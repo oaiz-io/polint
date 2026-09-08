@@ -36,7 +36,7 @@ oxc_resolver = { workspace = true, optional = true }
 oxc_semantic = { workspace = true, optional = true }
 oxc_span = { workspace = true, optional = true }
 petgraph.workspace = true
-polint-macros = { path = "../polint-macros", version = "0.3.5" }
+polint-macros = { path = "../polint-macros", version = "0.3.6" }
 rayon.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
