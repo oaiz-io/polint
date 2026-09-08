@@ -286,7 +286,9 @@ fn compute_module_export_summaries<'ast>(
 /// single pass suffices for the chains we model (`express()` →
 /// `createApplication` → returns the `mixin`-assembled `app`); return chains
 /// across summarized functions are not threaded (the map is empty while
-/// computing). Skipped entirely when no cross-module imports resolve.
+/// computing). Runs for every file: a returned object or callable is just as
+/// reachable within one module (`const z = make(); z.q()`) as across a
+/// `require` boundary.
 fn compute_function_return_summaries<'ast>(
     db: &impl AnalysisHost,
     programs: &BTreeMap<FileId, &'ast Program<'ast>>,
@@ -295,9 +297,6 @@ fn compute_function_return_summaries<'ast>(
     module_summaries: &BTreeMap<FileId, ModuleExportSummary>,
 ) -> BTreeMap<FunctionId, ModuleExportSummary> {
     let mut returns: BTreeMap<FunctionId, ModuleExportSummary> = BTreeMap::new();
-    if resolution_map.is_empty() {
-        return returns;
-    }
     let empty_returns = BTreeMap::new();
     for file in db
         .files()
@@ -521,8 +520,12 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         returns: &mut BTreeMap<FunctionId, ModuleExportSummary>,
     ) {
         let env = self.build_module_env(program);
+        // Every callable the file declares, not only its `function` declarations:
+        // a factory is as often `const make = () => ({ … })` or a method as a
+        // named declaration. `function_flows_by_id` is a `BTreeMap`, so the walk
+        // order is the deterministic `FunctionId` order.
         let flows: Vec<FunctionFlow<'db, 'ast>> =
-            self.function_declarations.values().cloned().collect();
+            self.function_flows_by_id.values().cloned().collect();
         for flow in flows {
             let summary = self.function_return_summary(&flow, &env);
             if !summary.is_empty() {
@@ -542,12 +545,22 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             return ModuleExportSummary::default();
         }
         let mut env = module_env.clone();
+        // A return summary is receiver-independent by construction: it is read
+        // at every call of the function, whatever the receiver. Keeping the
+        // module's `this` here would make `obj.make()` return the *module*'s
+        // `this` shape and shadow the receiver-bound walk that resolves
+        // `obj.make().m()`.
+        env.this_object = ObjectTargets::default();
         self.invocation_depth += 1;
         let saved_override = self.caller_override.take();
         for statement in &flow.body.statements {
             self.collect_statement(statement, flow.function, &mut env);
         }
-        let returned = returned_expression_from_statements(&flow.body.statements);
+        // A concise arrow (`() => ({ … })`) has no `return` statement: its whole
+        // body *is* the returned expression.
+        let returned = flow
+            .expression_body
+            .or_else(|| returned_expression_from_statements(&flow.body.statements));
         let object = returned
             .and_then(|expression| self.object_targets_from_expression(expression, &env))
             .unwrap_or_default();
@@ -1964,6 +1977,19 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 {
                     self.emit_call_span_targets(owner, new.span, "new", Some(vec![constructor]));
                 }
+                // `new F()` where the callee is any other callable *value*: a
+                // function expression bound to a variable (`var F = function(){};
+                // new F`), or a class reached through a module's export shape
+                // (`new mod.default()`). The constructed function is the target.
+                let constructed = self.callable_targets_from_expression(&new.callee, env);
+                if !constructed.is_empty() {
+                    self.emit_call_span_targets(
+                        owner,
+                        new.span,
+                        "new",
+                        Some(constructed.all_targets()),
+                    );
+                }
                 for argument in &new.arguments {
                     if let Some(expression) = argument_expression(argument) {
                         self.collect_expression(expression, owner, env);
@@ -2244,6 +2270,18 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             && !callables.values.contains(&flow.function.id)
         {
             callables.values.push(flow.function.id);
+        }
+        // It may equally name a class declaration (`class Timer {} … exports.default
+        // = Timer`). A class *is* a callable — its class function is the
+        // constructor — and lives in the class registry, not in `env.bindings`.
+        if let Expression::Identifier(identifier) = &assignment.right
+            && let Some(constructor) = self
+                .classes
+                .get(identifier.name.as_str())
+                .and_then(|class| class.constructor)
+            && !callables.values.contains(&constructor)
+        {
+            callables.values.push(constructor);
         }
         let object = self.object_targets_from_expression(&assignment.right, env);
         let collection = self.collection_targets_from_expression(&assignment.right, env);
@@ -3025,6 +3063,30 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                         .and_then(argument_expression)
                         .expect("callback expression already resolved"),
                 );
+            }
+        }
+
+        // The same binding for the two shapes the block above cannot see: a
+        // callback that is not a literal (`function doit(cb) { arr.forEach(cb) }`
+        // passes a *parameter* holding the caller's arrow) and a receiver that is
+        // not a named binding (`[() => {}].forEach(f)`). Bind the collection's
+        // elements into every callable the argument resolves to, so the caller's
+        // `f => f()` resolves against the elements.
+        if let Expression::StaticMemberExpression(member) = &call.callee
+            && let Some(argument_index) = callback_argument_index(member.property.name.as_str())
+            && let Some(argument) = call
+                .arguments
+                .get(argument_index)
+                .and_then(argument_expression)
+            && let Some(collection_targets) =
+                self.collection_targets_from_expression(&member.object, env)
+        {
+            let method = member.property.name.to_string();
+            let callbacks = self
+                .callable_targets_from_expression(argument, env)
+                .all_targets();
+            for callback in callbacks {
+                self.collect_bound_callback_parameter_flows(callback, &method, &collection_targets);
             }
         }
 
@@ -4284,6 +4346,34 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
 
         if let Expression::StaticMemberExpression(member) = &call.callee {
             let method = member.property.name.as_str();
+            // `arr.reduce(fn)` / `arr.reduce(fn, init)`: the accumulator starts at
+            // the initial value — or, with none, at the first element, which is
+            // also the result when the array holds a single element — and ends as
+            // the reducer's return. So the result is one of the array's elements,
+            // the initial value, or a reducer return. Reducing an empty array with
+            // no initial value throws, and invents no target here; a reducer whose
+            // return is not callable contributes nothing.
+            if matches!(method, "reduce" | "reduceRight") {
+                let mut result = CollectionTargets::default();
+                if let Some(source) = self.collection_targets_from_expression(&member.object, env) {
+                    result.extend(CollectionTargets {
+                        values: source.elements(),
+                        ..Default::default()
+                    });
+                }
+                if let Some(initial) = call.arguments.get(1).and_then(argument_expression) {
+                    result.extend(self.callable_targets_from_expression(initial, env));
+                }
+                if let Some(returned) = call
+                    .arguments
+                    .first()
+                    .and_then(argument_expression)
+                    .and_then(callback_returned_expression)
+                {
+                    result.extend(self.callable_targets_from_expression(returned, env));
+                }
+                return result;
+            }
             // Regular method call `recv.m()` whose body returns a value: invoke it
             // with `this` bound to the receiver and propagate the return value
             // (e.g. `x.p()` where `p` returns `this.q`).
@@ -4703,6 +4793,30 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             if !targets.is_empty() {
                 let span = oxc_span::Span::new(callback.span.start_byte, callback.span.end_byte);
                 self.emit_binding_targets(callback, name, span, Some(targets));
+            }
+        }
+    }
+
+    /// [`Self::collect_callback_parameter_flows`] for a callback reached by
+    /// value rather than written literally at the call: bind the collection's
+    /// elements into the parameters of the function the argument resolves to.
+    fn collect_bound_callback_parameter_flows(
+        &mut self,
+        callback: FunctionId,
+        method: &str,
+        collection_targets: &CollectionTargets,
+    ) {
+        let Some(flow) = self.function_flows_by_id.get(&callback).cloned() else {
+            return;
+        };
+        let span = oxc_span::Span::new(flow.function.span.start_byte, flow.function.span.end_byte);
+        for (index, param) in flow.params.iter().enumerate() {
+            let ParamPattern::Binding(name) = param else {
+                continue;
+            };
+            let targets = callback_targets_for_parameter(method, index, collection_targets);
+            if !targets.is_empty() {
+                self.emit_binding_targets(flow.function, name, span, Some(targets));
             }
         }
     }
@@ -6638,6 +6752,29 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         Some(targets)
     }
 
+    /// polint records a call site at the normalized span
+    /// ([`crate::ts::spans::normalized_call_expression_span`]), which is Jelly's:
+    /// it absorbs the callee's grouping parenthesis layer, so `( f())` is one
+    /// site span while the Oxc `CallExpression` span is `f()`, and `((f))()`
+    /// records `(f))()`. A site lookup keyed on the raw AST span must therefore
+    /// accept a site that differs from it only by parentheses and whitespace on
+    /// either side — the exact freedom that normalization can take.
+    fn site_matches_call_span(&self, site: &CallSiteFact, span: oxc_span::Span) -> bool {
+        let source = self.file.source.as_ref();
+        let only = |left: u32, right: u32, paren: char| {
+            let (low, high) = if left <= right {
+                (left, right)
+            } else {
+                (right, left)
+            };
+            source.get(low as usize..high as usize).is_some_and(|text| {
+                text.chars()
+                    .all(|character| character == paren || character.is_whitespace())
+            })
+        };
+        only(site.span.start_byte, span.start, '(') && only(span.end, site.span.end_byte, ')')
+    }
+
     fn emit_binding_targets(
         &mut self,
         owner: &'db FunctionFact,
@@ -6651,16 +6788,22 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         if targets.is_empty() {
             return;
         }
-        for site in self.sites.iter().copied().filter(|site| {
-            !site.in_throw
-                && site.caller == owner.id
-                && site.span.start_byte >= span.start
-                && site.span.end_byte <= span.end
-                && matches!(
-                    &site.callee,
-                    CallCallee::Identifier { name: callee, .. } if callee == name
-                )
-        }) {
+        let matched = self
+            .sites
+            .iter()
+            .copied()
+            .filter(|site| {
+                !site.in_throw
+                    && site.caller == owner.id
+                    && ((site.span.start_byte >= span.start && site.span.end_byte <= span.end)
+                        || self.site_matches_call_span(site, span))
+                    && matches!(
+                        &site.callee,
+                        CallCallee::Identifier { name: callee, .. } if callee == name
+                    )
+            })
+            .collect::<Vec<_>>();
+        for site in matched {
             for target in &targets {
                 self.rows.push(TsCallableFlow {
                     site: site.id,
@@ -6686,19 +6829,25 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         if targets.is_empty() {
             return;
         }
-        for site in self.sites.iter().copied().filter(|site| {
-            !site.in_throw
-                && site.caller == owner.id
-                && site.span.start_byte >= span.start
-                && site.span.end_byte <= span.end
-                && matches!(
-                    &site.callee,
-                    CallCallee::Member {
-                        property: callee,
-                        ..
-                    } if callee == property
-                )
-        }) {
+        let matched = self
+            .sites
+            .iter()
+            .copied()
+            .filter(|site| {
+                !site.in_throw
+                    && site.caller == owner.id
+                    && ((site.span.start_byte >= span.start && site.span.end_byte <= span.end)
+                        || self.site_matches_call_span(site, span))
+                    && matches!(
+                        &site.callee,
+                        CallCallee::Member {
+                            property: callee,
+                            ..
+                        } if callee == property
+                    )
+            })
+            .collect::<Vec<_>>();
+        for site in matched {
             for target in &targets {
                 self.rows.push(TsCallableFlow {
                     site: site.id,
@@ -6724,12 +6873,15 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         if targets.is_empty() {
             return;
         }
-        for site in self.sites.iter().copied().filter(|site| {
-            !site.in_throw
-                && site.caller == owner.id
-                && site.span.start_byte == span.start
-                && site.span.end_byte == span.end
-        }) {
+        let matched = self
+            .sites
+            .iter()
+            .copied()
+            .filter(|site| {
+                !site.in_throw && site.caller == owner.id && self.site_matches_call_span(site, span)
+            })
+            .collect::<Vec<_>>();
+        for site in matched {
             for target in &targets {
                 self.rows.push(TsCallableFlow {
                     site: site.id,
@@ -6788,9 +6940,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // That shared start does not make the expression's result a function.
         match expression {
             Expression::FunctionExpression(function) => self.function_for_span(function.span),
-            Expression::ArrowFunctionExpression(function) => {
-                self.function_for_span(function.span)
-            }
+            Expression::ArrowFunctionExpression(function) => self.function_for_span(function.span),
             Expression::ClassExpression(class) => self.function_for_span(class.span),
             Expression::ParenthesizedExpression(inner) => {
                 self.function_for_expression(&inner.expression)
@@ -8461,7 +8611,7 @@ fn class_method_function_span(method: &MethodDefinition<'_>) -> oxc_span::Span {
 
 fn object_property_function_span(property: &ObjectProperty<'_>) -> oxc_span::Span {
     if property.method {
-        return property.span;
+        return crate::ts::object_method_function_span(property);
     }
     property.value.span()
 }

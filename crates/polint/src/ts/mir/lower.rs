@@ -5,8 +5,7 @@ use oxc_ast::ast::{
     Argument, BinaryOperator, BindingPattern, Class, ClassElement, Declaration,
     ExportDefaultDeclarationKind, Expression, FormalParameters, Function, FunctionBody,
     LogicalOperator, MethodDefinition, MethodDefinitionKind, ObjectPropertyKind, Program,
-    PropertyKey, Statement,
-    VariableDeclarator,
+    PropertyKey, Statement, VariableDeclarator,
 };
 use oxc_span::GetSpan;
 
@@ -34,7 +33,8 @@ use crate::analysis_neutral::stable_key::semantic_stable_key;
 use crate::analysis_neutral::types::facts::TypeShape;
 use crate::internal_core::{FileId, FunctionId, Language, Span, StableKeyId};
 use crate::ts::{
-    PARSER_RECOVERY_CONSTRUCT, anonymous_callable_name, class_callable_name, parse_ts_file,
+    PARSER_RECOVERY_CONSTRUCT, anonymous_callable_name, class_callable_name,
+    object_method_function_span, parse_ts_file,
     spans::{
         normalized_call_expression_span, normalized_new_expression_span,
         normalized_tagged_template_span,
@@ -974,12 +974,7 @@ fn collect_class_functions<'ast>(
             ClassElement::MethodDefinition(method)
                 if method.kind == MethodDefinitionKind::Constructor =>
             {
-                collect_function(
-                    class_name.to_string(),
-                    class.span,
-                    &method.value,
-                    functions,
-                );
+                collect_function(class_name.to_string(), class.span, &method.value, functions);
             }
             ClassElement::MethodDefinition(method) => {
                 if let Some(method_name) = method_name(method) {
@@ -1297,9 +1292,10 @@ fn collect_anonymous_functions_from_expression<'ast>(
                             && let Expression::FunctionExpression(function) = &property.value
                             && let Some(body) = function.body.as_deref() =>
                     {
+                        let span = object_method_function_span(property);
                         functions.push(TsFunctionCandidate {
-                            name: anonymous_callable_name(property.span.start, property.span.end),
-                            span: property.span,
+                            name: anonymous_callable_name(span.start, span.end),
+                            span,
                             parameters: parameter_names(&function.params),
                             body: CandidateBody::Statements(&body.statements),
                         });

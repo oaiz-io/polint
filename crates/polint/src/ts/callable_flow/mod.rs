@@ -135,11 +135,16 @@ mod tests {
                 .map(|function| (function.id, function))
                 .collect::<BTreeMap<_, _>>();
             let start = source.find(call).unwrap() as u32;
+            // `f()` and `f()()` share a start; take the outermost call that still
+            // fits inside the snippet.
             let site = output
                 .db
                 .call_sites()
                 .iter()
-                .find(|site| site.span.start_byte == start)
+                .filter(|site| {
+                    site.span.start_byte == start && site.span.end_byte <= start + call.len() as u32
+                })
+                .max_by_key(|site| site.span.end_byte)
                 .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
             assert_eq!(
                 text(functions[&site.caller]),
@@ -217,7 +222,10 @@ mod tests {
                 let arena = oxc_allocator::Allocator::default();
                 let parsed = crate::ts::parse::parse_ts_file(&arena, file);
                 let programs = std::collections::BTreeMap::from([(file.id, parsed.program())]);
-                eprintln!("flows: {:?}", super::collect_callable_flows(&output.db, &programs));
+                eprintln!(
+                    "flows: {:?}",
+                    super::collect_callable_flows(&output.db, &programs)
+                );
             }
             assert_eq!(
                 edges
@@ -328,7 +336,8 @@ mod tests {
     #[test]
     fn commonjs_default_interop_helper_and_wrapper_shapes_resolve() {
         const HELPER: &str = "var __importDefault = (this && this.__importDefault) || function (mod) {\n    return (mod && mod.__esModule) ? mod : { \"default\": mod };\n};\n";
-        const HELPER_TEXT: &str = "function (mod) {\n    return (mod && mod.__esModule) ? mod : { \"default\": mod };\n}";
+        const HELPER_TEXT: &str =
+            "function (mod) {\n    return (mod && mod.__esModule) ? mod : { \"default\": mod };\n}";
         // (main tail after the helper preamble, helper module source, call snippet, target text)
         let cases: &[(&str, &str, &str, &str)] = &[
             // The helper call itself — client4/client5's `__importDefault(require(…))`.
@@ -359,10 +368,8 @@ mod tests {
             std::fs::write(repo.path().join("main.js"), &source).unwrap();
             std::fs::write(repo.path().join("helper.js"), helper_source).unwrap();
             let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
-            let sources = BTreeMap::from([
-                ("main.js", source.as_str()),
-                ("helper.js", *helper_source),
-            ]);
+            let sources =
+                BTreeMap::from([("main.js", source.as_str()), ("helper.js", *helper_source)]);
             let paths = output
                 .db
                 .files()
@@ -392,7 +399,12 @@ mod tests {
                 .db
                 .call_sites()
                 .iter()
-                .find(|site| site.file == main.id && site.span.start_byte == start)
+                .filter(|site| {
+                    site.file == main.id
+                        && site.span.start_byte == start
+                        && site.span.end_byte <= start + call.len() as u32
+                })
+                .max_by_key(|site| site.span.end_byte)
                 .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
             let targets = output
                 .db
@@ -412,7 +424,9 @@ mod tests {
         // helper.
         for (source, call) in [
             (
-                format!("{HELPER}function use(__importDefault) {{\n    __importDefault();\n}}\nuse(0);\n"),
+                format!(
+                    "{HELPER}function use(__importDefault) {{\n    __importDefault();\n}}\nuse(0);\n"
+                ),
                 "__importDefault();",
             ),
             (
@@ -438,6 +452,229 @@ mod tests {
                 "a shadowed or non-callable guard must stay unresolved: {source}"
             );
         }
+    }
+
+    /// Resolved-target texts for the unique call site starting at `call` in
+    /// `main.js`. Returning the whole set (not a membership check) makes every
+    /// fixture below a precision control too: an extra target fails the same way
+    /// a missing one does.
+    fn resolved_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
+        let repo = tempfile::tempdir().unwrap();
+        for (name, body) in files {
+            std::fs::write(repo.path().join(name), body).unwrap();
+        }
+        let sources = files.iter().copied().collect::<BTreeMap<_, _>>();
+        let source = sources["main.js"];
+        assert_eq!(
+            source.matches(call).count(),
+            1,
+            "call snippet {call:?} must be unique in {source}"
+        );
+        let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+        let paths = output
+            .db
+            .files()
+            .iter()
+            .map(|file| (file.id, file.relative_path.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let functions = output
+            .db
+            .functions()
+            .iter()
+            .map(|function| (function.id, function))
+            .collect::<BTreeMap<_, _>>();
+        let main = output
+            .db
+            .files()
+            .iter()
+            .find(|file| file.relative_path == "main.js")
+            .unwrap();
+        let start = source.find(call).unwrap() as u32;
+        // `arr.reduce(fn)` and `arr.reduce(fn)()` share a start byte; the snippet
+        // names the outermost call that fits inside it.
+        let site = output
+            .db
+            .call_sites()
+            .iter()
+            .filter(|site| {
+                site.file == main.id
+                    && site.span.start_byte == start
+                    && site.span.end_byte <= start + call.len() as u32
+            })
+            .max_by_key(|site| site.span.end_byte)
+            .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
+        output
+            .db
+            .refined_call_edges()
+            .iter()
+            .filter(|edge| edge.site == site.id && edge.status == CallTargetStatus::Resolved)
+            .filter_map(|edge| {
+                let target = functions.get(&edge.target_function?)?;
+                let body = sources[paths.get(&target.file)?.as_str()];
+                Some(
+                    body[target.span.start_byte as usize..target.span.end_byte as usize]
+                        .to_string(),
+                )
+            })
+            .collect()
+    }
+
+    /// One residual fixture: the source files, the call snippet naming a site in
+    /// `main.js`, and the exact resolved target texts at that site.
+    type ResidualFixture<'a> = (&'a [(&'a str, &'a str)], &'a str, &'a [&'a str]);
+
+    /// The residual value-flow repairs, one fixture each, asserting the exact
+    /// resolved target set at a single call site.
+    #[test]
+    fn residual_value_flow_fixtures_resolve_exactly() {
+        let cases: &[ResidualFixture<'_>] = &[
+            // A call site's span absorbs the callee's grouping parentheses, so a
+            // model row keyed on the bare Oxc call span must still find it.
+            (
+                &[(
+                    "main.js",
+                    "const creator = (() => ({val: () => {}}));\nvar x = ( creator());\nconst q = \"val\";\n(x[q] ());\n",
+                )],
+                "( creator())",
+                &["() => ({val: () => {}})"],
+            ),
+            // …and the object that call returns flows into `x`, so the computed
+            // constant-key call resolves.
+            (
+                &[(
+                    "main.js",
+                    "const creator = (() => ({val: () => {}}));\nvar x = ( creator());\nconst q = \"val\";\n(x[q] ());\n",
+                )],
+                "(x[q] ())",
+                &["() => {}"],
+            ),
+            // A returned object is as reachable inside one module as across a
+            // `require` boundary.
+            (
+                &[(
+                    "main.js",
+                    "function make() { return {m: () => {}}; }\nmake().m();\n",
+                )],
+                "make().m()",
+                &["() => {}"],
+            ),
+            // `reduce` with no initial value over a single-element array returns
+            // that element without ever calling the reducer.
+            (
+                &[("main.js", "[() => { return 1; }].reduce(() => void 0)();\n")],
+                "[() => { return 1; }].reduce(() => void 0)()",
+                &["() => { return 1; }"],
+            ),
+            // …and over an empty array it returns the initial value.
+            (
+                &[(
+                    "main.js",
+                    "[].reduce(() => void 0, () => { return 2; })();\n",
+                )],
+                "[].reduce(() => void 0, () => { return 2; })()",
+                &["() => { return 2; }"],
+            ),
+            // `new` on a callable *value*, not a class name.
+            (
+                &[("main.js", "var F = function () {};\nlet t = new F;\n")],
+                "new F",
+                &["function () {}"],
+            ),
+            // A native collection callback reached by value: the array literal's
+            // elements flow into the parameter of the arrow the caller passed.
+            (
+                &[(
+                    "main.js",
+                    "function doit(f) {\n    [() => { return 3; }].forEach(f);\n}\ndoit(g => g());\n",
+                )],
+                "g()",
+                &["() => { return 3; }"],
+            ),
+            // A class is a callable value: `exports.default = T` exports its
+            // constructor, so `new lib.default()` reaches the class.
+            (
+                &[
+                    (
+                        "main.js",
+                        "const lib = require('./lib.js');\nnew lib.default();\n",
+                    ),
+                    ("lib.js", "class T {}\nexports.default = T;\n"),
+                ],
+                "new lib.default()",
+                &["class T {}"],
+            ),
+        ];
+        for (files, call, expected) in cases {
+            assert_eq!(
+                resolved_targets_at(files, call),
+                expected
+                    .iter()
+                    .map(|text| (*text).to_string())
+                    .collect::<BTreeSet<_>>(),
+                "{call:?} in {}",
+                files[0].1
+            );
+        }
+
+        // Negative controls: nothing may be invented where the value is unknown.
+        for (files, call) in [
+            // Reducing an empty array with no initial value throws at runtime.
+            (
+                [("main.js", "[].reduce(() => void 0)();\n")],
+                "[].reduce(() => void 0)()",
+            ),
+            // A non-callable element and a non-callable reducer result.
+            (
+                [("main.js", "[1].reduce(() => 0)();\n")],
+                "[1].reduce(() => 0)()",
+            ),
+            // `new` on an unknown value.
+            ([("main.js", "new Unknown();\n")], "new Unknown()"),
+            // A collection callback that is not callable here.
+            (
+                [(
+                    "main.js",
+                    "function doit(f) {\n    [() => { return 3; }].forEach(f);\n}\ndoit(0);\nfunction other(g) { g(); }\n",
+                )],
+                "g()",
+            ),
+        ] {
+            assert!(
+                resolved_targets_at(&files, call).is_empty(),
+                "{call:?} must stay unresolved in {}",
+                files[0].1
+            );
+        }
+    }
+
+    /// Jelly names an object shorthand method by its key *contents*: the function
+    /// span of `{ "m"() {} }` starts at `m`, not at the opening quote. The
+    /// FunctionFact, the MIR body and the model rows must all use that span or
+    /// the edge is scored against a function the oracle does not have.
+    #[test]
+    fn string_keyed_object_method_span_starts_at_the_key_contents() {
+        let source = "const o = { \"m\"() {} };\no.m();\n";
+        let repo = tempfile::tempdir().unwrap();
+        std::fs::write(repo.path().join("main.js"), source).unwrap();
+        let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+        let method = output
+            .db
+            .functions()
+            .iter()
+            .find(|function| {
+                source[function.span.start_byte as usize..function.span.end_byte as usize]
+                    .ends_with("() {}")
+            })
+            .expect("the shorthand method has a function fact");
+        assert_eq!(
+            method.span.start_byte as usize,
+            source.find("m\"() {}").unwrap(),
+            "span must start at the key contents, not the quote"
+        );
+        assert_eq!(
+            resolved_targets_at(&[("main.js", source)], "o.m()"),
+            BTreeSet::from(["m\"() {}".to_string()])
+        );
     }
 
     #[test]

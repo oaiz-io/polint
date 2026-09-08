@@ -29,9 +29,9 @@ use std::sync::Arc;
 use crate::ts::local_db::LocalFactDb;
 use crate::ts::parse::{parse_ts_source, source_type};
 
-const TS_CACHE_SCHEMA: &str = "ts-facts-v15";
+const TS_CACHE_SCHEMA: &str = "ts-facts-v16";
 const TS_PROVIDER_ID: &str = "polint.ts.syntax";
-const TS_SYNTAX_LAYER_SCHEMA: &str = "ts-syntax-layer-v11";
+const TS_SYNTAX_LAYER_SCHEMA: &str = "ts-syntax-layer-v12";
 
 // Relationship resolution converts this non-string import expression sentinel to Dynamic.
 pub const DYNAMIC_IMPORT_SPECIFIER: &str = "<dynamic>";
@@ -2296,12 +2296,13 @@ fn extract_anonymous_callables_from_object_property(
     if property.method
         && let Expression::FunctionExpression(function) = &property.value
     {
+        let span = object_method_function_span(property);
         push_ts_function(
             db,
             ctx,
             TsFunctionSpec {
-                name: anonymous_callable_name(property.span.start, property.span.end),
-                span: property.span,
+                name: anonymous_callable_name(span.start, span.end),
+                span,
                 is_exported: false,
                 cyclomatic_complexity: ts_cyclomatic_complexity(function),
                 calls: function_body_calls(function.body.as_deref()),
@@ -2315,6 +2316,20 @@ fn extract_anonymous_callables_from_object_property(
     }
 
     extract_anonymous_callables_from_expression(db, ctx, &property.value, true);
+}
+
+/// The span Jelly assigns to an object shorthand method (`{ m() {} }`): the
+/// property span, except that a string-literal key contributes its *contents*
+/// — `{ "m"() {} }` starts at `m`, not at the quote. Shared by the frontend
+/// FunctionFact emission, MIR lowering and the callable-flow collector so the
+/// span-keyed fact, the MIR body and the model rows always agree.
+pub(crate) fn object_method_function_span(property: &ObjectProperty<'_>) -> oxc_span::Span {
+    match &property.key {
+        PropertyKey::StringLiteral(literal) if !property.computed => {
+            oxc_span::Span::new(literal.span.start.saturating_add(1), property.span.end)
+        }
+        _ => property.span,
+    }
 }
 
 /// The class's explicit `constructor(){}` member, if it declares one.

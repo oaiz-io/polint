@@ -103,6 +103,8 @@ pub use crate::analysis_api::{anonymous_callable_name, is_anonymous_callable_nam
 #[allow(unreachable_pub, unused_imports)]
 pub use adapter::analyze_with_options;
 #[cfg(feature = "lang-typescript")]
+pub(crate) use adapter::object_method_function_span;
+#[cfg(feature = "lang-typescript")]
 #[allow(unused_imports)]
 pub use adapter::{
     DYNAMIC_IMPORT_SPECIFIER, analyze_files_with_plan_options_and_cache_stats,
