@@ -33,11 +33,18 @@ pub fn derive_cfg_with_cache_stats(
     semantic_mir_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
 ) -> CfgProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.cfg", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut output = derive_cfg_output(db).normalized(interner);
+    checkpoint("lower_normalize");
     let bounded = append_derived_rows(interner, &mut output, CfgView::NormalControl);
     let output = output.normalized(interner);
+    checkpoint("derived_normalize");
     let output_digest = cfg_output_digest(
         manifest,
         input_snapshot,
@@ -46,19 +53,23 @@ pub fn derive_cfg_with_cache_stats(
         &output,
         interner,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
     match db.replace_cfg_facts(output) {
-        Ok(()) => CfgProviderOutput {
-            diagnostics: bounded
-                .map(dominance_budget_diagnostic)
-                .into_iter()
-                .collect(),
-            cache_stats,
-            output_digest: Some(output_digest),
-            execution: Default::default(),
-        },
+        Ok(()) => {
+            checkpoint("store_metadata");
+            CfgProviderOutput {
+                diagnostics: bounded
+                    .map(dominance_budget_diagnostic)
+                    .into_iter()
+                    .collect(),
+                cache_stats,
+                output_digest: Some(output_digest),
+                execution: Default::default(),
+            }
+        }
         Err(error) => CfgProviderOutput {
             diagnostics: vec![provider_error_diagnostic(error.to_string())],
             cache_stats,
@@ -87,6 +98,11 @@ fn append_derived_rows(
     output: &mut CfgOutput,
     view: CfgView,
 ) -> Option<DominanceBudgetTrip> {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.cfg", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     if output.functions.is_empty() {
         return None;
     }
@@ -99,9 +115,13 @@ fn append_derived_rows(
         DominanceMaterialization::Full
     };
     output.reachability = derive_reachability(interner, output, view);
+    checkpoint("reachability");
     output.dominators = derive_dominators(interner, output, view, materialization);
+    checkpoint("dominators");
     output.postdominators = derive_postdominators(interner, output, view, materialization);
+    checkpoint("postdominators");
     output.control_dependence = derive_control_dependence(interner, output, view);
+    checkpoint("control_dependence");
     bounded.then_some(DominanceBudgetTrip {
         estimated_pairs,
         limit,

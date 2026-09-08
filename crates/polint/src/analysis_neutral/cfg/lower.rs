@@ -7,17 +7,19 @@ use crate::analysis_neutral::cfg::facts::{
 };
 use crate::analysis_neutral::cfg::ids::{CfgFunctionId, UnsupportedControlFlowId};
 use crate::analysis_neutral::cfg::store::CfgOutput;
-#[cfg(test)]
-use crate::analysis_neutral::ids::MirOpId;
-use crate::analysis_neutral::ids::{MirBodyId, UnsupportedId};
-use crate::analysis_neutral::mir_body::{MirBlockId, MirStatus, MirTerminatorKind};
+use crate::analysis_neutral::ids::{
+    MirBodyId, MirOpId, MirStatementId, MirTerminatorId, UnsupportedId,
+};
+use crate::analysis_neutral::mir_body::{
+    MirBlock, MirBlockId, MirStatement, MirStatus, MirTerminator, MirTerminatorKind,
+};
 use crate::analysis_neutral::mir_op::{
-    ConservativeAction, MirOperationKind, UnsupportedDomain, UnsupportedPrecision,
+    ConservativeAction, MirOperation, MirOperationKind, UnsupportedDomain, UnsupportedPrecision,
     UnsupportedSemanticFact,
 };
 use crate::analysis_neutral::stable_key::semantic_stable_key;
 use crate::internal_core::Language;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub fn lower_cfg(db: &impl AnalysisHost) -> CfgOutput {
     let interner_handle = db.stable_key_interner();
@@ -29,14 +31,90 @@ pub fn lower_cfg(db: &impl AnalysisHost) -> CfgOutput {
 
 struct CfgLowering<'db, H: AnalysisHost + ?Sized> {
     db: &'db H,
+    inputs: CfgInputs<'db>,
     builder: CfgBuilder,
     body_to_function: BTreeMap<MirBodyId, CfgFunctionId>,
+}
+
+/// Lookup-only ID indexes preserve the first matching row. Grouped inputs retain
+/// source order, including repeated IDs, until the existing stable sort runs.
+struct CfgInputs<'db> {
+    blocks_by_body: BTreeMap<MirBodyId, Vec<&'db MirBlock>>,
+    terminators_by_body: BTreeMap<MirBodyId, Vec<&'db MirTerminator>>,
+    terminators: HashMap<MirTerminatorId, &'db MirTerminator>,
+    statements: HashMap<MirStatementId, &'db MirStatement>,
+    operations: HashMap<MirOpId, &'db MirOperation>,
+    unsupported: HashMap<UnsupportedId, &'db UnsupportedSemanticFact>,
+    unsupported_by_body: BTreeMap<MirBodyId, Vec<&'db UnsupportedSemanticFact>>,
+}
+
+impl<'db> CfgInputs<'db> {
+    fn new(db: &'db (impl AnalysisHost + ?Sized)) -> Self {
+        let mut inputs = Self {
+            blocks_by_body: BTreeMap::new(),
+            terminators_by_body: BTreeMap::new(),
+            terminators: HashMap::with_capacity(db.mir_terminators().len()),
+            statements: HashMap::with_capacity(db.mir_statements().len()),
+            operations: HashMap::with_capacity(db.mir_operations().len()),
+            unsupported: HashMap::with_capacity(db.unsupported_semantics().len()),
+            unsupported_by_body: BTreeMap::new(),
+        };
+        for block in db.mir_blocks() {
+            inputs
+                .blocks_by_body
+                .entry(block.body)
+                .or_default()
+                .push(block);
+        }
+        for terminator in db.mir_terminators() {
+            inputs
+                .terminators
+                .entry(terminator.id)
+                .or_insert(terminator);
+            inputs
+                .terminators_by_body
+                .entry(terminator.body)
+                .or_default()
+                .push(terminator);
+        }
+        for statement in db.mir_statements() {
+            inputs.statements.entry(statement.id).or_insert(statement);
+        }
+        for operation in db.mir_operations() {
+            inputs.operations.entry(operation.id).or_insert(operation);
+        }
+        for row in db.unsupported_semantics() {
+            inputs.unsupported.entry(row.id).or_insert(row);
+            if let Some(body) = row.body
+                && row.affected_domains.contains(&UnsupportedDomain::Cfg)
+            {
+                inputs
+                    .unsupported_by_body
+                    .entry(body)
+                    .or_default()
+                    .push(row);
+            }
+        }
+        inputs
+    }
+
+    fn terminators_for_body(
+        &self,
+        body: MirBodyId,
+    ) -> impl Iterator<Item = &'db MirTerminator> + '_ {
+        self.terminators_by_body
+            .get(&body)
+            .into_iter()
+            .flatten()
+            .copied()
+    }
 }
 
 impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
     fn new(db: &'db H) -> Self {
         Self {
             db,
+            inputs: CfgInputs::new(db),
             builder: CfgBuilder::new(),
             body_to_function: BTreeMap::new(),
         }
@@ -47,9 +125,9 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
         bodies.sort_by_cached_key(|body| interner.resolve(body.stable_key));
 
         for body in bodies {
-            let has_exceptional_control = self.db.mir_terminators().iter().any(|terminator| {
-                terminator.body == body.id
-                    && matches!(
+            let has_exceptional_control =
+                self.inputs.terminators_for_body(body.id).any(|terminator| {
+                    matches!(
                         terminator.kind,
                         MirTerminatorKind::Throw { .. }
                             | MirTerminatorKind::Call {
@@ -57,9 +135,9 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
                                 ..
                             }
                     )
-            }) || self
-                .unsupported_for_body(body.id)
-                .any(|row| matches!(row.construct.as_str(), "try" | "parser recovery" | "ERROR"));
+                }) || self.unsupported_for_body(body.id).any(|row| {
+                    matches!(row.construct.as_str(), "try" | "parser recovery" | "ERROR")
+                });
             let function = self
                 .builder
                 .start_function(interner, body, has_exceptional_control);
@@ -71,17 +149,17 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
 
     fn lower_body(&mut self, interner: &crate::internal_core::StableKeyInterner, body: MirBodyId) {
         let mut blocks = self
-            .db
-            .mir_blocks()
-            .iter()
-            .filter(|block| block.body == body)
+            .inputs
+            .blocks_by_body
+            .get(&body)
+            .into_iter()
+            .flatten()
+            .copied()
             .collect::<Vec<_>>();
         blocks.sort_by_cached_key(|block| (block.ordinal, interner.resolve(block.stable_key)));
         let unwind_targets = self
-            .db
-            .mir_terminators()
-            .iter()
-            .filter(|terminator| terminator.body == body)
+            .inputs
+            .terminators_for_body(body)
             .filter_map(|terminator| match terminator.kind {
                 MirTerminatorKind::Throw { unwind, .. } => Some((unwind, CfgEdgeKind::Throw)),
                 MirTerminatorKind::Call {
@@ -103,10 +181,10 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
         let mut cfg_blocks = BTreeMap::new();
         for block in &blocks {
             let terminator = self
-                .db
-                .mir_terminators()
-                .iter()
-                .find(|terminator| terminator.id == block.terminator)
+                .inputs
+                .terminators
+                .get(&block.terminator)
+                .copied()
                 .expect("MIR block terminator must exist");
             let kind = match terminator.kind {
                 MirTerminatorKind::Branch { .. } | MirTerminatorKind::Switch { .. } => {
@@ -125,16 +203,16 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
             }
             for (index, statement_id) in block.statements.iter().enumerate() {
                 let statement = self
-                    .db
-                    .mir_statements()
-                    .iter()
-                    .find(|statement| statement.id == *statement_id)
+                    .inputs
+                    .statements
+                    .get(statement_id)
+                    .copied()
                     .expect("MIR block statement must exist");
                 let operation = self
-                    .db
-                    .mir_operations()
-                    .iter()
-                    .find(|operation| operation.id == statement.operation)
+                    .inputs
+                    .operations
+                    .get(&statement.operation)
+                    .copied()
                     .expect("MIR statement operation must exist");
                 let node_kind = if index + 1 == block.statements.len() {
                     match terminator.kind {
@@ -196,16 +274,16 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
             let mut stop_lowering = false;
             for statement_id in &block.statements {
                 let statement = self
-                    .db
-                    .mir_statements()
-                    .iter()
-                    .find(|statement| statement.id == *statement_id)
+                    .inputs
+                    .statements
+                    .get(statement_id)
+                    .copied()
                     .expect("MIR block statement must exist");
                 let operation = self
-                    .db
-                    .mir_operations()
-                    .iter()
-                    .find(|operation| operation.id == statement.operation)
+                    .inputs
+                    .operations
+                    .get(&statement.operation)
+                    .copied()
                     .expect("MIR statement operation must exist");
                 let MirOperationKind::Unsupported { unsupported } = &operation.kind else {
                     continue;
@@ -238,10 +316,10 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
                 continue;
             }
             let terminator = self
-                .db
-                .mir_terminators()
-                .iter()
-                .find(|terminator| terminator.id == block.terminator)
+                .inputs
+                .terminators
+                .get(&block.terminator)
+                .copied()
                 .expect("MIR block terminator must exist");
             match &terminator.kind {
                 MirTerminatorKind::Goto { target } => {
@@ -460,19 +538,19 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
     }
 
     fn unsupported_by_id(&self, id: UnsupportedId) -> Option<&UnsupportedSemanticFact> {
-        self.db
-            .unsupported_semantics()
-            .iter()
-            .find(|row| row.id == id)
+        self.inputs.unsupported.get(&id).copied()
     }
 
     fn unsupported_for_body(
         &self,
         body: MirBodyId,
     ) -> impl Iterator<Item = &'db UnsupportedSemanticFact> + '_ {
-        self.db.unsupported_semantics().iter().filter(move |row| {
-            row.body == Some(body) && row.affected_domains.contains(&UnsupportedDomain::Cfg)
-        })
+        self.inputs
+            .unsupported_by_body
+            .get(&body)
+            .into_iter()
+            .flatten()
+            .copied()
     }
 
     fn finish(self, interner: &crate::internal_core::StableKeyInterner) -> CfgOutput {

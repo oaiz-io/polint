@@ -35,6 +35,9 @@ struct LocalFlowBuilder<'a, 'b, H: AnalysisHost + ?Sized> {
     /// a corpus where `derive_local_place_nodes` has already pushed one node per
     /// MIR place.
     nodes_by_key: BTreeMap<crate::internal_core::StableKeyId, DataFlowNodeId>,
+    keys_by_node: std::collections::HashMap<DataFlowNodeId, crate::internal_core::StableKeyId>,
+    body_index: BTreeMap<MirBodyId, usize>,
+    place_key_index: BTreeMap<PlaceId, usize>,
     /// `PlaceId` -> index into `db.mir_places()`, so `projection_edge_kind` does
     /// not scan the whole place table per projection edge.
     place_index: BTreeMap<PlaceId, usize>,
@@ -67,11 +70,26 @@ impl<'a, 'b, H: AnalysisHost + ?Sized> LocalFlowBuilder<'a, 'b, H> {
             .enumerate()
             .map(|(index, place)| (place.id, index))
             .collect();
+        let mut keys_by_node = std::collections::HashMap::new();
+        for node in &output.nodes {
+            keys_by_node.entry(node.id).or_insert(node.stable_key);
+        }
+        let mut body_index = BTreeMap::new();
+        for (index, body) in db.mir_bodies().iter().enumerate() {
+            body_index.entry(body.id).or_insert(index);
+        }
+        let mut place_key_index = BTreeMap::new();
+        for (index, place) in db.mir_places().iter().enumerate() {
+            place_key_index.entry(place.id).or_insert(index);
+        }
         Self {
             db,
             output,
             place_nodes,
             nodes_by_key,
+            keys_by_node,
+            body_index,
+            place_key_index,
             place_index,
             emitted_edges: BTreeSet::new(),
             branchy_bodies,
@@ -477,6 +495,7 @@ impl<'a, 'b, H: AnalysisHost + ?Sized> LocalFlowBuilder<'a, 'b, H> {
             stable_key,
         });
         self.nodes_by_key.insert(stable_key, id);
+        self.keys_by_node.entry(id).or_insert(stable_key);
         id
     }
 
@@ -541,19 +560,17 @@ impl<'a, 'b, H: AnalysisHost + ?Sized> LocalFlowBuilder<'a, 'b, H> {
         Option<crate::internal_core::FileId>,
         Option<FunctionId>,
     ) {
-        self.db
-            .mir_bodies()
-            .iter()
-            .find(|fact| fact.id == body)
+        self.body_index
+            .get(&body)
+            .map(|index| &self.db.mir_bodies()[*index])
             .map(|fact| (fact.language, Some(fact.file), Some(fact.function)))
             .unwrap_or((Language::Unknown, None, None))
     }
 
     fn place_key(&self, place: PlaceId) -> Arc<str> {
-        self.db
-            .mir_places()
-            .iter()
-            .find(|fact| fact.id == place)
+        self.place_key_index
+            .get(&place)
+            .map(|index| &self.db.mir_places()[*index])
             .map(|place| self.db.resolve_stable_key(place.stable_key))
             .unwrap_or_else(|| Arc::from(format!("place:{}", place.0)))
     }
@@ -563,11 +580,9 @@ impl<'a, 'b, H: AnalysisHost + ?Sized> LocalFlowBuilder<'a, 'b, H> {
     }
 
     fn node_key(&self, node: DataFlowNodeId) -> String {
-        self.output
-            .nodes
-            .iter()
-            .find(|fact| fact.id == node)
-            .map(|fact| self.db.resolve_stable_key(fact.stable_key).to_string())
+        self.keys_by_node
+            .get(&node)
+            .map(|key| self.db.resolve_stable_key(*key).to_string())
             .unwrap_or_else(|| format!("node:{}", node.0))
     }
 }

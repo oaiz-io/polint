@@ -1,4 +1,6 @@
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
+use std::iter::Peekable;
 use std::sync::Arc;
 
 use super::cache_key::{
@@ -52,11 +54,20 @@ pub fn derive_evidence_with_cache_stats(
     data_flow_output_digest: Digest,
 ) -> EvidenceProviderOutput {
     debug_assert_eq!(manifest.id, EVIDENCE_PROVIDER_ID);
+    let mut checkpoint = std::time::Instant::now();
+    let mut record = |step| {
+        let elapsed = checkpoint.elapsed();
+        tracing::debug!(target: "polint::kernel::stage", provider = EVIDENCE_PROVIDER_ID, step, elapsed_ms = elapsed.as_secs_f64() * 1000.0, "provider step");
+        checkpoint = std::time::Instant::now();
+    };
     let mut output = EvidenceOutput::empty();
     derive_data_flow_evidence(db, &mut output);
+    record("data_flow");
     derive_control_dependence_evidence(db, &mut output);
+    record("control_dependence");
     let interner = db.stable_key_interner();
     let output = output.normalized(&interner);
+    record("normalize");
     let output_digest = evidence_output_digest(
         manifest,
         input_snapshot,
@@ -72,10 +83,13 @@ pub fn derive_evidence_with_cache_stats(
         &output,
         &interner,
     );
+    record("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
-    match db.replace_evidence_facts(output) {
+    let replaced = db.replace_evidence_facts(output);
+    record("store_metadata");
+    match replaced {
         Ok(()) => EvidenceProviderOutput {
             diagnostics: Vec::new(),
             cache_stats,
@@ -97,7 +111,7 @@ pub fn derive_evidence_with_cache_stats(
 fn derive_data_flow_evidence(db: &impl AnalysisHost, output: &mut EvidenceOutput) {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let mut node_map = std::collections::BTreeMap::new();
+    let mut node_map = BTreeMap::new();
     for node in db.data_flow_nodes() {
         let evidence_id = EvidenceNodeId(output.nodes.len() as u64);
         node_map.insert(node.id, evidence_id);
@@ -197,39 +211,35 @@ fn evidence_edge_from_data_flow(
 fn derive_control_dependence_evidence(db: &impl AnalysisHost, output: &mut EvidenceOutput) {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    let mut edges = HashMap::with_capacity(db.cfg_edges().len());
+    let mut blocks = HashMap::with_capacity(db.cfg_blocks().len());
+    let mut functions = HashMap::with_capacity(db.cfg_functions().len());
+    for edge in db.cfg_edges() {
+        edges.entry(edge.id).or_insert(edge);
+    }
+    for block in db.cfg_blocks() {
+        blocks.entry(block.id).or_insert(block);
+    }
+    for function in db.cfg_functions() {
+        functions.entry(function.id).or_insert(function);
+    }
     for dependence in db.cfg_control_dependence() {
-        let Some(controlling_edge) = db
-            .cfg_edges()
-            .iter()
-            .find(|edge| edge.id == dependence.controlling_edge)
-        else {
+        let Some(controlling_edge) = edges.get(&dependence.controlling_edge) else {
             continue;
         };
         let from = EvidenceNodeId(output.nodes.len() as u64);
-        let controlled_node = db
-            .cfg_blocks()
-            .iter()
-            .find(|block| block.id == dependence.controlled_block)
+        let controlled_node = blocks
+            .get(&dependence.controlled_block)
             .and_then(|block| block.first_node.or(block.last_node));
+        let function = functions.get(&dependence.cfg_function);
         output.nodes.push(EvidenceNodeFact {
             id: from,
             kind: EvidenceNodeKind::Statement,
-            language: db
-                .cfg_functions()
-                .iter()
-                .find(|function| function.id == dependence.cfg_function)
+            language: function
                 .map(|function| function.language)
                 .unwrap_or(crate::internal_core::Language::Unknown),
-            file: db
-                .cfg_functions()
-                .iter()
-                .find(|function| function.id == dependence.cfg_function)
-                .map(|function| function.file),
-            function: db
-                .cfg_functions()
-                .iter()
-                .find(|function| function.id == dependence.cfg_function)
-                .map(|function| function.function),
+            file: function.map(|function| function.file),
+            function: function.map(|function| function.function),
             body: None,
             operation: None,
             cfg_node: Some(controlling_edge.from),
@@ -542,8 +552,7 @@ const EVIDENCE_HEADER_LABELS: [&str; 20] = [
     "evidence_output",
 ];
 
-/// Provider-output digest for the evidence layer, hashed one fact family at a
-/// time.
+/// Provider-output digest for the evidence layer, hashed in sorted part order.
 ///
 /// The digest is the FNV fold over the run's parts **in sorted order**. Building
 /// that order the obvious way — collect every part into one `Vec<String>`, sort,
@@ -552,14 +561,17 @@ const EVIDENCE_HEADER_LABELS: [&str; 20] = [
 /// measured at **+2.3 GB of peak RSS** for this one call, more than the facts it
 /// describes.
 ///
-/// It is avoidable without changing a byte of the digest. Every fact family's
+/// Every fact family's
 /// parts share a `<family>=` prefix, and no family name is a prefix of another,
 /// so in sorted order the families form contiguous blocks ordered by prefix.
 /// A header part (`provider_id=…`, `cfg=…`, `extensions=…`, …) never starts with
 /// a family prefix, so it sorts before *every* part of a family exactly when it
 /// sorts before that family's prefix. Emitting the (few, small) header parts and
 /// the family blocks in that merged order therefore reproduces `parts.sort()`
-/// exactly, while only one family's payloads are live at a time.
+/// exactly. Nodes and edges have their integer ID first in the debug payload,
+/// so their order can be established without expanding the rest of each row.
+/// Only one expanded node or edge payload is live at a time; smaller families
+/// retain the general full-payload sort.
 #[allow(clippy::too_many_arguments)]
 fn evidence_output_digest(
     manifest: &ProviderManifest,
@@ -634,34 +646,38 @@ fn evidence_output_digest(
 
     let mut digest = Digest::builder(DigestKind::ProviderOutput, "evidence_output");
     let mut header = header.into_iter().peekable();
-    let mut emit_family = |digest: &mut DigestBuilder, prefix: &str, mut block: Vec<String>| {
-        while header.peek().is_some_and(|part| part.as_str() < prefix) {
-            digest.part(&header.next().expect("peeked part is present"));
-        }
-        block.sort();
-        for part in &block {
-            digest.part(part);
-        }
-    };
-
     // Families in ascending prefix order — the order `parts.sort()` produced.
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[0],
         family_parts(interner, EVIDENCE_FAMILY_PREFIXES[0], &output.bundles),
     );
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[1],
-        family_parts(interner, EVIDENCE_FAMILY_PREFIXES[1], &output.edges),
+        indexed_family_parts(
+            interner,
+            EVIDENCE_FAMILY_PREFIXES[1],
+            &output.edges,
+            |fact| fact.id.0,
+        ),
     );
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[2],
-        family_parts(interner, EVIDENCE_FAMILY_PREFIXES[2], &output.nodes),
+        indexed_family_parts(
+            interner,
+            EVIDENCE_FAMILY_PREFIXES[2],
+            &output.nodes,
+            |fact| fact.id.0,
+        ),
     );
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[3],
         family_parts(
             interner,
@@ -671,21 +687,25 @@ fn evidence_output_digest(
     );
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[4],
         family_parts(interner, EVIDENCE_FAMILY_PREFIXES[4], &output.paths),
     );
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[5],
         family_parts(interner, EVIDENCE_FAMILY_PREFIXES[5], &output.replay_keys),
     );
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[6],
         family_parts(interner, EVIDENCE_FAMILY_PREFIXES[6], &output.slices),
     );
     emit_family(
         &mut digest,
+        &mut header,
         EVIDENCE_FAMILY_PREFIXES[7],
         family_parts(interner, EVIDENCE_FAMILY_PREFIXES[7], &output.unknowns),
     );
@@ -705,10 +725,50 @@ fn family_parts<T: Debug>(
     prefix: &str,
     facts: &[T],
 ) -> Vec<String> {
-    facts
+    let mut parts = facts
         .iter()
         .map(|fact| format!("{prefix}{}", stable_fact_payload(interner, fact)))
-        .collect()
+        .collect::<Vec<_>>();
+    parts.sort();
+    parts
+}
+
+fn emit_family(
+    digest: &mut DigestBuilder,
+    header: &mut Peekable<std::vec::IntoIter<String>>,
+    prefix: &str,
+    parts: impl IntoIterator<Item = String>,
+) {
+    while header.peek().is_some_and(|part| part.as_str() < prefix) {
+        digest.part(&header.next().expect("peeked part is present"));
+    }
+    for part in parts {
+        digest.part(&part);
+    }
+}
+
+/// These row types start their Debug payload with an integer ID. Decimal IDs
+/// order the payloads because the closing ')' sorts before every digit. Keep
+/// references in that order and materialize only the current row. Equal IDs
+/// still compare their full payload, preserving the order of unnormalized input.
+fn indexed_family_parts<'a, T: Debug>(
+    interner: &'a crate::internal_core::StableKeyInterner,
+    prefix: &'a str,
+    facts: &'a [T],
+    id: impl Fn(&T) -> u64,
+) -> impl Iterator<Item = String> + 'a {
+    let mut indexed = facts
+        .iter()
+        .map(|fact| (id(fact).to_string(), fact))
+        .collect::<Vec<_>>();
+    indexed.sort_by(|(left_id, left), (right_id, right)| {
+        left_id.cmp(right_id).then_with(|| {
+            stable_fact_payload(interner, left).cmp(&stable_fact_payload(interner, right))
+        })
+    });
+    indexed
+        .into_iter()
+        .map(move |(_, fact)| format!("{prefix}{}", stable_fact_payload(interner, fact)))
 }
 
 fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[InputComponent]) {
@@ -771,7 +831,78 @@ fn provider_error_diagnostic(message: String) -> Diagnostic {
 
 #[cfg(test)]
 mod digest_order_tests {
-    use super::{EVIDENCE_FAMILY_PREFIXES, EVIDENCE_HEADER_LABELS};
+    use super::*;
+
+    #[test]
+    fn id_ordered_payloads_match_full_sort_for_sparse_and_repeated_ids() {
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let stable_key = interner.intern("source: unicode λ and escaped \"quote\"\\newline\n");
+        let ids = [100, 1, 10, 2, 0, 99, 9, 10, 11, u64::MAX, 101, 1];
+        let nodes = ids
+            .iter()
+            .enumerate()
+            .map(|(index, &id)| EvidenceNodeFact {
+                id: EvidenceNodeId(id),
+                kind: EvidenceNodeKind::Statement,
+                language: crate::internal_core::Language::TypeScript,
+                file: None,
+                function: None,
+                body: None,
+                operation: None,
+                cfg_node: None,
+                place: None,
+                symbol: None,
+                reference: None,
+                call_site: None,
+                span: None,
+                status: EvidenceStatus::Present,
+                precision: EvidencePrecision::Syntax,
+                provenance: EvidenceProvenance::Native,
+                validation: EvidenceValidation::ReferentiallyValidated,
+                confidence: EvidenceConfidence::High,
+                compact_label: Some(format!("label:{}", ids.len() - index)),
+                source_fact_stable_keys: vec![interner.resolve(stable_key)],
+                stable_key,
+            })
+            .collect::<Vec<_>>();
+        let edges = nodes
+            .iter()
+            .map(|node| EvidenceEdgeFact {
+                id: EvidenceEdgeId(node.id.0),
+                from: EvidenceNodeId(10),
+                to: EvidenceNodeId(2),
+                kind: EvidenceEdgeKind::DataValue,
+                query_mode: EvidenceQueryMode::ThinBackward,
+                status: node.status,
+                precision: node.precision,
+                provenance: node.provenance,
+                validation: node.validation,
+                confidence: node.confidence,
+                call_site: None,
+                summary_stable_key: Some(interner.resolve(stable_key)),
+                expansion: EvidenceExpansion::None,
+                compact_label: node.compact_label.clone(),
+                source_fact_stable_keys: node.source_fact_stable_keys.clone(),
+                stable_key,
+            })
+            .collect::<Vec<_>>();
+        for count in 0..=ids.len() {
+            assert_eq!(
+                indexed_family_parts(&interner, "evidence_node=", &nodes[..count], |node| node
+                    .id
+                    .0)
+                .collect::<Vec<_>>(),
+                family_parts(&interner, "evidence_node=", &nodes[..count]),
+            );
+            assert_eq!(
+                indexed_family_parts(&interner, "evidence_edge=", &edges[..count], |edge| edge
+                    .id
+                    .0)
+                .collect::<Vec<_>>(),
+                family_parts(&interner, "evidence_edge=", &edges[..count]),
+            );
+        }
+    }
 
     /// The streaming digest emits header parts and family blocks in a merged
     /// order and claims it equals sorting every part together. That holds only

@@ -12,14 +12,24 @@ use crate::analysis_neutral::points_to::vars;
 #[derive(Debug, Default)]
 pub struct AliasQueryIndex<'a> {
     access_paths: BTreeMap<crate::analysis_neutral::ids::AccessPathId, &'a AccessPathFact>,
+    paths_by_base: BTreeMap<crate::analysis_neutral::ids::PlaceId, Vec<&'a AccessPathFact>>,
     points_to: BTreeMap<PtVarId, &'a PointsToSetFact>,
     budget_exceeded: bool,
 }
 
 impl<'a> AliasQueryIndex<'a> {
     pub fn new(access_paths: &'a [AccessPathFact], points_to: &'a [PointsToSetFact]) -> Self {
+        let access_paths = access_paths
+            .iter()
+            .map(|path| (path.id, path))
+            .collect::<BTreeMap<_, _>>();
+        let mut paths_by_base: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for &path in access_paths.values() {
+            paths_by_base.entry(path.base).or_default().push(path);
+        }
         Self {
-            access_paths: access_paths.iter().map(|path| (path.id, path)).collect(),
+            access_paths,
+            paths_by_base,
             points_to: points_to.iter().map(|set| (set.variable, set)).collect(),
             budget_exceeded: points_to
                 .iter()
@@ -60,9 +70,10 @@ impl<'a> AliasQueryIndex<'a> {
                 .expect("alias access-path operand must reference an indexed path"),
             AliasOperand::Place(place) => {
                 let mut path_keys = self
-                    .access_paths
-                    .values()
-                    .filter(|path| path.base == place)
+                    .paths_by_base
+                    .get(&place)
+                    .into_iter()
+                    .flatten()
                     .map(|path| interner.resolve(path.stable_key).to_string())
                     .collect::<BTreeSet<_>>();
                 if path_keys.is_empty()
@@ -262,6 +273,30 @@ mod tests {
     use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
     use crate::analysis_neutral::points_to::vars;
     use crate::internal_core::Language;
+
+    #[test]
+    fn base_path_index_matches_full_scan_after_duplicate_id_resolution() {
+        let interner = crate::internal_core::test_stable_key_interner();
+        let paths = (0..100)
+            .map(|id| path(AccessPathId(id % 31), PlaceId(id % 7), "field"))
+            .collect::<Vec<_>>();
+        let index = AliasQueryIndex::new(&paths, &[]);
+        let indexed_paths = paths
+            .iter()
+            .map(|path| (path.id, path))
+            .collect::<BTreeMap<_, _>>();
+        for base in 0..7 {
+            let fragments = indexed_paths
+                .values()
+                .filter(|path| path.base == PlaceId(base))
+                .map(|path| interner.resolve(path.stable_key).to_string())
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                index.operand_stable_identity(&interner, AliasOperand::Place(PlaceId(base))),
+                semantic_relation_identity(&fragments),
+            );
+        }
+    }
 
     #[test]
     fn alias_query_returns_all_statuses_with_evidence() {
