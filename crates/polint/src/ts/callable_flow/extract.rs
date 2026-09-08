@@ -1850,6 +1850,25 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     },
                 );
             }
+            // A guarded callable binding: `var __importDefault = (this &&
+            // this.__importDefault) || function (mod) { … }` — the preamble
+            // TypeScript and Babel emit for CommonJS default interop. The guard
+            // branch is an unknown member load, so only the literal function
+            // branch has a declaration; bind it so a call *through the helper
+            // name* resolves to the helper the file actually declares.
+            if let Some(name) = binding_identifier_name(&declarator.id)
+                && let Some(init) = &declarator.init
+            {
+                let guarded = self.guarded_callable_functions(init);
+                if !guarded.is_empty() {
+                    let targets = env.bindings.entry(name).or_default();
+                    for function in guarded {
+                        if !targets.values.contains(&function) {
+                            targets.values.push(function);
+                        }
+                    }
+                }
+            }
             if let Some(name) = binding_identifier_name(&declarator.id)
                 && let Some(init) = &declarator.init
                 && let Some(targets) = self.async_function_promise_targets(init, env)
@@ -4940,6 +4959,73 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         }
     }
 
+    /// The object shape a default-interop helper produces from the module it
+    /// wraps: `mod && mod.__esModule ? mod : { default: mod }`.
+    ///
+    /// Two branches, distinguished by the wrapped module's observed shape rather
+    /// than by the helper's name:
+    /// - a module that already exposes `default` (`exports.__esModule = true;
+    ///   exports.default = …`) is ESM-shaped and passes through unchanged;
+    /// - an unmarked CommonJS module whose *value* is callable
+    ///   (`module.exports = fn`) is wrapped, so `helper.default` reaches it.
+    ///
+    /// A plain property-bag CommonJS module has no callable module value to
+    /// wrap and keeps its own members. `__importStar` shares this shape: it
+    /// preserves the namespace's members and adds `default`.
+    fn commonjs_interop_object(
+        &self,
+        inner: &'ast Expression<'ast>,
+        env: &FlowEnv,
+    ) -> Option<ObjectTargets> {
+        let wrapped = self.object_targets_from_expression(inner, env);
+        if wrapped.as_ref().is_some_and(|object| {
+            object.properties.contains_key("default")
+                || object.object_properties.contains_key("default")
+        }) {
+            return wrapped;
+        }
+        let module_value = self
+            .collection_targets_from_expression(inner, env)
+            .map(|targets| targets.all_targets())
+            .unwrap_or_default();
+        if module_value.is_empty() {
+            return wrapped;
+        }
+        let mut object = wrapped.unwrap_or_default();
+        for target in module_value {
+            object.add_property_target("default".to_string(), target);
+        }
+        Some(object)
+    }
+
+    /// Callable branches of a guarded initializer — `a || function () {}`,
+    /// `a && function () {}`, `cond ? a : b`. Only a branch that *is* a literal
+    /// function/class expression has a declaration to point at; an unknown
+    /// member load contributes nothing. Both branches are unioned: either can
+    /// be taken at runtime.
+    fn guarded_callable_functions(&self, expression: &'ast Expression<'ast>) -> Vec<FunctionId> {
+        match expression {
+            Expression::LogicalExpression(logical) => {
+                let mut targets = self.guarded_callable_functions(&logical.left);
+                targets.extend(self.guarded_callable_functions(&logical.right));
+                targets
+            }
+            Expression::ConditionalExpression(conditional) => {
+                let mut targets = self.guarded_callable_functions(&conditional.consequent);
+                targets.extend(self.guarded_callable_functions(&conditional.alternate));
+                targets
+            }
+            Expression::ParenthesizedExpression(inner) => {
+                self.guarded_callable_functions(&inner.expression)
+            }
+            Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_) => self
+                .function_for_expression(expression)
+                .map(|function| vec![function.id])
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
+    }
+
     /// Extract the static string specifier of a `require("x")` call, if present.
     fn require_specifier(&self, call: &'ast CallExpression<'ast>) -> Option<&'ast str> {
         let is_require = matches!(&call.callee, Expression::Identifier(identifier) if identifier.name == "require");
@@ -5157,7 +5243,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             return Some(summary.object.clone());
         }
         if let Some(inner) = self.commonjs_interop_argument(call) {
-            return self.object_targets_from_expression(inner, env);
+            return self.commonjs_interop_object(inner, env);
         }
         // A call to a function summarized elsewhere (`const app = express()`):
         // seed the object shape that function returns (the `app` object that

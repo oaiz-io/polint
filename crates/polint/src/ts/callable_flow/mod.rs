@@ -319,6 +319,127 @@ mod tests {
         }
     }
 
+    /// The CommonJS default-interop preamble TypeScript and Babel emit is two
+    /// things at once: a callable the file itself declares (so calls *to*
+    /// `__importDefault(...)` resolve to it), and a wrapper over the module it
+    /// receives (so reads *through* it resolve). Which wrapper shape applies is
+    /// decided by the wrapped module — an ESM-marked module with `exports.default`
+    /// passes through, a bare `module.exports = fn` is wrapped as `{ default: fn }`.
+    #[test]
+    fn commonjs_default_interop_helper_and_wrapper_shapes_resolve() {
+        const HELPER: &str = "var __importDefault = (this && this.__importDefault) || function (mod) {\n    return (mod && mod.__esModule) ? mod : { \"default\": mod };\n};\n";
+        const HELPER_TEXT: &str = "function (mod) {\n    return (mod && mod.__esModule) ? mod : { \"default\": mod };\n}";
+        // (main tail after the helper preamble, helper module source, call snippet, target text)
+        let cases: &[(&str, &str, &str, &str)] = &[
+            // The helper call itself — client4/client5's `__importDefault(require(…))`.
+            (
+                "const lib = __importDefault(require('./helper.js'));\n",
+                "function target() {}\nmodule.exports = target;\n",
+                "__importDefault(require('./helper.js'))",
+                HELPER_TEXT,
+            ),
+            // Marked ESM default: the helper forwards the namespace unchanged.
+            (
+                "const lib = __importDefault(require('./helper.js'));\nlib.default();\n",
+                "Object.defineProperty(exports, \"__esModule\", { value: true });\nexports.default = function foo() {};\n",
+                "lib.default()",
+                "function foo() {}",
+            ),
+            // Unmarked CommonJS callable: the helper wraps it as `{ default: mod }`.
+            (
+                "const lib = __importDefault(require('./helper.js'));\nlib.default();\n",
+                "function target() {}\nmodule.exports = target;\n",
+                "lib.default()",
+                "function target() {}",
+            ),
+        ];
+        for (tail, helper_source, call, target_text) in cases {
+            let source = format!("{HELPER}{tail}");
+            let repo = tempfile::tempdir().unwrap();
+            std::fs::write(repo.path().join("main.js"), &source).unwrap();
+            std::fs::write(repo.path().join("helper.js"), helper_source).unwrap();
+            let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+            let sources = BTreeMap::from([
+                ("main.js", source.as_str()),
+                ("helper.js", *helper_source),
+            ]);
+            let paths = output
+                .db
+                .files()
+                .iter()
+                .map(|file| (file.id, file.relative_path.clone()))
+                .collect::<BTreeMap<_, _>>();
+            let text = |function: &FunctionFact| {
+                let path = paths.get(&function.file).expect("function file");
+                sources[path.as_str()]
+                    [function.span.start_byte as usize..function.span.end_byte as usize]
+                    .to_string()
+            };
+            let functions = output
+                .db
+                .functions()
+                .iter()
+                .map(|function| (function.id, function))
+                .collect::<BTreeMap<_, _>>();
+            let main = output
+                .db
+                .files()
+                .iter()
+                .find(|file| file.relative_path == "main.js")
+                .unwrap();
+            let start = source.find(call).unwrap() as u32;
+            let site = output
+                .db
+                .call_sites()
+                .iter()
+                .find(|site| site.file == main.id && site.span.start_byte == start)
+                .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
+            let targets = output
+                .db
+                .refined_call_edges()
+                .iter()
+                .filter(|edge| edge.site == site.id && edge.status == CallTargetStatus::Resolved)
+                .filter_map(|edge| Some(text(functions.get(&edge.target_function?)?)))
+                .collect::<BTreeSet<_>>();
+            assert!(
+                targets.contains(*target_text),
+                "expected {target_text:?} for {call:?} in {source}, got {targets:?}"
+            );
+        }
+
+        // Negative controls: a guard whose branches are not literal callables
+        // binds nothing, and a shadowing parameter must not reach the module's
+        // helper.
+        for (source, call) in [
+            (
+                format!("{HELPER}function use(__importDefault) {{\n    __importDefault();\n}}\nuse(0);\n"),
+                "__importDefault();",
+            ),
+            (
+                "const maybe = (globalThis.a && globalThis.b) || globalThis.c;\nmaybe();\n"
+                    .to_string(),
+                "maybe()",
+            ),
+        ] {
+            let repo = tempfile::tempdir().unwrap();
+            std::fs::write(repo.path().join("main.js"), &source).unwrap();
+            let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+            let start = source.find(call).unwrap() as u32;
+            let site = output
+                .db
+                .call_sites()
+                .iter()
+                .find(|site| site.span.start_byte == start)
+                .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
+            assert!(
+                output.db.refined_call_edges().iter().all(|edge| {
+                    edge.site != site.id || edge.status != CallTargetStatus::Resolved
+                }),
+                "a shadowed or non-callable guard must stay unresolved: {source}"
+            );
+        }
+    }
+
     #[test]
     fn recovered_parse_does_not_seed_callable_shape_models() {
         let repo = tempfile::tempdir().unwrap();
