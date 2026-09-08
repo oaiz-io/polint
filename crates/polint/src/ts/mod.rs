@@ -9,6 +9,7 @@ mod unavailable;
 #[cfg(not(feature = "lang-typescript"))]
 pub use unavailable::{semantic_graph, token_flow};
 pub mod binding;
+mod callable_flow;
 pub mod error;
 mod frontend;
 #[cfg(test)]

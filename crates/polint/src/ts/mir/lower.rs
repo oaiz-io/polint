@@ -579,6 +579,7 @@ impl TsMirLowering {
         functions.dedup_by(|left, right| left.span == right.span && left.name == right.name);
 
         let mut prepared = Vec::new();
+        let mut prepared_identities = BTreeSet::new();
         for function in functions {
             let span = span_from_oxc(file, function.span);
             let Some(function_fact) =
@@ -587,6 +588,12 @@ impl TsMirLowering {
             else {
                 continue;
             };
+            // A variable initializer is also visited as an anonymous callable.
+            // Both candidates can resolve to the same owner despite different
+            // candidate names; each owned source body must be lowered only once.
+            if !prepared_identities.insert((function_fact.id, span.start_byte, span.end_byte)) {
+                continue;
+            }
             let body = self.push_body(interner, db, file, function_fact, span);
             prepared.push((function, function_fact.id, body));
         }
@@ -4635,6 +4642,47 @@ mod places {
         );
         let output = lower_ts_mir(&db);
         (db, output)
+    }
+
+    #[test]
+    fn variable_callables_have_one_body_per_resolved_owner() {
+        let (output, interner) = lower(
+            "src/callables.js",
+            r#"
+const arrow = (value) => value;
+const expression = function named(value) { return value; };
+function outer(seed) {
+    const nested = (value) => seed + value;
+    return nested;
+}
+"#,
+        );
+        assert_eq!(output.bodies.len(), 5, "four callables and the module body");
+        let keys = output
+            .bodies
+            .iter()
+            .map(|body| interner.resolve(body.stable_key))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            keys.len(),
+            output.bodies.len(),
+            "MIR body identities are unique"
+        );
+        let operation_keys = output
+            .operations
+            .iter()
+            .map(|operation| interner.resolve(operation.stable_key))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(operation_keys.len(), output.operations.len());
+        assert_eq!(
+            output
+                .operations
+                .iter()
+                .filter(|operation| matches!(operation.kind, MirOperationKind::Return { .. }))
+                .count(),
+            4,
+            "every callable retains its return operation"
+        );
     }
 
     #[test]

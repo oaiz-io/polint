@@ -17,7 +17,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-#[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
+#[cfg(feature = "lang-typescript")]
 use oxc_allocator::Allocator;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 use oxc_semantic::SemanticBuilder;
@@ -43,6 +43,7 @@ use crate::ts::binding::direct::{
 };
 use crate::ts::binding::facts::{TsDirectBindingFact, TsDirectBindingKind, TsDirectBindingStatus};
 use crate::ts::binding::store::TsDirectBindingOutput;
+use crate::ts::callable_flow::TsCallableFlow;
 #[cfg(all(test, feature = "lang-typescript"))]
 use crate::ts::inventory::extract::extract_ts_inventory;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
@@ -55,7 +56,7 @@ use crate::ts::object_model::facts::{
     TsReceiverBindingFact,
 };
 use crate::ts::object_model::store::TsObjectModelOutput;
-#[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
+#[cfg(feature = "lang-typescript")]
 use crate::ts::parse::parse_ts_file;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 use crate::ts::scope::extract::{extract_ts_scope_from_program, mark_scope_partial_ast};
@@ -118,6 +119,7 @@ pub(crate) fn build_semantic_graph_with_ts_direct_bindings_and_adaptation_models
         adaptation_models,
         &TsObjectModelOutput::default(),
         None,
+        &[],
         no_additional_projection,
     )
 }
@@ -140,6 +142,7 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection_and_adaptat
         adaptation_models,
         &object_model,
         Some(ts_direct_bindings.analyses.as_slice()),
+        &ts_direct_bindings.callable_flows,
         project_additional_facts,
     )
 }
@@ -150,6 +153,7 @@ fn build_semantic_graph_with_inputs<H: AnalysisHost>(
     adaptation_models: &AdaptationModelStore,
     object_model: &TsObjectModelOutput,
     ts_analyses: Option<&[TsFileAnalysis]>,
+    callable_flows: &[TsCallableFlow],
     project_additional_facts: fn(
         &H,
         &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
@@ -164,6 +168,7 @@ fn build_semantic_graph_with_inputs<H: AnalysisHost>(
     project_additional_facts(db, &mut builder.inner);
     builder.project_ts_direct_bindings(db, ts_direct_bindings);
     builder.project_ts_token_source_flows(db, ts_analyses);
+    builder.project_ts_callable_flows(db, callable_flows);
     builder.project_ts_object_model(db, object_model);
     builder.project_adaptation_models(interner, adaptation_models);
     builder.project_member_of_edges(db);
@@ -182,7 +187,7 @@ fn no_additional_projection(
 ) {
 }
 
-pub(crate) use crate::ts::semantic_graph::{TsFileAnalysis, analyze_ts_file};
+pub(crate) use crate::ts::semantic_graph::TsFileAnalysis;
 
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 struct TsBindingFileAnalysis {
@@ -229,6 +234,7 @@ impl TsDirectBindingAnalysis for TsBindingFileAnalysis {
 pub(crate) struct TsDirectBindingCollection {
     output: TsDirectBindingOutput,
     analyses: Vec<TsFileAnalysis>,
+    callable_flows: Vec<TsCallableFlow>,
 }
 
 impl TsDirectBindingCollection {
@@ -266,9 +272,13 @@ impl TsDirectBindingCollection {
 pub(crate) fn collect_ts_direct_binding_collection(
     db: &impl AnalysisHost,
 ) -> TsDirectBindingCollection {
-    let analyses = collect_ts_file_analyses(db);
+    let (analyses, callable_flows) = collect_ts_file_analyses(db);
     let output = collect_ts_direct_bindings_from_analyses(db, &analyses);
-    TsDirectBindingCollection { output, analyses }
+    TsDirectBindingCollection {
+        output,
+        analyses,
+        callable_flows,
+    }
 }
 
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
@@ -277,14 +287,50 @@ pub(crate) fn collect_ts_direct_bindings(db: &impl AnalysisHost) -> TsDirectBind
     collect_ts_direct_bindings_from_analyses(db, &analyses)
 }
 
-fn collect_ts_file_analyses(db: &impl AnalysisHost) -> Vec<TsFileAnalysis> {
-    let interner_handle = db.stable_key_interner();
-    let interner = &interner_handle;
-    db.files()
+#[cfg(feature = "lang-typescript")]
+fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
+    let interner = db.stable_key_interner();
+    let files = db
+        .files()
         .iter()
         .filter(|file| file.language.is_ts_family())
-        .map(|file| analyze_ts_file(interner, file))
-        .collect()
+        .collect::<Vec<_>>();
+    let arenas = files
+        .iter()
+        .map(|_| Allocator::default())
+        .collect::<Vec<_>>();
+    let parsed = files
+        .iter()
+        .zip(&arenas)
+        .map(|(file, arena)| parse_ts_file(arena, file))
+        .collect::<Vec<_>>();
+    let analyses = files
+        .iter()
+        .zip(&parsed)
+        .map(|(file, parsed)| {
+            crate::ts::semantic_graph::analyze_parsed_ts_file(&interner, file, parsed)
+        })
+        .collect();
+    let programs = files
+        .iter()
+        .zip(&parsed)
+        .filter(|(_, parsed)| parsed.fully_parsed)
+        .map(|(file, parsed)| (file.id, parsed.program()))
+        .collect();
+    let callable_flows = crate::ts::callable_flow::collect_callable_flows(db, &programs);
+    (analyses, callable_flows)
+}
+
+#[cfg(not(feature = "lang-typescript"))]
+fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
+    let interner = db.stable_key_interner();
+    let analyses = db
+        .files()
+        .iter()
+        .filter(|file| file.language.is_ts_family())
+        .map(|file| crate::ts::semantic_graph::analyze_ts_file(&interner, file))
+        .collect();
+    (analyses, Vec::new())
 }
 
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
@@ -553,6 +599,61 @@ impl GraphBuilder {
         );
     }
 
+    fn project_ts_callable_flows(&mut self, db: &impl AnalysisHost, flows: &[TsCallableFlow]) {
+        use crate::analysis_neutral::points_to::facts::PointsToPrecision;
+        let interner = db.stable_key_interner();
+        let functions = db
+            .functions()
+            .iter()
+            .filter_map(|function| {
+                let key = function_node_key(db, function);
+                self.node_for_key(&interner, &key)
+                    .map(|node| (function.id, (node, key)))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let sites = db
+            .call_sites()
+            .iter()
+            .filter_map(|site| {
+                let key = node_key_from_identity("callsite", &interner.resolve(site.stable_key));
+                self.node_for_key(&interner, &key)
+                    .map(|node| (site.id, (node, site)))
+            })
+            .collect::<BTreeMap<_, _>>();
+        for flow in flows {
+            let (Some(&(callsite, site)), Some((target, target_key))) =
+                (sites.get(&flow.site), functions.get(&flow.target_function))
+            else {
+                continue;
+            };
+            let identity = semantic_stable_key(
+                FactFamily::PointsToConstraint,
+                &[
+                    ("site", interner.resolve(site.stable_key).to_string()),
+                    ("target", target_key.clone()),
+                    ("binding", flow.binding.clone()),
+                    ("model", format!("callable_shape:{:?}", flow.kind)),
+                ],
+            )
+            .into_string();
+            self.inner.push_constraint_with_precision(
+                &interner,
+                ConstraintKind::CopyEdge {
+                    dst: callsite,
+                    src: *target,
+                },
+                &identity,
+                PointsToPrecision::Heuristic,
+            );
+            self.inner.push_constraint_with_precision(
+                &interner,
+                ConstraintKind::CallConstraint { callsite },
+                &identity,
+                PointsToPrecision::Heuristic,
+            );
+        }
+    }
+
     // -- TS object-model constraints ---------------------------------------
 
     fn project_ts_object_model(
@@ -632,6 +733,18 @@ impl GraphBuilder {
                 self.push_constraint(
                     interner,
                     ConstraintKind::CallConstraint { callsite },
+                    &interner.resolve(read.stable_key),
+                );
+                // The loaded property value is the callee. Keep that flow in
+                // the graph explicitly; constraint identities include their
+                // kind, so a FieldLoad cannot be joined to a CallConstraint by
+                // comparing their complete stable keys.
+                self.push_constraint(
+                    interner,
+                    ConstraintKind::CopyEdge {
+                        dst: callsite,
+                        src: dst,
+                    },
                     &interner.resolve(read.stable_key),
                 );
             }
@@ -1188,6 +1301,7 @@ mod tests {
             &AdaptationModelStore::default(),
             object_model,
             None,
+            &[],
             no_additional_projection,
         )
     }
@@ -1957,6 +2071,29 @@ function run() {
                         .resolve_stable_key(constraint.stable_key)
                         .contains("read:holder.target")
             }));
+            let loaded = output
+                .constraints
+                .iter()
+                .find_map(|constraint| match constraint.kind {
+                    ConstraintKind::FieldLoad { dst, .. } => Some(dst),
+                    _ => None,
+                })
+                .expect("the property value is loaded");
+            let callsite = output
+                .nodes
+                .iter()
+                .find_map(|node| matches!(node.kind, NodeKind::Callsite(_)).then_some(node.id))
+                .expect("the callsite has a semantic node");
+            assert!(
+                output.constraints.iter().any(|constraint| {
+                    constraint.kind
+                        == ConstraintKind::CopyEdge {
+                            dst: callsite,
+                            src: loaded,
+                        }
+                }),
+                "property values must flow into the callee variable"
+            );
             SemanticGraphStore::from_output(output, &db.stable_key_interner())
                 .expect("object callsite graph validates");
         }

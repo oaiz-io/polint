@@ -236,17 +236,6 @@ fn evidence_callee(
         );
     }
 
-    if matches!(evidence, "fn" | "callable" | "callback") {
-        return (
-            CallCallee::FunctionValue {
-                place: PlaceId(u64::MAX),
-            },
-            None,
-            CallSyntaxKind::FunctionValue,
-            "function_value".to_string(),
-        );
-    }
-
     if crate::analysis_api::is_anonymous_callable_name(evidence) {
         return (
             CallCallee::Identifier {
@@ -704,6 +693,22 @@ mod tests {
         assert_eq!(site.result, Some(PlaceId(2)));
         assert_eq!(site.status, CallTargetStatus::Unresolved);
         assert_eq!(site.precision, CallPrecision::Conservative);
+    }
+
+    #[test]
+    fn common_callback_names_retain_their_identifier_evidence() {
+        for name in ["fn", "callable", "callback", "handler"] {
+            let (callee, receiver, kind, _) = super::evidence_callee(name, Language::JavaScript);
+            assert_eq!(
+                callee,
+                CallCallee::Identifier {
+                    reference: None,
+                    name: name.to_string(),
+                }
+            );
+            assert_eq!(receiver, None);
+            assert_eq!(kind, CallSyntaxKind::Function);
+        }
     }
 
     #[test]

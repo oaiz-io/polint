@@ -28,6 +28,7 @@ pub struct TsPointsToCallsite {
     callsite_node: SemanticNodeId,
     callsite_stable_key: StableKeyId,
     constraint_stable_key: StableKeyId,
+    precision: PointsToPrecision,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -71,6 +72,16 @@ impl TsPointsToInputs {
             })
             .collect::<BTreeMap<_, _>>();
 
+        let mut precision_by_callsite = BTreeMap::<SemanticNodeId, PointsToPrecision>::new();
+        for constraint in db.semantic_constraints() {
+            if let ConstraintKind::CallConstraint { callsite } = constraint.kind {
+                precision_by_callsite
+                    .entry(callsite)
+                    .and_modify(|precision| *precision = (*precision).max(constraint.precision))
+                    .or_insert(constraint.precision);
+            }
+        }
+
         let callable_objects = db
             .semantic_nodes()
             .iter()
@@ -91,6 +102,10 @@ impl TsPointsToInputs {
                 Some(TsPointsToCallsite {
                     caller_node,
                     callsite_node,
+                    precision: precision_by_callsite
+                        .get(&callsite_node)
+                        .copied()
+                        .unwrap_or(PointsToPrecision::FlowInsensitive),
                     callsite_stable_key: *node_key_by_id.get(&callsite_node)?,
                     constraint_stable_key: constraint_key_by_callsite
                         .get(&callsite_node)
@@ -182,7 +197,7 @@ pub fn solve_ts_points_to(
                 source: callsite.caller_node,
                 target: *target,
                 status: set.status,
-                precision: set.precision,
+                precision: set.precision.max(callsite.precision),
                 stable_key,
                 provenance,
             });
@@ -208,15 +223,6 @@ fn project_constraints(
     inputs: &TsPointsToInputs,
 ) -> Vec<PointsToConstraintFact> {
     let mut projected = BTreeMap::new();
-    let callsite_by_source_key = inputs
-        .constraints
-        .iter()
-        .filter_map(|constraint| match constraint.kind {
-            ConstraintKind::CallConstraint { callsite } => Some((constraint.stable_key, callsite)),
-            _ => None,
-        })
-        .collect::<BTreeMap<_, _>>();
-
     for (&object, &(node, node_stable_key)) in &inputs.callable_objects {
         insert_projected_constraint(
             interner,
@@ -281,18 +287,6 @@ fn project_constraints(
                         field: field.clone(),
                     },
                 );
-                if let Some(callsite) = callsite_by_source_key.get(&constraint.stable_key) {
-                    insert_projected_constraint(
-                        interner,
-                        &mut projected,
-                        constraint.stable_key,
-                        "field_load_callsite",
-                        PointsToConstraintKind::Copy {
-                            dst: var_for_node(*callsite),
-                            src: var_for_node(*dst),
-                        },
-                    );
-                }
             }
             ConstraintKind::FieldStore { base, field, src } => {
                 insert_projected_constraint(
@@ -347,7 +341,7 @@ fn insert_projected_constraint(
 }
 
 fn var_for_node(node: SemanticNodeId) -> PtVarId {
-    PtVarId(node.0)
+    crate::analysis_neutral::points_to::vars::semantic_node_var(node)
 }
 
 fn object_for_node(node: SemanticNodeId) -> ObjectTokenId {
@@ -356,4 +350,111 @@ fn object_for_node(node: SemanticNodeId) -> ObjectTokenId {
 
 pub fn budget_status(result: &PointsToSolveResult) -> BudgetStatus {
     BudgetStatus::from_points_to(result.budget_status)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn heap_slots_cannot_alias_unrelated_semantic_nodes() {
+        let interner = crate::internal_core::test_stable_key_interner();
+        let caller = SemanticNodeId(1);
+        let target = SemanticNodeId(2);
+        let loaded = SemanticNodeId(3);
+        let object = SemanticNodeId(4);
+        // The first dynamic heap slot has raw ID 5. A semantic node numbered
+        // 5 is an unrelated variable and must never inherit that slot's value.
+        let unrelated = SemanticNodeId(5);
+        let invoked = SemanticNodeId(6);
+        let constraints = [
+            (
+                "allocate",
+                ConstraintKind::Alloc {
+                    dst: object,
+                    object,
+                },
+            ),
+            (
+                "store",
+                ConstraintKind::FieldStore {
+                    base: object,
+                    field: "method".into(),
+                    src: target,
+                },
+            ),
+            (
+                "load",
+                ConstraintKind::FieldLoad {
+                    dst: loaded,
+                    base: object,
+                    field: "method".into(),
+                },
+            ),
+            (
+                "callee",
+                ConstraintKind::CopyEdge {
+                    dst: invoked,
+                    src: loaded,
+                },
+            ),
+            (
+                "call:unrelated",
+                ConstraintKind::CallConstraint {
+                    callsite: unrelated,
+                },
+            ),
+            (
+                "call:invoked",
+                ConstraintKind::CallConstraint { callsite: invoked },
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, (key, kind))| ConstraintFact {
+            id: crate::analysis_neutral::ids::SemanticConstraintId(index as u64),
+            kind,
+            status: PointsToStatus::Present,
+            precision: PointsToPrecision::FlowInsensitive,
+            stable_key: interner.intern(key),
+        })
+        .collect();
+        let inputs = TsPointsToInputs {
+            constraints,
+            callable_objects: BTreeMap::from([
+                (
+                    object_for_node(caller),
+                    (caller, interner.intern("function:caller")),
+                ),
+                (
+                    object_for_node(target),
+                    (target, interner.intern("function:target")),
+                ),
+            ]),
+            callsites: [unrelated, invoked]
+                .into_iter()
+                .map(|node| TsPointsToCallsite {
+                    precision: PointsToPrecision::FlowInsensitive,
+                    caller_node: caller,
+                    callsite_node: node,
+                    callsite_stable_key: interner.intern(format!("site:{}", node.0)),
+                    constraint_stable_key: interner.intern(format!("constraint:{}", node.0)),
+                })
+                .collect(),
+        };
+        let result = solve_ts_points_to(&interner, &inputs, &SolverBudget::default());
+        assert_eq!(budget_status(&result.points_to), BudgetStatus::WithinBudget);
+        assert!(
+            result
+                .points_to
+                .sets
+                .iter()
+                .all(|set| { set.variable != var_for_node(unrelated) || set.objects.is_empty() })
+        );
+        assert!(result.points_to.sets.iter().any(|set| {
+            set.variable == var_for_node(invoked) && set.objects == [object_for_node(target)]
+        }));
+        assert_eq!(result.derived_edges.len(), 1);
+        assert_eq!(result.derived_edges[0].target, target);
+    }
 }
