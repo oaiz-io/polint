@@ -3,6 +3,7 @@ use super::facts::{
     DataFlowNodeKind, DataFlowPrecision, DataFlowProvenance, DataFlowStatus, DataFlowValidation,
 };
 use super::store::{DataFlowOutput, next_data_flow_edge_id, next_data_flow_node_id};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::analysis_api::{FactFamily, stable_key_from_parts};
@@ -15,26 +16,103 @@ use crate::analysis_neutral::summaries::facts::{
 };
 use crate::internal_core::Language;
 
+struct CallInputs<'a> {
+    sites: BTreeMap<CallSiteId, &'a CallSiteFact>,
+    summaries: BTreeMap<crate::internal_core::FunctionId, Vec<&'a SummaryFact>>,
+}
+
+impl<'a> CallInputs<'a> {
+    fn new(db: &'a impl AnalysisHost) -> Self {
+        let mut sites = BTreeMap::new();
+        for site in db.call_sites() {
+            sites.entry(site.id).or_insert(site);
+        }
+        let mut summaries: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for summary in db.summary_facts() {
+            if summary.domain == SummaryDomainKind::DataFlowTito
+                && summary.status == SummaryStatus::Present
+            {
+                summaries.entry(summary.function).or_default().push(summary);
+            }
+        }
+        Self { sites, summaries }
+    }
+}
+
+/// Append-aware indexes for the direct-call projection. The fact vectors keep
+/// their original insertion order; hash tables are used only for lookup. Index
+/// entries retain the first match, including for sparse or repeated input IDs.
+struct CallProjection<'a> {
+    facts: &'a mut DataFlowOutput,
+    nodes_indexed: usize,
+    edges_indexed: usize,
+    nodes_by_place: HashMap<PlaceId, DataFlowNodeId>,
+    nodes_by_key: HashMap<crate::internal_core::StableKeyId, DataFlowNodeId>,
+    keys_by_node: HashMap<DataFlowNodeId, crate::internal_core::StableKeyId>,
+    edge_keys: HashSet<crate::internal_core::StableKeyId>,
+}
+
+impl<'a> CallProjection<'a> {
+    fn new(facts: &'a mut DataFlowOutput) -> Self {
+        Self {
+            facts,
+            nodes_indexed: 0,
+            edges_indexed: 0,
+            nodes_by_place: HashMap::new(),
+            nodes_by_key: HashMap::new(),
+            keys_by_node: HashMap::new(),
+            edge_keys: HashSet::new(),
+        }
+    }
+
+    fn refresh_nodes(&mut self) {
+        for node in &self.facts.nodes[self.nodes_indexed..] {
+            if let Some(place) = node.place {
+                self.nodes_by_place.entry(place).or_insert(node.id);
+            }
+            self.nodes_by_key.entry(node.stable_key).or_insert(node.id);
+            self.keys_by_node.entry(node.id).or_insert(node.stable_key);
+        }
+        self.nodes_indexed = self.facts.nodes.len();
+    }
+
+    fn existing_node(&mut self, key: crate::internal_core::StableKeyId) -> Option<DataFlowNodeId> {
+        self.refresh_nodes();
+        self.nodes_by_key.get(&key).copied()
+    }
+
+    fn has_edge(&mut self, key: crate::internal_core::StableKeyId) -> bool {
+        self.edge_keys.extend(
+            self.facts.edges[self.edges_indexed..]
+                .iter()
+                .map(|edge| edge.stable_key),
+        );
+        self.edges_indexed = self.facts.edges.len();
+        self.edge_keys.contains(&key)
+    }
+}
+
 pub fn derive_direct_call_edges(db: &impl AnalysisHost, output: &mut DataFlowOutput) {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    let inputs = CallInputs::new(db);
+    let mut output = CallProjection::new(output);
     for edge in db.refined_call_edges() {
         if edge.status == CallTargetStatus::Resolved {
-            derive_resolved_call_edge(db, output, edge);
+            derive_resolved_call_edge(interner, &inputs, &mut output, edge);
         } else {
-            derive_unresolved_call_edge(interner, output, edge);
+            derive_unresolved_call_edge(interner, &mut output, edge);
         }
     }
 }
 
 fn derive_resolved_call_edge(
-    db: &impl AnalysisHost,
-    output: &mut DataFlowOutput,
+    interner: &crate::internal_core::StableKeyInterner,
+    inputs: &CallInputs<'_>,
+    output: &mut CallProjection<'_>,
     edge: &RefinedCallEdgeFact,
 ) {
-    let interner_handle = db.stable_key_interner();
-    let interner = &interner_handle;
-    let site = db.call_sites().iter().find(|site| site.id == edge.site);
+    let site = inputs.sites.get(&edge.site).copied();
     let site_id = site.map(|site| site.id);
     let callee_input = call_node(
         interner,
@@ -95,7 +173,7 @@ fn derive_resolved_call_edge(
             },
         );
     }
-    bridge_target_summaries(db, output, edge, site, site_id);
+    bridge_target_summaries(interner, inputs, output, edge, site, site_id);
     if let Some(returned) = return_node(output, site) {
         push_edge(
             interner,
@@ -118,23 +196,18 @@ fn derive_resolved_call_edge(
 }
 
 fn bridge_target_summaries(
-    db: &impl AnalysisHost,
-    output: &mut DataFlowOutput,
+    interner: &crate::internal_core::StableKeyInterner,
+    inputs: &CallInputs<'_>,
+    output: &mut CallProjection<'_>,
     edge: &RefinedCallEdgeFact,
     site: Option<&CallSiteFact>,
     call_site: Option<CallSiteId>,
 ) {
-    let interner_handle = db.stable_key_interner();
-    let interner = &interner_handle;
     let Some(target_function) = edge.target_function else {
         return;
     };
 
-    for summary in db.summary_facts().iter().filter(|summary| {
-        summary.function == target_function
-            && summary.domain == SummaryDomainKind::DataFlowTito
-            && summary.status == SummaryStatus::Present
-    }) {
+    for summary in inputs.summaries.get(&target_function).into_iter().flatten() {
         for flow in &summary.tito_flows {
             if !super::summary_edges::flow_kind_projects_as_tito(flow.kind) {
                 continue;
@@ -221,7 +294,7 @@ fn bridge_target_summaries(
 }
 
 fn argument_nodes(
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     _edge: &RefinedCallEdgeFact,
     site: Option<&CallSiteFact>,
 ) -> Vec<(usize, DataFlowNodeId)> {
@@ -233,7 +306,7 @@ fn argument_nodes(
 }
 
 fn call_root_node(
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     edge: &RefinedCallEdgeFact,
     site: Option<&CallSiteFact>,
     root: FlowRoot,
@@ -265,29 +338,29 @@ fn call_root_node(
 }
 
 fn receiver_node(
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     site: Option<&CallSiteFact>,
 ) -> Option<DataFlowNodeId> {
     let receiver = site.and_then(|site| site.receiver)?;
     place_node(output, receiver)
 }
 
-fn return_node(output: &mut DataFlowOutput, site: Option<&CallSiteFact>) -> Option<DataFlowNodeId> {
+fn return_node(
+    output: &mut CallProjection<'_>,
+    site: Option<&CallSiteFact>,
+) -> Option<DataFlowNodeId> {
     site.and_then(|site| site.result)
         .and_then(|place| place_node(output, place))
 }
 
-fn place_node(output: &DataFlowOutput, place: PlaceId) -> Option<DataFlowNodeId> {
-    output
-        .nodes
-        .iter()
-        .find(|node| node.place == Some(place))
-        .map(|node| node.id)
+fn place_node(output: &mut CallProjection<'_>, place: PlaceId) -> Option<DataFlowNodeId> {
+    output.refresh_nodes();
+    output.nodes_by_place.get(&place).copied()
 }
 
 fn derive_unresolved_call_edge(
     interner: &crate::internal_core::StableKeyInterner,
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     edge: &RefinedCallEdgeFact,
 ) {
     let source = call_node(
@@ -314,7 +387,7 @@ fn derive_unresolved_call_edge(
             1,
             2,
             &interner.resolve(edge.stable_key),
-            output,
+            output.facts,
         )
     });
     push_edge(
@@ -357,7 +430,7 @@ struct CallEdgeDraft<'a> {
 
 fn push_edge(
     interner: &crate::internal_core::StableKeyInterner,
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     draft: CallEdgeDraft<'_>,
 ) {
     let stable_key = stable_key_from_parts(
@@ -374,15 +447,11 @@ fn push_edge(
             ("status", format!("{:?}", draft.status)),
         ],
     );
-    if output
-        .edges
-        .iter()
-        .any(|edge| edge.stable_key == stable_key)
-    {
+    if output.has_edge(stable_key) {
         return;
     }
-    output.edges.push(DataFlowEdgeFact {
-        id: next_data_flow_edge_id(&output.edges),
+    output.facts.edges.push(DataFlowEdgeFact {
+        id: next_data_flow_edge_id(&output.facts.edges),
         from: draft.from,
         to: draft.to,
         kind: draft.kind,
@@ -415,7 +484,7 @@ fn push_edge(
 
 fn summary_node(
     interner: &crate::internal_core::StableKeyInterner,
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     fact: &SummaryFact,
     kind: DataFlowNodeKind,
     role: &str,
@@ -436,16 +505,11 @@ fn summary_node(
             ),
         ],
     );
-    if let Some(existing) = output
-        .nodes
-        .iter()
-        .find(|node| node.stable_key == stable_key)
-        .map(|node| node.id)
-    {
+    if let Some(existing) = output.existing_node(stable_key) {
         return existing;
     }
-    let id = next_data_flow_node_id(&output.nodes);
-    output.nodes.push(DataFlowNodeFact {
+    let id = next_data_flow_node_id(&output.facts.nodes);
+    output.facts.nodes.push(DataFlowNodeFact {
         id,
         kind,
         language: Language::Unknown,
@@ -467,7 +531,7 @@ fn summary_node(
 
 fn push_call_summary_tito_edge(
     interner: &crate::internal_core::StableKeyInterner,
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     edge: &RefinedCallEdgeFact,
     summary: &SummaryFact,
     flow: &crate::analysis_neutral::summaries::facts::SummaryFlowEdge,
@@ -492,15 +556,11 @@ fn push_call_summary_tito_edge(
             ("flow_kind", format!("{:?}", flow.kind)),
         ],
     );
-    if output
-        .edges
-        .iter()
-        .any(|edge| edge.stable_key == stable_key)
-    {
+    if output.has_edge(stable_key) {
         return;
     }
-    output.edges.push(DataFlowEdgeFact {
-        id: next_data_flow_edge_id(&output.edges),
+    output.facts.edges.push(DataFlowEdgeFact {
+        id: next_data_flow_edge_id(&output.facts.edges),
         from,
         to,
         kind: DataFlowEdgeKind::SummaryTito,
@@ -569,20 +629,20 @@ fn unresolved_validation(
 
 fn node_key(
     interner: &crate::internal_core::StableKeyInterner,
-    output: &DataFlowOutput,
+    output: &mut CallProjection<'_>,
     node: DataFlowNodeId,
 ) -> String {
+    output.refresh_nodes();
     output
-        .nodes
-        .iter()
-        .find(|fact| fact.id == node)
-        .map(|fact| interner.resolve(fact.stable_key).to_string())
+        .keys_by_node
+        .get(&node)
+        .map(|key| interner.resolve(*key).to_string())
         .unwrap_or_else(|| format!("node:{}", node.0))
 }
 
 fn call_node(
     interner: &crate::internal_core::StableKeyInterner,
-    output: &mut DataFlowOutput,
+    output: &mut CallProjection<'_>,
     kind: DataFlowNodeKind,
     edge: &RefinedCallEdgeFact,
     suffix: String,
@@ -600,16 +660,11 @@ fn call_node(
             ("node", suffix),
         ],
     );
-    if let Some(existing) = output
-        .nodes
-        .iter()
-        .find(|node| node.stable_key == stable_key)
-        .map(|node| node.id)
-    {
+    if let Some(existing) = output.existing_node(stable_key) {
         return existing;
     }
-    let id = next_data_flow_node_id(&output.nodes);
-    output.nodes.push(DataFlowNodeFact {
+    let id = next_data_flow_node_id(&output.facts.nodes);
+    output.facts.nodes.push(DataFlowNodeFact {
         id,
         kind,
         language: edge.language,
@@ -717,6 +772,33 @@ mod tests {
     }
 
     #[test]
+    fn projection_indexes_preserve_first_matches_as_facts_are_appended() {
+        let interner = crate::internal_core::test_stable_key_interner();
+        let first = place_node(50, PlaceId(10));
+        let first_key = first.stable_key;
+        let mut facts = DataFlowOutput {
+            nodes: vec![first],
+            ..DataFlowOutput::empty()
+        };
+        let mut output = CallProjection::new(&mut facts);
+        assert_eq!(output.existing_node(first_key), Some(DataFlowNodeId(50)));
+        let second = place_node(70, PlaceId(20));
+        let second_key = second.stable_key;
+        output.facts.nodes.push(second);
+        assert_eq!(output.existing_node(second_key), Some(DataFlowNodeId(70)));
+        let mut repeated = place_node(50, PlaceId(10));
+        repeated.stable_key = interner.intern("later identity for repeated id");
+        output.facts.nodes.push(repeated);
+        output.refresh_nodes();
+        assert_eq!(output.nodes_by_place[&PlaceId(10)], DataFlowNodeId(50));
+        assert_eq!(output.keys_by_node[&DataFlowNodeId(50)], first_key);
+        assert_eq!(
+            node_key(&interner, &mut output, DataFlowNodeId(50)),
+            interner.resolve(first_key).as_ref()
+        );
+    }
+
+    #[test]
     fn resolved_refined_call_creates_role_specific_edges() {
         let mut db = test_db();
         db.replace_call_facts(CallOutput {
@@ -735,7 +817,12 @@ mod tests {
             models: Vec::new(),
             budgets: Vec::new(),
         };
-        derive_resolved_call_edge(&db, &mut output, &refined_edge(CallTargetStatus::Resolved));
+        derive_resolved_call_edge(
+            &db.stable_key_interner(),
+            &CallInputs::new(&db),
+            &mut CallProjection::new(&mut output),
+            &refined_edge(CallTargetStatus::Resolved),
+        );
 
         assert!(output.edges.iter().any(|edge| {
             edge.kind == DataFlowEdgeKind::CallArgumentToParameter
@@ -764,7 +851,7 @@ mod tests {
         let mut output = DataFlowOutput::empty();
         derive_unresolved_call_edge(
             &crate::analysis_neutral::LocalAnalysisDb::new().stable_key_interner(),
-            &mut output,
+            &mut CallProjection::new(&mut output),
             &refined_edge(CallTargetStatus::Unresolved),
         );
 
@@ -1232,7 +1319,7 @@ mod tests {
             let mut output = DataFlowOutput::empty();
             derive_unresolved_call_edge(
                 &crate::analysis_neutral::LocalAnalysisDb::new().stable_key_interner(),
-                &mut output,
+                &mut CallProjection::new(&mut output),
                 &refined_edge(call_status),
             );
 

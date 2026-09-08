@@ -60,12 +60,19 @@ pub fn derive_type_value_alias_with_cache_stats(
     module_topology_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
 ) -> TypeValueAliasProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = TYPE_VALUE_ALIAS_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, TYPE_VALUE_ALIAS_PROVIDER_ID);
     let mut diagnostics = Vec::new();
     let mut output = super::go::derive_go_type_value_alias(db);
+    checkpoint("go_facts");
     let ts_js_output = super::ts_js::derive_ts_js_type_value_alias(db);
+    checkpoint("ts_js_facts");
     output.types.types.extend(ts_js_output.types.types);
     output.types.narrowed.extend(ts_js_output.types.narrowed);
     output.values.values.extend(ts_js_output.values.values);
@@ -92,27 +99,32 @@ pub fn derive_type_value_alias_with_cache_stats(
     );
     output = relation_merge.output;
     diagnostics.extend(relation_merge.diagnostics);
+    checkpoint("merge_normalize");
     let mut points_to_constraints =
         crate::analysis_neutral::points_to::constraints::derive_points_to_constraints(
             interner, &output,
         );
     points_to_constraints.extend(std::mem::take(&mut output.points_to.constraints));
+    checkpoint("points_to_constraints");
     let points_to_output = crate::analysis_neutral::points_to::solver::output_with_solved_sets(
         interner,
         points_to_constraints,
         crate::analysis_neutral::points_to::solver::PointsToBudget::default(),
     );
+    checkpoint("points_to_solve");
     let mut alias_output = crate::analysis_neutral::aliases::provider_stack::derive_alias_answers(
         interner,
         &output.access_paths.access_paths,
         &points_to_output.sets,
     );
+    checkpoint("alias_answers");
     alias_output
         .answers
         .extend(std::mem::take(&mut output.aliases.answers));
     output.points_to = points_to_output;
     output.aliases = alias_output;
     output = output.normalized(interner);
+    checkpoint("normalize");
     let output_digest = type_value_alias_output_digest(
         db,
         manifest,
@@ -129,12 +141,14 @@ pub fn derive_type_value_alias_with_cache_stats(
         &upstream_syntax_output_digests,
         &output,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
     match output_digest {
         Ok(output_digest) => {
             db.replace_normalized_type_value_alias_facts(output);
+            checkpoint("store_metadata");
             TypeValueAliasProviderOutput {
                 diagnostics,
                 cache_stats,

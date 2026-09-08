@@ -22,7 +22,7 @@ pub fn derive_alias_answers(
             ]
         })
         .collect::<Vec<_>>();
-    operands.sort_by_cached_key(|operand| index.operand_stable_identity(interner, *operand));
+    sort_operands(&index, interner, &mut operands);
     operands.dedup();
 
     let mut answers = Vec::new();
@@ -40,6 +40,36 @@ pub fn derive_alias_answers(
         }
     }
     AliasOutput { answers }.normalized(interner)
+}
+
+fn sort_operands(
+    index: &AliasQueryIndex<'_>,
+    interner: &crate::internal_core::StableKeyInterner,
+    operands: &mut [AliasOperand],
+) {
+    // A base appears once per projection in the input. Build its potentially
+    // large semantic identity once, then sort the original sequence by compact
+    // lexical ranks. Equal text gets equal ranks, preserving stable-sort ties
+    // and the subsequent adjacent-only deduplication exactly.
+    let mut identities = std::collections::BTreeMap::new();
+    for &operand in operands.iter() {
+        identities
+            .entry(operand)
+            .or_insert_with(|| index.operand_stable_identity(interner, operand));
+    }
+    let mut identities = identities.into_iter().collect::<Vec<_>>();
+    identities.sort_by(|left, right| left.1.cmp(&right.1));
+    let mut ranks = std::collections::BTreeMap::new();
+    let mut previous = None;
+    let mut rank = 0usize;
+    for (operand, identity) in &identities {
+        if previous.is_some_and(|previous| previous != identity.as_str()) {
+            rank += 1;
+        }
+        ranks.insert(*operand, rank);
+        previous = Some(identity.as_str());
+    }
+    operands.sort_by_cached_key(|operand| ranks[operand]);
 }
 
 fn budget_exceeded_answer(
@@ -78,6 +108,45 @@ mod tests {
     };
     use crate::analysis_neutral::points_to::vars;
     use crate::internal_core::Language;
+
+    #[test]
+    fn compact_operand_ranks_preserve_text_sort_ties_and_duplicates() {
+        let interner = crate::internal_core::test_stable_key_interner();
+        for count in [0, 1, 8, 65, 100] {
+            let paths = (0..count)
+                .map(|id| {
+                    let mut fact = path(AccessPathId(id), PlaceId(id % 7), "field");
+                    // Different paths can share identity text; stable-sort ties
+                    // must not reorder their interleaved base operands.
+                    fact.stable_key = interner.intern(format!("path:{}", id % 11));
+                    fact
+                })
+                .collect::<Vec<_>>();
+            let index = AliasQueryIndex::new(&paths, &[]);
+            for reverse in [false, true] {
+                let mut expected = paths
+                    .iter()
+                    .flat_map(|path| {
+                        [
+                            AliasOperand::Place(path.base),
+                            AliasOperand::AccessPath(path.id),
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                if reverse {
+                    expected.reverse();
+                }
+                let mut actual = expected.clone();
+                expected.sort_by_cached_key(|operand| {
+                    index.operand_stable_identity(&interner, *operand)
+                });
+                expected.dedup();
+                sort_operands(&index, &interner, &mut actual);
+                actual.dedup();
+                assert_eq!(actual, expected);
+            }
+        }
+    }
 
     #[test]
     fn provider_stack_derives_evidence_backed_answers() {

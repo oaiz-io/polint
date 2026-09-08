@@ -156,6 +156,11 @@ fn run_repo_perf_point_with_store_mode(
         diagnostics_digest = digest_diagnostics(&output.diagnostics),
         "run diagnostics"
     );
+    tracing::debug!(
+        target: "polint::kernel::stage",
+        diagnostics = ?output.diagnostics,
+        "run diagnostics details"
+    );
 
     let budget = budget_counters(&output.db);
 

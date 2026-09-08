@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Static Analysis 2.0 Implementation
 status: in_progress
-last_updated: "2026-08-31T04:16:33Z"
-last_activity: 2026-08-31
+last_updated: "2026-09-08T06:59:01Z"
+last_activity: 2026-09-08
 progress:
   total_phases: 9
   completed_phases: 2
@@ -59,6 +59,7 @@ Add `public surface leak gate (ubuntu-latest)` AND `public surface leak gate (ma
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260906-1ex | Index deep-analysis joins and stream evidence payloads; inherited Jelly gate remains red | 2026-09-08 | this commit | [260906-1ex-fundamental-deep-analysis-performance-re](./quick/260906-1ex-fundamental-deep-analysis-performance-re/) |
 | 260830-nzd | Implement and A/B benchmark byte-identical Polint algorithmic scan speedups | 2026-08-31 | d196786d | [260830-nzd-implement-and-a-b-benchmark-the-polint-1](./quick/260830-nzd-implement-and-a-b-benchmark-the-polint-1/) |
 | 260829-s1l | Refuse cross-checkout sharing for rule hosts that embed Cargo-provided checkout paths | 2026-08-29 | this commit | [260829-s1l-fix-cache-sharing-for-rule-hosts-that-em](./quick/260829-s1l-fix-cache-sharing-for-rule-hosts-that-em/) |
 | 260829-qto | Final v0.3.2 rule-host-store release review and blocker fixes | 2026-08-29 | c56d69de | [260829-qto-final-release-readiness-review-and-block](./quick/260829-qto-final-release-readiness-review-and-block/) |

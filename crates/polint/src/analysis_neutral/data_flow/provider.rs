@@ -46,16 +46,27 @@ pub fn derive_data_flow_with_cache_stats(
     entrypoints_output_digest: Digest,
     extensions_output_digest: Digest,
 ) -> DataFlowProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = DATA_FLOW_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     debug_assert_eq!(manifest.id, DATA_FLOW_PROVIDER_ID);
     let mut output = DataFlowOutput::empty();
     derive_local_place_nodes(db, &mut output);
+    checkpoint("place_nodes");
     super::local::derive_local_value_flow(db, &mut output);
+    checkpoint("local_flow");
     super::direct_calls::derive_direct_call_edges(db, &mut output);
+    checkpoint("direct_calls");
     super::summary_edges::derive_summary_projected_edges(db, &mut output);
+    checkpoint("summary_edges");
     derive_source_models(db, &mut output);
     derive_extension_models(db, &mut output);
+    checkpoint("models");
     let interner = db.stable_key_interner();
     output = output.normalized(&interner);
+    checkpoint("normalize");
 
     let output_digest = data_flow_output_digest(
         manifest,
@@ -71,16 +82,20 @@ pub fn derive_data_flow_with_cache_stats(
         &output,
         &interner,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
     match db.replace_data_flow_facts(output) {
-        Ok(()) => DataFlowProviderOutput {
-            diagnostics: Vec::new(),
-            cache_stats,
-            output_digest: Some(output_digest),
-            execution: Default::default(),
-        },
+        Ok(()) => {
+            checkpoint("store_metadata");
+            DataFlowProviderOutput {
+                diagnostics: Vec::new(),
+                cache_stats,
+                output_digest: Some(output_digest),
+                execution: Default::default(),
+            }
+        }
         Err(error) => DataFlowProviderOutput {
             diagnostics: vec![provider_error_diagnostic(error.to_string())],
             cache_stats,
