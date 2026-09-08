@@ -4,7 +4,8 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BinaryOperator, BindingPattern, Class, ClassElement, Declaration,
     ExportDefaultDeclarationKind, Expression, FormalParameters, Function, FunctionBody,
-    LogicalOperator, MethodDefinition, ObjectPropertyKind, Program, PropertyKey, Statement,
+    LogicalOperator, MethodDefinition, MethodDefinitionKind, ObjectPropertyKind, Program,
+    PropertyKey, Statement,
     VariableDeclarator,
 };
 use oxc_span::GetSpan;
@@ -964,6 +965,22 @@ fn collect_class_functions<'ast>(
 ) {
     for element in &class.body.body {
         match element {
+            // A class *is* its constructor callable: `new C()` runs the
+            // constructor body, and Jelly attributes that body's calls to the
+            // class function, not to a separate `C.constructor`. Lower the
+            // constructor under the class name/span so the class FunctionFact
+            // owns its call sites end to end (MIR body -> call site caller ->
+            // solver source -> refined-call owner).
+            ClassElement::MethodDefinition(method)
+                if method.kind == MethodDefinitionKind::Constructor =>
+            {
+                collect_function(
+                    class_name.to_string(),
+                    class.span,
+                    &method.value,
+                    functions,
+                );
+            }
             ClassElement::MethodDefinition(method) => {
                 if let Some(method_name) = method_name(method) {
                     collect_function(

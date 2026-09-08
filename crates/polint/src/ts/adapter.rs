@@ -2122,6 +2122,11 @@ fn push_ts_class(
         is_exported,
         is_component_like,
     ));
+    // The class function *is* the constructor callable, so it carries the
+    // explicit `constructor(){}` body's facts. No separate `C.constructor`
+    // function is emitted below: two owners for one body would split call
+    // attribution between the class and the member span.
+    let constructor = class_constructor(class);
     push_ts_function(
         db,
         TsAstCtx {
@@ -2133,8 +2138,12 @@ fn push_ts_class(
             name: name.clone(),
             span: class.span,
             is_exported,
-            cyclomatic_complexity: 1,
-            calls: Vec::new(),
+            cyclomatic_complexity: constructor
+                .map(|method| ts_cyclomatic_complexity(&method.value))
+                .unwrap_or(1),
+            calls: constructor
+                .map(|method| function_body_calls(method.value.body.as_deref()))
+                .unwrap_or_default(),
             is_component_like: false,
         },
     );
@@ -2146,6 +2155,9 @@ fn push_ts_class(
 
     for element in &class.body.body {
         match element {
+            // Folded into the class function above.
+            ClassElement::MethodDefinition(method)
+                if method.kind == MethodDefinitionKind::Constructor => {}
             ClassElement::MethodDefinition(method) => {
                 let Some(method_name) = method_name(method) else {
                     continue;
@@ -2303,6 +2315,18 @@ fn extract_anonymous_callables_from_object_property(
     }
 
     extract_anonymous_callables_from_expression(db, ctx, &property.value, true);
+}
+
+/// The class's explicit `constructor(){}` member, if it declares one.
+fn class_constructor<'ast>(class: &'ast Class<'ast>) -> Option<&'ast MethodDefinition<'ast>> {
+    class.body.body.iter().find_map(|element| match element {
+        ClassElement::MethodDefinition(method)
+            if method.kind == MethodDefinitionKind::Constructor =>
+        {
+            Some(&**method)
+        }
+        _ => None,
+    })
 }
 
 fn class_method_function_span(method: &MethodDefinition<'_>, source: &str) -> oxc_span::Span {

@@ -715,7 +715,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     let Some(body) = method.value.body.as_deref() else {
                         continue;
                     };
-                    let Some(owner) = self.function_for_class_method(method) else {
+                    let Some(owner) = self.owner_for_class_method(class, method) else {
                         continue;
                     };
                     let is_constructor = method.kind == MethodDefinitionKind::Constructor;
@@ -815,7 +815,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let Some(super_ctor) = constructor_method(super_class) else {
             return;
         };
-        let Some(super_ctor_fact) = self.function_for_class_method(super_ctor) else {
+        let Some(super_ctor_fact) = self.owner_for_class_method(super_class, super_ctor) else {
             return;
         };
         let Some(super_flow) = self.function_flows_by_id.get(&super_ctor_fact.id).cloned() else {
@@ -1078,7 +1078,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     let Some(body) = method.value.body.as_deref() else {
                         continue;
                     };
-                    let Some(function_fact) = self.function_for_class_method(method) else {
+                    let Some(function_fact) = self.owner_for_class_method(class, method) else {
                         continue;
                     };
                     let flow = FunctionFlow {
@@ -6711,6 +6711,22 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             }
             _ => None,
         }
+    }
+
+    /// The `FunctionFact` that owns a class member's body. A class *is* its
+    /// constructor callable, so a `constructor(){}` body is owned by the class
+    /// function (the class span); every other member owns its own body. This
+    /// must agree with the MIR body owner, or `site.caller == owner.id` below
+    /// rejects every call site in the body.
+    fn owner_for_class_method(
+        &self,
+        class: &'ast Class<'ast>,
+        method: &'ast MethodDefinition<'ast>,
+    ) -> Option<&'db FunctionFact> {
+        if method.kind == MethodDefinitionKind::Constructor {
+            return self.function_for_span(class.span);
+        }
+        self.function_for_class_method(method)
     }
 
     fn function_for_class_method(
