@@ -65,6 +65,7 @@ pub(super) const CYCLOMATIC_COMPLEXITY_METRIC_NAME: &str = "cyclomatic_complexit
 use metadata::*;
 
 mod capability;
+mod completeness;
 mod db;
 mod fact_index;
 mod fact_store;
@@ -104,6 +105,7 @@ pub(crate) use review::{ChangedFile, ReviewChangeset};
 pub use capability::{
     Capabilities, CapabilitySupport, CapabilitySupportStatus, CapabilitySupportView,
 };
+pub use completeness::{CapabilityCompleteness, CapabilityCompletenessStatus, CompletenessView};
 pub use db::AnalysisDb;
 #[cfg(test)]
 pub(crate) use rule::RuleRegistry;
@@ -112,7 +114,9 @@ pub(crate) use rule::run_rules_with_capability_support;
 #[cfg(test)]
 pub(crate) use rule::span_from_byte_range;
 pub use rule::{Rule, RuleConfigValue, RuleCtx, RuleKind, RuleMeta, RuleOptions};
-pub(crate) use rule::{rule_id_matches, run_rules, run_rules_with_runtime_provider_blockers};
+pub(crate) use rule::{
+    RuleRuntimeViews, rule_id_matches, run_rules, run_rules_with_runtime_provider_blockers,
+};
 
 #[cfg(test)]
 mod tests {

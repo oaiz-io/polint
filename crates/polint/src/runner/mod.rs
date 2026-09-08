@@ -1,7 +1,7 @@
 use crate::analysis_kernel::{AnalysisKernel, KernelInput};
 use crate::analysis_plan::{AnalysisPlan, RulePlanInputs};
 use crate::config::{LoadedConfig, load_config};
-use crate::core::{Rule, RuleKind, run_rules_with_runtime_provider_blockers};
+use crate::core::{Rule, RuleKind, RuleRuntimeViews, run_rules_with_runtime_provider_blockers};
 use crate::diagnostics::{
     ColorChoice, JsonReportMeta, OutputFormat, RenderOpts, Severity, apply_report_filters,
     build_ai_friendly_report, limit_report_diagnostics, render_ai_friendly_stdout,
@@ -439,14 +439,18 @@ fn analyze_and_run(
         let changeset = read_changeset(path)?;
         output.db.set_changeset(changeset);
     }
+    let runtime = RuleRuntimeViews::new(
+        &output.capability_support,
+        &output.completeness,
+        &output.runtime_blocked_rules,
+    );
     diagnostics.extend(run_rules_with_runtime_provider_blockers(
         &output.db,
         rules,
         &options,
         Some(&exact_enabled),
         true,
-        &output.capability_support,
-        &output.runtime_blocked_rules,
+        &runtime,
     ));
     let file_paths = output
         .db

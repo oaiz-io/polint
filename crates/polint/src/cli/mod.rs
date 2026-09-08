@@ -1847,7 +1847,29 @@ fn calls_policy_template(
         description,
         view_param: "calls: Calls<'_>",
         body: format!(
-            r#"    let mut query = ReachQuery::new(EventPattern::call("{target}"));
+            r#"    let completeness_status = ctx.completeness().status_for("calls");
+    if completeness_status != CapabilityCompletenessStatus::Complete {{
+        let reason = ctx
+            .completeness()
+            .reason_for("calls")
+            .unwrap_or("completeness information is unavailable")
+            .to_string();
+        ctx.report(
+            Diagnostic::warning(
+                ctx.rule_id(),
+                "<workspace>",
+                DiagnosticRange::point(1, 1),
+                format!(
+                    "Calls analysis is incomplete ({{}}).",
+                    completeness_status.as_str()
+                ),
+            )
+            .with_evidence("analysis_completeness", completeness_status.as_str())
+            .with_evidence("analysis_completeness_reason", reason),
+        );
+    }}
+
+    let mut query = ReachQuery::new(EventPattern::call("{target}"));
     query.roots = vec![EventPattern::call("{root}")];
     query.max_depth = 8;
     query.max_paths = 10;

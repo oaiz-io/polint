@@ -4,6 +4,7 @@
 
 use super::AnalysisDb;
 use super::capability::{Capabilities, CapabilitySupportStatus, CapabilitySupportView};
+use super::completeness::CompletenessView;
 use super::ids::FileId;
 use super::span::Span;
 use crate::diagnostics::{Diagnostic, Severity, TextRange as DiagnosticRange, dedupe_diagnostics};
@@ -159,6 +160,7 @@ pub struct RuleCtx<'a> {
     rule: RuleMeta,
     options: RuleOptions,
     capability_support: CapabilitySupportView,
+    completeness: CompletenessView,
 }
 
 impl<'a> RuleCtx<'a> {
@@ -168,11 +170,28 @@ impl<'a> RuleCtx<'a> {
         Self::with_capability_support(db, rule, options, CapabilitySupportView::empty())
     }
 
+    #[cfg(test)]
     pub(crate) fn with_capability_support(
         db: &'a AnalysisDb,
         rule: RuleMeta,
         options: RuleOptions,
         capability_support: CapabilitySupportView,
+    ) -> Self {
+        Self::with_runtime_views(
+            db,
+            rule,
+            options,
+            capability_support,
+            CompletenessView::unknown(),
+        )
+    }
+
+    pub(crate) fn with_runtime_views(
+        db: &'a AnalysisDb,
+        rule: RuleMeta,
+        options: RuleOptions,
+        capability_support: CapabilitySupportView,
+        completeness: CompletenessView,
     ) -> Self {
         Self {
             db,
@@ -180,6 +199,7 @@ impl<'a> RuleCtx<'a> {
             rule,
             options,
             capability_support,
+            completeness,
         }
     }
 
@@ -196,6 +216,15 @@ impl<'a> RuleCtx<'a> {
     /// Returns read-only capability support information for the resolved plan.
     pub fn capability_support(&self) -> &CapabilitySupportView {
         &self.capability_support
+    }
+
+    /// Returns completeness information for the current rule's requested capabilities.
+    ///
+    /// A status of [`CapabilityCompletenessStatus::Unknown`](super::CapabilityCompletenessStatus)
+    /// means the host could not prove completeness for that capability. Rules should
+    /// not interpret missing telemetry as a clean repository.
+    pub fn completeness(&self) -> &CompletenessView {
+        &self.completeness
     }
 
     /// Paths paired with `file`'s relative path under the named `[path_contexts]` rule.
@@ -285,6 +314,26 @@ pub fn run_rules(
     run_rules_with_capability_support(db, rules, options, enabled, parallel, &capability_support)
 }
 
+pub(crate) struct RuleRuntimeViews<'a> {
+    capability_support: &'a CapabilitySupportView,
+    completeness: &'a CompletenessView,
+    runtime_blocked_rules: &'a BTreeSet<String>,
+}
+
+impl<'a> RuleRuntimeViews<'a> {
+    pub(crate) fn new(
+        capability_support: &'a CapabilitySupportView,
+        completeness: &'a CompletenessView,
+        runtime_blocked_rules: &'a BTreeSet<String>,
+    ) -> Self {
+        Self {
+            capability_support,
+            completeness,
+            runtime_blocked_rules,
+        }
+    }
+}
+
 pub(crate) fn run_rules_with_capability_support(
     db: &AnalysisDb,
     rules: &[Rule],
@@ -293,15 +342,10 @@ pub(crate) fn run_rules_with_capability_support(
     parallel: bool,
     capability_support: &CapabilitySupportView,
 ) -> Vec<Diagnostic> {
-    run_rules_with_runtime_provider_blockers(
-        db,
-        rules,
-        options,
-        enabled,
-        parallel,
-        capability_support,
-        &BTreeSet::new(),
-    )
+    let completeness = CompletenessView::unknown();
+    let runtime_blocked_rules = BTreeSet::new();
+    let runtime = RuleRuntimeViews::new(capability_support, &completeness, &runtime_blocked_rules);
+    run_rules_with_runtime_provider_blockers(db, rules, options, enabled, parallel, &runtime)
 }
 
 pub(crate) fn run_rules_with_runtime_provider_blockers(
@@ -310,8 +354,7 @@ pub(crate) fn run_rules_with_runtime_provider_blockers(
     options: &BTreeMap<String, RuleOptions>,
     enabled: Option<&BTreeSet<String>>,
     parallel: bool,
-    capability_support: &CapabilitySupportView,
-    runtime_blocked_rules: &BTreeSet<String>,
+    runtime: &RuleRuntimeViews<'_>,
 ) -> Vec<Diagnostic> {
     let run_one = |rule: &Rule| {
         let meta = match catch_unwind(AssertUnwindSafe(|| rule.meta())) {
@@ -331,17 +374,18 @@ pub(crate) fn run_rules_with_runtime_provider_blockers(
         {
             return Vec::new();
         }
-        if has_blocking_capability(&meta.id, capability_support)
-            || runtime_blocked_rules.contains(&meta.id)
+        if has_blocking_capability(&meta.id, runtime.capability_support)
+            || runtime.runtime_blocked_rules.contains(&meta.id)
         {
             return Vec::new();
         }
         let rule_options = options.get(&meta.id).cloned().unwrap_or_default();
-        let mut ctx = RuleCtx::with_capability_support(
+        let mut ctx = RuleCtx::with_runtime_views(
             db,
             meta.clone(),
             rule_options,
-            capability_support.clone(),
+            runtime.capability_support.clone(),
+            runtime.completeness.for_rule(&meta.id),
         );
         let started = std::time::Instant::now();
         let result = catch_unwind(AssertUnwindSafe(|| rule.run(db, &mut ctx)));

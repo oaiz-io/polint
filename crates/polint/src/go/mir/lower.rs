@@ -458,6 +458,30 @@ fn set_branch_region(operations: &mut [OperationDraft], branch: MirOpId, region:
     *stored = region;
 }
 
+/// Records the value a switch dispatches on.
+///
+/// Switch branches lower to a `Switch` terminator whose case and default edges
+/// carry no truthiness or nilness assumption, so the recorded place is
+/// descriptive evidence only and never refines an abstract state.
+fn set_switch_discriminant(
+    operations: &mut [OperationDraft],
+    branch: MirOpId,
+    predicate_place_key: Option<String>,
+) {
+    let operation = operations
+        .iter_mut()
+        .find(|operation| operation.id == branch)
+        .expect("branch operation should exist");
+    let OperationKindDraft::Branch {
+        predicate_place_key: stored_place,
+        ..
+    } = &mut operation.kind
+    else {
+        panic!("branch operation id should identify a branch");
+    };
+    *stored_place = predicate_place_key;
+}
+
 #[derive(Debug, Default)]
 struct GoMirLowering {
     bodies: Vec<MirBody>,
@@ -977,12 +1001,29 @@ impl<'source> FunctionLowering<'source> {
             | "expression_switch_statement"
             | "type_switch_statement"
             | "switch_statement" => {
-                self.push_branch(interner, operations, statement, None, None);
+                let branch = self.push_branch(interner, operations, statement, None, None);
                 for index in 0..statement.named_child_count() as u32 {
                     let Some(child) = statement.named_child(index) else {
                         continue;
                     };
                     self.lower_statement(interner, child, places, operations, unsupported);
+                }
+                // Loop conditions are deliberately left unbound. A loop body is
+                // lowered after its branch operation, so it lands in the block the
+                // branch reaches on its `false` edge; binding the condition would
+                // apply the loop-exit assumption to the body instead.
+                if let Some(discriminant) = go_switch_discriminant(statement) {
+                    let predicate_place_key = self
+                        .lower_expression(
+                            interner,
+                            discriminant,
+                            places,
+                            &mut Vec::new(),
+                            &mut Vec::new(),
+                            false,
+                        )
+                        .map(|shape| shape.key);
+                    set_switch_discriminant(operations, branch, predicate_place_key);
                 }
             }
             "return_statement" => {
@@ -2313,6 +2354,15 @@ fn node_text<'source>(source: &'source str, node: Node<'_>) -> Option<&'source s
     source.get(node.start_byte()..node.end_byte())
 }
 
+fn go_switch_discriminant(statement: Node<'_>) -> Option<Node<'_>> {
+    match statement.kind() {
+        "expression_switch_statement" | "type_switch_statement" | "switch_statement" => {
+            statement.child_by_field_name("value")
+        }
+        _ => None,
+    }
+}
+
 fn go_nil_test(source: &str, condition: Node<'_>) -> Option<BranchNilTest> {
     if condition.kind() != "binary_expression" {
         return None;
@@ -2901,6 +2951,101 @@ func flow(user User, index int) bool {
                 .terminators
                 .iter()
                 .any(|terminator| matches!(terminator.kind, MirTerminatorKind::Return { .. }))
+        );
+    }
+
+    #[test]
+    fn go_branch_operations_bind_if_and_switch_condition_places() {
+        let (output, interner) = lower(
+            r#"
+package auth
+
+func flow(left bool, right bool, kind int) {
+    if left && right {}
+    switch kind { case 1: return; default: return }
+    for left || right { return }
+}
+"#,
+        );
+
+        let predicates = output
+            .operations
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                MirOperationKind::Branch {
+                    predicate_place,
+                    nil_test,
+                    ..
+                } => Some((predicate_place, nil_test)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(predicates.len(), 3, "{output:#?}");
+
+        let key_for = |predicate| {
+            let place = output
+                .places
+                .iter()
+                .find(|place| place.id == predicate)
+                .expect("predicate place should survive remapping");
+            interner.resolve(place.stable_key).to_string()
+        };
+
+        // The `if` binds the last place its condition reads, the `switch` binds
+        // its discriminant, and the loop stays unbound: a loop body is lowered
+        // into the block the branch reaches on its `false` edge, so a bound
+        // condition would refine the body with the loop-exit assumption.
+        let bound = predicates
+            .iter()
+            .filter_map(|(predicate, _)| predicate.map(key_for))
+            .collect::<Vec<_>>();
+        assert_eq!(bound.len(), 2, "{predicates:?}");
+        assert!(
+            bound.iter().any(|key| key.ends_with("root_name=5:right")),
+            "{bound:?}"
+        );
+        assert!(
+            bound.iter().any(|key| key.ends_with("root_name=4:kind")),
+            "{bound:?}"
+        );
+    }
+
+    #[test]
+    fn go_loop_branches_carry_no_condition_assumption() {
+        let (output, _) = lower(
+            r#"
+package auth
+
+type User struct{}
+
+func flow(user *User, items []string, ready bool) {
+    for user != nil { return }
+    for index := 0; index < len(items); index++ { return }
+    for ready { return }
+    for range items { return }
+}
+"#,
+        );
+
+        // Every branch in this body is a loop branch.
+        let branches = output
+            .operations
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                MirOperationKind::Branch {
+                    predicate_place,
+                    nil_test,
+                    ..
+                } => Some((predicate_place, nil_test)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(branches.len(), 4, "{output:#?}");
+        assert!(
+            branches
+                .iter()
+                .all(|(place, nil_test)| place.is_none() && nil_test.is_none()),
+            "{branches:?}"
         );
     }
 

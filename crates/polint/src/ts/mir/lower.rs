@@ -489,6 +489,28 @@ fn set_branch_region(operations: &mut [OperationDraft], branch: MirOpId, region:
     *stored = region;
 }
 
+fn set_branch_predicate(
+    operations: &mut [OperationDraft],
+    branch: MirOpId,
+    predicate_place_key: Option<String>,
+    nil_test: Option<BranchNilTest>,
+) {
+    let operation = operations
+        .iter_mut()
+        .find(|operation| operation.id == branch)
+        .expect("branch operation should exist");
+    let OperationKindDraft::Branch {
+        predicate_place_key: stored_place,
+        nil_test: stored_nil_test,
+        ..
+    } = &mut operation.kind
+    else {
+        panic!("branch operation id should identify a branch");
+    };
+    *stored_place = predicate_place_key;
+    *stored_nil_test = nil_test;
+}
+
 #[derive(Debug, Default)]
 struct TsMirLowering {
     bodies: Vec<MirBody>,
@@ -1768,8 +1790,9 @@ impl<'source> FunctionLowering<'source> {
                     "switch",
                     (Vec::new(), ConservativeAction::HavocAffectedPlaces),
                 );
-                self.push_branch(interner, operations, statement.span, ControlShape::Switch);
-                self.lower_expression(
+                let branch =
+                    self.push_branch(interner, operations, statement.span, ControlShape::Switch);
+                let discriminant = self.lower_expression(
                     interner,
                     &statement.discriminant,
                     places,
@@ -1777,8 +1800,19 @@ impl<'source> FunctionLowering<'source> {
                     unsupported,
                     false,
                 );
+                // A switch lowers to a `Switch` terminator whose case and default
+                // edges carry no truthiness or nilness assumption, so the
+                // discriminant is recorded as evidence and never refines a state.
+                set_branch_predicate(
+                    operations,
+                    branch,
+                    discriminant.map(|shape| shape.key),
+                    None,
+                );
                 for case in &statement.cases {
                     if let Some(test) = &case.test {
+                        // A case tests `discriminant === test`, not the truthiness
+                        // of `test`, so the case branch carries no bound predicate.
                         self.push_branch(
                             interner,
                             operations,
@@ -2521,19 +2555,27 @@ impl<'source> FunctionLowering<'source> {
                 Some(self.temporary_shape(places, unary.span))
             }
             Expression::ConditionalExpression(conditional) => {
-                self.push_branch(
+                let branch = self.push_branch(
                     interner,
                     operations,
                     conditional.span,
                     ControlShape::Conditional,
                 );
-                self.lower_expression(
+                let lowered = self.lower_expression(
                     interner,
                     &conditional.test,
                     places,
                     operations,
                     unsupported,
                     false,
+                );
+                self.bind_branch_predicate(
+                    interner,
+                    places,
+                    operations,
+                    branch,
+                    &conditional.test,
+                    lowered,
                 );
                 self.lower_expression(
                     interner,
@@ -2553,18 +2595,25 @@ impl<'source> FunctionLowering<'source> {
                 )
             }
             Expression::LogicalExpression(logical) => {
-                if matches!(
+                let branch = matches!(
                     logical.operator,
                     LogicalOperator::And | LogicalOperator::Or | LogicalOperator::Coalesce
-                ) {
+                )
+                .then(|| {
                     self.push_branch(
                         interner,
                         operations,
                         logical.span,
                         ControlShape::Conditional,
-                    );
-                }
-                self.lower_expression(
+                    )
+                });
+                // `??` short-circuits on nullishness, not truthiness, so its left
+                // operand is not bound: a bound predicate place without a nil test
+                // is consumed as a truthiness assumption.
+                let truthiness_branch = branch.filter(|_| {
+                    matches!(logical.operator, LogicalOperator::And | LogicalOperator::Or)
+                });
+                let lowered = self.lower_expression(
                     interner,
                     &logical.left,
                     places,
@@ -2572,6 +2621,16 @@ impl<'source> FunctionLowering<'source> {
                     unsupported,
                     false,
                 );
+                if let Some(branch) = truthiness_branch {
+                    self.bind_branch_predicate(
+                        interner,
+                        places,
+                        operations,
+                        branch,
+                        &logical.left,
+                        lowered,
+                    );
+                }
                 self.lower_expression(
                     interner,
                     &logical.right,
@@ -3764,6 +3823,37 @@ impl<'source> FunctionLowering<'source> {
         }
     }
 
+    /// Binds the place a conditional branch tests, plus any nil comparison.
+    ///
+    /// `predicate_place` is consumed as a truthiness (or, with a nil test,
+    /// nilness) assumption on the branch's `true` / `false` edges, so it may
+    /// only be bound where the `true` edge really does prove the place truthy.
+    fn bind_branch_predicate(
+        &mut self,
+        interner: &crate::internal_core::StableKeyInterner,
+        places: &mut PlaceTableBuilder,
+        operations: &mut [OperationDraft],
+        branch: MirOpId,
+        expression: &Expression<'_>,
+        lowered: Option<PlaceShape>,
+    ) {
+        let nil_test = ts_nil_test(expression);
+        let predicate_place_key = if let Some(operand) = ts_null_operand(expression) {
+            self.lower_expression(
+                interner,
+                operand,
+                places,
+                &mut Vec::new(),
+                &mut Vec::new(),
+                false,
+            )
+            .map(|shape| shape.key)
+        } else {
+            lowered.map(|shape| shape.key)
+        };
+        set_branch_predicate(operations, branch, predicate_place_key, nil_test);
+    }
+
     fn push_branch(
         &self,
         interner: &crate::internal_core::StableKeyInterner,
@@ -4884,6 +4974,104 @@ export function flow(user, index, enabled) {
                 .terminators
                 .iter()
                 .any(|terminator| matches!(terminator.kind, MirTerminatorKind::Return { .. }))
+        );
+    }
+
+    #[test]
+    fn ts_branch_operations_bind_if_switch_ternary_and_logical_condition_places() {
+        let (output, interner) = lower(
+            "src/branches.ts",
+            r#"
+export function flow(flag, other, kind) {
+  if (flag) {}
+  switch (kind) { case other: break; default: break; }
+  const selected = flag ? kind : other;
+  const both = flag && other;
+  const either = flag || other;
+}
+"#,
+        );
+
+        let predicates = output
+            .operations
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                MirOperationKind::Branch {
+                    predicate_place, ..
+                } => Some(predicate_place),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(predicates.len(), 6, "{output:#?}");
+
+        // The `case` branch stays unbound: a case tests `discriminant === test`,
+        // not the truthiness of the case expression.
+        let keys = predicates
+            .iter()
+            .copied()
+            .flatten()
+            .map(|predicate| {
+                let place = output
+                    .places
+                    .iter()
+                    .find(|place| place.id == predicate)
+                    .expect("predicate place should survive remapping");
+                interner.resolve(place.stable_key).to_string()
+            })
+            .collect::<Vec<_>>();
+        // `if`, the ternary test, and both logical left operands bind `flag`;
+        // the switch binds its `kind` discriminant. `other` is only ever a case
+        // test or a right operand, so no branch claims it as a predicate.
+        let mut names = keys
+            .iter()
+            .map(|key| {
+                key.rsplit_once("root_name=")
+                    .expect("place key carries a root name")
+                    .1
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(
+            names,
+            vec!["4:flag", "4:flag", "4:flag", "4:flag", "4:kind"],
+            "{keys:?}"
+        );
+    }
+
+    #[test]
+    fn ts_loop_and_coalesce_branches_carry_no_condition_assumption() {
+        let (output, _) = lower(
+            "src/loops.ts",
+            r#"
+export function flow(user, items, ready) {
+  while (user !== null) { break; }
+  do { break; } while (ready);
+  for (let index = 0; index < items.length; index++) { break; }
+  const fallback = user ?? items;
+}
+"#,
+        );
+
+        // Every branch in this body is a loop branch or the `??` branch.
+        let branches = output
+            .operations
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                MirOperationKind::Branch {
+                    predicate_place,
+                    nil_test,
+                    ..
+                } => Some((predicate_place, nil_test)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(branches.len(), 4, "{output:#?}");
+        assert!(
+            branches
+                .iter()
+                .all(|(place, nil_test)| place.is_none() && nil_test.is_none()),
+            "{branches:?}"
         );
     }
 

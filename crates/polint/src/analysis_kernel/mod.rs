@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[rustfmt::skip]
 #[cfg(test)] mod debug;
+mod completeness;
 #[cfg(test)]
 mod dispatch_tests;
 pub(crate) mod go_syntax_projection;
@@ -398,6 +399,7 @@ pub(crate) struct KernelOutput {
     pub(crate) db: AnalysisDb,
     pub(crate) diagnostics: Vec<Diagnostic>,
     pub(crate) capability_support: CapabilitySupportView,
+    pub(crate) completeness: crate::core::CompletenessView,
     #[cfg_attr(
         not(test),
         expect(
@@ -522,6 +524,12 @@ impl AnalysisKernel {
             store_status,
         );
         run_report.provider_outputs = provider_outputs;
+        let completeness = completeness::view_from_run(
+            input.plan,
+            &db,
+            &run_report.provider_outcomes,
+            &diagnostics,
+        );
         #[cfg(test)]
         let run_report = run_report.with_scc_closure_debug(scc_closure_debug);
 
@@ -529,6 +537,7 @@ impl AnalysisKernel {
             db,
             diagnostics,
             capability_support,
+            completeness,
             run_report,
             runtime_blocked_rules,
         })
@@ -1055,6 +1064,79 @@ mod tests {
             assert_eq!(output.run_report.store_status(), &StoreStatus::Ready);
             assert!(store_path.is_file());
         }
+    }
+
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
+    #[test]
+    fn loop_bodies_stay_reachable_under_a_constant_true_condition() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        std::fs::write(
+            temp.path().join("go.mod"),
+            "module example.com/loops\n\ngo 1.22\n",
+        )
+        .expect("write go.mod");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nfunc sink(value int) {}\n\nfunc loopFlow() {\n\tready := true\n\tfor ready {\n\t\tsink(1)\n\t}\n}\n\nfunc main() { loopFlow() }\n",
+        )
+        .expect("write Go source");
+        std::fs::write(
+            temp.path().join("app.ts"),
+            "function sink(value: number) {}\n\nexport function loopFlow() {\n  const ready = true;\n  while (ready) {\n    sink(1);\n  }\n}\n\nexport function doFlow() {\n  const ready = true;\n  do {\n    sink(2);\n  } while (ready);\n}\n",
+        )
+        .expect("write TypeScript source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let plan = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+
+        let output = AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &Cache::new("", false),
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel should run");
+
+        // A loop body is lowered into the block its branch reaches on the
+        // `false` edge, so binding the loop condition would refine the body with
+        // the loop-exit assumption and retract every block behind it.
+        let call_operations = output
+            .db
+            .mir_operations()
+            .iter()
+            .filter(|operation| {
+                matches!(
+                    operation.kind,
+                    crate::analysis_neutral::mir_op::MirOperationKind::Call { .. }
+                )
+            })
+            .map(|operation| operation.id)
+            .collect::<BTreeSet<_>>();
+        assert!(!call_operations.is_empty(), "fixture should lower calls");
+
+        let unreachable_calls = output
+            .db
+            .abstract_domain_observations()
+            .iter()
+            .filter(|row| {
+                row.slot == crate::analysis_neutral::domains::facts::DomainSlot::Reachability
+                    && row
+                        .operation
+                        .is_some_and(|operation| call_operations.contains(&operation))
+                    && matches!(
+                        &row.value,
+                        crate::analysis_neutral::domains::facts::DomainValue::Label(label)
+                            if label == "unreachable"
+                    )
+            })
+            .count();
+        assert_eq!(
+            unreachable_calls,
+            0,
+            "{:#?}",
+            output.db.abstract_domain_observations()
+        );
     }
 
     #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]

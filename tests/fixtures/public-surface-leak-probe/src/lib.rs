@@ -69,6 +69,13 @@ mod allowlist_witness {
     fn _assert_capabilitysupportview() -> ::core::marker::PhantomData<CapabilitySupportView> {
         ::core::marker::PhantomData
     }
+    fn _assert_capabilitycompleteness() -> ::core::marker::PhantomData<CapabilityCompleteness> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_capabilitycompletenessstatus()
+    -> ::core::marker::PhantomData<CapabilityCompletenessStatus> {
+        ::core::marker::PhantomData
+    }
     fn _assert_changedfiles() -> ::core::marker::PhantomData<ChangedFiles<'static>> {
         ::core::marker::PhantomData
     }
@@ -85,6 +92,9 @@ mod allowlist_witness {
         ::core::marker::PhantomData
     }
     fn _assert_complexitymetrics() -> ::core::marker::PhantomData<ComplexityMetrics<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_completenessview() -> ::core::marker::PhantomData<CompletenessView> {
         ::core::marker::PhantomData
     }
     fn _assert_controlflow() -> ::core::marker::PhantomData<ControlFlow<'static>> {

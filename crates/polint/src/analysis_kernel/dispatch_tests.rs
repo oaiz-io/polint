@@ -16,7 +16,8 @@ use crate::config::{LoadedConfig, load_config};
 #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
 use crate::core::CapabilitySupportView;
 use crate::core::{
-    Capabilities, Rule, RuleKind, RuleMeta, run_rules_with_runtime_provider_blockers,
+    Capabilities, Rule, RuleKind, RuleMeta, RuleRuntimeViews,
+    run_rules_with_runtime_provider_blockers,
 };
 #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
 use crate::diagnostics::sort_diagnostics;
@@ -31,14 +32,18 @@ type Counter = std::sync::Arc<AtomicUsize>;
 
 /// Runs the rules exactly as `runner::analyze_and_run` does for a kernel output.
 fn dispatch(output: &KernelOutput, rules: &[Rule], parallel: bool) -> Vec<Diagnostic> {
+    let runtime = RuleRuntimeViews::new(
+        &output.capability_support,
+        &output.completeness,
+        &output.runtime_blocked_rules,
+    );
     run_rules_with_runtime_provider_blockers(
         &output.db,
         rules,
         &BTreeMap::new(),
         None,
         parallel,
-        &output.capability_support,
-        &output.runtime_blocked_rules,
+        &runtime,
     )
 }
 

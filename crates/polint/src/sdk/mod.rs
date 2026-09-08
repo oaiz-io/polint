@@ -27,16 +27,17 @@ pub fn collect_go_tests<'a>(tests: GoTests<'a>, file: FileId) -> Vec<&'a TestFac
 /// the path-scoping helpers, and [`RuleResult`](crate::sdk::prelude::RuleResult) in one star-import.
 pub mod prelude {
     pub use crate::core::{
-        BranchId, BranchObligation, CapabilitySupport, CapabilitySupportStatus,
-        CapabilitySupportView, ChangeStatus, ComplexityMetricFact, CoverageFact, DefinitionFact,
-        DefinitionId, DefinitionKind, FileId, FileMetricFact, FunctionFact, FunctionId,
-        FunctionMetricFact, GoTypeDeclFact, GoTypeDeclKind, ImportFact, ImportId, JsxAttributeFact,
-        Language, ModuleEdge, ModuleEdgeId, ModuleEdgeKind, ModuleNode, ModuleNodeId,
-        ModuleNodeKind, NodeId, PackageFact, PackageId, ReferenceFact, ReferenceId, ReferenceKind,
-        ResolutionPrecision, ResolutionStatus, ResolvedImportFact, ResolvedImportId, Rule,
-        RuleConfigValue, RuleCtx, RuleId, RuleOptions, SourceFile, Span, StringLiteralFact,
-        SymbolFact, SymbolId, SymbolKind, SymbolNamespace, SymbolPrecision, SymbolResolutionStatus,
-        TestFact, TextRange, TsClassFact, TsComponentFact, UnresolvedReason,
+        BranchId, BranchObligation, CapabilityCompleteness, CapabilityCompletenessStatus,
+        CapabilitySupport, CapabilitySupportStatus, CapabilitySupportView, ChangeStatus,
+        CompletenessView, ComplexityMetricFact, CoverageFact, DefinitionFact, DefinitionId,
+        DefinitionKind, FileId, FileMetricFact, FunctionFact, FunctionId, FunctionMetricFact,
+        GoTypeDeclFact, GoTypeDeclKind, ImportFact, ImportId, JsxAttributeFact, Language,
+        ModuleEdge, ModuleEdgeId, ModuleEdgeKind, ModuleNode, ModuleNodeId, ModuleNodeKind, NodeId,
+        PackageFact, PackageId, ReferenceFact, ReferenceId, ReferenceKind, ResolutionPrecision,
+        ResolutionStatus, ResolvedImportFact, ResolvedImportId, Rule, RuleConfigValue, RuleCtx,
+        RuleId, RuleOptions, SourceFile, Span, StringLiteralFact, SymbolFact, SymbolId, SymbolKind,
+        SymbolNamespace, SymbolPrecision, SymbolResolutionStatus, TestFact, TextRange, TsClassFact,
+        TsComponentFact, UnresolvedReason,
     };
     pub use crate::diagnostics::{
         ColorChoice, Diagnostic, Evidence, Fix, JsonReportMeta, Label, OutputFormat,
@@ -238,6 +239,10 @@ mod tests {
         assert!(metric_capabilities.complexity_metrics);
 
         let mut ctx = RuleCtx::new(&db, rule.meta(), RuleOptions::default());
+        assert_eq!(
+            ctx.completeness().status_for("syntax"),
+            CapabilityCompletenessStatus::Unknown
+        );
         let tests = GoTests::build(&db);
         assert!(collect_go_tests(tests, FileId::from_raw(0)).is_empty());
         rule.run(&db, &mut ctx).expect("prelude rule runs");
@@ -253,6 +258,9 @@ mod tests {
         assert_exported::<CapabilitySupport>();
         assert_exported::<CapabilitySupportStatus>();
         assert_exported::<CapabilitySupportView>();
+        assert_exported::<CapabilityCompleteness>();
+        assert_exported::<CapabilityCompletenessStatus>();
+        assert_exported::<CompletenessView>();
 
         let view = CapabilitySupportView::empty();
         assert!(view.entries().is_empty());

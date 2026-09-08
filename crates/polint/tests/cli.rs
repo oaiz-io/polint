@@ -7136,12 +7136,92 @@ fn new_rule_policy_template_modules_use_public_sdk_only() {
                 "{template}: {module}"
             );
         }
+        if template == "raw-reachable-api" {
+            assert!(module.contains("ctx.completeness().status_for(\"calls\")"));
+            assert!(module.contains("analysis_completeness"));
+        }
         assert!(module.contains("violation.diagnostic("), "{module}");
         assert!(!module.contains("Capabilities::new("), "{module}");
         assert!(!module.contains("impl Rule"), "{module}");
         assert!(!module.contains("polint::core"), "{module}");
         assert!(!module.contains("crate::core"), "{module}");
     }
+}
+
+#[test]
+fn raw_reachable_template_labels_budget_incomplete_run() {
+    let temp = tempfile::tempdir().unwrap();
+    polint_cmd()
+        .current_dir(temp.path())
+        .arg("init")
+        .assert()
+        .success();
+    polint_cmd()
+        .current_dir(temp.path())
+        .args([
+            "new-rule",
+            "go",
+            "budget-aware-reachability",
+            "--template",
+            "raw-reachable-api",
+        ])
+        .assert()
+        .success();
+    point_generated_rule_pack_at_local_polint(temp.path());
+    write_file(
+        &temp.path().join(".polint.toml"),
+        r#"[workspace]
+include = ["**/*.go"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+
+[languages.go]
+module_roots = ["."]
+package_patterns = ["./..."]
+
+[solver.go]
+max_candidates_per_callsite = 1
+"#,
+    );
+    write_file(
+        &temp.path().join("go.mod"),
+        "module example.com/completeness\n\ngo 1.22\n",
+    );
+    let budget_fixture = fs::read_to_string(
+        repo_root().join("tests/eval-fixtures/go-rta/iteration-cap/repo/main.go"),
+    )
+    .unwrap();
+    write_file(&temp.path().join("main.go"), &budget_fixture);
+
+    let report = stdout_json(
+        polint_cmd()
+            .current_dir(temp.path())
+            .args([
+                "check",
+                "--no-cache",
+                "--format",
+                "json",
+                "--fail-on",
+                "none",
+            ])
+            .assert()
+            .success(),
+    );
+    let diagnostic = diagnostics_for_rule(&report, "custom/budget-aware-reachability")
+        .into_iter()
+        .find(|diagnostic| {
+            diagnostic["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("Calls analysis is incomplete"))
+        })
+        .unwrap_or_else(|| panic!("missing template completeness diagnostic: {report:#?}"));
+    assert!(diagnostic_has_evidence(
+        diagnostic,
+        "analysis_completeness",
+        "budget_exceeded"
+    ));
 }
 
 #[test]

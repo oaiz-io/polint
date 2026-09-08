@@ -196,3 +196,19 @@ exposing `EvidenceStore` or other `analysis/evidence/` internals.
 
 The `ALLOWED_PRELUDE` count moved `+1` for this addition. Internal evidence store /
 node / edge / bundle facts remain crate-private.
+
+## Completeness accessor promotion (sanctioned prelude addition)
+
+Rules need to distinguish a clean result from analysis that stopped early or
+could not prove coverage. The accessor stays on `RuleCtx`, while three small
+typed values are promoted so rule authors can inspect its result without
+depending on provider, run-report, solver, or unknown-taxonomy internals.
+
+| Surface | Disposition | Required gates and notes |
+|---|---|---|
+| `CompletenessView` | stable | Returned by `RuleCtx::completeness()`; limited to capabilities directly requested by the current rule; missing host information reports `unknown`. Probe witness `_assert_completenessview`. |
+| `CapabilityCompleteness` | stable | Read-only per-capability row with capability, status, and reason accessors. Provider identities and internal outcome rows remain private. Probe witness `_assert_capabilitycompleteness`. |
+| `CapabilityCompletenessStatus` | stable | Closed rule-facing vocabulary for `complete`, `budget_exceeded`, `provider_failed`, `degraded`, and `unknown`; non-exhaustive for compatibility. Probe witness `_assert_capabilitycompletenessstatus`. |
+
+The `ALLOWED_PRELUDE` count moved `119 -> 122`. No provider graph, solver row,
+run-report type, or unknown-taxonomy type is promoted.

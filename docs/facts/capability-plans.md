@@ -92,3 +92,29 @@ raw graph view.
 Rules that request unsupported or setup-missing hard capabilities produce
 `polint/capability` diagnostics during `polint check` and are not executed with
 placeholder facts.
+
+## Completeness at Rule Execution
+
+Capability support answers whether polint can provide a fact family. It does
+not by itself prove that a particular run finished without truncation or
+unknown regions. Rules can inspect `ctx.completeness()` for that distinction:
+
+```rust
+let status = ctx.completeness().status_for("calls");
+if status != CapabilityCompletenessStatus::Complete {
+    let reason = ctx
+        .completeness()
+        .reason_for("calls")
+        .unwrap_or("completeness information is unavailable");
+    // Report or annotate the policy result with `status.as_str()` and `reason`.
+}
+```
+
+Each directly requested capability is reported as `complete`,
+`budget_exceeded`, `provider_failed`, `degraded`, or `unknown`. Budget status
+includes relevant provider stops and recorded solver/data-flow budget rows.
+`degraded` always carries a reason from the unknown taxonomy. `unknown` means
+the host could not prove completeness; a rule must not treat it as a clean
+repository. `CompletenessView::is_complete()` checks every capability requested
+by the current rule, and `budget_exceeded()` reports whether any of them hit a
+budget.
