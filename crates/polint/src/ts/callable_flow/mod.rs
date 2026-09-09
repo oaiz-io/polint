@@ -848,4 +848,112 @@ mod tests {
             );
         }
     }
+    /// The CommonJS interop preambles branch on the module's `__esModule`
+    /// marker, not on whether it happens to expose a `default` property. Reading
+    /// one for the other is wrong in both directions, so each case below asserts
+    /// the exact resolved set: an unmarked module is wrapped even when it exports
+    /// `default`, and the wrapper nests the whole namespace under `default` even
+    /// when the module value is not callable.
+    #[test]
+    fn commonjs_interop_follows_the_es_module_marker() {
+        const HELPERS: &str = "var __importDefault = (this && this.__importDefault) || function (mod) { return (mod && mod.__esModule) ? mod : { \"default\": mod }; };\nvar __importStar = (this && this.__importStar) || function (mod) { if (mod && mod.__esModule) return mod; var r = {}; for (var k in mod) r[k] = mod[k]; r.default = mod; return r; };\n";
+        // A transpiled ES module: marked, with both a default and a named export.
+        const MARKED: &str = "Object.defineProperty(exports, \"__esModule\", { value: true });\nexports.default = function foo() {};\nexports.m = function m() {};\n";
+        // Unmarked CommonJS that happens to export `default`.
+        const UNMARKED_DEFAULT: &str = "exports.default = function target() {};\n";
+        // Unmarked CommonJS property bag.
+        const UNMARKED_BAG: &str = "exports.m = function m() {};\n";
+        // Unmarked CommonJS whose module *value* is callable.
+        const UNMARKED_FN: &str = "function target() {}\nmodule.exports = target;\n";
+
+        // (lib.js, main.js tail after the preamble, call snippet, exact targets, note)
+        let cases: &[(&str, &str, &str, &[&str], &str)] = &[
+            // Unmarked, so the helper wraps: `lib.default` is the namespace
+            // object, and calling it throws. Reported `target` before.
+            (
+                UNMARKED_DEFAULT,
+                "const lib = __importDefault(require('./lib.js'));\nlib.default();\n",
+                "lib.default()",
+                &[],
+                "invented a target for a call that throws",
+            ),
+            // The call that *is* reachable on that module: through the wrapper's
+            // `default` and then the module's own.
+            (
+                UNMARKED_DEFAULT,
+                "const lib = __importDefault(require('./lib.js'));\nlib.default.default();\n",
+                "lib.default.default()",
+                &["function target() {}"],
+                "missed the reachable call",
+            ),
+            // A property bag has no callable module value, but `default` still
+            // holds the namespace, so this member call is valid.
+            (
+                UNMARKED_BAG,
+                "const lib = __importDefault(require('./lib.js'));\nlib.default.m();\n",
+                "lib.default.m()",
+                &["function m() {}"],
+                "left the namespace unnested",
+            ),
+            // The default helper returns `{ default: mod }` and nothing else, so
+            // the namespace's own members are not on the wrapper.
+            (
+                UNMARKED_BAG,
+                "const lib = __importDefault(require('./lib.js'));\nlib.m();\n",
+                "lib.m()",
+                &[],
+                "exposed a member the default helper does not copy",
+            ),
+            // The star helper does copy them — the one place the two helpers
+            // disagree.
+            (
+                UNMARKED_BAG,
+                "const lib = __importStar(require('./lib.js'));\nlib.m();\n",
+                "lib.m()",
+                &["function m() {}"],
+                "unchanged",
+            ),
+            (
+                UNMARKED_BAG,
+                "const lib = __importStar(require('./lib.js'));\nlib.default.m();\n",
+                "lib.default.m()",
+                &["function m() {}"],
+                "left the namespace unnested",
+            ),
+            // Marked: both helpers return the namespace unchanged.
+            (
+                MARKED,
+                "const lib = __importDefault(require('./lib.js'));\nlib.default();\n",
+                "lib.default()",
+                &["function foo() {}"],
+                "unchanged",
+            ),
+            (
+                MARKED,
+                "const lib = __importDefault(require('./lib.js'));\nlib.m();\n",
+                "lib.m()",
+                &["function m() {}"],
+                "unchanged",
+            ),
+            // Unmarked with a callable module value: `default` reaches it.
+            (
+                UNMARKED_FN,
+                "const lib = __importDefault(require('./lib.js'));\nlib.default();\n",
+                "lib.default()",
+                &["function target() {}"],
+                "unchanged",
+            ),
+        ];
+        for (lib, tail, call, expected, note) in cases {
+            let main = format!("{HELPERS}{tail}");
+            assert_eq!(
+                resolved_targets_at(&[("main.js", &main), ("lib.js", lib)], call),
+                expected
+                    .iter()
+                    .map(|text| (*text).to_string())
+                    .collect::<BTreeSet<_>>(),
+                "{call:?} against {lib:?} ({note})"
+            );
+        }
+    }
 }

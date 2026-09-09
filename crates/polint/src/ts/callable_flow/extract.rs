@@ -25,6 +25,23 @@ use super::{TsCallableFlow, TsCallableFlowKind};
 /// bound keeps deep dependency graphs (e.g. express) finite.
 const MAX_MODULE_SUMMARY_ROUNDS: usize = 4;
 
+/// The property the CommonJS default-interop helpers branch on:
+/// `mod && mod.__esModule ? mod : { default: mod }`.
+const ES_MODULE_MARKER: &str = "__esModule";
+
+/// The property the interop wrapper puts the module value under.
+const DEFAULT_EXPORT: &str = "default";
+
+/// Which interop preamble wrapped a module. They agree on marked modules (both
+/// pass the namespace through) and differ on unmarked ones: the default helper
+/// returns `{ default: mod }` alone, the star helper copies the namespace's own
+/// members alongside `default`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum InteropHelper {
+    Default,
+    Star,
+}
+
 /// Depth bound shared by the recursive callable walks. This is a stack-safety
 /// backstop, not the termination argument: the cycle set is what makes each
 /// walk finite, and it does so without truncating any chain that would have
@@ -267,11 +284,20 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
 struct ModuleExportSummary {
     object: ObjectTargets,
     callables: CollectionTargets,
+    /// Does this module carry the `__esModule` marker the default-interop
+    /// helpers actually branch on? Set by `exports.__esModule = true`, by the
+    /// `Object.defineProperty(exports, "__esModule", …)` form TypeScript emits,
+    /// and by ESM export syntax (which every transpiler marks on the way out).
+    /// The helper's own condition is this marker, never the presence of a
+    /// `default` property — an unmarked CommonJS module that happens to export
+    /// `default` is still wrapped, so reading `default` through the wrapper
+    /// reaches the namespace, not the module's own `default`.
+    esmodule: bool,
 }
 
 impl ModuleExportSummary {
     fn is_empty(&self) -> bool {
-        self.object.is_empty() && self.callables.is_empty()
+        self.object.is_empty() && self.callables.is_empty() && !self.esmodule
     }
 }
 
@@ -683,7 +709,12 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             .unwrap_or_default();
         self.caller_override = saved_override;
         self.invocation_depth -= 1;
-        ModuleExportSummary { object, callables }
+        // A function's return summary is not a module, so it carries no marker.
+        ModuleExportSummary {
+            object,
+            callables,
+            esmodule: false,
+        }
     }
 
     /// Program-global pre-scan assigning each `receiver.next()` call a 0-based
@@ -2427,9 +2458,16 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 if let Some(reexport) = reexport {
                     self.exports.callables.extend(reexport.callables);
                     self.exports.object.merge(reexport.object);
+                    // `module.exports = require('./x')` republishes x's value, so
+                    // it republishes x's marker with it.
+                    self.exports.esmodule |= reexport.esmodule;
                 }
             }
             ExportAssignmentTarget::Property(name) => {
+                if name == ES_MODULE_MARKER {
+                    self.exports.esmodule = true;
+                    return;
+                }
                 for target in callables.all_targets() {
                     self.exports
                         .object
@@ -2555,8 +2593,15 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
 
     /// Capture ESM exports into `self.exports`.
     fn collect_esm_export(&mut self, statement: &'ast Statement<'ast>, env: &mut FlowEnv) {
+        // Called for every module-level statement, so the ESM marker belongs on
+        // the export arms, not here.
         match statement {
             Statement::ExportNamedDeclaration(export) => {
+                // A module that exports through ESM syntax is an ES module:
+                // every transpiler stamps `__esModule` on its CommonJS output,
+                // and a native ESM namespace is what the helper's marked branch
+                // models anyway.
+                self.exports.esmodule = true;
                 if let Some(source) = &export.source {
                     // Re-export: `export { a, b as c } from './m'`.
                     let Some(summary) = self.summary_for_specifier(source.value.as_str()) else {
@@ -2580,9 +2625,19 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 }
             }
             Statement::ExportDefaultDeclaration(export) => {
+                // A module that exports through ESM syntax is an ES module:
+                // every transpiler stamps `__esModule` on its CommonJS output,
+                // and a native ESM namespace is what the helper's marked branch
+                // models anyway.
+                self.exports.esmodule = true;
                 self.capture_default_export(&export.declaration, env);
             }
             Statement::ExportAllDeclaration(export) => {
+                // A module that exports through ESM syntax is an ES module:
+                // every transpiler stamps `__esModule` on its CommonJS output,
+                // and a native ESM namespace is what the helper's marked branch
+                // models anyway.
+                self.exports.esmodule = true;
                 if export.exported.is_none()
                     && let Some(summary) = self.summary_for_specifier(export.source.value.as_str())
                 {
@@ -3657,12 +3712,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 }
             }
             Some("Object.defineProperty") => {
-                let Some(target_name) = call
-                    .arguments
-                    .first()
-                    .and_then(argument_expression)
-                    .and_then(expression_identifier)
-                else {
+                let Some(receiver) = call.arguments.first().and_then(argument_expression) else {
                     return;
                 };
                 let Some(property) = call
@@ -3671,6 +3721,20 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     .and_then(argument_expression)
                     .and_then(|expression| self.constant_string_from_expression(expression, env))
                 else {
+                    return;
+                };
+                // `Object.defineProperty(exports, "__esModule", { value: true })`
+                // is the form TypeScript emits; it is the marker itself, not a
+                // property worth copying.
+                if property == ES_MODULE_MARKER
+                    && (expression_aliases_exports(receiver)
+                        || expression_identifier(receiver)
+                            .is_some_and(|name| self.export_aliases.contains(name)))
+                {
+                    self.exports.esmodule = true;
+                    return;
+                }
+                let Some(target_name) = expression_identifier(receiver) else {
                     return;
                 };
                 let descriptor = call
@@ -5194,55 +5258,96 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         &self,
         call: &'ast CallExpression<'ast>,
     ) -> Option<&'ast Expression<'ast>> {
+        self.commonjs_interop_call(call).map(|(_, inner)| inner)
+    }
+
+    /// The helper kind and the module expression it wraps, for a call to one of
+    /// the interop preambles. The kind matters: on an unmarked module the
+    /// default helper yields `{ default: mod }` and nothing else, while the star
+    /// helper copies the namespace's own members *and* adds `default`.
+    fn commonjs_interop_call(
+        &self,
+        call: &'ast CallExpression<'ast>,
+    ) -> Option<(InteropHelper, &'ast Expression<'ast>)> {
         let name = callee_identifier(&call.callee)?;
-        if matches!(
-            name,
-            "__importDefault"
-                | "__importStar"
-                | "_interopRequireDefault"
-                | "_interopRequireWildcard"
-        ) {
-            call.arguments.first().and_then(argument_expression)
-        } else {
-            None
+        let helper = match name {
+            "__importDefault" | "_interopRequireDefault" => InteropHelper::Default,
+            "__importStar" | "_interopRequireWildcard" => InteropHelper::Star,
+            _ => return None,
+        };
+        let inner = call.arguments.first().and_then(argument_expression)?;
+        Some((helper, inner))
+    }
+
+    /// The export summary of the module an interop helper wraps, when the
+    /// wrapped expression is a `require(...)` this file can resolve. The
+    /// `__esModule` marker lives on the summary, so this is what decides which
+    /// branch of the helper the wrapper takes.
+    fn interop_module_summary(
+        &self,
+        inner: &'ast Expression<'ast>,
+    ) -> Option<&'env ModuleExportSummary> {
+        match inner {
+            Expression::CallExpression(call) => self.require_summary(call),
+            Expression::ParenthesizedExpression(inner) => {
+                self.interop_module_summary(&inner.expression)
+            }
+            _ => None,
         }
     }
 
-    /// The object shape a default-interop helper produces from the module it
-    /// wraps: `mod && mod.__esModule ? mod : { default: mod }`.
+    /// The object shape an interop helper produces from the module it wraps:
+    /// `mod && mod.__esModule ? mod : { default: mod }`.
     ///
-    /// Two branches, distinguished by the wrapped module's observed shape rather
-    /// than by the helper's name:
-    /// - a module that already exposes `default` (`exports.__esModule = true;
-    ///   exports.default = …`) is ESM-shaped and passes through unchanged;
-    /// - an unmarked CommonJS module whose *value* is callable
-    ///   (`module.exports = fn`) is wrapped, so `helper.default` reaches it.
+    /// The branch is decided by the wrapped module's `__esModule` marker, which
+    /// is what the helper itself tests — not by whether the module happens to
+    /// expose a `default` property. Those are different questions, and reading
+    /// one for the other is wrong in both directions: an unmarked CommonJS
+    /// module with `exports.default = fn` was passed through, so `wrapped
+    /// .default()` resolved to `fn` even though the helper wraps that module and
+    /// the call throws; and an unmarked property-bag module was left unnested,
+    /// so the valid `wrapped.default.m()` resolved to nothing.
     ///
-    /// A plain property-bag CommonJS module has no callable module value to
-    /// wrap and keeps its own members. `__importStar` shares this shape: it
-    /// preserves the namespace's members and adds `default`.
+    /// * Marked: the helper returns `mod` itself, so the namespace passes
+    ///   through unchanged.
+    /// * Unmarked: `default` holds the whole module value — the callable, for
+    ///   `module.exports = fn`, and the namespace object, for a property bag, so
+    ///   that `wrapped.default.m()` reaches `m`. The star helper additionally
+    ///   keeps the namespace's own members, which is the one place the two
+    ///   helpers differ.
     fn commonjs_interop_object(
         &self,
+        helper: InteropHelper,
         inner: &'ast Expression<'ast>,
         env: &FlowEnv,
     ) -> Option<ObjectTargets> {
         let wrapped = self.object_targets_from_expression(inner, env);
-        if wrapped.as_ref().is_some_and(|object| {
-            object.properties.contains_key("default")
-                || object.object_properties.contains_key("default")
-        }) {
+        // An unresolvable module carries no marker and no shape; there is
+        // nothing to pass through or to nest either way.
+        if self
+            .interop_module_summary(inner)
+            .is_some_and(|summary| summary.esmodule)
+        {
             return wrapped;
         }
+        let namespace = wrapped.clone().unwrap_or_default();
         let module_value = self
             .collection_targets_from_expression(inner, env)
             .map(|targets| targets.all_targets())
             .unwrap_or_default();
-        if module_value.is_empty() {
+        if namespace.is_empty() && module_value.is_empty() {
             return wrapped;
         }
-        let mut object = wrapped.unwrap_or_default();
+        let mut object = match helper {
+            // `for (k in mod) result[k] = mod[k]` before `result.default = mod`.
+            InteropHelper::Star => namespace.clone(),
+            InteropHelper::Default => ObjectTargets::default(),
+        };
         for target in module_value {
-            object.add_property_target("default".to_string(), target);
+            object.add_property_target(DEFAULT_EXPORT.to_string(), target);
+        }
+        if !namespace.is_empty() {
+            object.add_object_property(DEFAULT_EXPORT.to_string(), namespace);
         }
         Some(object)
     }
@@ -5495,8 +5600,8 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         {
             return Some(summary.object.clone());
         }
-        if let Some(inner) = self.commonjs_interop_argument(call) {
-            return self.commonjs_interop_object(inner, env);
+        if let Some((helper, inner)) = self.commonjs_interop_call(call) {
+            return self.commonjs_interop_object(helper, inner, env);
         }
         // A call to a function summarized elsewhere (`const app = express()`):
         // seed the object shape that function returns (the `app` object that
