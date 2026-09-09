@@ -193,7 +193,6 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
             class_expressions: Vec::new(),
             exports: ModuleExportSummary::default(),
             export_aliases: std::collections::BTreeSet::new(),
-            caller_override: None,
             this_method_walk: false,
             current_super: None,
             invocation_depth: 0,
@@ -246,12 +245,6 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     /// (`app.listen = fn`, `app[method] = fn`) build the export object, so after
     /// the module body walk their `env.objects` entry is folded into `exports`.
     export_aliases: std::collections::BTreeSet<String>,
-    /// When set, emitted edges use this function as the caller instead of the
-    /// call site's enclosing function. Class construction owns constructor-body
-    /// and field-initializer calls,
-    /// so the class-body walk sets this to the class function fact while walking
-    /// the constructor.
-    caller_override: Option<FunctionId>,
     /// True during speculative export-object method walks with a modeled `this`.
     /// These flows retain a separate receiver-model provenance label.
     this_method_walk: bool,
@@ -395,7 +388,6 @@ fn compute_module_export_summaries<'ast>(
                 class_expressions: Vec::new(),
                 exports: ModuleExportSummary::default(),
                 export_aliases: std::collections::BTreeSet::new(),
-                caller_override: None,
                 this_method_walk: false,
                 current_super: None,
                 invocation_depth: 0,
@@ -459,7 +451,6 @@ fn compute_function_return_summaries<'ast>(
             class_expressions: Vec::new(),
             exports: ModuleExportSummary::default(),
             export_aliases: std::collections::BTreeSet::new(),
-            caller_override: None,
             this_method_walk: false,
             current_super: None,
             invocation_depth: 0,
@@ -494,9 +485,8 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     /// bound to that object. `application.js` defines `app.use`, `app.listen`, the
     /// verb handler, etc. as `app.X = function(){ … this.lazyrouter() … }`; those
     /// `this.Y()` calls resolve only with `this` = the (fully built) `app` object.
-    /// Attribution stays with each method (no `caller_override`). This models
-    /// the same receiver binding as `collect_class_body_call_flows` for plain
-    /// object methods.
+    /// This models the same receiver binding as
+    /// `collect_class_body_call_flows` for plain object methods.
     fn collect_export_object_method_flows(&mut self, env: &FlowEnv) {
         // Preserve the speculative receiver model in each flow's provenance.
         let saved_this_walk = self.this_method_walk;
@@ -692,7 +682,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // summary then overwrites the argument-dependent answer at every call.
         env.shadow_parameters(&flow_param_names(flow));
         self.invocation_depth += 1;
-        let saved_override = self.caller_override.take();
         for statement in &flow.body.statements {
             self.collect_statement(statement, flow.function, &mut env);
         }
@@ -707,7 +696,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let callables = returned
             .map(|expression| self.callable_targets_from_expression(expression, &env))
             .unwrap_or_default();
-        self.caller_override = saved_override;
         self.invocation_depth -= 1;
         // A function's return summary is not a module, so it carries no marker.
         ModuleExportSummary {
@@ -754,9 +742,10 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     }
 
     /// Walk each class method and constructor body for call resolution with
-    /// `this`/`super` in scope. Jelly treats every class function as reachable,
-    /// and attributes constructor-body calls to the class node (via
-    /// `caller_override`).
+    /// `this`/`super` in scope. Jelly treats every class function as reachable
+    /// and attributes constructor-body calls to the class node; that attribution
+    /// is established at the frontend/MIR boundary, so the call site a model row
+    /// names already carries the class as its owner.
     fn collect_class_body_call_flows(
         &mut self,
         program: &'ast Program<'ast>,
@@ -764,9 +753,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     ) {
         // Seed top-level function declarations as callable bindings so direct
         // calls to them inside class bodies (e.g. `f1()` in a constructor or
-        // static block) resolve and are attributed via `caller_override` to the
-        // class node (Jelly attributes constructor/field/static-block calls to
-        // the class). `function` declarations are otherwise absent from
+        // static block) resolve. Jelly attributes constructor/field/static-block
+        // calls to the class, which the MIR body owner already records.
+        // `function` declarations are otherwise absent from
         // `env.bindings` (unlike `const f = () => …`).
         let mut class_env = module_env.clone();
         for (name, flow) in &self.function_declarations {
@@ -835,8 +824,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let super_static = super_name
             .as_ref()
             .and_then(|super_name| self.class_static_targets(super_name));
-        // The class function fact owns constructor-body call attribution.
-        let class_fact = self.function_for_span(class.span).map(|fact| fact.id);
 
         for element in &class.body.body {
             // A field initializer (`x = <expr>`) is its own function: walk the
@@ -937,11 +924,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 super_instance.clone()
             };
             // Constructor-body calls are attributed to the class node by Jelly.
-            self.caller_override = if is_constructor { class_fact } else { None };
             for statement in statements {
                 self.collect_statement(statement, owner, &mut env);
             }
-            self.caller_override = None;
             self.current_super = None;
             // `super(arg)` flows the subclass's arguments into the superclass
             // constructor's parameters, so a param invoked there (`x()` in
@@ -992,19 +977,15 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let Some(super_flow) = self.function_flows_by_id.get(&super_ctor_fact.id).cloned() else {
             return;
         };
-        let super_node = self.classes.get(super_name).and_then(|c| c.constructor);
         let mut super_env = module_env.clone();
         if let Some(instance) = super_instance {
             super_env.this_object = instance.clone();
         }
         self.bind_call_arguments_to_flow(&super_flow, super_call, caller_env, &mut super_env);
-        let saved_override = self.caller_override.take();
         let saved_super = self.current_super.take();
-        self.caller_override = super_node;
         for statement in &super_flow.body.statements {
             self.collect_statement(statement, super_flow.function, &mut super_env);
         }
-        self.caller_override = saved_override;
         self.current_super = saved_super;
     }
 
@@ -4295,16 +4276,14 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             return CollectionTargets::default();
         }
         self.invocation_depth += 1;
-        // Calls in the invoked body belong to `flow.function`, not to a
-        // `caller_override` active in an enclosing constructor/field body.
-        let saved_override = self.caller_override.take();
+        // Calls in the invoked body belong to `flow.function`, which is the
+        // owner every model row emitted from it names.
         let result = if let Some(expression) = flow.expression_body {
             self.collect_expression(expression, flow.function, env);
             self.callable_return_targets_from_expression(expression, env, 0)
         } else {
             self.collect_invocation_statements(&flow.body.statements, flow.function, env)
         };
-        self.caller_override = saved_override;
         self.invocation_depth -= 1;
         result
     }
@@ -5643,13 +5622,11 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let mut callee_env = FlowEnv::default();
         self.bind_invocation_arguments(&flow, &arguments, &object_arguments, &mut callee_env);
         self.invocation_depth += 1;
-        let saved_override = self.caller_override.take();
         for statement in &flow.body.statements {
             self.collect_statement(statement, flow.function, &mut callee_env);
         }
         let result = returned_expression_from_statements(&flow.body.statements)
             .and_then(|expression| self.object_targets_from_expression(expression, &callee_env));
-        self.caller_override = saved_override;
         self.invocation_depth -= 1;
         result
     }
@@ -6646,12 +6623,10 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 bind_param_pattern(pattern, &targets, &mut env);
             }
         }
-        // Calls inside this nested body belong to `callback`, not to any
-        // `caller_override` active in the enclosing constructor/field body (e.g.
-        // super5's `super.m()` inside an IIFE arrow is attributed to the arrow,
-        // not the class node). `current_super` is intentionally preserved: an
-        // arrow lexically captures `super` from its enclosing method.
-        let saved_override = self.caller_override.take();
+        // Calls inside this nested body belong to `callback` (e.g. super5's
+        // `super.m()` inside an IIFE arrow is attributed to the arrow, not the
+        // class node). `current_super` is intentionally preserved: an arrow
+        // lexically captures `super` from its enclosing method.
         match expression {
             Expression::ArrowFunctionExpression(function) => {
                 if let Some(expression) = function.get_expression() {
@@ -6671,7 +6646,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             }
             _ => {}
         }
-        self.caller_override = saved_override;
     }
 
     fn promise_method_result_targets(
@@ -7119,7 +7093,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             for target in &targets {
                 self.rows.push(TsCallableFlow {
                     site: site.id,
-                    caller: self.caller_override.unwrap_or(site.caller),
                     target_function: *target,
                     kind: self.value_flow_kind(),
                     binding: name.to_owned(),
@@ -7163,7 +7136,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             for target in &targets {
                 self.rows.push(TsCallableFlow {
                     site: site.id,
-                    caller: self.caller_override.unwrap_or(site.caller),
                     target_function: *target,
                     kind: self.value_flow_kind(),
                     binding: property.to_owned(),
@@ -7197,7 +7169,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             for target in &targets {
                 self.rows.push(TsCallableFlow {
                     site: site.id,
-                    caller: self.caller_override.unwrap_or(site.caller),
                     target_function: *target,
                     kind: self.value_flow_kind(),
                     binding: binding.to_owned(),
@@ -7236,7 +7207,6 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         for target in &targets {
             self.rows.push(TsCallableFlow {
                 site: site.id,
-                caller: self.caller_override.unwrap_or(site.caller),
                 target_function: *target,
                 kind: self.value_flow_kind(),
                 binding: binding.to_owned(),

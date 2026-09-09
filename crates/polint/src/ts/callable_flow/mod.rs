@@ -13,7 +13,6 @@ pub(super) use extract::collect_callable_flows;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct TsCallableFlow {
     pub(super) site: CallSiteId,
-    pub(super) caller: FunctionId,
     pub(super) target_function: FunctionId,
     pub(super) kind: TsCallableFlowKind,
     pub(super) binding: String,
