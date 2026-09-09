@@ -1204,7 +1204,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "polint"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1243,7 +1243,7 @@ dependencies = [
 
 [[package]]
 name = "polint-bench"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anyhow",
  "polint",
@@ -1255,130 +1255,130 @@ dependencies = [
 
 [[package]]
 name = "polint-eval"
-version = "0.3.6"
+version = "0.3.7"
 
 [[package]]
 name = "polint-example-basic-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-code-quality-metrics-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-comment-ignores-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-config-denied-literal-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-custom-go-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-custom-ts-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-go-branch-obligations-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-go-complexity-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-go-import-boundaries-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-go-sensitive-writes-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-go-test-quality-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-gorm-review-indexes"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-multiple-rules"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-review-rules"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-ts-complexity-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-ts-design-tokens-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-example-ts-no-raw-api-calls-rule"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "polint",
 ]
 
 [[package]]
 name = "polint-macros"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "proc-macro2",
  "quote",
