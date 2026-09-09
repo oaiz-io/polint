@@ -24,6 +24,41 @@ pub fn extract_call_sites(db: &impl AnalysisHost) -> Vec<CallSiteFact> {
         .iter()
         .map(|place| (place.id, place))
         .collect::<BTreeMap<_, _>>();
+    // Names each Go function binds as a local or a parameter. A callee naming one
+    // of these is a call *through a variable*; see `variable_callee`.
+    //
+    // Indexed for Go bodies only, and skipped outright when the program has none.
+    // `variable_callee` is Go-scoped, so indexing a large TypeScript repository
+    // here would be pure overhead — and not cheap overhead: excalidraw carries
+    // enough places that cloning a name per place cost minutes of wall clock and
+    // gigabytes of resident set before this filter was added.
+    let go_functions = db
+        .mir_bodies()
+        .iter()
+        .filter(|body| matches!(body.language, Language::Go))
+        .map(|body| body.function)
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut variable_names: BTreeMap<FunctionId, std::collections::BTreeSet<String>> =
+        BTreeMap::new();
+    if !go_functions.is_empty() {
+        for place in db.mir_places() {
+            let (function, name) = match &place.root {
+                PlaceRoot::Local { function, name } => (function, name),
+                PlaceRoot::Parameter {
+                    function,
+                    name: Some(name),
+                    ..
+                } => (function, name),
+                _ => continue,
+            };
+            if go_functions.contains(function) {
+                variable_names
+                    .entry(*function)
+                    .or_default()
+                    .insert(name.clone());
+            }
+        }
+    }
     let functions = db
         .functions()
         .iter()
@@ -87,8 +122,13 @@ pub fn extract_call_sites(db: &impl AnalysisHost) -> Vec<CallSiteFact> {
         else {
             continue;
         };
-        let (call_callee, receiver, kind, callee_shape) =
-            call_callee(callee, body.language, &places);
+        let (call_callee, receiver, kind, callee_shape) = call_callee(
+            callee,
+            body.language,
+            &places,
+            body.function,
+            &variable_names,
+        );
         let operation_stable_key = db.resolve_stable_key(operation.stable_key);
 
         sites.push(CallSiteFact {
@@ -130,6 +170,8 @@ fn call_callee(
     value: &MirValue,
     language: Language,
     places: &BTreeMap<PlaceId, &PlaceFact>,
+    caller: FunctionId,
+    variable_names: &BTreeMap<FunctionId, std::collections::BTreeSet<String>>,
 ) -> (CallCallee, Option<PlaceId>, CallSyntaxKind, String) {
     match value {
         MirValue::Place(place) => place_callee(*place, language, places.get(place).copied()),
@@ -142,7 +184,10 @@ fn call_callee(
             CallSyntaxKind::FunctionValue,
             format!("call_return:{}", site.0),
         ),
-        MirValue::Unknown { evidence } => evidence_callee(evidence, language),
+        MirValue::Unknown { evidence } => {
+            variable_callee(evidence, language, caller, variable_names)
+                .unwrap_or_else(|| evidence_callee(evidence, language))
+        }
         MirValue::Closure { body, .. } => (
             CallCallee::Unknown {
                 reason: UnresolvedCallReason::FunctionValue,
@@ -168,6 +213,59 @@ fn call_callee(
             format!("literal:{}", value.trim()),
         ),
     }
+}
+
+/// A Go callee naming one of the caller's own locals or parameters is a call
+/// through a variable holding a function — `UnresolvedCallReason::FunctionValue`
+/// — not a name the frontend merely failed to look up.
+///
+/// `place_callee` already draws exactly this line, but only for callees a
+/// frontend hands over as a place: a `PlaceRoot::Local`/`Parameter` root is a
+/// function value. Neither frontend does that today — both lower every callee as
+/// `MirValue::Unknown` carrying the callee's source text — so that arm is
+/// unreachable and the classification has to be recovered from the caller's own
+/// place table, the one place the frontend left the signal.
+///
+/// Deliberately **not** the `matches!(evidence, "fn" | "callable" | "callback")`
+/// branch this replaces. That matched on spelling, so it labelled a variable
+/// named `fn` correctly and an identically-shaped `apply` wrongly, and it fired
+/// on those three spellings whether or not a variable of that name existed.
+///
+/// Restricted to Go, on evidence rather than by preference. In Go this shape is
+/// never resolvable: the frontend supplies no semantic reference for a local
+/// variable callee, so `FunctionValue` states exactly what is known and costs
+/// nothing. In TypeScript the same shape *is* resolvable — the callable-flow
+/// collector resolves 243 of them in the Jelly corpus — and `FunctionValue`
+/// carries a `PlaceId::MAX` sentinel with no points-to reach, so applying it
+/// there is a give-up marker that drops those edges (measured: Jelly TP 986 ->
+/// 743, F1 0.790381 -> 0.663393). The real repair for both languages is for the
+/// frontends to lower callee places so `place_callee` can do this properly;
+/// until then this keeps Go's classification honest without touching TypeScript.
+fn variable_callee(
+    evidence: &str,
+    language: Language,
+    caller: FunctionId,
+    variable_names: &BTreeMap<FunctionId, std::collections::BTreeSet<String>>,
+) -> Option<(CallCallee, Option<PlaceId>, CallSyntaxKind, String)> {
+    if !matches!(language, Language::Go) || !is_identifier_like(evidence) {
+        return None;
+    }
+    // Keyed by function so the name lookup borrows `evidence` instead of
+    // allocating a tuple for every unresolved callee in the program.
+    if !variable_names
+        .get(&caller)
+        .is_some_and(|names| names.contains(evidence))
+    {
+        return None;
+    }
+    Some((
+        CallCallee::FunctionValue {
+            place: PlaceId(u64::MAX),
+        },
+        None,
+        CallSyntaxKind::FunctionValue,
+        "function_value".to_string(),
+    ))
 }
 
 fn evidence_callee(
@@ -693,6 +791,58 @@ mod tests {
         assert_eq!(site.result, Some(PlaceId(2)));
         assert_eq!(site.status, CallTargetStatus::Unresolved);
         assert_eq!(site.precision, CallPrecision::Conservative);
+    }
+
+    /// A Go callee naming one of the caller's own variables is a function value,
+    /// whatever the variable is called — the branch this replaces matched three
+    /// hardcoded spellings, so it labelled `fn` right and an identically-shaped
+    /// `apply` wrong, and fired on those spellings with no such variable in
+    /// scope. TypeScript keeps its identifier evidence: there the shape is
+    /// resolvable, and the sentinel-placed `FunctionValue` would be a give-up
+    /// marker that drops real edges.
+    #[test]
+    fn a_go_callee_naming_a_caller_variable_is_a_function_value() {
+        let caller = FunctionId::from_raw(7);
+        let other = FunctionId::from_raw(8);
+        let variables = std::collections::BTreeMap::from([(
+            caller,
+            ["fn", "apply", "handler"]
+                .into_iter()
+                .map(str::to_string)
+                .collect::<std::collections::BTreeSet<_>>(),
+        )]);
+
+        for name in ["fn", "apply", "handler"] {
+            let (callee, receiver, kind, shape) =
+                super::variable_callee(name, Language::Go, caller, &variables)
+                    .expect("a caller variable in Go");
+            assert_eq!(
+                callee,
+                CallCallee::FunctionValue {
+                    place: PlaceId(u64::MAX)
+                }
+            );
+            assert_eq!(receiver, None);
+            assert_eq!(kind, CallSyntaxKind::FunctionValue);
+            assert_eq!(shape, "function_value");
+
+            // The same shape in TypeScript stays an identifier.
+            assert!(
+                super::variable_callee(name, Language::TypeScript, caller, &variables).is_none()
+            );
+            assert!(
+                super::variable_callee(name, Language::JavaScript, caller, &variables).is_none()
+            );
+        }
+
+        // A variable of a *different* function, a name no variable binds, and a
+        // non-identifier callee all fall through to the evidence classifier
+        // rather than claiming a function value.
+        assert!(super::variable_callee("fn", Language::Go, other, &variables).is_none());
+        assert!(
+            super::variable_callee("directFunction", Language::Go, caller, &variables).is_none()
+        );
+        assert!(super::variable_callee("a.b", Language::Go, caller, &variables).is_none());
     }
 
     #[test]
