@@ -949,6 +949,41 @@ mod tests {
                 &["function target() {}"],
                 "unchanged",
             ),
+            // Babel's older output requires into a variable first, then wraps
+            // that variable. The marker lives on the module, not on the
+            // expression handed to the helper, so this shape has to land on the
+            // same branch as the inline `require(...)` form.
+            (
+                MARKED,
+                "const mod = require('./lib.js');\nconst lib = __importDefault(mod);\nlib.default();\n",
+                "lib.default()",
+                &["function foo() {}"],
+                "read the marker off the variable's module",
+            ),
+            (
+                UNMARKED_BAG,
+                "const mod = require('./lib.js');\nconst lib = __importDefault(mod);\nlib.default.m();\n",
+                "lib.default.m()",
+                &["function m() {}"],
+                "same wrapping decision through a variable",
+            ),
+            // ...and the impossible call stays impossible through a variable too.
+            (
+                UNMARKED_DEFAULT,
+                "const mod = require('./lib.js');\nconst lib = __importDefault(mod);\nlib.default();\n",
+                "lib.default()",
+                &[],
+                "the wrapped namespace is still not callable",
+            ),
+            // A parameter shadowing the module name must not inherit its
+            // identity: the helper then has no module to read a marker from.
+            (
+                MARKED,
+                "const mod = require('./lib.js');\nfunction use(mod) { return __importDefault(mod); }\nconst lib = use(0);\nlib.default();\n",
+                "lib.default()",
+                &[],
+                "a shadowed module name carries no marker",
+            ),
         ];
         for (lib, tail, call, expected, note) in cases {
             let main = format!("{HELPERS}{tail}");

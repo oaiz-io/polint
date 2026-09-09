@@ -1926,6 +1926,15 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             {
                 env.merge_helpers.insert(name);
             }
+            // `const mod = require('./lib')`: remember which module the name is,
+            // so an interop helper handed `mod` rather than the `require(...)`
+            // call can still read that module's `__esModule` marker.
+            if let Some(name) = binding_identifier_name(&declarator.id)
+                && let Some(Expression::CallExpression(call)) = &declarator.init
+                && let Some(target) = self.require_target_file(call)
+            {
+                env.module_bindings.insert(name, target);
+            }
             if let Some(name) = binding_identifier_name(&declarator.id)
                 && let Some(Expression::ClassExpression(class)) = &declarator.init
             {
@@ -5212,11 +5221,16 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         &self,
         call: &'ast CallExpression<'ast>,
     ) -> Option<&'env ModuleExportSummary> {
+        self.module_summaries.get(&self.require_target_file(call)?)
+    }
+
+    /// The file a `require(...)` call resolves to, through the kernel module
+    /// graph's own resolution.
+    fn require_target_file(&self, call: &'ast CallExpression<'ast>) -> Option<FileId> {
         let specifier = self.require_specifier(call)?;
-        let target = self
-            .resolution_map
-            .get(&(self.file.id, specifier.to_string()))?;
-        self.module_summaries.get(target)
+        self.resolution_map
+            .get(&(self.file.id, specifier.to_string()))
+            .copied()
     }
 
     /// The merged return-value summary of the function(s) this call resolves to,
@@ -5325,14 +5339,29 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     fn interop_module_summary(
         &self,
         inner: &'ast Expression<'ast>,
+        env: &FlowEnv,
     ) -> Option<&'env ModuleExportSummary> {
         match inner {
             Expression::CallExpression(call) => self.require_summary(call),
+            // Babel's older output requires into a variable first
+            // (`var _foo = require("./foo"); var _foo2 = _interopRequireDefault
+            // (_foo);`). Reading the marker off the variable's module keeps that
+            // shape on the same branch as the inline `require(...)` form; without
+            // it a marked ES module reached this way looked unmarked and got
+            // wrapped, so the one call that *is* reachable went unresolved.
+            Expression::Identifier(identifier) => self
+                .module_bindings_lookup(identifier.name.as_str(), env)
+                .and_then(|file| self.module_summaries.get(&file)),
             Expression::ParenthesizedExpression(inner) => {
-                self.interop_module_summary(&inner.expression)
+                self.interop_module_summary(&inner.expression, env)
             }
             _ => None,
         }
+    }
+
+    /// The module a local name is bound to, if it names a `require(...)` result.
+    fn module_bindings_lookup(&self, name: &str, env: &FlowEnv) -> Option<FileId> {
+        env.module_bindings.get(name).copied()
     }
 
     /// The object shape an interop helper produces from the module it wraps:
@@ -5364,7 +5393,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // An unresolvable module carries no marker and no shape; there is
         // nothing to pass through or to nest either way.
         if self
-            .interop_module_summary(inner)
+            .interop_module_summary(inner, env)
             .is_some_and(|summary| summary.esmodule)
         {
             return wrapped;
@@ -7337,6 +7366,13 @@ struct FlowEnv {
     /// live arm, so the dead arm's calls are never walked (demand-driven pruning of
     /// `array-flatten`'s `flattenWithDepth` recursion under express's no-`depth` call).
     absent: std::collections::BTreeSet<String>,
+    /// Local names bound directly to a resolvable `require(...)` result
+    /// (`const mod = require('./lib')`). Only the *identity* of the module is
+    /// kept; its shape already flows through `objects`/`bindings`. The interop
+    /// helpers branch on the wrapped module's `__esModule` marker, which lives on
+    /// that module's summary, so a helper handed a variable rather than the
+    /// `require(...)` call itself needs this to find it.
+    module_bindings: BTreeMap<String, FileId>,
 }
 
 impl FlowEnv {
@@ -7365,6 +7401,7 @@ impl FlowEnv {
             self.forin_keys.remove(name);
             self.merge_helpers.remove(name);
             self.absent.remove(name);
+            self.module_bindings.remove(name);
         }
     }
 }
