@@ -4545,29 +4545,55 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
 
         if let Expression::StaticMemberExpression(member) = &call.callee {
             let method = member.property.name.as_str();
-            // `arr.reduce(fn)` / `arr.reduce(fn, init)`: the accumulator starts at
-            // the initial value — or, with none, at the first element, which is
-            // also the result when the array holds a single element — and ends as
-            // the reducer's return. So the result is one of the array's elements,
-            // the initial value, or a reducer return. Reducing an empty array with
-            // no initial value throws, and invents no target here; a reducer whose
-            // return is not callable contributes nothing.
-            if matches!(method, "reduce" | "reduceRight") {
+            // `arr.reduce(fn)` / `arr.reduce(fn, init)`. Which of the three
+            // candidate results is reachable depends on the array's length and
+            // on whether an initial value was passed, and unioning all three
+            // unconditionally invents targets the program cannot produce:
+            // `[].reduce(fn)` throws before `fn` ever runs, and
+            // `[x].reduce(fn)` returns `x` without running `fn` either.
+            //
+            // With a statically known length, take only the reachable branch:
+            //
+            // * no initial value: length 0 throws, length 1 is the element
+            //   itself, length 2+ is the reducer's return;
+            // * with an initial value: length 0 is that value, length 1+ is the
+            //   reducer's return.
+            //
+            // An array whose length is not statically known keeps the
+            // conservative union — every branch is still possible there.
+            //
+            // A receiver that defines its own `reduce` is not an array at all,
+            // so it falls through to ordinary method handling below; this branch
+            // precedes it and would otherwise swallow the call.
+            if matches!(method, "reduce" | "reduceRight")
+                && !self.receiver_defines_method(&member.object, method, env)
+            {
+                let length = static_array_length(&member.object);
+                let initial = call.arguments.get(1).and_then(argument_expression);
                 let mut result = CollectionTargets::default();
-                if let Some(source) = self.collection_targets_from_expression(&member.object, env) {
+                if initial.is_none()
+                    && length.is_none_or(|length| length == 1)
+                    && let Some(source) =
+                        self.collection_targets_from_expression(&member.object, env)
+                {
                     result.extend(CollectionTargets {
                         values: source.elements(),
                         ..Default::default()
                     });
                 }
-                if let Some(initial) = call.arguments.get(1).and_then(argument_expression) {
+                if let Some(initial) = initial
+                    && length.is_none_or(|length| length == 0)
+                {
                     result.extend(self.callable_targets_from_expression(initial, env));
                 }
-                if let Some(returned) = call
-                    .arguments
-                    .first()
-                    .and_then(argument_expression)
-                    .and_then(callback_returned_expression)
+                let reducer_runs =
+                    length.is_none_or(|length| length >= if initial.is_some() { 1 } else { 2 });
+                if reducer_runs
+                    && let Some(returned) = call
+                        .arguments
+                        .first()
+                        .and_then(argument_expression)
+                        .and_then(callback_returned_expression)
                 {
                     result.extend(self.callable_targets_from_expression(returned, env));
                 }
@@ -5247,6 +5273,19 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Does the receiver carry its own method of this name? A `const o = {
+    /// reduce(f) { … } }` is not an array, and the native collection models must
+    /// not claim its calls.
+    fn receiver_defines_method(
+        &self,
+        receiver: &'ast Expression<'ast>,
+        method: &str,
+        env: &FlowEnv,
+    ) -> bool {
+        self.object_targets_from_expression(receiver, env)
+            .is_some_and(|object| object.properties.contains_key(method))
     }
 
     /// TypeScript/Babel emit interop wrappers around `require(...)` that pass the
@@ -8088,6 +8127,27 @@ fn param_pattern_from_binding(pattern: &BindingPattern<'_>) -> ParamPattern {
 /// outer scope must shadow all of them: a parameter's value is unknown to a
 /// speculative or argument-independent walk, and resolving it to the module
 /// symbol it shadows is a false target, not a fallback.
+/// The element count of an array *literal* receiver, when it is statically
+/// known. A spread contributes an unknown number of elements, and `reduce`
+/// skips the holes of a sparse array, so neither form has a length this can
+/// commit to — both answer `None`, which keeps the conservative union.
+fn static_array_length(expression: &Expression<'_>) -> Option<usize> {
+    match expression {
+        Expression::ArrayExpression(array) => array
+            .elements
+            .iter()
+            .all(|element| {
+                !matches!(
+                    element,
+                    ArrayExpressionElement::SpreadElement(_) | ArrayExpressionElement::Elision(_)
+                )
+            })
+            .then(|| array.elements.len()),
+        Expression::ParenthesizedExpression(inner) => static_array_length(&inner.expression),
+        _ => None,
+    }
+}
+
 fn param_pattern_names(pattern: &ParamPattern, names: &mut std::collections::BTreeSet<String>) {
     match pattern {
         ParamPattern::Binding(name) => {

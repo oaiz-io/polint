@@ -619,9 +619,11 @@ mod tests {
         // Negative controls: nothing may be invented where the value is unknown.
         for (files, call) in [
             // Reducing an empty array with no initial value throws at runtime.
+            // The reducer returns a *callable*: with a non-callable return this
+            // control passed no matter what the model did with the reducer.
             (
-                [("main.js", "[].reduce(() => void 0)();\n")],
-                "[].reduce(() => void 0)()",
+                [("main.js", "[].reduce(() => () => 0)();\n")],
+                "[].reduce(() => () => 0)()",
             ),
             // A non-callable element and a non-callable reducer result.
             (
@@ -953,6 +955,110 @@ mod tests {
                     .map(|text| (*text).to_string())
                     .collect::<BTreeSet<_>>(),
                 "{call:?} against {lib:?} ({note})"
+            );
+        }
+    }
+    /// `reduce`/`reduceRight` produce exactly one of three values, and which one
+    /// is decided by the array's length and whether an initial value was passed.
+    /// Unioning all three invents targets the program cannot produce: the reducer
+    /// does not run at all on an empty array, nor on a single-element array with
+    /// no initial value, and the elements are not the result once it does run.
+    ///
+    /// Each case asserts the exact resolved set, so an invented target fails the
+    /// same way a lost one does. The reducers all return a callable — a reducer
+    /// returning a non-callable cannot catch this at all, since it contributes
+    /// nothing either way.
+    #[test]
+    fn reduce_results_follow_array_cardinality() {
+        // (source, call snippet, exact targets, why)
+        let cases: &[(&str, &str, &[&str], &str)] = &[
+            // Empty and no initial value: `reduce` throws before the reducer runs.
+            (
+                "[].reduce(() => () => 2)();\n",
+                "[].reduce(() => () => 2)()",
+                &[],
+                "an empty reduce throws; nothing is produced",
+            ),
+            (
+                "[].reduceRight(() => () => 2)();\n",
+                "[].reduceRight(() => () => 2)()",
+                &[],
+                "reduceRight throws on the same input",
+            ),
+            // One element and no initial value: that element is returned and the
+            // reducer never runs.
+            (
+                "[() => 1].reduce(() => () => 2)();\n",
+                "[() => 1].reduce(() => () => 2)()",
+                &["() => 1"],
+                "the lone element is the result; the reducer never runs",
+            ),
+            (
+                "[() => 1].reduceRight(() => () => 2)();\n",
+                "[() => 1].reduceRight(() => () => 2)()",
+                &["() => 1"],
+                "same, from the right",
+            ),
+            // Two elements: the reducer runs and its return is the result, so the
+            // elements are not.
+            (
+                "[() => 1, () => 3].reduce(() => () => 2)();\n",
+                "[() => 1, () => 3].reduce(() => () => 2)()",
+                &["() => 2"],
+                "the reducer runs, so its return is the only result",
+            ),
+            // Empty with an initial value: that value is returned untouched.
+            (
+                "[].reduce(() => () => 2, () => 4)();\n",
+                "[].reduce(() => () => 2, () => 4)()",
+                &["() => 4"],
+                "the initial value passes through",
+            ),
+            // One element with an initial value: the reducer runs once.
+            (
+                "[() => 1].reduce(() => () => 2, () => 4)();\n",
+                "[() => 1].reduce(() => () => 2, () => 4)()",
+                &["() => 2"],
+                "an initial value makes the reducer run at length 1",
+            ),
+            // Length not statically known: every branch stays possible, so the
+            // conservative union is kept.
+            (
+                "function pick(a) { return a; }\nconst arr = pick([() => 1]);\narr.reduce(() => () => 2)();\n",
+                "arr.reduce(() => () => 2)()",
+                &["() => 1", "() => 2"],
+                "an unknown length keeps the union",
+            ),
+            (
+                "const rest = [() => 5];\n[...rest].reduce(() => () => 2)();\n",
+                "[...rest].reduce(() => () => 2)()",
+                &["() => 2", "() => 5"],
+                "a spread contributes an unknown element count",
+            ),
+            // A receiver that defines its own `reduce` is not an array. This
+            // branch runs before ordinary method handling, so without the guard
+            // it swallowed the call and answered with the array model.
+            (
+                "const o = { reduce(f) { return f; } };\no.reduce(() => 1)();\n",
+                "o.reduce(() => 1)()",
+                &["() => 1"],
+                "a custom reduce returns its argument",
+            ),
+            (
+                "const o = { reduce(f) { return () => 7; } };\no.reduce(() => () => 2)();\n",
+                "o.reduce(() => () => 2)()",
+                &["() => 7"],
+                "a custom reduce's own return, not the reducer's",
+            ),
+        ];
+        for (source, call, expected, why) in cases {
+            assert_eq!(
+                resolved_targets_at(&[("main.js", source)], call),
+                expected
+                    .iter()
+                    .map(|text| (*text).to_string())
+                    .collect::<BTreeSet<_>>(),
+                "{call:?}: {why}"
             );
         }
     }
