@@ -1,4 +1,6 @@
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use oxc_ast::ast::{
     Argument, ArrayExpressionElement, AssignmentTarget, BinaryOperator, BindingPattern,
@@ -22,6 +24,110 @@ use super::{TsCallableFlow, TsCallableFlowKind};
 /// `module.exports = require('./lib/foo')` converge after a few rounds. The
 /// bound keeps deep dependency graphs (e.g. express) finite.
 const MAX_MODULE_SUMMARY_ROUNDS: usize = 4;
+
+/// Depth bound shared by the recursive callable walks. This is a stack-safety
+/// backstop, not the termination argument: the cycle set is what makes each
+/// walk finite, and it does so without truncating any chain that would have
+/// terminated on its own. Deliberately far above the nesting real receiver
+/// chains reach, so raising it would not resolve anything new — it only keeps a
+/// pathological file off the guard rails.
+const CALLABLE_WALK_MAX_DEPTH: usize = 64;
+
+/// Node visits allowed per top-level callable walk. The depth cap alone still
+/// admits exponential work, because each hop may branch over every function
+/// bound to the property it reads. Refreshed at every outermost entry, so one
+/// call site's resolution can never be truncated by work spent on an unrelated
+/// one — a budget shared across a whole file would make a resolution depend on
+/// code that has nothing to do with it.
+const CALLABLE_WALK_BUDGET: usize = 4096;
+
+/// What a guarded walk frame is keyed on. Two different recursions share the
+/// guard, and their keys must not collide: a call's start offset and a
+/// function's identity are separate namespaces.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum WalkKey {
+    /// A call whose returned object shape is being resolved, keyed by the
+    /// call's start offset (unique within the file the collector is built for).
+    ReturnShape(u32),
+    /// A callee body being walked for its effect on the receiver it was called
+    /// on, keyed by the function whose body it is.
+    ReceiverBody(FunctionId),
+}
+
+/// Cycle, depth and work guard shared by the recursive walks that follow a call
+/// into the body of the callable it invokes. Two such walks exist, and both
+/// close into a cycle on ordinary, terminating source:
+///
+/// * the read-only return-shape chain `object_targets_from_call` ->
+///   `object_targets_from_return_expression` -> `object_targets_from_call`,
+///   which follows a method's returned call into the returning body; and
+/// * the mutable receiver walk `collect_receiver_side_effects` ->
+///   `collect_statement` -> ... -> `collect_call_expression` ->
+///   `collect_receiver_side_effects`, which walks the body of every function
+///   bound to the called property to fold its effect back into the receiver.
+///
+/// `const o = { f() { return o.f(); } }` closes the second one, and
+/// `collect_program` reaches `f` whether or not anything calls it, so a valid
+/// file used to take the process down with a stack overflow. Neither walk was
+/// bounded by `invocation_depth`: the first because every hop on it borrows
+/// `&self`, the second because no hop on it touches the counter. Keeping the
+/// state behind `Cell`/`RefCell` is what lets the `&self` walk share the budget
+/// with the `&mut self` one. The collector is built per file and never crosses
+/// a thread.
+#[derive(Default)]
+struct CallableWalkGuard {
+    /// The frames currently in flight on this stack. Re-entering one is a cycle:
+    /// a return-shape frame passes the same env down and is read-only, and a
+    /// receiver-body frame is already folding that body's effect into the same
+    /// receiver, so the nested visit could only reproduce the frame in flight.
+    active: RefCell<std::collections::BTreeSet<WalkKey>>,
+    depth: Cell<usize>,
+    budget: Cell<usize>,
+}
+
+impl CallableWalkGuard {
+    /// Claim a walk frame for `key`, or `None` when the walk must stop — the
+    /// frame is already in flight further up the stack, the depth cap is
+    /// reached, or this walk's budget is spent. Every caller treats `None` as
+    /// "nothing more is known here", which is the outcome an unknown receiver
+    /// already produces, so an exhausted guard preserves uncertainty rather than
+    /// inventing a target.
+    fn enter(self: &Rc<Self>, key: WalkKey) -> Option<WalkFrame> {
+        let depth = self.depth.get();
+        if depth == 0 {
+            self.budget.set(CALLABLE_WALK_BUDGET);
+        }
+        let budget = self.budget.get();
+        if depth >= CALLABLE_WALK_MAX_DEPTH || budget == 0 {
+            return None;
+        }
+        if !self.active.borrow_mut().insert(key) {
+            return None;
+        }
+        self.budget.set(budget - 1);
+        self.depth.set(depth + 1);
+        Some(WalkFrame {
+            guard: Rc::clone(self),
+            key,
+        })
+    }
+}
+
+/// Releases one walk frame. A guard object rather than paired calls because the
+/// read-only walk returns early through `?` at a dozen points. It shares
+/// ownership of the guard instead of borrowing the collector, so the `&mut
+/// self` receiver walk can hold a frame across the body walk it is guarding.
+struct WalkFrame {
+    guard: Rc<CallableWalkGuard>,
+    key: WalkKey,
+}
+
+impl Drop for WalkFrame {
+    fn drop(&mut self) {
+        self.guard.active.borrow_mut().remove(&self.key);
+        self.guard.depth.set(self.guard.depth.get() - 1);
+    }
+}
 
 pub(in crate::ts) fn collect_callable_flows<'ast>(
     db: &impl AnalysisHost,
@@ -74,6 +180,7 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
             this_method_walk: false,
             current_super: None,
             invocation_depth: 0,
+            walk_guard: Rc::default(),
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -139,6 +246,8 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     /// which would otherwise loop forever because the per-call `depth` resets to 0
     /// when a return statement re-enters `callable_return_targets_from_expression`.
     invocation_depth: usize,
+    /// Bounds the recursive callable walks that `invocation_depth` cannot reach.
+    walk_guard: Rc<CallableWalkGuard>,
     /// Program-global positional index of every `receiver.next()` call: maps the
     /// `.next()` call's `span.start` to its 0-based ordinal among `.next()` calls
     /// on the same receiver name (in source order). Used to sequence generator
@@ -264,6 +373,7 @@ fn compute_module_export_summaries<'ast>(
                 this_method_walk: false,
                 current_super: None,
                 invocation_depth: 0,
+                walk_guard: Rc::default(),
                 iterator_next_ordinals: BTreeMap::new(),
                 iterator_next_starts: BTreeMap::new(),
                 rows: Vec::new(),
@@ -327,6 +437,7 @@ fn compute_function_return_summaries<'ast>(
             this_method_walk: false,
             current_super: None,
             invocation_depth: 0,
+            walk_guard: Rc::default(),
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -3719,6 +3830,14 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             let Some(flow) = self.function_flows_by_id.get(target).cloned() else {
                 continue;
             };
+            // A method that calls back through its own receiver (`const o = { f()
+            // { return o.f(); } }`) re-enters this walk on the body it is already
+            // walking. The frame is held across the walk, so the cycle stops here
+            // with the receiver shape learned so far rather than recursing until
+            // the process dies.
+            let Some(_frame) = self.walk_guard.enter(WalkKey::ReceiverBody(*target)) else {
+                continue;
+            };
             let mut callee_env = env.clone();
             callee_env.this_object = receiver.clone();
             self.current_super = object_super.clone();
@@ -5351,6 +5470,10 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         call: &'ast CallExpression<'ast>,
         env: &FlowEnv,
     ) -> Option<ObjectTargets> {
+        // Held for the whole body so every `?` on the way out releases it.
+        let _frame = self
+            .walk_guard
+            .enter(WalkKey::ReturnShape(call.span.start))?;
         if let Some(summary) = self.require_summary(call)
             && !summary.object.is_empty()
         {

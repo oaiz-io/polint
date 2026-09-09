@@ -695,4 +695,60 @@ mod tests {
                 .contains("callable_shape")
         }));
     }
+    /// A valid but *uncalled* self-recursive object method must not take the
+    /// process down. The all-callable return-summary pass walks every callable
+    /// the file declares, so it reaches `f` even though nothing invokes it, and
+    /// the read-only `object_targets_from_call` ->
+    /// `object_targets_from_return_expression` chain follows `o.f()` back into
+    /// `f` forever. The `&mut self` `invocation_depth` counter cannot bound that
+    /// chain because every hop on it borrows `&self`.
+    ///
+    /// Runs the analysis in a child process: a stack overflow aborts with
+    /// SIGABRT rather than unwinding, so an in-process assertion would be killed
+    /// alongside the regression it is meant to report.
+    #[test]
+    fn recursive_object_methods_do_not_abort_analysis() {
+        const CHILD_SOURCE: &str = "POLINT_RECURSIVE_CALLABLE_CHILD_SOURCE";
+        if let Ok(source) = std::env::var(CHILD_SOURCE) {
+            let repo = tempfile::tempdir().unwrap();
+            std::fs::write(repo.path().join("main.js"), source).unwrap();
+            crate::eval::observed::run_kernel_for_repo_for_test(repo.path())
+                .expect("the kernel completes over a recursive callable shape");
+            return;
+        }
+        for source in [
+            // Direct self-recursion through the receiver the method lives on.
+            "const o = { f() { return o.f(); } };\n",
+            // Two-object mutual recursion.
+            "const a = { f() { return b.g(); } };\nconst b = { g() { return a.f(); } };\n",
+            // A deeper three-object cycle, so a fixed small depth cap that merely
+            // happens to clear the two-object shape still fails here.
+            "const a = { f() { return b.g(); } };\nconst b = { g() { return c.h(); } };\nconst c = { h() { return a.f(); } };\n",
+            // The cycle closes through a returned local rather than a direct call.
+            "const o = { f() { const next = o.f(); return next; } };\n",
+            // Reading the *shape* of the returned value takes the second,
+            // read-only cycle: `object_targets_from_call` follows `f`'s returned
+            // call back into `f` looking for the object `x` would be.
+            "const o = { f() { return o.f(); } };\nconst x = o.f();\nx.m();\n",
+        ] {
+            let child = std::process::Command::new(
+                std::env::current_exe().expect("the running test binary"),
+            )
+            .args([
+                "--exact",
+                "ts::callable_flow::tests::recursive_object_methods_do_not_abort_analysis",
+                "--nocapture",
+            ])
+            .env(CHILD_SOURCE, source)
+            .output()
+            .expect("spawn the analysis child");
+            assert!(
+                child.status.success(),
+                "analysis must terminate for {source:?}, got {:?}\n{}{}",
+                child.status,
+                String::from_utf8_lossy(&child.stdout),
+                String::from_utf8_lossy(&child.stderr),
+            );
+        }
+    }
 }
