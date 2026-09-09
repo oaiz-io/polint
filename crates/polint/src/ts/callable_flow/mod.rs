@@ -25,7 +25,11 @@ pub(super) enum TsCallableFlowKind {
     Receiver,
 }
 
-#[cfg(all(test, feature = "lang-typescript"))]
+// Every fixture below drives the kernel through `crate::eval::observed`, and
+// that harness is itself gated on both language features (see `lib.rs`), so this
+// module has to carry the identical condition — a `lang-typescript`-only build
+// has no `crate::eval` to reach.
+#[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
