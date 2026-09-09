@@ -751,4 +751,101 @@ mod tests {
             );
         }
     }
+    /// A callee's parameters shadow the scope its body is walked in. Two walks
+    /// inherit an outer scope and used to let a parameter fall through to the
+    /// module symbol it shadows: the argument-independent return summary, which
+    /// clones the module env, and the speculative class-body walk, which
+    /// enumerated only plain identifier parameters and so missed every
+    /// destructured and rest name.
+    ///
+    /// Each case pairs a module-level definition with a parameter of the same
+    /// name. Asserting the exact resolved set makes every case a precision
+    /// control: the shadowed module symbol must not appear, whether or not the
+    /// argument flow reaches the real one.
+    #[test]
+    fn parameters_shadow_module_scope_in_every_binding_form() {
+        // (source, call snippet, exact resolved targets, what it used to report)
+        let cases: &[(&str, &str, &[&str], &str)] = &[
+            // Return summary, simple parameter. `identity` returns its
+            // parameter, so its summary must not claim it returns the module's
+            // `callback` — that invalid summary used to overwrite the
+            // argument-dependent answer at the call site.
+            (
+                "const callback = function wrong() {};\nfunction identity(callback) { return callback; }\nconst result = identity(function right() {});\nresult();\n",
+                "result()",
+                &["function right() {}"],
+                "function wrong() {}",
+            ),
+            // Return summary, destructured parameter.
+            (
+                "const callback = function wrong() {};\nfunction identity({callback}) { return callback; }\nconst result = identity({callback: function right() {}});\nresult();\n",
+                "result()",
+                &["function right() {}"],
+                "function wrong() {}",
+            ),
+            // Return summary, rest parameter.
+            (
+                "const callback = function wrong() {};\nfunction identity(...callback) { return callback[0]; }\nconst result = identity(function right() {});\nresult();\n",
+                "result()",
+                &["function right() {}"],
+                "function wrong() {}",
+            ),
+            // Class constructor, destructured parameter. The speculative class
+            // walk has no arguments, so the parameter is genuinely unknown here
+            // and uncertainty is the right answer — but the module's `callback`
+            // is not it.
+            (
+                "function callback() {}\nclass C {\n  constructor({callback}) { callback(); }\n}\nnew C({callback: function right() {}});\n",
+                "callback();",
+                &[],
+                "function callback() {}",
+            ),
+            // Class constructor, array-destructured parameter.
+            (
+                "function callback() {}\nclass C {\n  constructor([callback]) { callback(); }\n}\nnew C([function right() {}]);\n",
+                "callback();",
+                &[],
+                "function callback() {}",
+            ),
+            // Class constructor, rest parameter.
+            (
+                "function callback() {}\nclass C {\n  constructor(...callback) { callback[0](); }\n}\nnew C(function right() {});\n",
+                "callback[0]();",
+                &[],
+                "function callback() {}",
+            ),
+            // A destructured parameter on an ordinary method, not just the
+            // constructor.
+            (
+                "function callback() {}\nclass C {\n  m({callback}) { callback(); }\n}\nnew C().m({callback: function right() {}});\n",
+                "callback();",
+                &[],
+                "function callback() {}",
+            ),
+            // Controls: the plain identifier and default-valued forms were
+            // already shadowed, and must stay that way.
+            (
+                "function callback() {}\nclass C {\n  constructor(callback) { callback(); }\n}\nnew C(function right() {});\n",
+                "callback();",
+                &[],
+                "(already unresolved)",
+            ),
+            (
+                "function callback() {}\nclass C {\n  constructor(callback = function dflt() {}) { callback(); }\n}\nnew C(function right() {});\n",
+                "callback();",
+                &[],
+                "(already unresolved)",
+            ),
+        ];
+        for (source, call, expected, previously) in cases {
+            assert_eq!(
+                resolved_targets_at(&[("main.js", source)], call),
+                expected
+                    .iter()
+                    .map(|text| (*text).to_string())
+                    .collect::<BTreeSet<_>>(),
+                "{call:?} in {source} (previously reported {previously})"
+            );
+        }
+    }
 }

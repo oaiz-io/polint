@@ -565,13 +565,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let mut method_env = module_env.clone();
         method_env.this_object = this_object.clone();
         // The method's parameters shadow any module binding of the same name;
-        // their values are unknown, so drop the inherited binding.
-        for param in &flow.params {
-            if let ParamPattern::Binding(name) = param {
-                method_env.bindings.remove(name);
-                method_env.objects.remove(name);
-            }
-        }
+        // their values are unknown to this speculative walk, so drop everything
+        // inherited under them — destructured and rest names included.
+        method_env.shadow_parameters(&flow_param_names(&flow));
         for statement in &flow.body.statements {
             self.collect_statement(statement, flow.function, &mut method_env);
         }
@@ -662,6 +658,13 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // `this` shape and shadow the receiver-bound walk that resolves
         // `obj.make().m()`.
         env.this_object = ObjectTargets::default();
+        // A return summary is argument-independent too, not just receiver-
+        // independent: it is read at every call site whatever the arguments. The
+        // module env it clones binds the *outer* symbols, so without shadowing
+        // the parameters `function identity(callback) { return callback; }`
+        // summarises as "returns the module's `callback`", and that invalid
+        // summary then overwrites the argument-dependent answer at every call.
+        env.shadow_parameters(&flow_param_names(flow));
         self.invocation_depth += 1;
         let saved_override = self.caller_override.take();
         for statement in &flow.body.statements {
@@ -843,13 +846,24 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                         continue;
                     };
                     let is_constructor = method.kind == MethodDefinitionKind::Constructor;
-                    let params = method
-                        .value
-                        .params
-                        .items
-                        .iter()
-                        .filter_map(|param| binding_identifier_name(&param.pattern))
-                        .collect::<Vec<_>>();
+                    // Every name the parameter list introduces, not only the
+                    // plain identifiers: `constructor({callback})` binds
+                    // `callback` just as `constructor(callback)` does, and a
+                    // name missed here keeps resolving to the module symbol it
+                    // shadows.
+                    let mut params = std::collections::BTreeSet::new();
+                    for param in &method.value.params.items {
+                        param_pattern_names(
+                            &param_pattern_from_binding(&param.pattern),
+                            &mut params,
+                        );
+                    }
+                    if let Some(rest) = &method.value.params.rest {
+                        param_pattern_names(
+                            &param_pattern_from_binding(&rest.rest.argument),
+                            &mut params,
+                        );
+                    }
                     (
                         &body.statements,
                         owner,
@@ -862,7 +876,13 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     let Some(owner) = self.function_for_span(block.span) else {
                         continue;
                     };
-                    (&block.body, owner, true, false, Vec::new())
+                    (
+                        &block.body,
+                        owner,
+                        true,
+                        false,
+                        std::collections::BTreeSet::new(),
+                    )
                 }
                 _ => continue,
             };
@@ -879,11 +899,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             // a top-level function seeded into the class-body env). Its value is
             // unknown here, so drop the inherited binding rather than resolve the
             // call to the shadowed module symbol (a false positive).
-            for param in &params {
-                env.bindings.remove(param);
-                env.class_bindings.remove(param);
-                env.objects.remove(param);
-            }
+            env.shadow_parameters(&params);
             self.current_super = if is_static {
                 super_static.clone()
             } else {
@@ -7179,6 +7195,36 @@ struct FlowEnv {
     absent: std::collections::BTreeSet<String>,
 }
 
+impl FlowEnv {
+    /// Drop every inherited fact about `names`, which a callee's parameters
+    /// shadow. Clearing one domain is not enough: the same name reaches the
+    /// solver through bindings, objects, promises, generators and the rest, so a
+    /// parameter that shadowed only `bindings` still resolved through `objects`
+    /// — and `absent` has to go too, or a shadowed name would count as
+    /// known-`undefined` for a walk whose arguments are unknown.
+    fn shadow_parameters(&mut self, names: &std::collections::BTreeSet<String>) {
+        for name in names {
+            self.bindings.remove(name);
+            self.bound_functions.remove(name);
+            self.objects.remove(name);
+            self.class_bindings.remove(name);
+            self.string_bindings.remove(name);
+            self.bool_bindings.remove(name);
+            self.string_arrays.remove(name);
+            self.promises.remove(name);
+            self.async_functions.remove(name);
+            self.async_generators.remove(name);
+            self.async_iterators.remove(name);
+            self.generator_sequences.remove(name);
+            self.iterator_sequences.remove(name);
+            self.object_prototypes.remove(name);
+            self.forin_keys.remove(name);
+            self.merge_helpers.remove(name);
+            self.absent.remove(name);
+        }
+    }
+}
+
 /// The ordered result sequence of a generator: each `yield` (with `yield*`
 /// flattened to one slot per delegated value) is a step, and the `return` value
 /// is delivered only by the terminal `.next()` (and excluded from `for-of`).
@@ -7930,6 +7976,47 @@ fn param_pattern_from_binding(pattern: &BindingPattern<'_>) -> ParamPattern {
         },
         BindingPattern::AssignmentPattern(pattern) => param_pattern_from_binding(&pattern.left),
     }
+}
+
+/// Every name a parameter pattern introduces, including the ones nested inside
+/// array/object destructuring and behind a rest element. A walk that inherits an
+/// outer scope must shadow all of them: a parameter's value is unknown to a
+/// speculative or argument-independent walk, and resolving it to the module
+/// symbol it shadows is a false target, not a fallback.
+fn param_pattern_names(pattern: &ParamPattern, names: &mut std::collections::BTreeSet<String>) {
+    match pattern {
+        ParamPattern::Binding(name) => {
+            names.insert(name.clone());
+        }
+        ParamPattern::Array { elements, rest } => {
+            for element in elements.iter().flatten() {
+                param_pattern_names(element, names);
+            }
+            if let Some(rest) = rest {
+                param_pattern_names(rest, names);
+            }
+        }
+        ParamPattern::Object { properties, rest } => {
+            for (_, pattern) in properties {
+                param_pattern_names(pattern, names);
+            }
+            if let Some(rest) = rest {
+                param_pattern_names(rest, names);
+            }
+        }
+    }
+}
+
+/// Every name the parameter list of `flow` introduces, rest parameter included.
+fn flow_param_names(flow: &FunctionFlow<'_, '_>) -> std::collections::BTreeSet<String> {
+    let mut names = std::collections::BTreeSet::new();
+    for param in &flow.params {
+        param_pattern_names(param, &mut names);
+    }
+    if let Some(rest) = &flow.rest {
+        param_pattern_names(rest, &mut names);
+    }
+    names
 }
 
 fn bind_param_pattern(pattern: &ParamPattern, targets: &CollectionTargets, env: &mut FlowEnv) {
