@@ -2,7 +2,6 @@
 
 use crate::analysis_api::SourceFile;
 use crate::internal_core::StableKeyInterner;
-use oxc_allocator::Allocator;
 use oxc_semantic::SemanticBuilder;
 
 use crate::ts::inventory::extract::{
@@ -13,7 +12,7 @@ use crate::ts::object_model::extract::{
     extract_ts_object_model_from_program, mark_object_model_partial_ast,
 };
 use crate::ts::object_model::store::TsObjectModelOutput;
-use crate::ts::parse::parse_ts_file;
+use crate::ts::parse::ParsedTsSource;
 use crate::ts::scope::extract::{extract_ts_scope_from_program, mark_scope_partial_ast};
 use crate::ts::scope::store::TsScopeOutput;
 use crate::ts::token_flow::{TsTokenSourceFlow, collect_ts_token_source_flows_from_nodes};
@@ -27,10 +26,12 @@ pub struct TsFileAnalysis {
     pub token_source_flows: Vec<TsTokenSourceFlow>,
 }
 
-pub fn analyze_ts_file(interner: &StableKeyInterner, file: &SourceFile) -> TsFileAnalysis {
+pub(super) fn analyze_parsed_ts_file(
+    interner: &StableKeyInterner,
+    file: &SourceFile,
+    parsed: &ParsedTsSource<'_>,
+) -> TsFileAnalysis {
     let source = file.source.as_ref();
-    let allocator = Allocator::default();
-    let parsed = parse_ts_file(&allocator, file);
     if parsed.is_catastrophic() {
         return TsFileAnalysis {
             file: file.id,

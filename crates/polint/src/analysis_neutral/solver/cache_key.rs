@@ -43,7 +43,7 @@ pub fn solver_provider_parameter_digest(budget: &SolverBudget) -> Digest {
         // reachability ⊗ instantiated-types ⊗ dispatch derivation bumps this and
         // deterministically invalidates the solver cache.
         "go_rta_fixpoint_v1",
-        "ts_points_to_projection_v1",
+        "ts_points_to_projection_v2",
         // Repo-local adaptation model facts (ADAPT-01): accepted facts and
         // budget knobs affect future model-derived solver edges.
         "adaptation_model_v1",
@@ -133,7 +133,7 @@ mod tests {
                     "provenance_projection_v1",
                     "precision_ceiling_v1",
                     "go_rta_fixpoint_v1",
-                    "ts_points_to_projection_v1",
+                    "ts_points_to_projection_v2",
                     "adaptation_model_v1",
                     "budget.max_steps=10000",
                     "budget.max_outer_iterations=64",
@@ -170,7 +170,7 @@ mod tests {
                 "provenance_projection_v1",
                 "precision_ceiling_v1",
                 "go_rta_fixpoint_v1",
-                "ts_points_to_projection_v1",
+                "ts_points_to_projection_v2",
                 "adaptation_model_v1",
                 "budget.max_steps=10000",
                 "budget.max_outer_iterations=64",

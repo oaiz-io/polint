@@ -4,8 +4,8 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, BinaryOperator, BindingPattern, Class, ClassElement, Declaration,
     ExportDefaultDeclarationKind, Expression, FormalParameters, Function, FunctionBody,
-    LogicalOperator, MethodDefinition, ObjectPropertyKind, Program, PropertyKey, Statement,
-    VariableDeclarator,
+    LogicalOperator, MethodDefinition, MethodDefinitionKind, ObjectPropertyKind, Program,
+    PropertyKey, Statement, VariableDeclarator,
 };
 use oxc_span::GetSpan;
 
@@ -33,7 +33,8 @@ use crate::analysis_neutral::stable_key::semantic_stable_key;
 use crate::analysis_neutral::types::facts::TypeShape;
 use crate::internal_core::{FileId, FunctionId, Language, Span, StableKeyId};
 use crate::ts::{
-    PARSER_RECOVERY_CONSTRUCT, anonymous_callable_name, class_callable_name, parse_ts_file,
+    PARSER_RECOVERY_CONSTRUCT, anonymous_callable_name, class_callable_name,
+    object_method_function_span, parse_ts_file,
     spans::{
         normalized_call_expression_span, normalized_new_expression_span,
         normalized_tagged_template_span,
@@ -579,6 +580,7 @@ impl TsMirLowering {
         functions.dedup_by(|left, right| left.span == right.span && left.name == right.name);
 
         let mut prepared = Vec::new();
+        let mut prepared_identities = BTreeSet::new();
         for function in functions {
             let span = span_from_oxc(file, function.span);
             let Some(function_fact) =
@@ -587,6 +589,12 @@ impl TsMirLowering {
             else {
                 continue;
             };
+            // A variable initializer is also visited as an anonymous callable.
+            // Both candidates can resolve to the same owner despite different
+            // candidate names; each owned source body must be lowered only once.
+            if !prepared_identities.insert((function_fact.id, span.start_byte, span.end_byte)) {
+                continue;
+            }
             let body = self.push_body(interner, db, file, function_fact, span);
             prepared.push((function, function_fact.id, body));
         }
@@ -957,6 +965,17 @@ fn collect_class_functions<'ast>(
 ) {
     for element in &class.body.body {
         match element {
+            // A class *is* its constructor callable: `new C()` runs the
+            // constructor body, and Jelly attributes that body's calls to the
+            // class function, not to a separate `C.constructor`. Lower the
+            // constructor under the class name/span so the class FunctionFact
+            // owns its call sites end to end (MIR body -> call site caller ->
+            // solver source -> refined-call owner).
+            ClassElement::MethodDefinition(method)
+                if method.kind == MethodDefinitionKind::Constructor =>
+            {
+                collect_function(class_name.to_string(), class.span, &method.value, functions);
+            }
             ClassElement::MethodDefinition(method) => {
                 if let Some(method_name) = method_name(method) {
                     collect_function(
@@ -1273,9 +1292,10 @@ fn collect_anonymous_functions_from_expression<'ast>(
                             && let Expression::FunctionExpression(function) = &property.value
                             && let Some(body) = function.body.as_deref() =>
                     {
+                        let span = object_method_function_span(property);
                         functions.push(TsFunctionCandidate {
-                            name: anonymous_callable_name(property.span.start, property.span.end),
-                            span: property.span,
+                            name: anonymous_callable_name(span.start, span.end),
+                            span,
                             parameters: parameter_names(&function.params),
                             body: CandidateBody::Statements(&body.statements),
                         });
@@ -4635,6 +4655,47 @@ mod places {
         );
         let output = lower_ts_mir(&db);
         (db, output)
+    }
+
+    #[test]
+    fn variable_callables_have_one_body_per_resolved_owner() {
+        let (output, interner) = lower(
+            "src/callables.js",
+            r#"
+const arrow = (value) => value;
+const expression = function named(value) { return value; };
+function outer(seed) {
+    const nested = (value) => seed + value;
+    return nested;
+}
+"#,
+        );
+        assert_eq!(output.bodies.len(), 5, "four callables and the module body");
+        let keys = output
+            .bodies
+            .iter()
+            .map(|body| interner.resolve(body.stable_key))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            keys.len(),
+            output.bodies.len(),
+            "MIR body identities are unique"
+        );
+        let operation_keys = output
+            .operations
+            .iter()
+            .map(|operation| interner.resolve(operation.stable_key))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(operation_keys.len(), output.operations.len());
+        assert_eq!(
+            output
+                .operations
+                .iter()
+                .filter(|operation| matches!(operation.kind, MirOperationKind::Return { .. }))
+                .count(),
+            4,
+            "every callable retains its return operation"
+        );
     }
 
     #[test]

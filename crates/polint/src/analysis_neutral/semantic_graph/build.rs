@@ -99,6 +99,21 @@ impl SemanticGraphBuilder {
         kind: ConstraintKind,
         identity: &str,
     ) {
+        self.push_constraint_with_precision(
+            interner,
+            kind,
+            identity,
+            PointsToPrecision::FlowInsensitive,
+        );
+    }
+
+    pub(crate) fn push_constraint_with_precision(
+        &mut self,
+        interner: &StableKeyInterner,
+        kind: ConstraintKind,
+        identity: &str,
+        precision: PointsToPrecision,
+    ) {
         let stable_key = interner.intern(
             semantic_stable_key(
                 FactFamily::PointsToConstraint,
@@ -113,9 +128,7 @@ impl SemanticGraphBuilder {
             id: Default::default(),
             kind,
             status: PointsToStatus::Present,
-            // FlowInsensitive: these are projected rather than solved, so they
-            // never have exact precision.
-            precision: PointsToPrecision::FlowInsensitive,
+            precision,
             stable_key,
         });
     }

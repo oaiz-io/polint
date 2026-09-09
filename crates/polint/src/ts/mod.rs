@@ -9,6 +9,7 @@ mod unavailable;
 #[cfg(not(feature = "lang-typescript"))]
 pub use unavailable::{semantic_graph, token_flow};
 pub mod binding;
+mod callable_flow;
 pub mod error;
 mod frontend;
 #[cfg(test)]
@@ -101,6 +102,8 @@ pub use crate::analysis_api::{anonymous_callable_name, is_anonymous_callable_nam
 #[cfg(feature = "lang-typescript")]
 #[allow(unreachable_pub, unused_imports)]
 pub use adapter::analyze_with_options;
+#[cfg(feature = "lang-typescript")]
+pub(crate) use adapter::object_method_function_span;
 #[cfg(feature = "lang-typescript")]
 #[allow(unused_imports)]
 pub use adapter::{

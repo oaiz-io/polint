@@ -1,0 +1,56 @@
+# Implementation plan for tonight
+
+## Decision and acceptance
+
+Continue the archived private AST-to-callable-flow collector, feeding the canonical graph and shared solver. Keep the collector, row types, models, and hooks private. Keep `Model` / `Heuristic` provenance. No public SDK change, separate heap solver, second resolver, Go modification, oracle/renderer shortcut, baseline/tolerance change, or gate weakening is needed.
+
+Acceptance is the actual unchanged gate: full 76-case Jelly F1 **>=0.7851929260450161**, with unchanged 1,479 expected edges, plus the existing Go gate and remaining cost checks. At 36 FP the minimum is 980 TP; at 45 FP it is 986 TP. Target several edges of margin, approximately **F1 >=0.79**, while preserving all 249 original TP. Do not substitute the historical baseline or a focused fixture result for the full gate.
+
+## Exact first three implementation steps
+
+1. **Reconstruct and measure the archived candidate.** Start the repository's implementation GSD workflow on a named implementation branch from `d713dbd2`. Apply only the rejected restoration hunks, plus `callable_flow/{mod,extract}.rs`; inspect `tracked.patch` file by file rather than applying `full-working-tree.patch` (which can include unrelated performance changes). Preserve HEAD's landed changes and narrow visibility. Record source/patch hashes and distinguish the late `fn`/`callable`/`callback` identifier repair. Immediately run the unchanged full release-tier corpus gate using the safe procedure in `VALIDATION.md`, retaining per-case reports. This establishes the actual score of the archived source; 0.765784 is not guaranteed for it.
+2. **Repair constructor ownership as one canonical invariant.** Add kernel fixtures for the eight report-level wrong-caller pairs (`classes`, `private`, `super`, `super5`), asserting both callsite-to-target and caller-to-target edges. Trace `ts/mir/lower.rs` → `analysis_neutral/calls/extract.rs` → `ts/semantic_graph_build.rs` → `ts/points_to.rs` → `analysis_neutral/refined_calls/provider.rs`. Correct constructor ownership at the earliest appropriate TS boundary; retain owner equality validation. Add class-expression, nested arrow, method, static-block, field-initializer and `super(callback)` controls. Gate immediately: eight TP gains/eight FP removals are a counterfactual bound, not a promised result.
+3. **Repair and measure CommonJS helper invocation and wrapper shapes.** In `ts/callable_flow/extract.rs`, trace logical/conditional callable bindings into `__importDefault`, then distinguish marked ESM/default objects from unmarked callable/object CommonJS exports. Add both the old `__esModule=true; exports.default=...` fixture and the failing `module.exports=target` fixture, plus `client4`/`client5` helper/class/method cases and shadowed-helper negatives. Use canonical resolved imports. Gate this slice separately and recompute the TP/FP shortfall before selecting the remaining queue below.
+
+These three steps do **not** guarantee a pass. At the ideal eight constructor swaps alone, 948 TP / 28 FP gives F1 0.772301 and still needs another 27 TP at unchanged FP. Continue until the real gate passes; if the time box expires, preserve the failing report and exact remaining edge queue without claiming recovery.
+
+## File-level work and dependencies
+
+| Owner/work unit | Files | Required behavior and checks | Estimate |
+| --- | --- | --- | ---: |
+| Integration lead: reconstruct candidate | `ts/callable_flow/{mod,extract}.rs`; `ts/mod.rs`; `ts/semantic_graph.rs`; `ts/semantic_graph_build.rs` | Borrow retained Oxc parses across summary rounds; feed private model rows to canonical constraints; recovery gating; no separate parse/resolver loop | 1–2 h |
+| Integration lead: graph joins and ownership | `ts/mir/lower.rs`; `analysis_neutral/calls/extract.rs`; `ts/points_to.rs`; `analysis_neutral/points_to/vars.rs`; `analysis_neutral/semantic_graph/build.rs`; audit `analysis_neutral/refined_calls/provider.rs` | Preserve namespace fix, property-load→callsite copy, precise owner and source spans, target declaration identity, heuristic precision | 2–3 h |
+| Model implementer: module shapes | `ts/callable_flow/extract.rs`, tests in its `mod.rs` or a private `tests.rs` | Helper binding + callable/object/default product shape; canonical module facts; explicit uncertain behavior | 1–2 h |
+| Model implementer: ranked residual fixes | `ts/callable_flow/extract.rs`; relevant canonical extraction/span boundary only where diagnosed | Select 2–4 small slices from actual post-step-3 edge deficits; preserve precision controls | 3–5 h |
+| Integration lead: digests and validation | `ts/adapter.rs`; `analysis_neutral/semantic_graph/cache_key.rs`; `analysis_neutral/solver/cache_key.rs`; relevant MIR/call/TS binding parameter digests; existing kernel tests | Version changed extraction/projection semantics; warm/cold and request/thread equivalence; both gate builds; formatting/lint/focused regressions | 2–3 h |
+| Shared review/handoff | Implementation workflow artifacts, edge ledger, verification logs | Reconcile final score, source hashes, unchanged gate/oracle, and remaining known limits | 1 h |
+
+Total **10–16 engineer-hours**. With two experienced implementers and serialized corpus measurement/compilation, expect **8–12 elapsed hours**, reserve **2–4 more** for ownership integration or new failures. A single implementer should budget the engineer-hour range plus build delays. Do not schedule all edge-model work independently before canonical ownership and graph joins stabilize. Use one integration owner; model/fixture work can proceed concurrently without editing the same collector sections.
+
+## Ranked post-integration fixture queue
+
+Counts below are **observed residual pools at the old 0.765784 result**, not additive predictions of each proposed code change. Re-rank after the archived repair and first slices are measured. Keep an edge ledger with before/after expected intersections, new FP, lost TP, and unresolved reason for each candidate.
+
+| Priority | Exact corpus fixtures / residual pool | Small reproducer and diagnosis | Precision/negative controls |
+| --- | --- | --- | --- |
+| 1 | `arrays3.json` **6**, `arrays4.json` **4** | Reduce with singleton/no initial value, empty array with initial callable; callback parameter `doit(f){[()=>{}].forEach(f)}`. Follow accumulator/element→callback argument→return callable flow. | Primitive reducer result must stay non-callable; no union of unrelated array indices; empty reduction without valid initial value must not invent target. |
+| 2 | `default-parameter.json` **4**, `destructuring.json` **3** | Function-valued defaults; nested/rest destructured callable bindings. Reuse old tests at pre-deletion source around lines 11413 and 11528. | A present-but-unknown argument must not be treated as missing and replaced with its default; unrelated property/argument must not gain a target. |
+| 3 | `srcLoc.json` **12** | `(creator())`, computed literal/constant string properties, returned object/array callback results, parenthesized function declarations. Separate missing value from nonmatching identity span in each edge. | No same-start-only match to a containing call/member expression; exact declaration/target span and both edge kinds; preserve Unicode/CRLF rendering. |
+| 4 | `generators.json` **6** | Yield/next/value and sequencing through returned callable values. | Do not union every yield result for every `.next()` position; maintain explicit uncertainty on exhausted bounds. |
+| 5 | `promises2.json` **4**, `asyncawait.json` **2**, `promiseall.json` **2** | Executor resolve callback, promise aggregation, parenthesized async IIFE. Inspect actual spans before changing a promise model. | Noncallable fulfillment values, catch/finally semantics, self-loop FP controls. |
+| 6 | `arrays5.json` **8**, `rest.json` **7**, `spread.json` **8** | Native method alias/callback arguments; positional rest/spread binding. Spread residual consists of call2fun misses whose fun2fun targets already exist. | Existing rest has seven FP; never widen all positions or all collection elements to achieve a fixture pass. |
+| Reserve | `arguments.json` **6**; cross-module callback subgroup **18** | Positional arguments/captured arguments; library callback/receiver/argument propagation with real canonical imports. | Guard shadowing, unrelated callbacks, module cycles, unsupported imports. |
+
+The first three residual rows expose **29 scored FN** (10+7+12), just over the ideal post-constructor shortfall of 27, but full recovery is unlikely from a single model patch. Step 3's helper/interop pool and generator/promise reserve provide alternatives and margin. It is dishonest to schedule “constructor + CJS = green”; both the expected score and the remaining source-backed queue must be checked.
+
+Do not assign all `approx/deconstruction.json`'s four remaining edges to destructuring: the missing calls follow computed-key writes. Do not treat the 342 absent-dependency edges as a tonight collector task. Do not use old performance notes' reachability-pruning experiments to alter today's fixed gate.
+
+## Data, bounds, provenance, and cache contract
+
+The existing collector is a bounded shape analysis: function tokens, object properties, collection elements, promise/iterator shapes, parameter bindings and return summaries. It does not establish exact JS semantics. Retain deterministic iteration and bounded unions; the archive limits module-summary rounds to four, invocation recursion above 16, shape depth above eight, and a bounded union size of eight. Audit whether reaching a bound emits explicit uncertainty; do not silently declare exhaustive targets.
+
+Graph rows must use canonical file/function/callsite IDs and exact target declarations. The archive rejects call/member expressions masquerading as declarations with the same start offset; preserve that guard. Model evidence must remain heuristic through constraint→solver→refined projections, including unresolved/ambiguous/budget states. No new rule-author SDK or extension API is required. Future generic model lowering is a separate refactor after accuracy recovery.
+
+The archive has **no cache-version changes**. Explicitly version the new callable-flow projection in `semantic_graph_provider_parameter_digest`, update the locked parts-list test, and version TS points-to projection in `solver_provider_parameter_digest` if that projection changes. Review `TS_CACHE_SCHEMA` (`ts-facts-v15`) and `TS_SYNTAX_LAYER_SCHEMA` (`ts-syntax-layer-v11`) against changed payloads and extraction semantics, and the MIR/calls/TS-binding parameter digests against changed ownership/identifier semantics. Do not merely bump every unrelated schema. Confirm resolved imports, source/module summaries and changed options participate in affected input digests.
+
+Complexity/scalability risk is primarily repeated bounded shape propagation and retaining all parsed AST arenas across file-summary rounds; exact practical cost is unmeasured for the accepted recovery because no accepted recovery exists. Borrow source text, avoid whole-program clone loops, sort materialized outputs rather than emitting hash iteration order, and record the existing gate's time/RSS columns. No performance improvement claim accompanies the accuracy plan.

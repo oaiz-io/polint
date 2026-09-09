@@ -1,5 +1,6 @@
 use crate::analysis_neutral::ids::{
-    AbstractValueId, AccessPathId, AllocationTokenId, ObjectTokenId, PlaceId, PtVarId, ValueFactId,
+    AbstractValueId, AccessPathId, AllocationTokenId, ObjectTokenId, PlaceId, PtVarId,
+    SemanticNodeId, ValueFactId,
 };
 
 const TAG_BITS: u64 = 4;
@@ -11,6 +12,7 @@ const ALLOCATION_VAR_TAG: u64 = 3;
 const ACCESS_PATH_VAR_TAG: u64 = 4;
 const DYNAMIC_VAR_TAG: u64 = 5;
 const ACCESS_PATH_PREFIX_VAR_TAG: u64 = 6;
+const SEMANTIC_NODE_VAR_TAG: u64 = 7;
 
 const ALLOCATION_OBJECT_TAG: u64 = 1;
 const ABSTRACT_VALUE_OBJECT_TAG: u64 = 2;
@@ -53,6 +55,10 @@ pub fn access_path_prefix_var(id: AccessPathId, projection_index: usize) -> PtVa
 
 pub fn dynamic_var(slot_index: usize) -> PtVarId {
     tagged_var(DYNAMIC_VAR_TAG, slot_index as u64)
+}
+
+pub(crate) fn semantic_node_var(id: SemanticNodeId) -> PtVarId {
+    tagged_var(SEMANTIC_NODE_VAR_TAG, id.0)
 }
 
 pub fn allocation_object(id: AllocationTokenId) -> ObjectTokenId {
@@ -107,6 +113,8 @@ mod tests {
             allocation_var(AllocationTokenId(id)),
             access_path_var(AccessPathId(id)),
             dynamic_var(id as usize),
+            access_path_prefix_var(AccessPathId(id), 0),
+            semantic_node_var(SemanticNodeId(id)),
         ];
 
         for (left_index, left) in vars.iter().enumerate() {

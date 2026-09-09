@@ -140,6 +140,10 @@ pub fn semantic_mir_provider_parameter_digest() -> Digest {
             "unsupported_semantics",
             "go_lowering",
             "ts_js_lowering",
+            // A class's constructor body is lowered under the class function and
+            // an object shorthand method's span follows its key: both change which
+            // body owns a call site, so stale MIR must not be reused.
+            "ts-class-constructor-owner-1",
             "semantic-mir-facts-5",
         ],
     )
@@ -163,6 +167,7 @@ mod semantic_mir_layer_key {
                     "unsupported_semantics",
                     "go_lowering",
                     "ts_js_lowering",
+                    "ts-class-constructor-owner-1",
                     "semantic-mir-facts-5",
                 ],
             )

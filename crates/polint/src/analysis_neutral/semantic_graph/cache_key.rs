@@ -62,9 +62,10 @@ pub fn semantic_graph_provider_parameter_digest() -> Digest {
             "ts_direct_binding_output",
             "ts_direct_binding_projection_v1",
             "ts_token_source_flow_projection_v1",
+            "ts_callable_flow_projection_v1",
             "go_semantic_output_digest",
             "go_semantic_projection_v1",
-            "ts_object_model_projection_v3",
+            "ts_object_model_projection_v4",
             "adaptation_model_v1",
         ],
     )
@@ -92,9 +93,10 @@ mod tests {
                     "ts_direct_binding_output",
                     "ts_direct_binding_projection_v1",
                     "ts_token_source_flow_projection_v1",
+                    "ts_callable_flow_projection_v1",
                     "go_semantic_output_digest",
                     "go_semantic_projection_v1",
-                    "ts_object_model_projection_v3",
+                    "ts_object_model_projection_v4",
                     "adaptation_model_v1",
                 ],
             )
