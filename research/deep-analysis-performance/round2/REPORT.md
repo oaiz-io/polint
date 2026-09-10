@@ -206,8 +206,10 @@ Stores sort their rows by stable-key text. Doing that through `resolve` inside a
 comparator is `O(n log n)` materializations of keys that are only being compared,
 and `sort_by_cached_key` is `O(n)` of them. `StableKeyInterner::compare_canonical`
 streams both sides, stops at the first differing byte and allocates nothing,
-producing exactly the ordering `resolve(left).cmp(&resolve(right))` does. 46 store
-and normalization comparators plus 16 cached-key sorts now use it.
+producing exactly the ordering `resolve(left).cmp(&resolve(right))` does. It
+replaces 80 resolve-based comparators and cached-key sorts across 44 files,
+expanding to 128 comparison terms because a tuple comparison becomes one term per
+element.
 
 Fact-metadata payload digests stream the key's canonical bytes into the
 fingerprint instead of expanding them into a string first
