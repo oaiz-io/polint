@@ -1,5 +1,7 @@
-use crate::analysis_api::{FactFamily, SymbolNamespace, stable_key_from_parts};
-use crate::internal_core::{Diagnostic, DiagnosticRange as TextRange};
+use crate::analysis_api::{
+    FactFamily, SymbolNamespace, stable_key_from_key_parts, stable_key_from_parts,
+};
+use crate::internal_core::{Diagnostic, DiagnosticRange as TextRange, KeyPart};
 use crate::internal_core::{
     FileId, Language, ModuleNodeId, PackageId, Span, StableKeyId, SymbolId,
 };
@@ -979,19 +981,22 @@ fn closure_alias_stable_key(
     original: &AliasFact,
     closure: &AliasFact,
 ) -> StableKeyId {
-    stable_key_from_parts(
+    stable_key_from_key_parts(
         interner,
         FactFamily::Alias,
-        &[
-            (
-                "base_alias",
-                interner.resolve(original.stable_key).to_string(),
-            ),
+        [
+            ("base_alias", KeyPart::Key(original.stable_key)),
             (
                 "targets",
-                sorted_stable_key_value(interner, &closure.target_symbol_stable_keys),
+                KeyPart::Text(&sorted_stable_key_value(
+                    interner,
+                    &closure.target_symbol_stable_keys,
+                )),
             ),
-            ("status", semantic_status_label(closure.status).to_string()),
+            (
+                "status",
+                KeyPart::Text(semantic_status_label(closure.status)),
+            ),
         ],
     )
 }
@@ -1129,35 +1134,41 @@ impl AliasFact {
         &self,
         interner: &crate::internal_core::StableKeyInterner,
     ) -> StableKeyId {
-        stable_key_from_parts(
+        stable_key_from_key_parts(
             interner,
             FactFamily::Alias,
-            &[
-                ("language", language_label(self.language).to_string()),
+            [
+                ("language", KeyPart::Text(language_label(self.language))),
                 (
                     "file",
-                    self.file.map(file_id_key).unwrap_or_else(none_value),
+                    KeyPart::Text(&self.file.map(file_id_key).unwrap_or_else(none_value)),
                 ),
                 (
                     "package",
-                    self.package.map(package_id_key).unwrap_or_else(none_value),
+                    KeyPart::Text(&self.package.map(package_id_key).unwrap_or_else(none_value)),
                 ),
                 (
                     "module",
-                    self.module
-                        .map(module_node_id_key)
-                        .unwrap_or_else(none_value),
+                    KeyPart::Text(
+                        &self
+                            .module
+                            .map(module_node_id_key)
+                            .unwrap_or_else(none_value),
+                    ),
                 ),
                 (
                     "symbol_stable_key",
-                    interner.resolve(self.source_symbol_stable_key).to_string(),
+                    KeyPart::Key(self.source_symbol_stable_key),
                 ),
                 (
                     "target_symbol_stable_keys",
-                    sorted_stable_key_value(interner, &self.target_symbol_stable_keys),
+                    KeyPart::Text(&sorted_stable_key_value(
+                        interner,
+                        &self.target_symbol_stable_keys,
+                    )),
                 ),
-                ("kind", alias_kind_label(self.kind).to_string()),
-                ("status", semantic_status_label(self.status).to_string()),
+                ("kind", KeyPart::Text(alias_kind_label(self.kind))),
+                ("status", KeyPart::Text(semantic_status_label(self.status))),
             ],
         )
     }
@@ -1168,35 +1179,35 @@ impl ResolutionFact {
         &self,
         interner: &crate::internal_core::StableKeyInterner,
     ) -> StableKeyId {
-        stable_key_from_parts(
+        stable_key_from_key_parts(
             interner,
             FactFamily::Resolution,
-            &[
-                ("language", language_label(self.language).to_string()),
+            [
+                ("language", KeyPart::Text(language_label(self.language))),
                 (
                     "file",
-                    self.file.map(file_id_key).unwrap_or_else(none_value),
+                    KeyPart::Text(&self.file.map(file_id_key).unwrap_or_else(none_value)),
                 ),
                 (
                     "package",
-                    self.package.map(package_id_key).unwrap_or_else(none_value),
+                    KeyPart::Text(&self.package.map(package_id_key).unwrap_or_else(none_value)),
                 ),
                 (
                     "module",
-                    self.module
-                        .map(module_node_id_key)
-                        .unwrap_or_else(none_value),
+                    KeyPart::Text(
+                        &self
+                            .module
+                            .map(module_node_id_key)
+                            .unwrap_or_else(none_value),
+                    ),
                 ),
-                (
-                    "symbol_stable_key",
-                    interner.resolve(self.source_stable_key).to_string(),
-                ),
+                ("symbol_stable_key", KeyPart::Key(self.source_stable_key)),
                 (
                     "target_stable_keys",
-                    sorted_stable_key_value(interner, &self.target_stable_keys),
+                    KeyPart::Text(&sorted_stable_key_value(interner, &self.target_stable_keys)),
                 ),
-                ("kind", resolution_step_kind_label(self.step).to_string()),
-                ("status", semantic_status_label(self.status).to_string()),
+                ("kind", KeyPart::Text(resolution_step_kind_label(self.step))),
+                ("status", KeyPart::Text(semantic_status_label(self.status))),
             ],
         )
     }
@@ -1207,40 +1218,40 @@ impl GeneratedSymbolFact {
         &self,
         interner: &crate::internal_core::StableKeyInterner,
     ) -> StableKeyId {
-        stable_key_from_parts(
+        stable_key_from_key_parts(
             interner,
             FactFamily::GeneratedSymbol,
-            &[
-                ("language", language_label(self.language).to_string()),
+            [
+                ("language", KeyPart::Text(language_label(self.language))),
                 (
                     "file",
-                    self.file.map(file_id_key).unwrap_or_else(none_value),
+                    KeyPart::Text(&self.file.map(file_id_key).unwrap_or_else(none_value)),
                 ),
                 (
                     "package",
-                    self.package.map(package_id_key).unwrap_or_else(none_value),
+                    KeyPart::Text(&self.package.map(package_id_key).unwrap_or_else(none_value)),
                 ),
                 (
                     "module",
-                    self.module
-                        .map(module_node_id_key)
-                        .unwrap_or_else(none_value),
+                    KeyPart::Text(
+                        &self
+                            .module
+                            .map(module_node_id_key)
+                            .unwrap_or_else(none_value),
+                    ),
                 ),
-                (
-                    "symbol_stable_key",
-                    interner.resolve(self.symbol_stable_key).to_string(),
-                ),
-                (
-                    "source_stable_key",
-                    interner.resolve(self.source_stable_key).to_string(),
-                ),
-                ("producer_id", self.producer_id.clone()),
+                ("symbol_stable_key", KeyPart::Key(self.symbol_stable_key)),
+                ("source_stable_key", KeyPart::Key(self.source_stable_key)),
+                ("producer_id", KeyPart::Text(&self.producer_id.clone())),
                 (
                     "generated_discriminator",
-                    self.generated_discriminator.clone(),
+                    KeyPart::Text(&self.generated_discriminator.clone()),
                 ),
-                ("kind", generated_symbol_kind_label(self.kind).to_string()),
-                ("status", semantic_status_label(self.status).to_string()),
+                (
+                    "kind",
+                    KeyPart::Text(generated_symbol_kind_label(self.kind)),
+                ),
+                ("status", KeyPart::Text(semantic_status_label(self.status))),
             ],
         )
     }
@@ -1251,24 +1262,27 @@ impl StableExportIdentity {
         &self,
         interner: &crate::internal_core::StableKeyInterner,
     ) -> StableKeyId {
-        stable_key_from_parts(
+        stable_key_from_key_parts(
             interner,
             FactFamily::StableExport,
-            &[
-                ("language", language_label(self.language).to_string()),
-                ("package", option_key(self.package_key.clone())),
-                ("module", option_key(self.module_key.clone())),
-                ("export_name", self.export_name.clone()),
-                ("namespace", namespace_label(self.namespace).to_string()),
+            [
+                ("language", KeyPart::Text(language_label(self.language))),
                 (
-                    "symbol_stable_key",
-                    interner.resolve(self.symbol_stable_key).to_string(),
+                    "package",
+                    KeyPart::Text(&option_key(self.package_key.clone())),
                 ),
+                (
+                    "module",
+                    KeyPart::Text(&option_key(self.module_key.clone())),
+                ),
+                ("export_name", KeyPart::Text(&self.export_name.clone())),
+                ("namespace", KeyPart::Text(namespace_label(self.namespace))),
+                ("symbol_stable_key", KeyPart::Key(self.symbol_stable_key)),
                 (
                     "generated_discriminator",
-                    option_key(self.generated_discriminator.clone()),
+                    KeyPart::Text(&option_key(self.generated_discriminator.clone())),
                 ),
-                ("status", semantic_status_label(self.status).to_string()),
+                ("status", KeyPart::Text(semantic_status_label(self.status))),
             ],
         )
     }

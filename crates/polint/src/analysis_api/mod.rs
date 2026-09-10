@@ -28,6 +28,7 @@ pub use digest::{
     PrecisionTier, ProviderSchemaSnapshot, QueryKey, TsJsLifecycleSnapshot,
 };
 pub use fact_store::{FactStore, FactStoreEntry};
+pub(crate) use metadata::stable_key_from_key_parts;
 pub use metadata::{
     FactConfidence, FactFamily, FactMeta, FactMetaInsert, FactMetaStore, FactPrecision, FactRef,
     MissingFactMeta, StableKeyConflict, StableKeyOwner, ValidationStatus, stable_key_from_parts,

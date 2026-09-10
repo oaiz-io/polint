@@ -159,7 +159,7 @@ pub(super) fn extension_fact_metadata(
         ("status", format!("{:?}", fact.status)),
     ];
     let payload_digest =
-        metadata_payload_digest(interner.resolve(stable_key).as_ref(), &payload_extra_parts);
+        metadata_payload_digest_for_key(interner, stable_key, &payload_extra_parts);
 
     FactMeta {
         stable_key,
@@ -277,15 +277,17 @@ pub(super) fn fact_meta_from_borrowed_parts<const STABLE: usize, const EXTRA: us
     stable_parts: [(&'static str, &str); STABLE],
     payload_extra_parts: [(&'static str, &str); EXTRA],
 ) -> FactMeta {
-    let (stable_key, stable_key_text) = STABLE_KEY_TEXT.with(|buffer| {
+    let (stable_key, payload_digest) = STABLE_KEY_TEXT.with(|buffer| {
         let mut buffer = buffer.borrow_mut();
         let mut sorted = stable_parts;
         write_stable_key_text(&mut buffer, family, &mut sorted);
-        interner.intern_and_resolve(&buffer)
+        // The buffer already holds exactly the text the digest hashes, so the
+        // interner is asked for the id only — never to hand the text back.
+        let stable_key = interner.intern(buffer.as_str());
+        let mut payload_parts = stable_parts.to_vec();
+        payload_parts.extend(payload_extra_parts);
+        (stable_key, metadata_payload_digest(&buffer, &payload_parts))
     });
-    let mut payload_parts = stable_parts.to_vec();
-    payload_parts.extend(payload_extra_parts);
-    let payload_digest = metadata_payload_digest(&stable_key_text, &payload_parts);
 
     FactMeta {
         stable_key,
@@ -307,7 +309,7 @@ pub(super) fn fact_meta_from_stable_key<const EXTRA: usize>(
     payload_extra_parts: [(&'static str, String); EXTRA],
 ) -> FactMeta {
     let payload_digest =
-        metadata_payload_digest(interner.resolve(stable_key).as_ref(), &payload_extra_parts);
+        metadata_payload_digest_for_key(interner, stable_key, &payload_extra_parts);
 
     FactMeta {
         stable_key,
@@ -330,7 +332,7 @@ pub(super) fn fact_meta_from_stable_key_with_validation<const EXTRA: usize>(
     payload_extra_parts: [(&'static str, String); EXTRA],
 ) -> FactMeta {
     let payload_digest =
-        metadata_payload_digest(interner.resolve(stable_key).as_ref(), &payload_extra_parts);
+        metadata_payload_digest_for_key(interner, stable_key, &payload_extra_parts);
 
     FactMeta {
         stable_key,
@@ -389,12 +391,47 @@ pub(super) fn metadata_payload_digest<V: AsRef<str>>(
     lower_hex_u64(hash)
 }
 
+/// Payload digest for a fact whose stable key is already interned.
+///
+/// Streams the key's canonical bytes into the fingerprint rather than expanding
+/// them into a string first. This runs once per fact, and a composite key's text
+/// is wanted here one byte at a time — materializing it would reintroduce the
+/// per-fact expansion that structural sharing removes.
+pub(super) fn metadata_payload_digest_for_key<V: AsRef<str>>(
+    interner: &crate::core::StableKeyInterner,
+    stable_key: StableKeyId,
+    parts: &[(&'static str, V)],
+) -> String {
+    let mut normalized = parts
+        .iter()
+        .map(|(label, value)| (*label, metadata_value(value.as_ref())))
+        .collect::<Vec<_>>();
+    normalized.sort_by(compare_metadata_parts);
+
+    let mut hash = 0xcbf29ce484222325_u64;
+    interner.stream_canonical(stable_key, |chunk| {
+        for byte in chunk {
+            fingerprint_byte(&mut hash, *byte);
+        }
+    });
+    fingerprint_separator(&mut hash);
+    for (label, value) in &normalized {
+        fingerprint_metadata_part(&mut hash, label, value.as_ref());
+    }
+    lower_hex_u64(hash)
+}
+
 pub(super) fn summary_fact_payload_metadata_digest(
     interner: &crate::core::StableKeyInterner,
     fact: &SummaryFact,
 ) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
-    fingerprint_part(&mut hash, interner.resolve(fact.stable_key).as_bytes());
+    interner.stream_canonical(fact.stable_key, |chunk| {
+        for byte in chunk {
+            fingerprint_byte(&mut hash, *byte);
+        }
+    });
+    fingerprint_separator(&mut hash);
     fingerprint_normalized_metadata_part(
         &mut hash,
         "callable",
@@ -413,7 +450,12 @@ pub(super) fn summary_event_payload_metadata_digest(
     fact: &SummaryEventFact,
 ) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
-    fingerprint_part(&mut hash, interner.resolve(fact.stable_key).as_bytes());
+    interner.stream_canonical(fact.stable_key, |chunk| {
+        for byte in chunk {
+            fingerprint_byte(&mut hash, *byte);
+        }
+    });
+    fingerprint_separator(&mut hash);
     fingerprint_normalized_metadata_part(
         &mut hash,
         "callable",

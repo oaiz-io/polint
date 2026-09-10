@@ -12,11 +12,12 @@ use super::facts::{
 use super::lattice::{AbstractDomain, TopReason};
 use super::results::{DomainResults, SolverStatus};
 use super::state::ProductState;
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::cfg::ids::BasicBlockId;
 use crate::analysis_neutral::ids::{
     DomainEventId, DomainObservationId, MirBodyId, MirOpId, PlaceId,
 };
+use crate::internal_core::KeyPart;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DomainOutput {
@@ -94,15 +95,12 @@ impl DomainOutput {
                     status: DomainStatus::BudgetExceeded,
                     precision: DomainPrecision::Unknown,
                     reason: "solver_budget_exceeded".to_string(),
-                    stable_key: stable_key_from_parts(
+                    stable_key: stable_key_from_key_parts(
                         interner,
                         FactFamily::DomainEvent,
-                        &[
-                            (
-                                "body",
-                                interner.resolve(function.body_stable_key).to_string(),
-                            ),
-                            ("reason", "solver_budget_exceeded".to_string()),
+                        [
+                            ("body", KeyPart::Key(function.body_stable_key)),
+                            ("reason", KeyPart::Text("solver_budget_exceeded")),
                         ],
                     ),
                 });
@@ -166,12 +164,12 @@ impl DomainOutput {
                 status: status_for_top_reason(event.reason),
                 precision: precision_for_top_reason(event.reason),
                 reason: event.reason.as_str().to_string(),
-                stable_key: stable_key_from_parts(
+                stable_key: stable_key_from_key_parts(
                     interner,
                     FactFamily::DomainEvent,
-                    &[
-                        ("source", interner.resolve(event.stable_key).to_string()),
-                        ("reason", event.reason.as_str().to_string()),
+                    [
+                        ("source", KeyPart::Key(event.stable_key)),
+                        ("reason", KeyPart::Text(event.reason.as_str())),
                     ],
                 ),
             });
@@ -207,15 +205,12 @@ impl DomainOutput {
                     status: DomainStatus::BudgetExceeded,
                     precision: DomainPrecision::Unknown,
                     reason: "solver_budget_exceeded".to_string(),
-                    stable_key: stable_key_from_parts(
+                    stable_key: stable_key_from_key_parts(
                         interner,
                         FactFamily::DomainEvent,
-                        &[
-                            (
-                                "body",
-                                interner.resolve(function.body_stable_key).to_string(),
-                            ),
-                            ("reason", "solver_budget_exceeded".to_string()),
+                        [
+                            ("body", KeyPart::Key(function.body_stable_key)),
+                            ("reason", KeyPart::Text("solver_budget_exceeded")),
                         ],
                     ),
                 });

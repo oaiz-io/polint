@@ -1,4 +1,4 @@
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::entrypoints::facts::{
     EntrypointFact, EntrypointKind, TrustBoundaryFact, TrustBoundarySourceKind,
@@ -6,7 +6,7 @@ use crate::analysis_neutral::entrypoints::facts::{
 use crate::analysis_neutral::entrypoints::provider::ENTRYPOINTS_PROVIDER_ID;
 use crate::analysis_neutral::ids::TrustBoundaryId;
 use crate::analysis_neutral::places::{PlaceFact, PlaceRoot};
-use crate::internal_core::{Language, StableKeyId};
+use crate::internal_core::{KeyPart, Language, StableKeyId};
 
 /// Derive trust boundary facts from recognized entrypoints.
 ///
@@ -277,16 +277,13 @@ fn trust_boundary_stable_key(
     source_kind: TrustBoundarySourceKind,
     language: crate::internal_core::Language,
 ) -> StableKeyId {
-    stable_key_from_parts(
+    stable_key_from_key_parts(
         interner,
         FactFamily::TrustBoundary,
-        &[
-            (
-                "entrypoint_key",
-                interner.resolve(entrypoint_key).to_string(),
-            ),
-            ("source_kind", format!("{source_kind:?}")),
-            ("language", format!("{language:?}")),
+        [
+            ("entrypoint_key", KeyPart::Key(entrypoint_key)),
+            ("source_kind", KeyPart::Text(&format!("{source_kind:?}"))),
+            ("language", KeyPart::Text(&format!("{language:?}"))),
         ],
     )
 }

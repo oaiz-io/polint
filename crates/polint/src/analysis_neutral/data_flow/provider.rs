@@ -13,14 +13,14 @@ use super::store::{
 };
 use crate::analysis_api::{
     CacheStats, Digest, DigestKind, InputComponent, InputSnapshot, ProviderExecution,
-    ProviderFailureReason, ProviderFailureStage,
+    ProviderFailureReason, ProviderFailureStage, stable_key_from_key_parts,
 };
 use crate::analysis_api::{FactFamily, ProviderManifest, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::entrypoints::facts::TrustBoundaryFact;
 use crate::analysis_neutral::ids::{DataFlowModelId, DataFlowNodeId};
 use crate::analysis_neutral::places::{PlaceFact, PlaceRoot};
-use crate::internal_core::Diagnostic;
+use crate::internal_core::{Diagnostic, KeyPart};
 
 pub const DATA_FLOW_PROVIDER_ID: &str = "polint.data_flow";
 
@@ -121,15 +121,12 @@ fn derive_source_models(db: &impl AnalysisHost, output: &mut DataFlowOutput) {
     let interner = &interner_handle;
     for boundary in db.trust_boundary_facts() {
         let model_id = next_data_flow_model_id(&output.models);
-        let stable_key = stable_key_from_parts(
+        let stable_key = stable_key_from_key_parts(
             interner,
             FactFamily::DataFlowModel,
-            &[
-                ("kind", "source".to_string()),
-                (
-                    "trust_boundary",
-                    interner.resolve(boundary.stable_key).to_string(),
-                ),
+            [
+                ("kind", KeyPart::Text("source")),
+                ("trust_boundary", KeyPart::Key(boundary.stable_key)),
             ],
         );
         output.models.push(DataFlowModelFact {
@@ -167,10 +164,10 @@ fn derive_source_models(db: &impl AnalysisHost, output: &mut DataFlowOutput) {
             call_site: None,
             model: Some(model_id),
             span: Some(boundary.span.clone()),
-            stable_key: stable_key_from_parts(
+            stable_key: stable_key_from_key_parts(
                 interner,
                 FactFamily::DataFlowNode,
-                &[("source_model", interner.resolve(stable_key).to_string())],
+                [("source_model", KeyPart::Key(stable_key))],
             ),
         });
         derive_source_introduction_edges(db, output, boundary, source_node, model_id);
@@ -245,16 +242,13 @@ fn push_source_introduction_edge(
     target_node: DataFlowNodeId,
     model_id: DataFlowModelId,
 ) {
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::DataFlowEdge,
-        &[
-            ("kind", "SourceIntroduction".to_string()),
-            (
-                "trust_boundary",
-                interner.resolve(boundary.stable_key).to_string(),
-            ),
-            ("place", interner.resolve(place.stable_key).to_string()),
+        [
+            ("kind", KeyPart::Text("SourceIntroduction")),
+            ("trust_boundary", KeyPart::Key(boundary.stable_key)),
+            ("place", KeyPart::Key(place.stable_key)),
         ],
     );
     if output
@@ -334,15 +328,12 @@ fn derive_extension_models(db: &impl AnalysisHost, output: &mut DataFlowOutput) 
             provenance: DataFlowProvenance::Extension,
             evidence: fact.evidence.clone(),
             payload_labels: fact.payload_labels.clone(),
-            stable_key: stable_key_from_parts(
+            stable_key: stable_key_from_key_parts(
                 interner,
                 FactFamily::DataFlowModel,
-                &[
-                    ("kind", format!("{kind:?}")),
-                    (
-                        "extension_fact",
-                        interner.resolve(fact.stable_key).to_string(),
-                    ),
+                [
+                    ("kind", KeyPart::Text(&format!("{kind:?}"))),
+                    ("extension_fact", KeyPart::Key(fact.stable_key)),
                 ],
             ),
         });

@@ -1,11 +1,11 @@
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::entrypoints::facts::{
     DispatchEdgeKind, EntrypointFact, EntrypointKind, FrameworkDispatchEdgeFact,
 };
 use crate::analysis_neutral::entrypoints::provider::ENTRYPOINTS_PROVIDER_ID;
 use crate::analysis_neutral::ids::DispatchEdgeId;
-use crate::internal_core::StableKeyId;
+use crate::internal_core::{KeyPart, StableKeyId};
 
 /// Derive framework dispatch edge facts from recognized entrypoints.
 ///
@@ -91,14 +91,14 @@ fn dispatch_edge_stable_key(
     edge_kind: DispatchEdgeKind,
     language: crate::internal_core::Language,
 ) -> StableKeyId {
-    stable_key_from_parts(
+    stable_key_from_key_parts(
         interner,
         FactFamily::DispatchEdge,
-        &[
-            ("from", interner.resolve(from_source).to_string()),
-            ("to_function_key", to_function_key.to_string()),
-            ("edge_kind", format!("{edge_kind:?}")),
-            ("language", format!("{language:?}")),
+        [
+            ("from", KeyPart::Key(from_source)),
+            ("to_function_key", KeyPart::Text(to_function_key)),
+            ("edge_kind", KeyPart::Text(&format!("{edge_kind:?}"))),
+            ("language", KeyPart::Text(&format!("{language:?}"))),
         ],
     )
 }

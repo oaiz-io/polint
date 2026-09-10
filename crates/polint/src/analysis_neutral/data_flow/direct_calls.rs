@@ -6,7 +6,7 @@ use super::store::{DataFlowOutput, next_data_flow_edge_id, next_data_flow_node_i
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{CallSiteFact, CallSyntaxKind, CallTargetStatus};
 use crate::analysis_neutral::ids::{CallSiteId, DataFlowBudgetId, DataFlowNodeId, PlaceId};
@@ -14,7 +14,7 @@ use crate::analysis_neutral::refined_calls::facts::{RefinedCallConfidence, Refin
 use crate::analysis_neutral::summaries::facts::{
     FlowRoot, SummaryDomainKind, SummaryFact, SummaryPrecision, SummaryStatus,
 };
-use crate::internal_core::Language;
+use crate::internal_core::{KeyPart, Language};
 
 struct CallInputs<'a> {
     sites: BTreeMap<CallSiteId, &'a CallSiteFact>,
@@ -433,18 +433,18 @@ fn push_edge(
     output: &mut CallProjection<'_>,
     draft: CallEdgeDraft<'_>,
 ) {
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::DataFlowEdge,
-        &[
-            ("kind", format!("{:?}", draft.kind)),
+        [
+            ("kind", KeyPart::Text(&format!("{:?}", draft.kind))),
+            ("refined_call", KeyPart::Key(draft.edge.stable_key)),
             (
-                "refined_call",
-                interner.resolve(draft.edge.stable_key).to_string(),
+                "from",
+                KeyPart::Text(&node_key(interner, output, draft.from)),
             ),
-            ("from", node_key(interner, output, draft.from)),
-            ("to", node_key(interner, output, draft.to)),
-            ("status", format!("{:?}", draft.status)),
+            ("to", KeyPart::Text(&node_key(interner, output, draft.to))),
+            ("status", KeyPart::Text(&format!("{:?}", draft.status))),
         ],
     );
     if output.has_edge(stable_key) {
@@ -490,18 +490,20 @@ fn summary_node(
     role: &str,
     call_site: Option<CallSiteId>,
 ) -> DataFlowNodeId {
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::DataFlowNode,
-        &[
-            ("kind", format!("{kind:?}")),
-            ("summary", interner.resolve(fact.stable_key).to_string()),
-            ("role", role.to_string()),
+        [
+            ("kind", KeyPart::Text(&format!("{kind:?}"))),
+            ("summary", KeyPart::Key(fact.stable_key)),
+            ("role", KeyPart::Text(role)),
             (
                 "call_site",
-                call_site
-                    .map(|id| id.0.to_string())
-                    .unwrap_or_else(|| "none".to_string()),
+                KeyPart::Text(
+                    &call_site
+                        .map(|id| id.0.to_string())
+                        .unwrap_or_else(|| "none".to_string()),
+                ),
             ),
         ],
     );
@@ -539,21 +541,27 @@ fn push_call_summary_tito_edge(
     pair: (DataFlowNodeId, Option<CallSiteId>),
 ) {
     let (to, call_site) = pair;
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::DataFlowEdge,
-        &[
-            ("kind", format!("{:?}", DataFlowEdgeKind::SummaryTito)),
+        [
             (
-                "refined_call",
-                interner.resolve(edge.stable_key).to_string(),
+                "kind",
+                KeyPart::Text(&format!("{:?}", DataFlowEdgeKind::SummaryTito)),
             ),
-            ("summary", interner.resolve(summary.stable_key).to_string()),
-            ("from", node_key(interner, output, from)),
-            ("to", node_key(interner, output, to)),
-            ("flow_from", super::summary_edges::root_role(flow.from)),
-            ("flow_to", super::summary_edges::root_role(flow.to)),
-            ("flow_kind", format!("{:?}", flow.kind)),
+            ("refined_call", KeyPart::Key(edge.stable_key)),
+            ("summary", KeyPart::Key(summary.stable_key)),
+            ("from", KeyPart::Text(&node_key(interner, output, from))),
+            ("to", KeyPart::Text(&node_key(interner, output, to))),
+            (
+                "flow_from",
+                KeyPart::Text(&super::summary_edges::root_role(flow.from)),
+            ),
+            (
+                "flow_to",
+                KeyPart::Text(&super::summary_edges::root_role(flow.to)),
+            ),
+            ("flow_kind", KeyPart::Text(&format!("{:?}", flow.kind))),
         ],
     );
     if output.has_edge(stable_key) {
@@ -648,16 +656,13 @@ fn call_node(
     suffix: String,
     call_site: Option<CallSiteId>,
 ) -> DataFlowNodeId {
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::DataFlowNode,
-        &[
-            ("kind", format!("{kind:?}")),
-            (
-                "refined_call",
-                interner.resolve(edge.stable_key).to_string(),
-            ),
-            ("node", suffix),
+        [
+            ("kind", KeyPart::Text(&format!("{kind:?}"))),
+            ("refined_call", KeyPart::Key(edge.stable_key)),
+            ("node", KeyPart::Text(&suffix)),
         ],
     );
     if let Some(existing) = output.existing_node(stable_key) {
