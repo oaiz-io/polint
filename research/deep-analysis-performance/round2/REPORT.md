@@ -42,9 +42,7 @@ cold sample clears only that checkout's `.polint/cache`; each warm sample is a
 fresh process preserving it. Wall is whole-child-process elapsed; peak RSS is the
 analysis process's own `getrusage(RUSAGE_SELF)` high-water mark and excludes
 child processes. Warm figures are medians of three samples; cold samples are
-single observations. The host is shared: every sample records the load average
-and the process table is watched during the run, with any sample that overlapped
-foreign compilation discarded and retaken (rejects retained as `rejected-*.json`).
+single observations.
 
 Binary identity: the "before" executable is
 `cargo test -p polint --lib --all-features --locked --release --no-run` at
@@ -54,42 +52,64 @@ the "after" executable is the same command at this branch's code head (SHA-256
 after the fact and byte-identical to the one every "after" sample was taken with.
 Release profile, dependencies and compiler flags are unchanged.
 
-### Deep workloads
+### Sampling protocol: interleaved, because block sampling lied
+
+This host is shared with other active workloads; its load average ranged from 2
+to 349 over the measurement window. Measuring all "before" samples and then all
+"after" samples — the obvious protocol, and the one the first pass used — puts
+each binary under whatever the host happened to be doing at the time, and the
+difference between those two periods is larger than the difference between the
+binaries. It produced, for instance, a 19% syntactic regression on Excalidraw and
+a 135% one on golang/tools that **do not exist**: re-sampling the same two
+binaries alternately gives ±5% and parity respectively.
+
+Everything below therefore alternates the two binaries sample by sample —
+baseline cold, final cold, then baseline/final warm pairs — so ambient load lands
+on both. Cold samples each clear the cache first, so they remain genuinely cold.
+Every sample records its load average and watches the process table, discarding
+and retaking any sample that overlapped foreign compilation (rejects retained as
+`rejected-*.json`). The earlier block-sampled matrix is kept under
+`results/baseline/` and `results/final/` for comparison, but **the paired numbers
+below supersede it.**
+
+### Deep workloads (paired)
 
 | Suite / SHA / license | Warm wall s, before → after | Speedup | Warm peak RSS GiB, before → after | RSS Δ | Cold wall s, before → after | Cold peak RSS GiB, before → after |
 |---|---:|---:|---:|---:|---:|---:|
-| jelly-callgraph-micro / `b799ed4f0d68c670fe398830aaa51dd5c628cf74` / BSD-3-Clause | 150.329 → 147.429 | 1.020× | 2.648 → 2.263 | -14.52% | 154.646 → 160.558 | 2.648 → 2.267 |
-| excalidraw-excalidraw-scale / `0dbd2a39319d41fda37b2945dea0dcbd58d6a564` / MIT | 87.356 → 87.543 | 0.998× | 4.753 → 3.956 | -16.76% | 85.568 → 90.964 | 4.760 → 3.969 |
-| gohugoio-hugo-scale / `3f35721fb2c75a1f7cc5a7a14400b66e73d4b06e` / Apache-2.0 | 61.590 → 65.493 | 0.940× | 4.871 → 4.027 | -17.32% | 82.310 → 68.228 | 4.893 → 4.047 |
+| jelly-callgraph-micro / `b799ed4f0d68c670fe398830aaa51dd5c628cf74` / BSD-3-Clause | 140.872 → 143.490 | 0.982× | 2.648 → 2.263 | -14.52% | 143.152 → 141.143 | 2.647 → 2.264 |
+| excalidraw-excalidraw-scale / `0dbd2a39319d41fda37b2945dea0dcbd58d6a564` / MIT | 80.082 → 86.330 | 0.928× | 4.753 → 3.955 | -16.78% | 82.241 → 86.093 | 4.758 → 3.961 |
+| gohugoio-hugo-scale / `3f35721fb2c75a1f7cc5a7a14400b66e73d4b06e` / Apache-2.0 | 57.047 → 61.986 | 0.920× | 4.871 → 4.030 | -17.25% | 58.697 → 64.097 | 4.875 → 4.049 |
 
-### Syntactic workloads
-
-| Suite / SHA / license | Warm wall s, before → after | Speedup | Warm peak RSS GiB, before → after | RSS Δ | Cold wall s, before → after | Cold peak RSS GiB, before → after |
-|---|---:|---:|---:|---:|---:|---:|
-| jelly-callgraph-micro / `b799ed4f0d68c670fe398830aaa51dd5c628cf74` / BSD-3-Clause | 0.098 → 0.096 | 1.021× | 0.034 → 0.034 | +0.20% | 0.123 → 0.149 | 0.036 → 0.036 |
-| excalidraw-excalidraw-scale / `0dbd2a39319d41fda37b2945dea0dcbd58d6a564` / MIT | 0.167 → 0.199 | 0.839× | 0.049 → 0.050 | +1.24% | 0.243 → 0.300 | 0.052 → 0.053 |
-| gohugoio-hugo-scale / `3f35721fb2c75a1f7cc5a7a14400b66e73d4b06e` / Apache-2.0 | 0.678 → 0.660 | 1.028× | 0.096 → 0.096 | -0.27% | 1.160 → 1.220 | 0.108 → 0.108 |
-
-### deep warm repetitions
+### Deep warm repetitions (paired)
 
 | Suite | Before seconds | After seconds |
 |---|---|---|
-| jelly-callgraph-micro | 152.159, 149.988, 150.329 | 147.429, 151.298, 147.19 |
-| excalidraw-excalidraw-scale | 88.095, 87.356, 87.009 | 87.543, 88.316, 87.308 |
-| gohugoio-hugo-scale | 61.112, 61.59, 62.158 | 64.979, 65.633, 65.493 |
+| jelly-callgraph-micro | 141.717, 139.514, 140.872 | 143.49, 144.193, 142.984 |
+| excalidraw-excalidraw-scale | 80.002, 80.082, 80.406 | 86.185, 86.33, 87.418 |
+| gohugoio-hugo-scale | 59.429, 56.065, 57.047 | 61.355, 62.724, 61.986 |
+
+### Syntactic workloads (paired)
+
+Wall medians of three interleaved samples per binary, with the summed
+per-provider stage time beside them, since these runs are short enough for
+process startup to matter:
+
+| Suite | Warm wall s | Warm stage ms | Cold wall s | Cold stage ms |
+|---|---:|---:|---:|---:|
+| jelly-callgraph-micro | 0.093 → 0.101 | 61 → 68 | 0.120 → 0.125 | 91 → 94 |
+| excalidraw-excalidraw-scale | 0.172 → 0.179 | 125 → 134 | 0.227 → 0.232 | 172 → 185 |
+| gohugoio-hugo-scale | 0.625 → 0.627 | 397 → 404 | 1.101 → 1.229 | 867 → 991 |
+| go-x-tools-rta-callgraph | 1.418 → 1.501 | 871 → 942 | 2.971 → 2.913 | 2,310 → 2,349 |
 
 ### Interned identity retained
 
 | Suite / mode | Keys | Key text MiB, before → after | Reduction |
 |---|---:|---:|---:|
 | jelly-callgraph-micro / deep | 1,371,759 | 1789 → 812 | -54.6% |
-| jelly-callgraph-micro / syn | 13,495 | 2 → 2 | +0.0% |
 | excalidraw-excalidraw-scale / deep | 2,524,665 | 3115 → 1477 | -52.6% |
-| excalidraw-excalidraw-scale / syn | 28,479 | 4 → 4 | +0.0% |
 | gohugoio-hugo-scale / deep | 2,344,145 | 2107 → 1266 | -39.9% |
-| gohugoio-hugo-scale / syn | 90,933 | 12 → 12 | +0.0% |
 
-### Provider and diagnostic digest equality
+### Provider and diagnostic digest equality (paired)
 
 | Suite / mode / sample | Providers compared | Verdict |
 |---|---:|---|
@@ -97,81 +117,72 @@ Release profile, dependencies and compiler flags are unchanged.
 | jelly-callgraph-micro / deep / warm1 | 23 | identical |
 | jelly-callgraph-micro / deep / warm2 | 23 | identical |
 | jelly-callgraph-micro / deep / warm3 | 23 | identical |
-| jelly-callgraph-micro / syn / cold | 6 | identical |
-| jelly-callgraph-micro / syn / warm1 | 6 | identical |
-| jelly-callgraph-micro / syn / warm2 | 6 | identical |
-| jelly-callgraph-micro / syn / warm3 | 6 | identical |
 | excalidraw-excalidraw-scale / deep / cold | 23 | identical |
 | excalidraw-excalidraw-scale / deep / warm1 | 23 | identical |
 | excalidraw-excalidraw-scale / deep / warm2 | 23 | identical |
 | excalidraw-excalidraw-scale / deep / warm3 | 23 | identical |
-| excalidraw-excalidraw-scale / syn / cold | 6 | identical |
-| excalidraw-excalidraw-scale / syn / warm1 | 6 | identical |
-| excalidraw-excalidraw-scale / syn / warm2 | 6 | identical |
-| excalidraw-excalidraw-scale / syn / warm3 | 6 | identical |
-| gohugoio-hugo-scale / deep / cold | 16 | DIFFERS: ['polint.abstract_domains', 'polint.calls', 'polint.cfg', 'polint.direct_summaries', 'polint.entrypoints', 'polint.module_topology', 'polint.semantic_mir', 'polint.symbol_graph', 'polint.type_value_alias'] {'count': 5, 'digest': 'a34bc7740096991d'} vs {'count': 5, 'digest': '37da3ce75ed0d715'} |
-| gohugoio-hugo-scale / deep / warm1 | 16 | DIFFERS: ['polint.abstract_domains', 'polint.calls', 'polint.cfg', 'polint.direct_summaries', 'polint.entrypoints', 'polint.module_topology', 'polint.semantic_mir', 'polint.symbol_graph', 'polint.type_value_alias'] {'count': 5, 'digest': 'a34bc7740096991d'} vs {'count': 5, 'digest': '37da3ce75ed0d715'} |
-| gohugoio-hugo-scale / deep / warm2 | 16 | DIFFERS: ['polint.abstract_domains', 'polint.calls', 'polint.cfg', 'polint.direct_summaries', 'polint.entrypoints', 'polint.module_topology', 'polint.semantic_mir', 'polint.symbol_graph', 'polint.type_value_alias'] {'count': 5, 'digest': 'a34bc7740096991d'} vs {'count': 5, 'digest': '37da3ce75ed0d715'} |
-| gohugoio-hugo-scale / deep / warm3 | 16 | DIFFERS: ['polint.abstract_domains', 'polint.calls', 'polint.cfg', 'polint.direct_summaries', 'polint.entrypoints', 'polint.module_topology', 'polint.semantic_mir', 'polint.symbol_graph', 'polint.type_value_alias'] {'count': 5, 'digest': 'a34bc7740096991d'} vs {'count': 5, 'digest': '37da3ce75ed0d715'} |
-| gohugoio-hugo-scale / syn / cold | 6 | identical |
-| gohugoio-hugo-scale / syn / warm1 | 6 | identical |
-| gohugoio-hugo-scale / syn / warm2 | 6 | identical |
-| gohugoio-hugo-scale / syn / warm3 | 6 | identical |
+| gohugoio-hugo-scale / deep / cold | 16 | identical |
+| gohugoio-hugo-scale / deep / warm1 | 16 | identical |
+| gohugoio-hugo-scale / deep / warm2 | 16 | identical |
+| gohugoio-hugo-scale / deep / warm3 | 16 | identical |
 
 
-### The Hugo digest difference is Go setup variability, not this branch
+### Go setup variability, and why it also broke block sampling
 
-The cross-session Hugo comparison above shows nine provider digests and the
-diagnostics digest differing. That is **not** caused by this branch. Re-running
-the *retained baseline binary* in the same session as the final measurements
-reproduces the final binary's digests exactly:
+Under the paired protocol Hugo's sixteen provider digests and its diagnostics
+digest are identical before and after. Under block sampling they were not: nine
+providers and the diagnostics digest differed. That difference is **not** caused
+by this branch. Re-running the *retained baseline binary* in the same session as
+the "after" samples reproduces the "after" digests exactly:
 
-| Run | Diagnostics digest | Provider digests vs final |
+| Run | Diagnostics digest | Provider digests vs after |
 |---|---|---|
-| baseline binary, session 1 | `a34bc7740096991d` | 9 of 16 differ |
-| baseline binary, session 2 | `37da3ce75ed0d715` | all 16 identical |
-| final binary, session 2 | `37da3ce75ed0d715` | — |
+| baseline binary, first session | `a34bc7740096991d` | 9 of 16 differ |
+| baseline binary, second session | `37da3ce75ed0d715` | all 16 identical |
+| final binary, second session | `37da3ce75ed0d715` | — |
 
 Fact and interned-key counts are identical across all three (2,032,661 facts /
 2,344,145 keys), so the Go setup resolved something differently between sessions
 rather than the analysis changing. This independently confirms
 `NEXT-LEVER.md`'s instruction to require identical provider and diagnostic
-outcomes before accepting any paired Go comparison. **Hugo's cross-session wall
-comparison is therefore not a paired comparison and is not claimed as a
-speedup.** The same-session paired figures, with all digests equal, are:
-
-| Hugo, same session, digests identical | Baseline | Final | Δ |
-|---|---:|---:|---:|
-| warm peak RSS GiB | 4.877 | 4.027 | −17.43% |
-| cold peak RSS GiB | 4.871 | 4.047 | −16.92% |
-
-Peak RSS is far less load-sensitive than wall time, and the two runs did the same
-work; the wall figures from that pairing (baseline warm 70.913 s, cold 62.392 s)
-were taken as the host load was climbing past 100 and are not usable.
+outcomes before accepting any paired Go comparison — and it is a second reason,
+beyond load, that samples of the two binaries must be interleaved.
 
 No `GoSubprocessTimeout` occurred in any Hugo run in this round.
 
-### What moved, and what did not
+### What this is: memory for time, not both
 
-- **Memory is the result.** Retained key text falls 52.6% on Excalidraw, 54.6% on
-  jelly and 39.9% on Hugo, taking warm peak RSS down 16.8%, 14.5% and 17.4%
-  respectively, with byte-identical provider and diagnostic digests and an
-  identical interned key count on every suite.
-- **Warm wall is roughly flat**: jelly 1.020×, Excalidraw 0.998×. The
-  representation trades a cheap `Arc` clone in `resolve` for a traversal, and
-  streaming comparison and digesting buy most of that back. On jelly
-  `polint.refined_calls`, `polint.solver` and `polint.identity` get faster while
-  `polint.semantic_graph`'s normalization sorts get slower.
-- **Cold wall is noisier and slightly worse on the TS suites** (jelly 154.6 →
-  160.6 s, Excalidraw 85.6 → 91.0 s, single observations each). The warm
-  repetitions bracket the change much more tightly; treat the cold column as an
-  observation, not a claim.
-- **Syntactic mode pays a small constant.** Excalidraw's syntactic stage total
-  rises 118 → 154 ms (jelly 62 → 65 ms, Hugo 417 → 435 ms). Syntactic requests
-  intern a few thousand leaf keys with no substructure to share, so they get none
-  of the benefit and pay the new leaf hash: the composable polynomial does two
-  `u128` multiplies per byte where the old `RandomState` did SipHash. The fix is
-  mechanical and is the first item below.
+**This branch does not make analysis faster.** Warm deep wall time is 1.9% worse
+on jelly, 7.8% on Excalidraw and 8.7% on Hugo; cold is 1.4% *better* on jelly and
+4.7% / 9.2% worse on Excalidraw and Hugo. Syntactic mode is 4–9% worse on wall
+and 7–8% on stage time except golang/tools cold, which is flat. What it does buy:
+
+- Retained identity text falls **52.6%** on Excalidraw, **54.6%** on jelly and
+  **39.9%** on Hugo.
+- Warm peak RSS falls **16.8%**, **14.5%** and **17.3%**; cold peak RSS falls
+  **16.8%**, **14.5%** and **16.9%**.
+- Every provider output digest and the diagnostics digest is byte-identical on
+  every suite, mode and sample, and the interned key count is identical, so the
+  analysis is unchanged.
+
+The time is going where the memory came from. Two costs are identified and both
+are addressable:
+
+1. `resolve` now expands a composite instead of cloning a stored `Arc<str>`, so
+   the leaf hash and the traversal show up wherever a key is touched — which is
+   the whole syntactic regression, since syntactic requests intern a few thousand
+   leaf keys and have no substructure to share.
+2. Streaming comparison replaced `Arc<str>` comparison in the store sorts. That
+   removed the `O(n log n)` *materializations* the first prototype introduced
+   (jelly `polint.evidence` 14,080 → 9,460 ms), but a chunked DAG walk is still
+   slower than `memcmp` over contiguous bytes, and sibling keys share long
+   prefixes. On Excalidraw `polint.semantic_graph`'s three normalization sorts
+   account for about +2.0 s of the +6.2 s.
+
+Both have concrete fixes, listed first among the next levers. Neither was
+attempted here: the shared host offered no window in which a re-measured full
+matrix would have meant anything, and shipping an unmeasured change would defeat
+the point.
 
 ## Retained mechanisms
 
@@ -262,6 +273,17 @@ asking the interner to hand the text back.
    this branch because the shared host did not offer a quiet window to re-measure
    the full matrix after changing it, and an unmeasured change is not shippable
    here.
+
+0b. **Skip a shared child in `compare_canonical` in `O(1)`.** Sibling keys embed
+   the same parent, so two keys being compared usually reach a point where both
+   cursors are positioned at the identical `Segment::Key(child)`. Recognising that
+   and stepping over the child without reading its bytes would turn the common
+   comparison from `O(shared prefix)` into `O(number of segments)`. This is the
+   identified cost behind Excalidraw's `polint.semantic_graph` normalization sorts
+   (about +2.0 s of that suite's +6.2 s) and behind the deep warm regression
+   generally. `NEXT-LEVER.md` anticipated it as "chunked comparison with reusable
+   lexical ranks"; the ranks are the weaker form, since they still need one
+   streaming comparison per pair.
 
 1. **`ts_direct_bindings` is the whole ballgame on JS/TS.** Private substep
    timing shows `polint.semantic_graph` spends >98% of its wall in
@@ -354,5 +376,6 @@ asking the interner to hand the text back.
   the current writer no longer emits, so that drift predates this work.
 - Determinism: the interned key count is identical before and after on every
   suite, and every provider output digest and the diagnostics digest is
-  byte-identical on jelly and Excalidraw (deep and syntactic, cold and all three
-  warm samples) and on Hugo when both binaries are run in the same session.
+  byte-identical on all three suites in the paired protocol — 23 providers on
+  jelly and Excalidraw, 16 on Hugo, across the cold sample and all three warm
+  samples.
