@@ -24,6 +24,7 @@ pub(crate) enum PolicyOperation {
     EventsMatching,
     CallsForbiddenReachable,
     ControlFlowMissingGuard,
+    ControlFlowGuardOutcomes,
     ControlFlowMissingCleanup,
     DataFlowForbidden,
 }
@@ -34,6 +35,7 @@ impl PolicyOperation {
             Self::EventsMatching => "events.matching",
             Self::CallsForbiddenReachable => "calls.forbidden_reachable",
             Self::ControlFlowMissingGuard => "control_flow.missing_guard",
+            Self::ControlFlowGuardOutcomes => "control_flow.guard_outcomes",
             Self::ControlFlowMissingCleanup => "control_flow.missing_cleanup",
             Self::DataFlowForbidden => "data_flow.forbidden",
         }
@@ -195,6 +197,19 @@ impl PolicyViolation {
         self.precision
     }
 
+    pub(crate) fn file(&self) -> &str {
+        &self.file
+    }
+
+    #[cfg(test)]
+    pub(crate) fn evidence(&self) -> &[(String, String)] {
+        &self.evidence
+    }
+
+    pub(crate) fn range(&self) -> TextRange {
+        self.range
+    }
+
     /// Builds a diagnostic for this violation using the current rule ID.
     pub fn diagnostic(&self, rule_id: &str, message: impl Into<String>) -> Diagnostic {
         let mut diagnostic =
@@ -211,6 +226,99 @@ impl PolicyViolation {
             diagnostic = diagnostic.with_structured_evidence_v1(evidence);
         }
         diagnostic
+    }
+}
+
+/// What a policy query decided about one operation.
+///
+/// Unlike a bare violation list, an outcome distinguishes "proved" from "not
+/// decided" from "never examined", so an empty diagnostic list can no longer be
+/// read as a proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PolicyOutcome {
+    /// The contract was proved for this operation, within the documented scope.
+    Covered,
+    /// The contract was refuted for this operation.
+    Violation,
+    /// The operation was examined and the engine could not decide. The result's
+    /// `reason` evidence names what was missing.
+    Unknown,
+    /// The operation was never examined, because the analysis the query needed
+    /// did not run. Queries never return this; the run report does.
+    NotAnalyzed,
+}
+
+/// One operation's outcome under one policy query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PolicyResult {
+    outcome: PolicyOutcome,
+    result: PolicyViolation,
+}
+
+impl PolicyResult {
+    pub(crate) fn new(outcome: PolicyOutcome, result: PolicyViolation) -> Self {
+        Self { outcome, result }
+    }
+
+    pub(crate) fn stable_key(&self) -> String {
+        format!(
+            "{}:{}",
+            policy_outcome_label(self.outcome),
+            self.result.stable_key()
+        )
+    }
+
+    pub(crate) fn set_status(&mut self, status: PolicyStatus) {
+        self.result.set_status(status);
+    }
+
+    pub(crate) fn push_evidence(&mut self, label: impl Into<String>, value: impl Into<String>) {
+        self.result.push_evidence(label, value);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn evidence(&self) -> &[(String, String)] {
+        self.result.evidence()
+    }
+
+    /// Returns what the query decided about this operation.
+    pub fn outcome(&self) -> PolicyOutcome {
+        self.outcome
+    }
+
+    /// Returns the result status.
+    pub fn status(&self) -> PolicyStatus {
+        self.result.status()
+    }
+
+    /// Returns the result precision.
+    pub fn precision(&self) -> PolicyPrecision {
+        self.result.precision()
+    }
+
+    /// Returns the repo-relative path of the operation this result describes.
+    pub fn file(&self) -> &str {
+        self.result.file()
+    }
+
+    /// Returns the source range of the operation this result describes.
+    pub fn range(&self) -> TextRange {
+        self.result.range()
+    }
+
+    /// Builds a diagnostic for this result using the current rule ID.
+    ///
+    /// Returns `None` for [`PolicyOutcome::Covered`]: a proved operation has
+    /// nothing to report as a finding. Report covered operations through the
+    /// run summary, or build a rule-owned informational diagnostic from
+    /// [`PolicyResult::file`] and [`PolicyResult::range`].
+    pub fn diagnostic(&self, rule_id: &str, message: impl Into<String>) -> Option<Diagnostic> {
+        match self.outcome {
+            PolicyOutcome::Covered => None,
+            _ => Some(self.result.diagnostic(rule_id, message)),
+        }
     }
 }
 
@@ -287,7 +395,17 @@ pub struct GuardQuery {
     ///
     /// Defaults to `false`, which keeps the ordering-plus-dominance behavior
     /// that suppresses a result whenever the relation is unavailable.
+    /// `guard_outcomes` always reports unestablished dominance and ignores
+    /// this field.
     pub report_unknown_coverage: bool,
+    /// Require the guard's returned error to be tested, and the error path to
+    /// not reach the protected operation, before an operation counts as
+    /// covered.
+    ///
+    /// Only `guard_outcomes` reads this; `missing_guard` keeps its documented
+    /// ordering-plus-dominance meaning. Defaults to `false`, which proves
+    /// coverage on the ordering-plus-dominance dimension alone.
+    pub require_checked_error: bool,
 }
 
 impl GuardQuery {
@@ -300,7 +418,27 @@ impl GuardQuery {
             max_paths: 20,
             minimum_precision: PolicyPrecision::Conservative,
             report_unknown_coverage: false,
+            require_checked_error: false,
         }
+    }
+
+    /// Digest for the guard-outcome form of this query.
+    ///
+    /// Distinct from [`GuardQuery::query_digest`] because the two queries
+    /// answer different questions from the same query object.
+    pub(crate) fn outcome_query_digest(&self) -> String {
+        policy_query_digest([
+            encode_str(PolicyOperation::ControlFlowGuardOutcomes.label()),
+            encode_event_pattern("event", &self.event),
+            encode_guard_pattern("guard", &self.guard),
+            format!("max_depth={}", self.max_depth),
+            format!("max_paths={}", self.max_paths),
+            format!(
+                "minimum_precision={}",
+                policy_precision_label(self.minimum_precision)
+            ),
+            format!("require_checked_error={}", self.require_checked_error),
+        ])
     }
 
     pub(crate) fn query_digest(&self) -> String {
@@ -315,6 +453,7 @@ impl GuardQuery {
                 policy_precision_label(self.minimum_precision)
             ),
             format!("report_unknown_coverage={}", self.report_unknown_coverage),
+            format!("require_checked_error={}", self.require_checked_error),
         ])
     }
 }
@@ -745,6 +884,15 @@ fn barrier_pattern_kind_label(kind: BarrierPatternKind) -> &'static str {
     match kind {
         BarrierPatternKind::None => "none",
         BarrierPatternKind::CallAny => "call_any",
+    }
+}
+
+fn policy_outcome_label(outcome: PolicyOutcome) -> &'static str {
+    match outcome {
+        PolicyOutcome::Covered => "covered",
+        PolicyOutcome::Violation => "violation",
+        PolicyOutcome::Unknown => "unknown",
+        PolicyOutcome::NotAnalyzed => "not_analyzed",
     }
 }
 

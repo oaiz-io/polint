@@ -30,7 +30,7 @@ use crate::internal_core::StableKeyId;
 
 use super::budget::{BudgetReason, BudgetStatus, SolverBudget};
 use super::facts::DerivedEdgeFact;
-use super::policy::{PolicyOutcome, SolverPolicy};
+use super::policy::{SolverPolicy, SolverPolicyOutcome};
 use super::provenance::{ContributingFact, DerivedEdgeProvenance};
 use super::store::SolverOutput;
 
@@ -52,7 +52,7 @@ pub struct SolverRunResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyRunRecord {
     pub policy_id: &'static str,
-    pub outcome: PolicyOutcome,
+    pub outcome: SolverPolicyOutcome,
 }
 
 /// The unified solver engine. Holds a closed, ordered set of registered policies
@@ -775,7 +775,7 @@ mod tests {
     #[derive(Clone)]
     struct FixedPolicy {
         id: &'static str,
-        outcome: PolicyOutcome,
+        outcome: SolverPolicyOutcome,
     }
 
     impl SolverPolicy for FixedPolicy {
@@ -787,7 +787,7 @@ mod tests {
             &self,
             _interner: &crate::internal_core::StableKeyInterner,
             _budget: &SolverBudget,
-        ) -> PolicyOutcome {
+        ) -> SolverPolicyOutcome {
             self.outcome.clone()
         }
     }
@@ -832,17 +832,17 @@ mod tests {
         };
         let first = FixedPolicy {
             id: "high_internal_work",
-            outcome: PolicyOutcome {
+            outcome: SolverPolicyOutcome {
                 steps: budget.max_outer_iterations as u64 + 1,
-                ..PolicyOutcome::empty()
+                ..SolverPolicyOutcome::empty()
             },
         };
         let second = FixedPolicy {
             id: "edge_producer",
-            outcome: PolicyOutcome {
+            outcome: SolverPolicyOutcome {
                 derived_edges: vec![policy_edge("edge-after-high-internal-work", 1, 2)],
                 steps: 0,
-                ..PolicyOutcome::empty()
+                ..SolverPolicyOutcome::empty()
             },
         };
         let engine = SolverEngine::new(vec![Box::new(first), Box::new(second)], budget);

@@ -1,0 +1,96 @@
+# One expectation per protected operation in cases.go. The corpus is the
+# characterization: covered, violation, and unknown are all asserted, so a
+# regression that silently drops a case fails here instead of reading as clean.
+rule = "local/guard-outcomes"
+paths = ["*.go"]
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "info"
+message_contains = "Guard outcome: covered."
+range_start_line = 57
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 63
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 68
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 78
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 88
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 97
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "warn"
+message_contains = "Guard outcome: unknown."
+range_start_line = 109
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "info"
+message_contains = "Guard outcome: covered."
+range_start_line = 118
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "info"
+message_contains = "Guard outcome: covered."
+range_start_line = 128
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 135
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "info"
+message_contains = "Guard outcome: covered."
+range_start_line = 144
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 153
+
+[[expect.diagnostic]]
+rule_id = "local/guard-outcomes"
+file = "cases.go"
+severity = "error"
+message_contains = "Guard outcome: violation."
+range_start_line = 159

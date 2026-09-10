@@ -1,0 +1,11 @@
+[package]
+name = "polint-example-go-guard-outcomes-rule"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+polint = { workspace = true }
+
+[lints]
+workspace = true

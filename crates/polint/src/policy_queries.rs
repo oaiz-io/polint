@@ -1,4 +1,5 @@
 use crate::analysis::calls::facts::{CallCallee, CallPrecision, CallSiteFact, CallTargetStatus};
+use crate::analysis::cfg::facts::{CfgEdgeKind, CfgView};
 use crate::analysis::cfg::ids::BasicBlockId;
 use crate::analysis::data_flow::facts::{
     DataFlowConfidence, DataFlowEdgeFact, DataFlowEdgeKind, DataFlowNodeFact, DataFlowNodeKind,
@@ -9,6 +10,9 @@ use crate::analysis::ids::{CallSiteId, DataFlowNodeId, MirBodyId, MirOpId, Place
 use crate::analysis::ifds::{
     DataFlowPath, DataFlowPathStatus, DataFlowSearchBudget, find_taint_paths,
 };
+use crate::analysis::mir::op::{
+    AssignMode, BranchNilTest, MirOperation, MirOperationKind, MirValue,
+};
 use crate::analysis::places::{PlaceFact, PlaceProjection, PlaceRoot};
 use crate::analysis::reachability::facts::{ReachabilityRootFact, RootKind};
 use crate::analysis::refined_calls::facts::{RefinedCallConfidence, RefinedCallEdgeFact};
@@ -16,8 +20,8 @@ use crate::core::{AnalysisDb, FileId, FunctionFact, FunctionId};
 use crate::sdk::policy::{
     BarrierPattern, BarrierPatternKind, EventPattern, EventPatternKind, FlowQuery, GuardPattern,
     GuardPatternKind, GuardQuery, LifecycleQuery, PolicyConfidence, PolicyEvidenceEdgeKind,
-    PolicyOperation, PolicyPrecision, PolicyStatus, PolicyViolation, ReachQuery, SinkPattern,
-    SinkPatternKind, SourcePattern, SourcePatternKind,
+    PolicyOperation, PolicyOutcome, PolicyPrecision, PolicyResult, PolicyStatus, PolicyViolation,
+    ReachQuery, SinkPattern, SinkPatternKind, SourcePattern, SourcePatternKind,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -39,6 +43,11 @@ pub(crate) fn missing_guards(db: &AnalysisDb, query: GuardQuery) -> Vec<PolicyVi
     normalize_policy_results(missing_guard_calls(db, &query, &query_digest))
 }
 
+pub(crate) fn guard_outcomes(db: &AnalysisDb, query: GuardQuery) -> Vec<PolicyResult> {
+    let query_digest = query.outcome_query_digest();
+    normalize_policy_outcomes(guard_outcome_results(db, &query, &query_digest))
+}
+
 pub(crate) fn missing_cleanup(db: &AnalysisDb, query: LifecycleQuery) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
     normalize_policy_results(missing_cleanup_calls(db, &query, &query_digest))
@@ -51,6 +60,12 @@ pub(crate) fn forbidden_flows(db: &AnalysisDb, query: FlowQuery) -> Vec<PolicyVi
 
 fn normalize_policy_results(mut results: Vec<PolicyViolation>) -> Vec<PolicyViolation> {
     results.sort_by_key(PolicyViolation::stable_key);
+    results.dedup_by(|left, right| left.stable_key() == right.stable_key());
+    results
+}
+
+fn normalize_policy_outcomes(mut results: Vec<PolicyResult>) -> Vec<PolicyResult> {
+    results.sort_by_key(PolicyResult::stable_key);
     results.dedup_by(|left, right| left.stable_key() == right.stable_key());
     results
 }
@@ -400,6 +415,543 @@ fn missing_guard_calls(
     }
 
     results
+}
+
+/// Reason a guard contract was refuted for one operation.
+const REASON_GUARD_MISSING: &str = "guard_missing";
+const REASON_GUARD_NOT_ORDERED_BEFORE: &str = "guard_not_ordered_before";
+const REASON_GUARD_DOES_NOT_DOMINATE: &str = "guard_does_not_dominate";
+const REASON_RESULT_NEVER_TESTED: &str = "result_never_tested";
+const REASON_ERROR_PATH_REACHES_OPERATION: &str = "error_path_reaches_operation";
+/// Reason a guard contract could not be decided for one operation.
+const REASON_AMBIGUOUS_ERROR_DEFINITION: &str = "ambiguous_error_definition";
+const REASON_PARTIAL_NIL_TEST: &str = "partial_nil_test";
+const REASON_UNRECOGNIZED_ERROR_TEST: &str = "unrecognized_error_test";
+const REASON_MISSING_BRANCH_BLOCK: &str = "missing_branch_block";
+const REASON_MISSING_ERROR_EDGE: &str = "missing_error_edge";
+const REASON_MISSING_GUARD_OPERATION: &str = "missing_guard_operation";
+/// Reason a guard contract was proved for one operation.
+const REASON_GUARD_DOMINATES_OPERATION: &str = "guard_dominates_operation";
+const REASON_CHECKED_ERROR_EXITS: &str = "checked_error_exits";
+/// Budget label for the bounded error-path search.
+const BUDGET_ERROR_PATH_SEARCH: &str = "guard_outcome_error_path_budget";
+const BUDGET_GUARD_OUTCOME_QUERY: &str = "guard_outcome_query_budget";
+/// Identity binding a covered result claims. Slice-scoped: without an
+/// `argument_binding` the query never relates the guard's argument to the
+/// operation's, so a covered result says so instead of implying it checked.
+const IDENTITY_UNCHECKED: &str = "unchecked";
+/// Blocks the bounded error-path search may visit before giving up.
+const MAX_ERROR_PATH_BLOCKS: usize = 4_096;
+
+fn guard_outcome_results(
+    db: &AnalysisDb,
+    query: &GuardQuery,
+    query_digest: &str,
+) -> Vec<PolicyResult> {
+    if query.max_depth == 0
+        || query.max_paths == 0
+        || query.event.kind() != EventPatternKind::Call
+        || query.guard.kind() != GuardPatternKind::CallAny
+    {
+        return Vec::new();
+    }
+
+    let events = ordered_control_call_events(db, query.minimum_precision);
+    let by_function = control_events_by_function(&events);
+    let dominators = BlockRelation::dominators(db);
+    let index = GuardOutcomeIndex::new(db);
+    let mut results = Vec::new();
+    let mut truncated = false;
+    // One call site can carry several refined call edges (one per resolved
+    // target). A protected operation is one site, so it gets one outcome.
+    let mut decided = BTreeSet::new();
+
+    'functions: for function_events in by_function.values() {
+        for (position, event) in function_events.iter().enumerate() {
+            if !event_matches_pattern(event, &query.event) {
+                continue;
+            }
+            if !decided.insert(event.site) {
+                continue;
+            }
+            if results.len() >= query.max_paths {
+                truncated = true;
+                break 'functions;
+            }
+            let verdict =
+                guard_verdict(function_events, position, event, query, &dominators, &index);
+            results.push(guard_outcome_result(
+                db,
+                event,
+                query,
+                query_digest,
+                verdict,
+            ));
+        }
+    }
+
+    if truncated && let Some(mut last) = results.pop() {
+        last.set_status(PolicyStatus::BudgetExceeded);
+        last.push_evidence("budget", BUDGET_GUARD_OUTCOME_QUERY);
+        results.push(last);
+    }
+
+    results
+}
+
+/// One operation's decision under a guard contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GuardVerdict {
+    outcome: PolicyOutcome,
+    reason: &'static str,
+    dominance: &'static str,
+    identity: &'static str,
+    budget: Option<&'static str>,
+}
+
+impl GuardVerdict {
+    fn covered(reason: &'static str) -> Self {
+        Self {
+            outcome: PolicyOutcome::Covered,
+            reason,
+            dominance: DOMINANCE_FROM_RELATION,
+            identity: IDENTITY_UNCHECKED,
+            budget: None,
+        }
+    }
+
+    fn violation(reason: &'static str, dominance: &'static str) -> Self {
+        Self {
+            outcome: PolicyOutcome::Violation,
+            reason,
+            dominance,
+            identity: IDENTITY_UNCHECKED,
+            budget: None,
+        }
+    }
+
+    fn unknown(reason: &'static str, dominance: &'static str) -> Self {
+        Self {
+            outcome: PolicyOutcome::Unknown,
+            reason,
+            dominance,
+            identity: IDENTITY_UNCHECKED,
+            budget: None,
+        }
+    }
+
+    fn with_budget(mut self, budget: &'static str) -> Self {
+        self.budget = Some(budget);
+        self
+    }
+
+    /// Preference when several guards answer for the same operation: a proof
+    /// wins, and "could not decide" outranks a refutation so one unevaluated
+    /// guard never turns into a claimed violation.
+    fn rank(self) -> u8 {
+        match self.outcome {
+            PolicyOutcome::Covered => 0,
+            PolicyOutcome::Unknown | PolicyOutcome::NotAnalyzed => 1,
+            PolicyOutcome::Violation => 2,
+        }
+    }
+}
+
+fn guard_verdict(
+    function_events: &[&ControlCallEvent],
+    position: usize,
+    event: &ControlCallEvent,
+    query: &GuardQuery,
+    dominators: &BlockRelation,
+    index: &GuardOutcomeIndex<'_>,
+) -> GuardVerdict {
+    let mut best: Option<GuardVerdict> = None;
+    for candidate in function_events[..position]
+        .iter()
+        .filter(|candidate| guard_matches_event(candidate, &query.guard))
+    {
+        let verdict = guard_candidate_verdict(candidate, event, query, dominators, index);
+        if best.is_none_or(|current| verdict.rank() < current.rank()) {
+            best = Some(verdict);
+        }
+        if best.is_some_and(|current| current.rank() == 0) {
+            break;
+        }
+    }
+
+    best.unwrap_or_else(|| {
+        let guard_exists_later = function_events[position..]
+            .iter()
+            .any(|candidate| guard_matches_event(candidate, &query.guard));
+        if guard_exists_later {
+            GuardVerdict::violation(REASON_GUARD_NOT_ORDERED_BEFORE, DOMINANCE_NO_CANDIDATE)
+        } else {
+            GuardVerdict::violation(REASON_GUARD_MISSING, DOMINANCE_NO_CANDIDATE)
+        }
+    })
+}
+
+fn guard_candidate_verdict(
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    query: &GuardQuery,
+    dominators: &BlockRelation,
+    index: &GuardOutcomeIndex<'_>,
+) -> GuardVerdict {
+    match dominators.answer(candidate, event) {
+        DominanceAnswer::Unknown(reason) => return GuardVerdict::unknown(reason, reason),
+        DominanceAnswer::DoesNotHold => {
+            return GuardVerdict::violation(
+                REASON_GUARD_DOES_NOT_DOMINATE,
+                DOMINANCE_FROM_RELATION,
+            );
+        }
+        DominanceAnswer::Holds => {}
+    }
+    if !query.require_checked_error {
+        return GuardVerdict::covered(REASON_GUARD_DOMINATES_OPERATION);
+    }
+    checked_error_verdict(candidate, event, dominators, index)
+}
+
+/// Decides whether the guard's returned error is tested and its error path
+/// leaves before the protected operation.
+fn checked_error_verdict(
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    dominators: &BlockRelation,
+    index: &GuardOutcomeIndex<'_>,
+) -> GuardVerdict {
+    let Some(result_place) = candidate.result else {
+        return GuardVerdict::violation(REASON_RESULT_NEVER_TESTED, DOMINANCE_FROM_RELATION);
+    };
+    let Some(event_block) = event.block else {
+        return GuardVerdict::unknown(DOMINANCE_MISSING_BLOCK_IDS, DOMINANCE_MISSING_BLOCK_IDS);
+    };
+    let Some(operations) = index.operations.get(&candidate.body) else {
+        return GuardVerdict::unknown(REASON_MISSING_GUARD_OPERATION, DOMINANCE_FROM_RELATION);
+    };
+    let Some(guard_position) = operations
+        .iter()
+        .position(|operation| operation.id == candidate.operation)
+    else {
+        return GuardVerdict::unknown(REASON_MISSING_GUARD_OPERATION, DOMINANCE_FROM_RELATION);
+    };
+
+    let mut ambiguous = false;
+    for (branch_position, branch) in operations.iter().enumerate().skip(guard_position + 1) {
+        let MirOperationKind::Branch {
+            predicate_place: Some(predicate),
+            nil_test,
+            ..
+        } = branch.kind
+        else {
+            continue;
+        };
+        match definition_reaching(
+            &operations[..branch_position],
+            predicate,
+            result_place,
+            candidate.site,
+        ) {
+            DefinitionReach::Elsewhere => continue,
+            DefinitionReach::Ambiguous => {
+                ambiguous = true;
+                continue;
+            }
+            DefinitionReach::FromGuard => {}
+        }
+        let Some(nil_test) = nil_test else {
+            return GuardVerdict::unknown(REASON_UNRECOGNIZED_ERROR_TEST, DOMINANCE_FROM_RELATION);
+        };
+        if !nil_test.proves_non_nil() {
+            return GuardVerdict::unknown(REASON_PARTIAL_NIL_TEST, DOMINANCE_FROM_RELATION);
+        }
+        let Some(branch_block) = index.blocks.get(&(candidate.body, branch.id)).copied() else {
+            return GuardVerdict::unknown(REASON_MISSING_BRANCH_BLOCK, DOMINANCE_FROM_RELATION);
+        };
+        if dominators.answer_for_blocks(branch_block, event_block) != DominanceAnswer::Holds {
+            continue;
+        }
+        let Some(error_block) = index.error_edge_target(branch_block, nil_test) else {
+            return GuardVerdict::unknown(REASON_MISSING_ERROR_EDGE, DOMINANCE_FROM_RELATION);
+        };
+        return match index.reaches(error_block, event_block) {
+            BlockReach::Reaches => GuardVerdict::violation(
+                REASON_ERROR_PATH_REACHES_OPERATION,
+                DOMINANCE_FROM_RELATION,
+            ),
+            BlockReach::DoesNotReach => GuardVerdict::covered(REASON_CHECKED_ERROR_EXITS),
+            BlockReach::BudgetExceeded => {
+                GuardVerdict::unknown(BUDGET_ERROR_PATH_SEARCH, DOMINANCE_FROM_RELATION)
+                    .with_budget(BUDGET_ERROR_PATH_SEARCH)
+            }
+        };
+    }
+
+    if ambiguous {
+        return GuardVerdict::unknown(REASON_AMBIGUOUS_ERROR_DEFINITION, DOMINANCE_FROM_RELATION);
+    }
+    GuardVerdict::violation(REASON_RESULT_NEVER_TESTED, DOMINANCE_FROM_RELATION)
+}
+
+/// Where the value a branch tests was last defined.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DefinitionReach {
+    /// The last write between the guard and the branch carried the guard's result.
+    FromGuard,
+    /// The place was written from another source, or written in a way the MIR
+    /// cannot attribute. Go block scope is not modelled, so a shadowed variable
+    /// of the same name lands here rather than being called a different value.
+    Ambiguous,
+    /// No write links this place to the guard at all.
+    Elsewhere,
+}
+
+/// Walks the operations that precede a branch, in order, and reports where the
+/// value the branch tests came from.
+///
+/// The window ends just before the branch and starts at the body's first
+/// operation: a language may order a call's binding before the call itself
+/// (Go's `err := f()` lowers the binding at the statement's span and the call at
+/// the callee's), so anchoring the window at the guard call would miss it.
+///
+/// A place is only *ambiguous* when it carried the guard's result at some point
+/// and something else overwrote it; a place that was never linked to the guard
+/// is simply testing something else.
+fn definition_reaching(
+    window: &[&MirOperation],
+    predicate: PlaceId,
+    result_place: PlaceId,
+    site: CallSiteId,
+) -> DefinitionReach {
+    let writes = window
+        .iter()
+        .filter(|operation| writes_place(operation, predicate))
+        .collect::<Vec<_>>();
+    let Some(last) = writes.last() else {
+        return if predicate == result_place {
+            DefinitionReach::FromGuard
+        } else {
+            DefinitionReach::Elsewhere
+        };
+    };
+    if classify_write(last, result_place, site) == DefinitionReach::FromGuard {
+        return DefinitionReach::FromGuard;
+    }
+    let ever_held_guard_result = predicate == result_place
+        || writes
+            .iter()
+            .any(|write| classify_write(write, result_place, site) == DefinitionReach::FromGuard);
+    if ever_held_guard_result {
+        DefinitionReach::Ambiguous
+    } else {
+        DefinitionReach::Elsewhere
+    }
+}
+
+fn writes_place(operation: &MirOperation, place: PlaceId) -> bool {
+    match &operation.kind {
+        MirOperationKind::Assign { place: target, .. }
+        | MirOperationKind::Bind { place: target, .. }
+        | MirOperationKind::Write { place: target, .. } => *target == place,
+        MirOperationKind::Call { return_place, .. } => *return_place == place,
+        _ => false,
+    }
+}
+
+fn classify_write(
+    operation: &MirOperation,
+    result_place: PlaceId,
+    site: CallSiteId,
+) -> DefinitionReach {
+    match &operation.kind {
+        MirOperationKind::Call {
+            site: written_by, ..
+        } => {
+            if *written_by == site {
+                DefinitionReach::FromGuard
+            } else {
+                DefinitionReach::Ambiguous
+            }
+        }
+        MirOperationKind::Assign { value, mode, .. } => {
+            if matches!(
+                mode,
+                AssignMode::UnknownWrite | AssignMode::PartialWrite | AssignMode::Simultaneous
+            ) {
+                DefinitionReach::Ambiguous
+            } else {
+                classify_value(value, result_place, site)
+            }
+        }
+        MirOperationKind::Bind { value, .. } => classify_value(value, result_place, site),
+        _ => DefinitionReach::Ambiguous,
+    }
+}
+
+fn classify_value(value: &MirValue, result_place: PlaceId, site: CallSiteId) -> DefinitionReach {
+    match value {
+        MirValue::Place(place) if *place == result_place => DefinitionReach::FromGuard,
+        MirValue::CallReturn(call) if *call == site => DefinitionReach::FromGuard,
+        _ => DefinitionReach::Ambiguous,
+    }
+}
+
+/// Result of a bounded search from the guard's error edge to the operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockReach {
+    Reaches,
+    DoesNotReach,
+    BudgetExceeded,
+}
+
+/// Facts a guard-outcome evaluation needs, built once per query.
+struct GuardOutcomeIndex<'a> {
+    /// MIR operations per body, in evaluation order.
+    operations: BTreeMap<MirBodyId, Vec<&'a MirOperation>>,
+    blocks: BTreeMap<(MirBodyId, MirOpId), BasicBlockId>,
+    /// Normal-control successors, used for the error-path search.
+    successors: BTreeMap<BasicBlockId, Vec<BasicBlockId>>,
+    /// Normal-control condition edges, used to name the error edge.
+    condition_edges: BTreeMap<BasicBlockId, Vec<(CfgEdgeKind, BasicBlockId)>>,
+}
+
+impl<'a> GuardOutcomeIndex<'a> {
+    fn new(db: &'a AnalysisDb) -> Self {
+        let mut operations = BTreeMap::<MirBodyId, Vec<&'a MirOperation>>::new();
+        for operation in db.mir_operations() {
+            operations
+                .entry(operation.body)
+                .or_default()
+                .push(operation);
+        }
+        for body in operations.values_mut() {
+            body.sort_by_key(|operation| (operation.ordinal, operation.id));
+        }
+
+        let mut successors = BTreeMap::<BasicBlockId, Vec<BasicBlockId>>::new();
+        let mut condition_edges = BTreeMap::<BasicBlockId, Vec<(CfgEdgeKind, BasicBlockId)>>::new();
+        for edge in db.cfg_edges() {
+            if edge.view != CfgView::NormalControl {
+                continue;
+            }
+            successors
+                .entry(edge.from_block)
+                .or_default()
+                .push(edge.to_block);
+            if matches!(edge.kind, CfgEdgeKind::True | CfgEdgeKind::False) {
+                condition_edges
+                    .entry(edge.from_block)
+                    .or_default()
+                    .push((edge.kind, edge.to_block));
+            }
+        }
+
+        Self {
+            operations,
+            blocks: cfg_blocks_by_operation(db),
+            successors,
+            condition_edges,
+        }
+    }
+
+    /// The successor a nil-testing branch takes when the tested place is not nil.
+    ///
+    /// `nil_on_true` names the edge on which the place *is* nil, so the error
+    /// edge is the opposite sense.
+    fn error_edge_target(
+        &self,
+        branch_block: BasicBlockId,
+        nil_test: BranchNilTest,
+    ) -> Option<BasicBlockId> {
+        let error_kind = if nil_test.nil_on_true() {
+            CfgEdgeKind::False
+        } else {
+            CfgEdgeKind::True
+        };
+        self.condition_edges
+            .get(&branch_block)?
+            .iter()
+            .find(|(kind, _)| *kind == error_kind)
+            .map(|(_, target)| *target)
+    }
+
+    fn reaches(&self, start: BasicBlockId, target: BasicBlockId) -> BlockReach {
+        if start == target {
+            return BlockReach::Reaches;
+        }
+        let mut seen = BTreeSet::from([start]);
+        let mut queue = VecDeque::from([start]);
+        while let Some(current) = queue.pop_front() {
+            for destination in self.successors.get(&current).into_iter().flatten().copied() {
+                if destination == target {
+                    return BlockReach::Reaches;
+                }
+                if seen.len() >= MAX_ERROR_PATH_BLOCKS {
+                    return BlockReach::BudgetExceeded;
+                }
+                if seen.insert(destination) {
+                    queue.push_back(destination);
+                }
+            }
+        }
+        BlockReach::DoesNotReach
+    }
+}
+
+fn guard_outcome_result(
+    db: &AnalysisDb,
+    event: &ControlCallEvent,
+    query: &GuardQuery,
+    query_digest: &str,
+    verdict: GuardVerdict,
+) -> PolicyResult {
+    let mut evidence = vec![
+        ("policy", "guard_outcome".to_string()),
+        ("outcome", guard_outcome_label(verdict.outcome).to_string()),
+        ("reason", verdict.reason.to_string()),
+        ("required_guard", query.guard.values().join(",")),
+        ("dominance_evidence", verdict.dominance.to_string()),
+        ("identity_binding", verdict.identity.to_string()),
+        (
+            "require_checked_error",
+            query.require_checked_error.to_string(),
+        ),
+        ("requested_max_depth", query.max_depth.to_string()),
+    ];
+    if let Some(budget) = verdict.budget {
+        evidence.push(("budget", budget.to_string()));
+    }
+
+    let mut violation = control_violation(
+        db,
+        event,
+        PolicyOperation::ControlFlowGuardOutcomes,
+        query_digest,
+        evidence,
+    );
+    match verdict.outcome {
+        PolicyOutcome::Unknown | PolicyOutcome::NotAnalyzed => {
+            violation.set_status(if verdict.budget.is_some() {
+                PolicyStatus::BudgetExceeded
+            } else {
+                PolicyStatus::Unknown
+            });
+            violation.set_precision(PolicyPrecision::Unknown);
+        }
+        PolicyOutcome::Covered | PolicyOutcome::Violation => {}
+    }
+    PolicyResult::new(verdict.outcome, violation)
+}
+
+fn guard_outcome_label(outcome: PolicyOutcome) -> &'static str {
+    match outcome {
+        PolicyOutcome::Covered => "covered",
+        PolicyOutcome::Violation => "violation",
+        PolicyOutcome::Unknown => "unknown",
+        PolicyOutcome::NotAnalyzed => "not_analyzed",
+    }
 }
 
 fn missing_cleanup_calls(
@@ -1331,6 +1883,15 @@ struct SearchState {
 struct ControlCallEvent {
     function: FunctionId,
     block: Option<BasicBlockId>,
+    /// MIR body and operation of the call, used to walk definitions between
+    /// this call and a later branch or call in the same body.
+    body: MirBodyId,
+    operation: MirOpId,
+    site: CallSiteId,
+    /// Place holding the call's returned value, when the frontend recorded one.
+    result: Option<PlaceId>,
+    /// Argument places in source order.
+    arguments: Vec<PlaceId>,
     file: String,
     range: crate::diagnostics::TextRange,
     target_label: String,
@@ -1478,6 +2039,11 @@ fn control_event_for_edge(
     Some(ControlCallEvent {
         function: edge.caller,
         block: blocks.get(&(site.body, site.operation)).copied(),
+        body: site.body,
+        operation: site.operation,
+        site: site.id,
+        result: site.result,
+        arguments: site.arguments.clone(),
         file: db.path_for(site.file),
         range: site.span.diagnostic_range(),
         target_label,
@@ -1500,6 +2066,11 @@ fn control_event_for_site(
     ControlCallEvent {
         function: site.caller,
         block: blocks.get(&(site.body, site.operation)).copied(),
+        body: site.body,
+        operation: site.operation,
+        site: site.id,
+        result: site.result,
+        arguments: site.arguments.clone(),
         file: db.path_for(site.file),
         range: site.span.diagnostic_range(),
         target_label: label.clone(),
@@ -2091,11 +2662,11 @@ mod tests {
     };
     use crate::analysis::calls::store::CallOutput;
     use crate::analysis::cfg::facts::{
-        BasicBlockFact, BasicBlockKind, CfgFunctionFact, CfgNodeFact, CfgNodeKind, CfgPrecision,
-        CfgStatus, CfgView, DominatorFact, PostDominatorFact,
+        BasicBlockFact, BasicBlockKind, CfgEdgeFact, CfgFunctionFact, CfgNodeFact, CfgNodeKind,
+        CfgPrecision, CfgStatus, CfgView, DominatorFact, PostDominatorFact,
     };
     use crate::analysis::cfg::ids::{
-        BasicBlockId, CfgFunctionId, CfgNodeId, DominatorId, PostDominatorId,
+        BasicBlockId, CfgEdgeId, CfgFunctionId, CfgNodeId, DominatorId, PostDominatorId,
     };
     use crate::analysis::cfg::store::CfgOutput;
     use crate::analysis::data_flow::facts::{
@@ -2109,7 +2680,7 @@ mod tests {
         MirPredicateId, PlaceId, ReachabilityRootId, RefinedCallEdgeId,
     };
     use crate::analysis::mir::body::{MirBody, MirOutput, MirStatus};
-    use crate::analysis::mir::op::{MirOperation, MirOperationKind};
+    use crate::analysis::mir::op::{AssignMode, BranchNilTest, MirOperation, MirOperationKind};
     use crate::analysis::reachability::facts::{
         RootPrecision, RootProvenance, RootStatus, compute_reachability_root_stable_key,
     };
@@ -2581,6 +3152,269 @@ mod tests {
     }
 
     #[test]
+    fn guard_outcome_covers_checked_error_that_returns() {
+        let db = checked_error_guard_db(GuardShape::default());
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_CHECKED_ERROR_EXITS
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_covered_result_has_no_diagnostic() {
+        let db = checked_error_guard_db(GuardShape::default());
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert!(results[0].diagnostic("local/test", "covered").is_none());
+    }
+
+    #[test]
+    fn guard_outcome_covered_marks_identity_unchecked() {
+        let db = checked_error_guard_db(GuardShape::default());
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_UNCHECKED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_missing_guard() {
+        let db = policy_query_db_with_call_sequence(&["dangerous"]);
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_MISSING
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_write_before_guard() {
+        let db = policy_query_db_with_call_sequence(&["dangerous", "authorize"]);
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_NOT_ORDERED_BEFORE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_ignored_error() {
+        let db = checked_error_guard_db(GuardShape {
+            tests_result: false,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_RESULT_NEVER_TESTED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_conditional_branch_guard() {
+        let db = checked_error_guard_db(GuardShape {
+            guard_dominates: false,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_DOES_NOT_DOMINATE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_logged_error_without_exit() {
+        let db = checked_error_guard_db(GuardShape {
+            error_path_reaches_operation: true,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ERROR_PATH_REACHES_OPERATION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_for_shadowed_error_definition() {
+        let db = checked_error_guard_db(GuardShape {
+            intervening_write: true,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_AMBIGUOUS_ERROR_DEFINITION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_nil_test_is_partial() {
+        let db = checked_error_guard_db(GuardShape {
+            nil_test: Some(BranchNilTest::NilEdgeOnly { nil_on_true: false }),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_PARTIAL_NIL_TEST
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_error_test_is_not_a_nil_comparison() {
+        let db = checked_error_guard_db(GuardShape {
+            nil_test: None,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_UNRECOGNIZED_ERROR_TEST
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_dominator_relation_is_empty() {
+        let db = checked_error_guard_db(GuardShape {
+            dominator_rows: false,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            DOMINANCE_EMPTY_RELATION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_guard_in_unused_closure() {
+        let db = checked_error_guard_db(GuardShape {
+            guard_in_other_body: true,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_MISSING
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_covers_guard_and_write_in_same_closure_body() {
+        let db = checked_error_guard_db(GuardShape {
+            outer_body_call: Some("withTransaction"),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+    }
+
+    #[test]
+    fn guard_outcome_without_checked_error_covers_on_dominance_alone() {
+        let db = checked_error_guard_db(GuardShape {
+            tests_result: false,
+            ..GuardShape::default()
+        });
+        let query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+
+        let results = guard_outcomes(&db, query);
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_DOMINATES_OPERATION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_budget_exceeded_on_path_cap() {
+        let db = policy_query_db_with_two_matching_targets();
+        let mut query = checked_error_query();
+        query.max_paths = 1;
+
+        let results = guard_outcomes(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status(), PolicyStatus::BudgetExceeded);
+        let diagnostic = results[0]
+            .diagnostic("local/test", "budget")
+            .expect("non-covered results carry a diagnostic");
+        assert!(diagnostic.evidence.iter().any(|evidence| {
+            evidence.label == "budget" && evidence.value == BUDGET_GUARD_OUTCOME_QUERY
+        }));
+    }
+
+    #[test]
+    fn guard_outcome_query_digest_differs_from_missing_guard_digest() {
+        let query = checked_error_query();
+
+        assert_ne!(query.query_digest(), query.outcome_query_digest());
+    }
+
+    #[test]
     fn control_flow_missing_cleanup_reports_start_without_later_cleanup() {
         let db = policy_query_db_with_call_sequence(&["Begin", "work"]);
         let query =
@@ -2985,6 +3819,520 @@ mod tests {
 
         assert_eq!(first, second);
         assert_eq!(first, sorted);
+    }
+
+    fn checked_error_query() -> GuardQuery {
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.require_checked_error = true;
+        query
+    }
+
+    fn outcome_evidence(result: &PolicyResult, label: &str, value: &str) -> bool {
+        result
+            .evidence()
+            .iter()
+            .any(|(evidence_label, evidence_value)| {
+                evidence_label == label && evidence_value == value
+            })
+    }
+
+    /// Shape of the synthetic checked-error guard function.
+    ///
+    /// The default is the covered shape: guard call, error binding, `!= nil`
+    /// branch whose error edge returns, then the protected call.
+    #[derive(Debug, Clone, Copy)]
+    struct GuardShape {
+        /// A branch tests the place the guard's error was bound to.
+        tests_result: bool,
+        /// Nil-test recorded on that branch.
+        nil_test: Option<BranchNilTest>,
+        /// Another call rebinds the tested place between guard and branch.
+        intervening_write: bool,
+        /// The error edge falls through to the protected call's block.
+        error_path_reaches_operation: bool,
+        /// The guard's block dominates the protected call's block.
+        guard_dominates: bool,
+        /// The dominator relation has rows at all.
+        dominator_rows: bool,
+        /// The guard call belongs to a different function than the operation.
+        guard_in_other_body: bool,
+        /// An unrelated call placed in a separate enclosing function.
+        outer_body_call: Option<&'static str>,
+    }
+
+    impl Default for GuardShape {
+        fn default() -> Self {
+            Self {
+                tests_result: true,
+                nil_test: Some(BranchNilTest::Exhaustive { nil_on_true: false }),
+                intervening_write: false,
+                error_path_reaches_operation: false,
+                guard_dominates: true,
+                dominator_rows: true,
+                guard_in_other_body: false,
+                outer_body_call: None,
+            }
+        }
+    }
+
+    fn checked_error_guard_db(shape: GuardShape) -> AnalysisDb {
+        const GUARD_BLOCK: BasicBlockId = BasicBlockId(1);
+        const ERROR_BLOCK: BasicBlockId = BasicBlockId(2);
+        const EVENT_BLOCK: BasicBlockId = BasicBlockId(3);
+        const OTHER_SITE: CallSiteId = CallSiteId(9);
+
+        let mut db = AnalysisDb::new();
+        let interner = db.stable_key_interner();
+        let file = db.add_file(
+            PathBuf::from("src/main.go"),
+            "src/main.go".to_string(),
+            "package main\nfunc handler() {}\n".to_string(),
+        );
+        let handler = push_test_function(&mut db, file, "handler", 1, false);
+        let guard_owner = if shape.guard_in_other_body {
+            push_test_function(&mut db, file, "handler.func1", 2, false)
+        } else {
+            handler
+        };
+        let outer = shape
+            .outer_body_call
+            .map(|_| push_test_function(&mut db, file, "outer", 3, false));
+        let authorize = push_test_function(&mut db, file, "authorize", 10, false);
+        let dangerous = push_test_function(&mut db, file, "dangerous", 11, false);
+
+        // MIR ids are renumbered by stable-key order, so every id is assigned in
+        // push order and every stable key sorts the same way.
+        let mut bodies = Vec::new();
+        let mut push_body = |function: FunctionId, name: &str| {
+            let id = MirBodyId(bodies.len() as u64);
+            bodies.push(MirBody {
+                id,
+                language: Language::Go,
+                file,
+                function,
+                package: None,
+                module: None,
+                owner_stable_key: interner.intern(format!("function:{name}")),
+                span: Span::point(file, 1, 1),
+                stable_key: interner.intern(format!("mir:body:{:05}", id.0)),
+                status: MirStatus::Resolved,
+            });
+            id
+        };
+        let handler_body = push_body(handler, "handler");
+        let guard_body = if shape.guard_in_other_body {
+            push_body(guard_owner, "handler.func1")
+        } else {
+            handler_body
+        };
+        let outer_body = outer.map(|outer| push_body(outer, "outer"));
+
+        let mut places = Vec::new();
+        let mut push_place = |name: &str| {
+            let id = PlaceId(places.len() as u64);
+            places.push(PlaceFact {
+                id,
+                language: Language::Go,
+                file: Some(file),
+                function: Some(handler),
+                root: PlaceRoot::Local {
+                    function: handler,
+                    name: name.to_string(),
+                },
+                projections: Vec::new(),
+                stable_key: interner.intern(format!("mir:place:{:05}", id.0)),
+                status: crate::analysis::places::PlaceStatus::Resolved,
+            });
+            id
+        };
+        let guard_result = push_place("guardResult");
+        let error_place = push_place("err");
+        let event_result = push_place("eventResult");
+        let outer_result = push_place("outerResult");
+
+        let mut operations = Vec::new();
+        let mut push_operation = |kind: MirOperationKind, body: MirBodyId, ordinal: u32| {
+            let id = MirOpId(operations.len() as u64);
+            operations.push(MirOperation {
+                id,
+                body,
+                ordinal,
+                span: Span::point(file, ordinal + 1, 1),
+                kind,
+                stable_key: interner.intern(format!("mir:op:{:05}", id.0)),
+                status: MirStatus::Resolved,
+            });
+            id
+        };
+
+        let mut ordinal = 1;
+        let guard_operation = push_operation(
+            MirOperationKind::Call {
+                site: CallSiteId(0),
+                callee: MirValue::Unknown {
+                    evidence: "authorize".to_string(),
+                },
+                arguments: Vec::new(),
+                return_place: guard_result,
+            },
+            guard_body,
+            ordinal,
+        );
+        ordinal += 1;
+
+        let mut branch_operation = None;
+        if shape.tests_result {
+            push_operation(
+                MirOperationKind::Assign {
+                    place: error_place,
+                    value: MirValue::Place(guard_result),
+                    mode: AssignMode::DeclarationBinding,
+                },
+                guard_body,
+                ordinal,
+            );
+            ordinal += 1;
+            if shape.intervening_write {
+                push_operation(
+                    MirOperationKind::Assign {
+                        place: error_place,
+                        value: MirValue::CallReturn(OTHER_SITE),
+                        mode: AssignMode::DeclarationBinding,
+                    },
+                    guard_body,
+                    ordinal,
+                );
+                ordinal += 1;
+            }
+            branch_operation = Some(push_operation(
+                MirOperationKind::Branch {
+                    predicate: MirPredicateId(0),
+                    predicate_place: Some(error_place),
+                    nil_test: shape.nil_test,
+                },
+                guard_body,
+                ordinal,
+            ));
+            ordinal += 1;
+        }
+
+        let event_operation = push_operation(
+            MirOperationKind::Call {
+                site: CallSiteId(1),
+                callee: MirValue::Unknown {
+                    evidence: "dangerous".to_string(),
+                },
+                arguments: Vec::new(),
+                return_place: event_result,
+            },
+            handler_body,
+            ordinal,
+        );
+        let event_ordinal = ordinal;
+
+        let outer_operation = outer_body.map(|outer_body| {
+            push_operation(
+                MirOperationKind::Call {
+                    site: CallSiteId(2),
+                    callee: MirValue::Unknown {
+                        evidence: "withTransaction".to_string(),
+                    },
+                    arguments: Vec::new(),
+                    return_place: outer_result,
+                },
+                outer_body,
+                1,
+            )
+        });
+
+        let mut sites = vec![
+            checked_error_call_site(
+                0,
+                file,
+                guard_owner,
+                guard_body,
+                guard_operation,
+                "authorize",
+            )
+            .with_result(guard_result),
+            checked_error_call_site(1, file, handler, handler_body, event_operation, "dangerous")
+                .with_result(event_result),
+        ];
+        let mut targets = vec![
+            call_target(0, CallSiteId(0), guard_owner, authorize),
+            call_target(1, CallSiteId(1), handler, dangerous),
+        ];
+        let mut refined = vec![
+            refined_edge(0, CallSiteId(0), guard_owner, authorize, "authorize"),
+            refined_edge(1, CallSiteId(1), handler, dangerous, "dangerous"),
+        ];
+
+        let cfg_function = CfgFunctionId(0);
+        let mut cfg_nodes = vec![
+            checked_error_cfg_node(
+                &interner,
+                0,
+                cfg_function,
+                guard_body,
+                guard_operation,
+                GUARD_BLOCK,
+                1,
+            ),
+            checked_error_cfg_node(
+                &interner,
+                1,
+                cfg_function,
+                handler_body,
+                event_operation,
+                EVENT_BLOCK,
+                event_ordinal,
+            ),
+        ];
+        if let Some(branch) = branch_operation {
+            cfg_nodes.push(checked_error_cfg_node(
+                &interner,
+                2,
+                cfg_function,
+                guard_body,
+                branch,
+                GUARD_BLOCK,
+                event_ordinal - 1,
+            ));
+        }
+
+        if let (Some(outer), Some(operation), Some(outer_body), Some(call)) =
+            (outer, outer_operation, outer_body, shape.outer_body_call)
+        {
+            sites.push(checked_error_call_site(
+                2, file, outer, outer_body, operation, call,
+            ));
+            targets.push(call_target(2, CallSiteId(2), outer, handler));
+            refined.push(refined_edge(2, CallSiteId(2), outer, handler, call));
+        }
+
+        let cfg_blocks = vec![
+            checked_error_block(
+                &interner,
+                GUARD_BLOCK,
+                cfg_function,
+                BasicBlockKind::Branch,
+                1,
+            ),
+            checked_error_block(
+                &interner,
+                ERROR_BLOCK,
+                cfg_function,
+                BasicBlockKind::StraightLine,
+                2,
+            ),
+            checked_error_block(
+                &interner,
+                EVENT_BLOCK,
+                cfg_function,
+                BasicBlockKind::Join,
+                3,
+            ),
+        ];
+
+        let mut cfg_edges = Vec::new();
+        if shape.tests_result {
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                0,
+                cfg_function,
+                GUARD_BLOCK,
+                ERROR_BLOCK,
+                CfgEdgeKind::True,
+            ));
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                1,
+                cfg_function,
+                GUARD_BLOCK,
+                EVENT_BLOCK,
+                CfgEdgeKind::False,
+            ));
+        } else {
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                1,
+                cfg_function,
+                GUARD_BLOCK,
+                EVENT_BLOCK,
+                CfgEdgeKind::Normal,
+            ));
+        }
+        if shape.error_path_reaches_operation {
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                2,
+                cfg_function,
+                ERROR_BLOCK,
+                EVENT_BLOCK,
+                CfgEdgeKind::Normal,
+            ));
+        }
+
+        let mut dominator_pairs = Vec::new();
+        if shape.dominator_rows {
+            dominator_pairs.push((ERROR_BLOCK, GUARD_BLOCK));
+            if shape.guard_dominates {
+                dominator_pairs.push((EVENT_BLOCK, GUARD_BLOCK));
+            }
+        }
+        let dominators = dominator_pairs
+            .into_iter()
+            .enumerate()
+            .map(|(index, (dominated, dominator))| DominatorFact {
+                id: DominatorId(index as u64),
+                cfg_function,
+                view: CfgView::NormalControl,
+                dominator,
+                dominated,
+                immediate: true,
+                stable_key: interner.intern(format!("cfg:dom:{}:{}", dominated.0, dominator.0)),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            })
+            .collect::<Vec<_>>();
+
+        db.replace_semantic_mir(MirOutput {
+            bodies,
+            places,
+            operations,
+            unsupported: Vec::new(),
+            ..MirOutput::default()
+        })
+        .expect("valid semantic MIR facts");
+        db.replace_cfg_facts(CfgOutput {
+            functions: vec![CfgFunctionFact {
+                id: cfg_function,
+                body: handler_body,
+                function: handler,
+                language: Language::Go,
+                file,
+                span: Span::point(file, 1, 1),
+                entry_node: CfgNodeId(10_000),
+                normal_exit_node: CfgNodeId(10_001),
+                exceptional_exit_node: None,
+                stable_key: interner.intern("cfg:function:handler"),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            }],
+            nodes: cfg_nodes,
+            blocks: cfg_blocks,
+            edges: cfg_edges,
+            dominators,
+            ..CfgOutput::empty()
+        })
+        .expect("valid CFG facts");
+        db.replace_call_facts(CallOutput {
+            sites,
+            targets,
+            unresolved: Vec::new(),
+        })
+        .expect("valid call facts");
+        db.replace_refined_call_facts(RefinedCallOutput { edges: refined })
+            .expect("valid refined call facts");
+        db
+    }
+
+    fn checked_error_call_site(
+        id: u64,
+        file: FileId,
+        caller: FunctionId,
+        body: MirBodyId,
+        operation: MirOpId,
+        callee: &str,
+    ) -> CallSiteFact {
+        let mut site = call_site(id, file, caller, callee);
+        site.body = body;
+        site.operation = operation;
+        site
+    }
+
+    trait WithResult {
+        fn with_result(self, result: PlaceId) -> Self;
+    }
+
+    impl WithResult for CallSiteFact {
+        fn with_result(mut self, result: PlaceId) -> Self {
+            self.result = Some(result);
+            self
+        }
+    }
+
+    fn checked_error_cfg_node(
+        interner: &crate::core::StableKeyInterner,
+        id: u64,
+        cfg_function: CfgFunctionId,
+        body: MirBodyId,
+        operation: MirOpId,
+        block: BasicBlockId,
+        operation_ordinal: u32,
+    ) -> CfgNodeFact {
+        CfgNodeFact {
+            id: CfgNodeId(id),
+            cfg_function,
+            body,
+            operation: Some(operation),
+            block,
+            kind: CfgNodeKind::CallSite,
+            span: None,
+            generated: false,
+            operation_ordinal,
+            stable_key: interner.intern(format!("cfg:node:{id}")),
+            status: CfgStatus::Resolved,
+            precision: CfgPrecision::ExactLowered,
+        }
+    }
+
+    fn checked_error_block(
+        interner: &crate::core::StableKeyInterner,
+        id: BasicBlockId,
+        cfg_function: CfgFunctionId,
+        kind: BasicBlockKind,
+        reverse_postorder: u32,
+    ) -> BasicBlockFact {
+        BasicBlockFact {
+            id,
+            cfg_function,
+            kind,
+            first_node: None,
+            last_node: None,
+            reachable: true,
+            reverse_postorder,
+            stable_key: interner.intern(format!("cfg:block:{}", id.0)),
+            status: CfgStatus::Resolved,
+            precision: CfgPrecision::ExactLowered,
+        }
+    }
+
+    fn checked_error_edge(
+        interner: &crate::core::StableKeyInterner,
+        id: u64,
+        cfg_function: CfgFunctionId,
+        from_block: BasicBlockId,
+        to_block: BasicBlockId,
+        kind: CfgEdgeKind,
+    ) -> CfgEdgeFact {
+        CfgEdgeFact {
+            id: CfgEdgeId(id),
+            cfg_function,
+            view: CfgView::NormalControl,
+            from: CfgNodeId(id),
+            to: CfgNodeId(id + 100),
+            from_block,
+            to_block,
+            kind,
+            label: None,
+            stable_key: interner.intern(format!("cfg:edge:{id}")),
+            status: CfgStatus::Resolved,
+            precision: CfgPrecision::ExactLowered,
+        }
     }
 
     fn has_evidence(violation: &PolicyViolation, label: &str, value: &str) -> bool {

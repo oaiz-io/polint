@@ -4,7 +4,7 @@
 //! `polint-analysis`. This module retains only policies that adapt the facade's
 //! concrete frontend snapshots: Go RTA and the TS/JS callsite projection.
 
-pub(crate) use crate::analysis_neutral::solver::policy::{PolicyOutcome, SolverPolicy};
+pub(crate) use crate::analysis_neutral::solver::policy::{SolverPolicy, SolverPolicyOutcome};
 
 use super::budget::SolverBudget;
 use crate::go::rta::{GoRtaInputs, solve_go_rta};
@@ -39,12 +39,12 @@ impl SolverPolicy for GoRtaPolicy {
         &self,
         interner: &crate::core::StableKeyInterner,
         budget: &SolverBudget,
-    ) -> PolicyOutcome {
+    ) -> SolverPolicyOutcome {
         // Run the RTA fixpoint over the closed snapshot (composition over the engine
         // worklist, mirroring the neutral points-to policy's fold). The output is
         // already normalized.
         let output = solve_go_rta(interner, &self.inputs, budget);
-        PolicyOutcome {
+        SolverPolicyOutcome {
             points_to: None,
             derived_edges: output.derived_edges,
             budget_status: output.budget_status,
@@ -75,9 +75,9 @@ impl SolverPolicy for TsPointsToPolicy {
         &self,
         interner: &crate::core::StableKeyInterner,
         budget: &SolverBudget,
-    ) -> PolicyOutcome {
+    ) -> SolverPolicyOutcome {
         let output = solve_ts_points_to(interner, &self.inputs, budget);
-        PolicyOutcome {
+        SolverPolicyOutcome {
             points_to: None,
             derived_edges: output.derived_edges,
             budget_status: budget_status(&output.points_to),

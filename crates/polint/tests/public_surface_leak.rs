@@ -160,7 +160,9 @@ const ALLOWED_PRELUDE: &[&str] = &[
     "GuardQuery",
     "LifecycleQuery",
     "PolicyConfidence",
+    "PolicyOutcome",
     "PolicyPrecision",
+    "PolicyResult",
     "PolicyStatus",
     "PolicyViolation",
     "ReachQuery",
@@ -668,7 +670,7 @@ fn allowlist_has_no_duplicates_and_expected_count() {
     // completeness accessor and its typed result vocabulary.
     assert_eq!(
         ALLOWED_PRELUDE.len(),
-        122,
+        124,
         "ALLOWED_PRELUDE count changed — update this assertion ONLY alongside a sanctioned \
          API promotion record"
     );

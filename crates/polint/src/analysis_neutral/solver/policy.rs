@@ -15,12 +15,15 @@ use crate::internal_core::StableKeyInterner;
 
 /// Outcome produced by a [`SolverPolicy`] when driven by the engine.
 ///
+/// Unrelated to [`crate::sdk::policy::PolicyOutcome`], which is the rule-facing
+/// verdict of a policy query.
+///
 /// A points-to policy carries its folded sub-domain result in `points_to`;
 /// edge-producing policies place their normalized edges in `derived_edges`.
 /// Budget status and reasons are retained independently so the engine can
 /// combine only the policy outputs that contribute to the final solver output.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PolicyOutcome {
+pub struct SolverPolicyOutcome {
     /// Folded points-to sub-domain result, when this is the points-to policy.
     pub points_to: Option<PointsToSolveResult>,
     /// Derived edges contributed by this policy.
@@ -33,7 +36,7 @@ pub struct PolicyOutcome {
     pub steps: u64,
 }
 
-impl PolicyOutcome {
+impl SolverPolicyOutcome {
     /// Construct an honest empty outcome for policies with no derivation.
     pub fn empty() -> Self {
         Self {
@@ -52,7 +55,7 @@ pub trait SolverPolicy {
     fn id(&self) -> &'static str;
 
     /// Drive one policy fixpoint under the supplied unified budget.
-    fn solve(&self, interner: &StableKeyInterner, budget: &SolverBudget) -> PolicyOutcome;
+    fn solve(&self, interner: &StableKeyInterner, budget: &SolverBudget) -> SolverPolicyOutcome;
 }
 
 /// The language-neutral points-to policy.
@@ -75,11 +78,11 @@ impl SolverPolicy for PointsToPolicy {
         "points_to"
     }
 
-    fn solve(&self, interner: &StableKeyInterner, budget: &SolverBudget) -> PolicyOutcome {
+    fn solve(&self, interner: &StableKeyInterner, budget: &SolverBudget) -> SolverPolicyOutcome {
         let result = solve_points_to(interner, &self.constraints, budget.points_to_budget());
         let budget_status = BudgetStatus::from_points_to(result.budget_status);
         let budget_reasons = result.budget_reasons.clone();
-        PolicyOutcome {
+        SolverPolicyOutcome {
             points_to: Some(result),
             derived_edges: Vec::new(),
             budget_status,
@@ -95,7 +98,7 @@ mod tests {
 
     #[test]
     fn empty_outcome_is_semantically_empty() {
-        let outcome = PolicyOutcome::empty();
+        let outcome = SolverPolicyOutcome::empty();
         assert!(outcome.points_to.is_none());
         assert!(outcome.derived_edges.is_empty());
         assert_eq!(outcome.budget_status, BudgetStatus::WithinBudget);

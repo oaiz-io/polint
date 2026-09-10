@@ -12,6 +12,7 @@ members = [
     "examples/custom-rule-ts/.polint/rules",
     "examples/go-branch-obligations/.polint/rules",
     "examples/go-complexity/.polint/rules",
+    "examples/go-guard-outcomes/.polint/rules",
     "examples/go-import-boundaries/.polint/rules",
     "examples/go-sensitive-writes/.polint/rules",
     "examples/go-test-quality/.polint/rules",

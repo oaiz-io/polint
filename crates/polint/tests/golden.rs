@@ -707,6 +707,26 @@ fn diagnostic_set_diff_names_lost_fingerprints() {
 }
 
 #[test]
+fn guard_outcome_corpus_copies_stay_identical() {
+    // `polint test` copies a case directory into a temp repo, so the fixture
+    // keeps its own copy of the corpus the golden case analyses. Drift between
+    // the two would silently split the characterization in half.
+    let root = repo_root();
+    let example = root.join("examples/go-guard-outcomes/cases.go");
+    let fixture = root.join(
+        "examples/go-guard-outcomes/.polint/tests/rules/guard-outcomes/native-queries/cases.go",
+    );
+
+    assert_eq!(
+        fs::read_to_string(&example).expect("example corpus"),
+        fs::read_to_string(&fixture).expect("fixture corpus"),
+        "{} and {} must stay byte-identical",
+        example.display(),
+        fixture.display()
+    );
+}
+
+#[test]
 fn example_golden_cases_cover_inventory_rule_packs() {
     let root = repo_root();
     let inputs = load_toml(&root.join(INPUTS_REL));

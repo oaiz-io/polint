@@ -1314,6 +1314,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "polint-example-go-guard-outcomes-rule"
+version = "0.3.7"
+dependencies = [
+ "polint",
+]
+
+[[package]]
 name = "polint-example-go-import-boundaries-rule"
 version = "0.3.7"
 dependencies = [

@@ -1,0 +1,12 @@
+[workspace]
+include = ["*.go"]
+# The `polint test` fixture keeps its own copy of the corpus and its own
+# `go.mod`. Excluding it keeps this example one Go module.
+exclude = ["**/target/**", ".polint/**"]
+
+[profiles.fast]
+rules = ["local/guard-outcomes"]
+
+[[rules.config]]
+id = "local/guard-outcomes"
+files = ["*.go"]
