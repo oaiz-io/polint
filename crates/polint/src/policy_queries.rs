@@ -338,18 +338,24 @@ fn missing_guard_calls(
             if !event_matches_pattern(event, &query.event) {
                 continue;
             }
-            let has_guard = function_events[..index].iter().any(|candidate| {
-                guard_matches_event(candidate, &query.guard) && dominators.holds(candidate, event)
-            });
-            if has_guard {
-                continue;
+            let coverage = relation_coverage(
+                function_events[..index]
+                    .iter()
+                    .filter(|candidate| guard_matches_event(candidate, &query.guard)),
+                event,
+                &dominators,
+            );
+            match coverage {
+                RelationCoverage::Established => continue,
+                RelationCoverage::NotEstablished(_) if !query.report_unknown_coverage => continue,
+                RelationCoverage::NotEstablished(_) | RelationCoverage::Refuted { .. } => {}
             }
             if results.len() >= query.max_paths {
                 truncated = true;
                 break 'functions;
             }
-            results.push(
-                control_violation(
+            match coverage {
+                RelationCoverage::NotEstablished(reason) => results.push(unknown_control_result(
                     db,
                     event,
                     PolicyOperation::ControlFlowMissingGuard,
@@ -357,15 +363,35 @@ fn missing_guard_calls(
                     vec![
                         ("policy", "missing_guard".to_string()),
                         ("required_guard", query.guard.values().join(",")),
-                        ("uncovered_path", format!("entry -> {}", event.target_label)),
+                        ("dominance_evidence", reason.to_string()),
                         ("requested_max_depth", query.max_depth.to_string()),
                     ],
-                )
-                .with_path_evidence(
-                    ["entry".to_string(), event.target_label.clone()],
-                    PolicyEvidenceEdgeKind::Control,
+                )),
+                _ => results.push(
+                    control_violation(
+                        db,
+                        event,
+                        PolicyOperation::ControlFlowMissingGuard,
+                        query_digest,
+                        vec![
+                            ("policy", "missing_guard".to_string()),
+                            ("required_guard", query.guard.values().join(",")),
+                            ("uncovered_path", format!("entry -> {}", event.target_label)),
+                            (
+                                "dominance_evidence",
+                                coverage
+                                    .refuted_evidence(DOMINANCE_NO_CANDIDATE)
+                                    .to_string(),
+                            ),
+                            ("requested_max_depth", query.max_depth.to_string()),
+                        ],
+                    )
+                    .with_path_evidence(
+                        ["entry".to_string(), event.target_label.clone()],
+                        PolicyEvidenceEdgeKind::Control,
+                    ),
                 ),
-            );
+            }
         }
     }
 
@@ -400,19 +426,24 @@ fn missing_cleanup_calls(
             if !event_matches_pattern(event, &query.start) {
                 continue;
             }
-            let has_cleanup = function_events[index + 1..].iter().any(|candidate| {
-                event_matches_pattern(candidate, &query.cleanup)
-                    && postdominators.holds(candidate, event)
-            });
-            if has_cleanup {
-                continue;
+            let coverage = relation_coverage(
+                function_events[index + 1..]
+                    .iter()
+                    .filter(|candidate| event_matches_pattern(candidate, &query.cleanup)),
+                event,
+                &postdominators,
+            );
+            match coverage {
+                RelationCoverage::Established => continue,
+                RelationCoverage::NotEstablished(_) if !query.report_unknown_coverage => continue,
+                RelationCoverage::NotEstablished(_) | RelationCoverage::Refuted { .. } => {}
             }
             if results.len() >= query.max_paths {
                 truncated = true;
                 break 'functions;
             }
-            results.push(
-                control_violation(
+            match coverage {
+                RelationCoverage::NotEstablished(reason) => results.push(unknown_control_result(
                     db,
                     event,
                     PolicyOperation::ControlFlowMissingCleanup,
@@ -420,19 +451,43 @@ fn missing_cleanup_calls(
                     vec![
                         ("policy", "missing_cleanup".to_string()),
                         ("required_cleanup", query.cleanup.values().join(",")),
-                        ("uncovered_path", format!("{} -> exit", event.target_label)),
+                        ("dominance_evidence", reason.to_string()),
                         (
                             "require_error_cleanup",
                             query.require_error_cleanup.to_string(),
                         ),
                         ("requested_max_depth", query.max_depth.to_string()),
                     ],
-                )
-                .with_path_evidence(
-                    [event.target_label.clone(), "exit".to_string()],
-                    PolicyEvidenceEdgeKind::Control,
+                )),
+                _ => results.push(
+                    control_violation(
+                        db,
+                        event,
+                        PolicyOperation::ControlFlowMissingCleanup,
+                        query_digest,
+                        vec![
+                            ("policy", "missing_cleanup".to_string()),
+                            ("required_cleanup", query.cleanup.values().join(",")),
+                            ("uncovered_path", format!("{} -> exit", event.target_label)),
+                            (
+                                "dominance_evidence",
+                                coverage
+                                    .refuted_evidence(DOMINANCE_NO_CLEANUP_CANDIDATE)
+                                    .to_string(),
+                            ),
+                            (
+                                "require_error_cleanup",
+                                query.require_error_cleanup.to_string(),
+                            ),
+                            ("requested_max_depth", query.max_depth.to_string()),
+                        ],
+                    )
+                    .with_path_evidence(
+                        [event.target_label.clone(), "exit".to_string()],
+                        PolicyEvidenceEdgeKind::Control,
+                    ),
                 ),
-            );
+            }
         }
     }
 
@@ -443,11 +498,85 @@ fn missing_cleanup_calls(
     results
 }
 
-/// Adjacency over one CFG block relation, built once per query.
+/// Whether one CFG block relation covered an event, across every candidate.
 ///
-/// A relation with no rows means the analysis could not establish it, and every
-/// lookup answers `true` so a query keeps the ordering-only behavior it has
-/// without CFG relation facts rather than silently reporting more.
+/// `Established` is the only answer that proves coverage. `NotEstablished`
+/// carries the first reason a lookup could not be evaluated, and `Refuted`
+/// means every candidate was evaluated and none covered the event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelationCoverage {
+    Established,
+    NotEstablished(&'static str),
+    Refuted { saw_candidate: bool },
+}
+
+impl RelationCoverage {
+    /// Evidence value naming what decided a refuted result.
+    fn refuted_evidence(self, without_candidate: &'static str) -> &'static str {
+        match self {
+            Self::Refuted {
+                saw_candidate: true,
+            } => DOMINANCE_FROM_RELATION,
+            _ => without_candidate,
+        }
+    }
+}
+
+/// Folds every candidate's relation answer into one coverage verdict.
+///
+/// A single `Holds` proves coverage; otherwise the first `Unknown` reason wins
+/// over refutation, because an unevaluated lookup is not a refutation.
+fn relation_coverage<'a>(
+    candidates: impl Iterator<Item = &'a &'a ControlCallEvent>,
+    event: &ControlCallEvent,
+    relation: &BlockRelation,
+) -> RelationCoverage {
+    let mut unknown_reason = None;
+    let mut saw_candidate = false;
+    for candidate in candidates {
+        saw_candidate = true;
+        match relation.answer(candidate, event) {
+            DominanceAnswer::Holds => return RelationCoverage::Established,
+            DominanceAnswer::DoesNotHold => {}
+            DominanceAnswer::Unknown(reason) => {
+                unknown_reason.get_or_insert(reason);
+            }
+        }
+    }
+    match unknown_reason {
+        Some(reason) => RelationCoverage::NotEstablished(reason),
+        None => RelationCoverage::Refuted { saw_candidate },
+    }
+}
+
+/// Reason a CFG block relation could not answer a lookup.
+///
+/// One of the two events carried no basic block, so the relation has nothing to
+/// look up.
+pub(crate) const DOMINANCE_MISSING_BLOCK_IDS: &str = "missing_block_ids";
+/// Reason a CFG block relation could not answer a lookup: the relation itself
+/// has no rows, so the analysis never established it for this run.
+pub(crate) const DOMINANCE_EMPTY_RELATION: &str = "empty_relation";
+/// Evidence value naming the relation that decided an emitted control result.
+const DOMINANCE_FROM_RELATION: &str = "dominator_relation";
+/// Evidence value for a control result decided without any candidate to relate.
+const DOMINANCE_NO_CANDIDATE: &str = "no_guard_candidate";
+/// Evidence value for a lifecycle result decided without any cleanup candidate.
+const DOMINANCE_NO_CLEANUP_CANDIDATE: &str = "no_cleanup_candidate";
+
+/// Three-valued answer from one CFG block relation lookup.
+///
+/// The relation is only a proof when it answers [`DominanceAnswer::Holds`].
+/// Missing inputs answer [`DominanceAnswer::Unknown`] with the reason, so a
+/// caller can report "not established" instead of reading absence as coverage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DominanceAnswer {
+    Holds,
+    DoesNotHold,
+    Unknown(&'static str),
+}
+
+/// Adjacency over one CFG block relation, built once per query.
 struct BlockRelation {
     by_source: BTreeMap<BasicBlockId, Vec<BasicBlockId>>,
 }
@@ -477,13 +606,24 @@ impl BlockRelation {
         )
     }
 
-    fn holds(&self, candidate: &ControlCallEvent, event: &ControlCallEvent) -> bool {
+    fn answer(&self, candidate: &ControlCallEvent, event: &ControlCallEvent) -> DominanceAnswer {
         match (candidate.block, event.block) {
-            (Some(candidate), Some(event)) if candidate == event => true,
-            (Some(candidate), Some(event)) => {
-                self.by_source.is_empty() || self.reaches(event, candidate)
-            }
-            _ => true,
+            (Some(candidate), Some(event)) => self.answer_for_blocks(candidate, event),
+            _ => DominanceAnswer::Unknown(DOMINANCE_MISSING_BLOCK_IDS),
+        }
+    }
+
+    fn answer_for_blocks(&self, candidate: BasicBlockId, event: BasicBlockId) -> DominanceAnswer {
+        if candidate == event {
+            return DominanceAnswer::Holds;
+        }
+        if self.by_source.is_empty() {
+            return DominanceAnswer::Unknown(DOMINANCE_EMPTY_RELATION);
+        }
+        if self.reaches(event, candidate) {
+            DominanceAnswer::Holds
+        } else {
+            DominanceAnswer::DoesNotHold
         }
     }
 
@@ -1479,6 +1619,23 @@ fn control_violation(
     )
 }
 
+/// A control result that reports "not established" rather than a violation.
+///
+/// It carries no `uncovered_path` and no `evidence_v1`: there is no path to
+/// claim when the relation that would have proved coverage was unavailable.
+fn unknown_control_result(
+    db: &AnalysisDb,
+    event: &ControlCallEvent,
+    query: PolicyOperation,
+    query_digest: &str,
+    evidence: Vec<(&'static str, String)>,
+) -> PolicyViolation {
+    let mut result = control_violation(db, event, query, query_digest, evidence);
+    result.set_status(PolicyStatus::Unknown);
+    result.set_precision(PolicyPrecision::Unknown);
+    result
+}
+
 fn control_policy_status(status: CallTargetStatus, precision: CallPrecision) -> PolicyStatus {
     match status {
         CallTargetStatus::BudgetExceeded => PolicyStatus::BudgetExceeded,
@@ -1935,9 +2092,11 @@ mod tests {
     use crate::analysis::calls::store::CallOutput;
     use crate::analysis::cfg::facts::{
         BasicBlockFact, BasicBlockKind, CfgFunctionFact, CfgNodeFact, CfgNodeKind, CfgPrecision,
-        CfgStatus,
+        CfgStatus, CfgView, DominatorFact, PostDominatorFact,
     };
-    use crate::analysis::cfg::ids::{BasicBlockId, CfgFunctionId, CfgNodeId};
+    use crate::analysis::cfg::ids::{
+        BasicBlockId, CfgFunctionId, CfgNodeId, DominatorId, PostDominatorId,
+    };
     use crate::analysis::cfg::store::CfgOutput;
     use crate::analysis::data_flow::facts::{
         DataFlowAlgorithm, DataFlowConfidence, DataFlowEdgeFact, DataFlowEdgeKind,
@@ -2195,6 +2354,188 @@ mod tests {
         );
 
         assert!(missing_guards(&db, query).is_empty());
+    }
+
+    #[test]
+    fn control_flow_missing_guard_reports_unknown_when_dominator_relation_is_empty() {
+        let db = policy_query_db_with_cfg_ordered_call_sequence(&[
+            ("dangerous", 1, 2),
+            ("authorize", 2, 1),
+        ]);
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status(), PolicyStatus::Unknown);
+        assert_eq!(results[0].precision(), PolicyPrecision::Unknown);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_EMPTY_RELATION
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_guard_reports_unknown_when_operation_has_no_cfg_block() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("authorize", 1, 1),
+                CfgCall::new("dangerous", 2, 2).unplaced(),
+            ],
+            &[(2, 1)],
+        );
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_MISSING_BLOCK_IDS
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_guard_unknown_result_carries_no_uncovered_path() {
+        let db = policy_query_db_with_cfg_ordered_call_sequence(&[
+            ("dangerous", 1, 2),
+            ("authorize", 2, 1),
+        ]);
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+        let diagnostic = results[0].diagnostic("local/test", "coverage unknown");
+
+        assert!(diagnostic.evidence_v1.is_none());
+        assert!(
+            !diagnostic
+                .evidence
+                .iter()
+                .any(|evidence| evidence.label == "uncovered_path")
+        );
+    }
+
+    #[test]
+    fn control_flow_missing_guard_holds_with_immediate_only_dominators() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("authorize", 1, 1),
+                CfgCall::new("intermediate", 2, 2),
+                CfgCall::new("dangerous", 3, 3),
+            ],
+            &[(3, 2), (2, 1)],
+        );
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        assert!(missing_guards(&db, query).is_empty());
+    }
+
+    #[test]
+    fn control_flow_missing_guard_reports_violation_when_dominance_is_refuted() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("authorize", 1, 1),
+                CfgCall::new("dangerous", 2, 2),
+            ],
+            &[(1, 1)],
+        );
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            "dominator_relation"
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_guard_keeps_fail_open_behavior_by_default() {
+        let db = policy_query_db_with_cfg_ordered_call_sequence(&[
+            ("dangerous", 1, 2),
+            ("authorize", 2, 1),
+        ]);
+        let query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+
+        assert!(missing_guards(&db, query).is_empty());
+    }
+
+    #[test]
+    fn control_flow_missing_cleanup_reports_unknown_when_postdominator_relation_is_empty() {
+        let db =
+            policy_query_db_with_cfg_ordered_call_sequence(&[("Begin", 1, 1), ("Close", 2, 2)]);
+        let mut query =
+            LifecycleQuery::new(EventPattern::call("Begin"), EventPattern::call("Close"));
+        query.report_unknown_coverage = true;
+
+        let results = missing_cleanup(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status(), PolicyStatus::Unknown);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_EMPTY_RELATION
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_cleanup_reports_unknown_when_operation_has_no_cfg_block() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("Begin", 1, 1),
+                CfgCall::new("Close", 2, 2).unplaced(),
+            ],
+            &[(1, 2)],
+        );
+        let mut query =
+            LifecycleQuery::new(EventPattern::call("Begin"), EventPattern::call("Close"));
+        query.report_unknown_coverage = true;
+
+        let results = missing_cleanup(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_MISSING_BLOCK_IDS
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_cleanup_keeps_fail_open_behavior_by_default() {
+        let db =
+            policy_query_db_with_cfg_ordered_call_sequence(&[("Begin", 1, 1), ("Close", 2, 2)]);
+        let query = LifecycleQuery::new(EventPattern::call("Begin"), EventPattern::call("Close"));
+
+        assert!(missing_cleanup(&db, query).is_empty());
     }
 
     #[test]
@@ -2646,6 +2987,14 @@ mod tests {
         assert_eq!(first, sorted);
     }
 
+    fn has_evidence(violation: &PolicyViolation, label: &str, value: &str) -> bool {
+        violation
+            .diagnostic("local/test", "message")
+            .evidence
+            .iter()
+            .any(|evidence| evidence.label == label && evidence.value == value)
+    }
+
     fn assert_policy_header(
         diagnostic: &crate::diagnostics::Diagnostic,
         query: &str,
@@ -3058,7 +3407,52 @@ mod tests {
         db
     }
 
+    /// One call in a synthetic CFG-placed sequence.
+    #[derive(Debug, Clone, Copy)]
+    struct CfgCall<'a> {
+        callee: &'a str,
+        mir_ordinal: u32,
+        cfg_ordinal: u32,
+        /// When false the call keeps its MIR operation but gets no CFG node, so
+        /// the query cannot map it to a basic block.
+        placed: bool,
+    }
+
+    impl<'a> CfgCall<'a> {
+        fn new(callee: &'a str, mir_ordinal: u32, cfg_ordinal: u32) -> Self {
+            Self {
+                callee,
+                mir_ordinal,
+                cfg_ordinal,
+                placed: true,
+            }
+        }
+
+        fn unplaced(mut self) -> Self {
+            self.placed = false;
+            self
+        }
+    }
+
     fn policy_query_db_with_cfg_ordered_call_sequence(callees: &[(&str, u32, u32)]) -> AnalysisDb {
+        let calls = callees
+            .iter()
+            .map(|(callee, mir_ordinal, cfg_ordinal)| {
+                CfgCall::new(callee, *mir_ordinal, *cfg_ordinal)
+            })
+            .collect::<Vec<_>>();
+        policy_query_db_with_cfg_calls(&calls, &[])
+    }
+
+    /// Builds a single-function DB whose calls sit in distinct basic blocks.
+    ///
+    /// `dominators` are `(dominated, dominator)` block pairs; an empty list
+    /// leaves the relation unestablished, which is the shape the fail-open
+    /// fallback used to read as coverage.
+    fn policy_query_db_with_cfg_calls(
+        calls: &[CfgCall<'_>],
+        dominators: &[(u64, u64)],
+    ) -> AnalysisDb {
         let mut db = AnalysisDb::new();
         let interner = db.stable_key_interner();
         let file = db.add_file(
@@ -3076,7 +3470,13 @@ mod tests {
         let mut cfg_nodes = Vec::new();
         let mut cfg_blocks = Vec::new();
 
-        for (index, (callee, mir_ordinal, cfg_ordinal)) in callees.iter().enumerate() {
+        for (index, call) in calls.iter().enumerate() {
+            let CfgCall {
+                callee,
+                mir_ordinal,
+                cfg_ordinal,
+                placed,
+            } = *call;
             let id = index as u64;
             let operation = MirOpId(id);
             let block = BasicBlockId(id + 1);
@@ -3086,41 +3486,68 @@ mod tests {
             let site = call_site(id, file, handler, callee);
             targets.push(call_target(id, site.id, handler, callee_function));
             edges.push(refined_edge(id, site.id, handler, callee_function, callee));
-            operations.push(mir_operation(
-                &interner,
-                operation,
-                body,
-                *mir_ordinal,
-                file,
-            ));
-            cfg_nodes.push(CfgNodeFact {
-                id: cfg_node,
-                cfg_function,
-                body,
-                operation: Some(operation),
-                block,
-                kind: CfgNodeKind::CallSite,
-                span: Some(site.span.clone()),
-                generated: false,
-                operation_ordinal: *cfg_ordinal,
-                stable_key: interner.intern(format!("cfg:node:{id}:{callee}")),
-                status: CfgStatus::Resolved,
-                precision: CfgPrecision::ExactLowered,
-            });
-            cfg_blocks.push(BasicBlockFact {
-                id: block,
-                cfg_function,
-                kind: BasicBlockKind::StraightLine,
-                first_node: Some(cfg_node),
-                last_node: Some(cfg_node),
-                reachable: true,
-                reverse_postorder: *cfg_ordinal,
-                stable_key: interner.intern(format!("cfg:block:{id}:{callee}")),
-                status: CfgStatus::Resolved,
-                precision: CfgPrecision::ExactLowered,
-            });
+            operations.push(mir_operation(&interner, operation, body, mir_ordinal, file));
+            if placed {
+                cfg_nodes.push(CfgNodeFact {
+                    id: cfg_node,
+                    cfg_function,
+                    body,
+                    operation: Some(operation),
+                    block,
+                    kind: CfgNodeKind::CallSite,
+                    span: Some(site.span.clone()),
+                    generated: false,
+                    operation_ordinal: cfg_ordinal,
+                    stable_key: interner.intern(format!("cfg:node:{id}:{callee}")),
+                    status: CfgStatus::Resolved,
+                    precision: CfgPrecision::ExactLowered,
+                });
+                cfg_blocks.push(BasicBlockFact {
+                    id: block,
+                    cfg_function,
+                    kind: BasicBlockKind::StraightLine,
+                    first_node: Some(cfg_node),
+                    last_node: Some(cfg_node),
+                    reachable: true,
+                    reverse_postorder: cfg_ordinal,
+                    stable_key: interner.intern(format!("cfg:block:{id}:{callee}")),
+                    status: CfgStatus::Resolved,
+                    precision: CfgPrecision::ExactLowered,
+                });
+            }
             sites.push(site);
         }
+
+        let dominator_facts = dominators
+            .iter()
+            .enumerate()
+            .map(|(index, (dominated, dominator))| DominatorFact {
+                id: DominatorId(index as u64),
+                cfg_function,
+                view: CfgView::NormalControl,
+                dominator: BasicBlockId(*dominator),
+                dominated: BasicBlockId(*dominated),
+                immediate: true,
+                stable_key: interner.intern(format!("cfg:dom:{dominated}:{dominator}")),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            })
+            .collect::<Vec<_>>();
+        let postdominator_facts = dominators
+            .iter()
+            .enumerate()
+            .map(|(index, (dominated, dominator))| PostDominatorFact {
+                id: PostDominatorId(index as u64),
+                cfg_function,
+                view: CfgView::NormalControl,
+                postdominator: BasicBlockId(*dominator),
+                postdominated: BasicBlockId(*dominated),
+                immediate: true,
+                stable_key: interner.intern(format!("cfg:pdom:{dominated}:{dominator}")),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            })
+            .collect::<Vec<_>>();
 
         db.replace_semantic_mir(MirOutput {
             bodies: vec![mir_body(&interner, file, handler)],
@@ -3147,6 +3574,8 @@ mod tests {
             }],
             nodes: cfg_nodes,
             blocks: cfg_blocks,
+            dominators: dominator_facts,
+            postdominators: postdominator_facts,
             ..CfgOutput::empty()
         })
         .expect("valid CFG facts");

@@ -126,6 +126,10 @@ impl PolicyViolation {
         self.status = status;
     }
 
+    pub(crate) fn set_precision(&mut self, precision: PolicyPrecision) {
+        self.precision = precision;
+    }
+
     pub(crate) fn push_evidence(&mut self, label: impl Into<String>, value: impl Into<String>) {
         self.evidence.push((label.into(), value.into()));
     }
@@ -278,6 +282,12 @@ pub struct GuardQuery {
     pub max_paths: usize,
     /// Minimum acceptable precision.
     pub minimum_precision: PolicyPrecision,
+    /// Report an explicit unknown result when block dominance cannot be
+    /// established, instead of treating the missing relation as coverage.
+    ///
+    /// Defaults to `false`, which keeps the ordering-plus-dominance behavior
+    /// that suppresses a result whenever the relation is unavailable.
+    pub report_unknown_coverage: bool,
 }
 
 impl GuardQuery {
@@ -289,6 +299,7 @@ impl GuardQuery {
             max_depth: 4,
             max_paths: 20,
             minimum_precision: PolicyPrecision::Conservative,
+            report_unknown_coverage: false,
         }
     }
 
@@ -303,6 +314,7 @@ impl GuardQuery {
                 "minimum_precision={}",
                 policy_precision_label(self.minimum_precision)
             ),
+            format!("report_unknown_coverage={}", self.report_unknown_coverage),
         ])
     }
 }
@@ -323,6 +335,12 @@ pub struct LifecycleQuery {
     pub max_paths: usize,
     /// Minimum acceptable precision.
     pub minimum_precision: PolicyPrecision,
+    /// Report an explicit unknown result when block post-dominance cannot be
+    /// established, instead of treating the missing relation as cleanup.
+    ///
+    /// Defaults to `false`, which keeps the ordering-plus-post-dominance
+    /// behavior that suppresses a result whenever the relation is unavailable.
+    pub report_unknown_coverage: bool,
 }
 
 impl LifecycleQuery {
@@ -335,6 +353,7 @@ impl LifecycleQuery {
             max_depth: 4,
             max_paths: 20,
             minimum_precision: PolicyPrecision::Conservative,
+            report_unknown_coverage: false,
         }
     }
 
@@ -350,6 +369,7 @@ impl LifecycleQuery {
                 "minimum_precision={}",
                 policy_precision_label(self.minimum_precision)
             ),
+            format!("report_unknown_coverage={}", self.report_unknown_coverage),
         ])
     }
 }

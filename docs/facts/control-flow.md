@@ -67,6 +67,41 @@ pub(crate) fn transaction_cleanup(ctx: &mut RuleCtx<'_>, control: ControlFlow<'_
   when it post-dominates that start, which one call reaching every exit does.
   Cleanup split across exits is not yet proved: a function that calls cleanup
   separately on each path, or from a `finally` block, is still reported.
+- `report_unknown_coverage` (default `false`) decides what happens when the
+  dominance or post-dominance relation cannot answer. See
+  [Unestablished dominance](#unestablished-dominance).
+
+## Unestablished Dominance
+
+A guard clears an event only when the guard's basic block dominates the event's
+block; a cleanup clears a start only when it post-dominates the start. Two
+inputs can be missing:
+
+- `missing_block_ids` — one of the two calls has no CFG node, so it maps to no
+  basic block.
+- `empty_relation` — the run produced no rows for the relation at all, so
+  dominance was never computed.
+
+With `report_unknown_coverage = false` (the default) both cases suppress the
+result, which keeps the ordering-only behavior a query has without CFG relation
+facts. Absence of a diagnostic under that default therefore means "no result",
+not "proved covered".
+
+With `report_unknown_coverage = true` those cases become an explicit result with
+`policy_status = unknown`, `policy_precision = unknown`, and
+`dominance_evidence` naming the missing input. Such a result carries no
+`uncovered_path` and no `evidence_v1`: there is no path to claim when the
+relation that would have proved coverage was unavailable.
+
+Emitted results always carry `dominance_evidence`:
+
+| Value | Meaning |
+|---|---|
+| `dominator_relation` | Candidates existed and the relation refuted every one. |
+| `no_guard_candidate` | No matching guard call was ordered before the event. |
+| `no_cleanup_candidate` | No matching cleanup call was ordered after the start. |
+| `missing_block_ids` | A call had no CFG node (unknown result only). |
+| `empty_relation` | The relation had no rows (unknown result only). |
 
 Returned diagnostics include the common policy evidence header documented in
 [evidence.md](evidence.md), plus target, function, control scope, required

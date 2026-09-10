@@ -286,6 +286,11 @@ Policy results must be read with their evidence:
   complete absence proofs.
 - Cap-filtered unknown reports are available through
   `polint unknowns --cap events|calls|control_flow|dataflow --format json`.
+- An empty result list is not a proof. It can mean "no operation matched", "the
+  relation the query needed was never computed", or "every operation was
+  cleared". Control-flow queries can separate the middle case from the others
+  with `report_unknown_coverage`; see
+  [control-flow.md](control-flow.md#unestablished-dominance).
 
 Unsupported preview vocabulary returns no backed policy matches until a later
 phase promotes real facts. Setup gaps should produce `polint/capability`
