@@ -46,6 +46,14 @@ single observations. The host is shared: every sample records the load average
 and the process table is watched during the run, with any sample that overlapped
 foreign compilation discarded and retaken (rejects retained as `rejected-*.json`).
 
+Binary identity: the "before" executable is
+`cargo test -p polint --lib --all-features --locked --release --no-run` at
+`4906af0e` (SHA-256 `2fc8e58fd6c7f7d8d67f5e6c01f7a7b4baaa67c73efeab8657b35eb80202ccd1`);
+the "after" executable is the same command at this branch's code head (SHA-256
+`5a1d2605150baf74fd18ef7962ad84b369b207efaa53213ff75769b8194a2d95`), rebuilt
+after the fact and byte-identical to the one every "after" sample was taken with.
+Release profile, dependencies and compiler flags are unchanged.
+
 ### Deep workloads
 
 | Suite / SHA / license | Warm wall s, before → after | Speedup | Warm peak RSS GiB, before → after | RSS Δ | Cold wall s, before → after | Cold peak RSS GiB, before → after |
