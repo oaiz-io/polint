@@ -49,7 +49,7 @@ pub fn derive_dispatch_edges(
         });
     }
 
-    edges.sort_by_key(|edge| interner.resolve(edge.stable_key));
+    edges.sort_by(|edge, other| interner.compare_canonical(edge.stable_key, other.stable_key));
     edges
 }
 

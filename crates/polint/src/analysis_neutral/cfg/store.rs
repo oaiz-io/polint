@@ -23,36 +23,34 @@ impl CfgOutput {
 
     pub fn normalized(mut self, interner: &crate::internal_core::StableKeyInterner) -> Self {
         self.functions
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
-        self.nodes.sort_by_cached_key(|row| {
-            (
-                row.cfg_function,
-                row.operation_ordinal,
-                interner.resolve(row.stable_key),
-            )
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
+        self.nodes.sort_by(|row, other| {
+            row.cfg_function
+                .cmp(&other.cfg_function)
+                .then_with(|| row.operation_ordinal.cmp(&other.operation_ordinal))
+                .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
         });
         self.blocks
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
-        self.edges.sort_by_cached_key(|row| {
-            (
-                row.cfg_function,
-                row.view,
-                row.from_block,
-                row.to_block,
-                row.kind,
-                interner.resolve(row.stable_key),
-            )
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
+        self.edges.sort_by(|row, other| {
+            row.cfg_function
+                .cmp(&other.cfg_function)
+                .then_with(|| row.view.cmp(&other.view))
+                .then_with(|| row.from_block.cmp(&other.from_block))
+                .then_with(|| row.to_block.cmp(&other.to_block))
+                .then_with(|| row.kind.cmp(&other.kind))
+                .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
         });
         self.reachability
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.dominators
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.postdominators
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.control_dependence
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.unsupported
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self
     }
 }

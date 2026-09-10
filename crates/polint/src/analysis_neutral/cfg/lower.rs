@@ -122,7 +122,7 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
 
     fn lower(&mut self, interner: &crate::internal_core::StableKeyInterner) {
         let mut bodies = self.db.mir_bodies().iter().collect::<Vec<_>>();
-        bodies.sort_by_cached_key(|body| interner.resolve(body.stable_key));
+        bodies.sort_by(|body, other| interner.compare_canonical(body.stable_key, other.stable_key));
 
         for body in bodies {
             let has_exceptional_control =
@@ -156,7 +156,12 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
             .flatten()
             .copied()
             .collect::<Vec<_>>();
-        blocks.sort_by_cached_key(|block| (block.ordinal, interner.resolve(block.stable_key)));
+        blocks.sort_by(|block, other| {
+            block
+                .ordinal
+                .cmp(&other.ordinal)
+                .then_with(|| interner.compare_canonical(block.stable_key, other.stable_key))
+        });
         let unwind_targets = self
             .inputs
             .terminators_for_body(body)

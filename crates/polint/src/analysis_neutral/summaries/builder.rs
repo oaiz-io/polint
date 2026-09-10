@@ -57,8 +57,9 @@ impl DirectSummaryBuilder {
             }
             for ops in map.values_mut() {
                 ops.sort_by(|a, b| {
-                    (a.ordinal, interner.resolve(a.stable_key))
-                        .cmp(&(b.ordinal, interner.resolve(b.stable_key)))
+                    a.ordinal
+                        .cmp(&b.ordinal)
+                        .then_with(|| interner.compare_canonical(a.stable_key, b.stable_key))
                 });
             }
             map

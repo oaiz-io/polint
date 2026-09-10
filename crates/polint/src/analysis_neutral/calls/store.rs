@@ -21,29 +21,22 @@ impl CallOutput {
 
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.sites.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.targets.sort_by(|left, right| {
-            (left.site, interner.resolve(left.stable_key), left.id).cmp(&(
-                right.site,
-                interner.resolve(right.stable_key),
-                right.id,
-            ))
+            left.site
+                .cmp(&right.site)
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.unresolved.sort_by(|left, right| {
-            (
-                left.site,
-                left.reason,
-                left.status,
-                interner.resolve(left.stable_key),
-            )
-                .cmp(&(
-                    right.site,
-                    right.reason,
-                    right.status,
-                    interner.resolve(right.stable_key),
-                ))
+            left.site
+                .cmp(&right.site)
+                .then_with(|| left.reason.cmp(&right.reason))
+                .then_with(|| left.status.cmp(&right.status))
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
         });
         self
     }

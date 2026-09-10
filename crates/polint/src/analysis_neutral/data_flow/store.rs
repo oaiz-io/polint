@@ -25,11 +25,10 @@ impl DataFlowOutput {
 
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.nodes.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.kind, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.kind,
-                right.id,
-            ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.kind.cmp(&right.kind))
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.models = self
             .models
@@ -37,18 +36,16 @@ impl DataFlowOutput {
             .map(DataFlowModelFact::normalized)
             .collect();
         self.models.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.kind, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.kind,
-                right.id,
-            ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.kind.cmp(&right.kind))
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.budgets.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.reason, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.reason,
-                right.id,
-            ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.reason.cmp(&right.reason))
+                .then_with(|| left.id.cmp(&right.id))
         });
 
         let node_remap = self
@@ -104,22 +101,13 @@ impl DataFlowOutput {
             })
             .collect();
         self.edges.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.from,
-                left.to,
-                left.kind,
-                left.algorithm,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.from,
-                    right.to,
-                    right.kind,
-                    right.algorithm,
-                    right.id,
-                ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.from.cmp(&right.from))
+                .then_with(|| left.to.cmp(&right.to))
+                .then_with(|| left.kind.cmp(&right.kind))
+                .then_with(|| left.algorithm.cmp(&right.algorithm))
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, edge) in self.edges.iter_mut().enumerate() {
             edge.id = DataFlowEdgeId(index as u64);

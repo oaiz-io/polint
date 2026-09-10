@@ -51,7 +51,9 @@ pub fn derive_trust_boundaries(
         }
     }
 
-    boundaries.sort_by_key(|boundary| interner.resolve(boundary.stable_key));
+    boundaries.sort_by(|boundary, other| {
+        interner.compare_canonical(boundary.stable_key, other.stable_key)
+    });
     boundaries
 }
 

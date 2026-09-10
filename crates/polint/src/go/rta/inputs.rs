@@ -174,14 +174,11 @@ impl GoRtaInputs {
         }
         // Deterministic callsite order (by resolved callsite stable text, then dispatch).
         callsites.sort_by(|left, right| {
-            (
-                interner.resolve(left.callsite_stable_key),
-                interner.resolve(left.dispatch_stable_key),
-            )
-                .cmp(&(
-                    interner.resolve(right.callsite_stable_key),
-                    interner.resolve(right.dispatch_stable_key),
-                ))
+            interner
+                .compare_canonical(left.callsite_stable_key, right.callsite_stable_key)
+                .then_with(|| {
+                    interner.compare_canonical(left.dispatch_stable_key, right.dispatch_stable_key)
+                })
         });
 
         // Static call graph: caller qualified -> statically-called callee
@@ -649,11 +646,10 @@ fn select_constraint_callsite<'a>(
         };
 
     // 3. Deterministic minimum by stable key (never first-match on storage order).
-    final_set.iter().copied().min_by(|left, right| {
-        interner
-            .resolve(left.stable_key)
-            .cmp(&interner.resolve(right.stable_key))
-    })
+    final_set
+        .iter()
+        .copied()
+        .min_by(|left, right| interner.compare_canonical(left.stable_key, right.stable_key))
 }
 
 /// Reproduces `semantic_graph::build::node_key_from_identity` (node-kind label +

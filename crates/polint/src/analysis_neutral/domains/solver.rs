@@ -371,14 +371,10 @@ impl<'a> SolverFactIndex<'a> {
                 .map_or_else(String::new, |body| {
                     interner.resolve(body.stable_key).to_string()
                 });
-            (
-                left_body.as_str(),
-                interner.resolve(left.stable_key).as_ref(),
-            )
-                .cmp(&(
-                    right_body.as_str(),
-                    interner.resolve(right.stable_key).as_ref(),
-                ))
+            left_body
+                .as_str()
+                .cmp(right_body.as_str())
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
         });
 
         let function_by_cfg = functions

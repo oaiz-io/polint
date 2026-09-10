@@ -1322,7 +1322,7 @@ fn sorted_stable_key_ids(
     values: BTreeSet<StableKeyId>,
 ) -> Vec<StableKeyId> {
     let mut values = values.into_iter().collect::<Vec<_>>();
-    values.sort_by_key(|value| interner.resolve(*value));
+    values.sort_by(|value, other| interner.compare_canonical(*value, *other));
     values
 }
 

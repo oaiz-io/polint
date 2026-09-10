@@ -15,8 +15,9 @@ pub struct ValueOutput {
 impl ValueOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.allocations.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         let allocation_remap = self
             .allocations
@@ -28,8 +29,9 @@ impl ValueOutput {
             row.id = AllocationTokenId(index as u64);
         }
         self.values.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, row) in self.values.iter_mut().enumerate() {
             row.id = ValueFactId(index as u64);

@@ -52,8 +52,9 @@ pub fn render_bundle_json_v1(
         .filter_map(|path_id| store.paths().iter().find(|path| path.id == *path_id))
         .collect::<Vec<_>>();
     paths.sort_by(|left, right| {
-        (left.rank, interner.resolve(left.stable_key))
-            .cmp(&(right.rank, interner.resolve(right.stable_key)))
+        left.rank
+            .cmp(&right.rank)
+            .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
     });
 
     let mut unknowns = store
@@ -61,14 +62,16 @@ pub fn render_bundle_json_v1(
         .iter()
         .filter(|unknown| unknown.bundle == Some(bundle.id))
         .collect::<Vec<_>>();
-    unknowns.sort_by_key(|unknown| interner.resolve(unknown.stable_key));
+    unknowns
+        .sort_by(|unknown, other| interner.compare_canonical(unknown.stable_key, other.stable_key));
 
     let mut omitted = store
         .omitted_regions()
         .iter()
         .filter(|region| region.bundle == Some(bundle.id))
         .collect::<Vec<_>>();
-    omitted.sort_by_key(|region| interner.resolve(region.stable_key));
+    omitted
+        .sort_by(|region, other| interner.compare_canonical(region.stable_key, other.stable_key));
 
     let replay_key = store
         .replay_keys()

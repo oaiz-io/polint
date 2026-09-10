@@ -340,7 +340,7 @@ fn sorted_refs_by_stable_key<'a, T: StableKeyed>(
     rows: &'a [T],
 ) -> Vec<&'a T> {
     let mut refs = rows.iter().collect::<Vec<_>>();
-    refs.sort_by_cached_key(|row| interner.resolve(row.stable_key()));
+    refs.sort_by(|row, other| interner.compare_canonical(row.stable_key(), other.stable_key()));
     refs
 }
 

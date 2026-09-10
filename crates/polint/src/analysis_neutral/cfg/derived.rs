@@ -45,13 +45,13 @@ pub fn derive_reachability(
                 view,
                 block: block.id,
                 reachable: reachable.contains(&block.id),
-                stable_key: stable_key(
+                stable_key: stable_key_ref(
                     interner,
                     FactFamily::CfgReachability,
-                    &[
-                        ("function", function_key.clone()),
-                        ("view", format!("{view:?}")),
-                        ("block", interner.resolve(block.stable_key).to_string()),
+                    [
+                        ("function", KeyPart::Text(&function_key.clone())),
+                        ("view", KeyPart::Text(&format!("{view:?}"))),
+                        ("block", KeyPart::Key(block.stable_key)),
                     ],
                 ),
                 status: CfgStatus::Resolved,
@@ -60,7 +60,7 @@ pub fn derive_reachability(
             next_id += 1;
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 
@@ -114,7 +114,7 @@ pub fn derive_dominators(
             }
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 
@@ -197,7 +197,7 @@ pub fn derive_postdominators(
             }
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 
@@ -253,7 +253,7 @@ pub fn derive_control_dependence(
             }
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 

@@ -237,12 +237,12 @@ impl DomainOutput {
                 status: status_for_top_reason(event.reason),
                 precision: precision_for_top_reason(event.reason),
                 reason: event.reason.as_str().to_string(),
-                stable_key: stable_key_from_parts(
+                stable_key: stable_key_from_key_parts(
                     interner,
                     FactFamily::DomainEvent,
-                    &[
-                        ("source", interner.resolve(event.stable_key).to_string()),
-                        ("reason", event.reason.as_str().to_string()),
+                    [
+                        ("source", KeyPart::Key(event.stable_key)),
+                        ("reason", KeyPart::Text(event.reason.as_str())),
                     ],
                 ),
             });
@@ -252,50 +252,27 @@ impl DomainOutput {
 
     pub fn normalized(mut self, interner: &crate::internal_core::StableKeyInterner) -> Self {
         self.observations.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.body,
-                left.block,
-                left.operation,
-                left.place,
-                left.slot,
-                left.location,
-                left.status,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.body,
-                    right.block,
-                    right.operation,
-                    right.place,
-                    right.slot,
-                    right.location,
-                    right.status,
-                    right.id,
-                ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.body.cmp(&right.body))
+                .then_with(|| left.block.cmp(&right.block))
+                .then_with(|| left.operation.cmp(&right.operation))
+                .then_with(|| left.place.cmp(&right.place))
+                .then_with(|| left.slot.cmp(&right.slot))
+                .then_with(|| left.location.cmp(&right.location))
+                .then_with(|| left.status.cmp(&right.status))
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.events.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.body,
-                left.block,
-                left.operation,
-                left.slot,
-                left.status,
-                left.reason.as_str(),
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.body,
-                    right.block,
-                    right.operation,
-                    right.slot,
-                    right.status,
-                    right.reason.as_str(),
-                    right.id,
-                ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.body.cmp(&right.body))
+                .then_with(|| left.block.cmp(&right.block))
+                .then_with(|| left.operation.cmp(&right.operation))
+                .then_with(|| left.slot.cmp(&right.slot))
+                .then_with(|| left.status.cmp(&right.status))
+                .then_with(|| left.reason.as_str().cmp(right.reason.as_str()))
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, fact) in self.observations.iter_mut().enumerate() {
             fact.id = DomainObservationId(index as u64);

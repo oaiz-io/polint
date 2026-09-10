@@ -43,7 +43,7 @@ pub(super) fn normalize_scope_facts(
             fact.stable_key = fact.computed_stable_key(interner);
         }
     }
-    facts.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    facts.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 }
 
 pub(super) fn normalize_semantic_import_facts(
@@ -56,7 +56,7 @@ pub(super) fn normalize_semantic_import_facts(
                 crate::symbol_graph::semantic::semantic_import_computed_stable_key(fact, interner);
         }
     }
-    facts.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    facts.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 }
 
 pub(super) fn normalize_export_facts(
@@ -68,7 +68,7 @@ pub(super) fn normalize_export_facts(
             fact.stable_key = fact.computed_stable_key(interner);
         }
     }
-    facts.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    facts.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 }
 
 pub(super) fn normalize_alias_facts(
@@ -80,7 +80,7 @@ pub(super) fn normalize_alias_facts(
             fact.stable_key = fact.computed_stable_key(interner);
         }
     }
-    facts.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    facts.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 }
 
 pub(super) fn normalize_resolution_facts(
@@ -92,7 +92,7 @@ pub(super) fn normalize_resolution_facts(
             fact.stable_key = fact.computed_stable_key(interner);
         }
     }
-    facts.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    facts.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 }
 
 pub(super) fn normalize_generated_symbol_facts(
@@ -104,7 +104,7 @@ pub(super) fn normalize_generated_symbol_facts(
             fact.stable_key = fact.computed_stable_key(interner);
         }
     }
-    facts.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    facts.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 }
 
 pub(super) fn normalize_stable_export_identities(
@@ -116,7 +116,7 @@ pub(super) fn normalize_stable_export_identities(
             fact.stable_key = fact.computed_stable_key(interner);
         }
     }
-    facts.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    facts.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 }
 
 pub(super) fn source_file_metadata(

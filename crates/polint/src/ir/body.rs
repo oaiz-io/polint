@@ -122,40 +122,40 @@ pub struct MirOutput {
 impl MirOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.bodies
-            .sort_by_cached_key(|body| interner.resolve(body.stable_key));
-        self.blocks.sort_by_cached_key(|block| {
-            (
-                block.body,
-                block.ordinal,
-                interner.resolve(block.stable_key),
-            )
+            .sort_by(|body, other| interner.compare_canonical(body.stable_key, other.stable_key));
+        self.blocks.sort_by(|block, other| {
+            block
+                .body
+                .cmp(&other.body)
+                .then_with(|| block.ordinal.cmp(&other.ordinal))
+                .then_with(|| interner.compare_canonical(block.stable_key, other.stable_key))
         });
-        self.statements.sort_by_cached_key(|statement| {
-            (
-                statement.body,
-                statement.ordinal,
-                interner.resolve(statement.stable_key),
-            )
+        self.statements.sort_by(|statement, other| {
+            statement
+                .body
+                .cmp(&other.body)
+                .then_with(|| statement.ordinal.cmp(&other.ordinal))
+                .then_with(|| interner.compare_canonical(statement.stable_key, other.stable_key))
         });
-        self.terminators.sort_by_cached_key(|terminator| {
-            (
-                terminator.body,
-                terminator.ordinal,
-                interner.resolve(terminator.stable_key),
-            )
+        self.terminators.sort_by(|terminator, other| {
+            terminator
+                .body
+                .cmp(&other.body)
+                .then_with(|| terminator.ordinal.cmp(&other.ordinal))
+                .then_with(|| interner.compare_canonical(terminator.stable_key, other.stable_key))
         });
         self.places
-            .sort_by_cached_key(|place| interner.resolve(place.stable_key));
+            .sort_by(|place, other| interner.compare_canonical(place.stable_key, other.stable_key));
         self.place_types.sort_by_key(|fact| fact.place);
-        self.operations.sort_by_cached_key(|operation| {
-            (
-                operation.body,
-                operation.ordinal,
-                interner.resolve(operation.stable_key),
-            )
+        self.operations.sort_by(|operation, other| {
+            operation
+                .body
+                .cmp(&other.body)
+                .then_with(|| operation.ordinal.cmp(&other.ordinal))
+                .then_with(|| interner.compare_canonical(operation.stable_key, other.stable_key))
         });
         self.unsupported
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self
     }
 }

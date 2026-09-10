@@ -16,12 +16,14 @@ pub struct PointsToOutput {
 impl PointsToOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.constraints.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.sets.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, row) in self.constraints.iter_mut().enumerate() {
             row.id = PointsToConstraintId(index as u64);
