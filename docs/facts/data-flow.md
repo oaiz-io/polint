@@ -80,6 +80,13 @@ Phase 58 backs these patterns:
 - `SinkPattern::call("target")` matches exact call target candidates from
   existing call/refined-call facts and checks whether a source reaches an
   argument or receiver place for that call.
+- `SinkPattern::call_argument("target", position)` narrows the same match to one
+  zero-based argument position. Positions index the call's source-order
+  arguments and never its receiver, so "reaches *some* argument" becomes
+  "reaches argument N" without text-matching argument names. Variadic packing is
+  not modelled: a position past a variadic callee's fixed parameters names
+  whichever source argument sits there. The position participates in the query
+  digest, so results for different positions never share a cache entry.
 - `SinkPattern::logger()` matches a small heuristic logger target family such as
   `console.log`, `log.Print`, `log.Printf`, `log.Println`, `logger.info`,
   `logger.warn`, and `logger.error`.

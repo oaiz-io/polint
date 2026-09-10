@@ -98,7 +98,12 @@ Every result carries `reason` evidence naming what decided it:
 | `guard_does_not_dominate` | Violation: the guard runs on only some paths to the operation. |
 | `result_never_tested` | Violation: the guard ran but nothing tested its returned error. |
 | `error_path_reaches_operation` | Violation: the error was tested but the error path falls through to the operation. |
+| `identity_mismatch` | Violation: the guard's argument and the operation's argument provably do not alias. |
+| `identity_reassigned` | Violation when the rebinding source is a provably different root, Unknown otherwise. |
 | `ambiguous_error_definition` | Unknown: the tested place carried the guard's error and was then overwritten. |
+| `alias_indeterminate` | Unknown: no decisive alias answer relates the two arguments. |
+| `argument_position_out_of_range` | Unknown: a bound position is past the call's argument list. |
+| `cross_body_identity` | Unknown: the guard and the operation are not in one MIR body. |
 | `partial_nil_test` | Unknown: the comparison does not prove non-nil on its other edge. |
 | `unrecognized_error_test` | Unknown: the branch on the guard's error is not a nil comparison. |
 | `missing_branch_block` | Unknown: the error test has no CFG node. |
@@ -119,12 +124,44 @@ Every result carries `reason` evidence naming what decided it:
 4. the block the error edge enters cannot reach the operation's block in the
    normal-control view.
 
-It does **not** mean the guard authorized the value the operation consumed.
-Every covered result carries `identity_binding` evidence saying which identity
-claim it makes; without `argument_binding` that value is `unchecked`. A function
-that checks one actor and then acts on a different one is `Covered` with
-`identity_binding = unchecked`, which is why a rule that cares about identity
-must set `argument_binding`.
+It does **not**, on its own, mean the guard authorized the value the operation
+consumed. Every covered result carries `identity_binding` evidence saying which
+identity claim it makes; without `argument_binding` that value is `unchecked`,
+and a function that checks one actor and then acts on a different one is
+`Covered` with `identity_binding = unchecked`.
+
+### Argument Identity
+
+`GuardQuery::argument_binding` relates one guard argument to one protected-call
+argument by zero-based source position:
+
+```rust
+query.argument_binding = Some(ArgumentBinding::new(1, 1));
+```
+
+The query then answers identity with the cheapest sufficient evidence:
+
+| `identity_binding` | Established by |
+|---|---|
+| `same_place` | The two arguments are the same place. |
+| `projection_extension` | The consumed place is a projection of the authorized one, such as `actor.TenantID` after `actor`. |
+| `must_alias` | An alias answer says the two places must alias. |
+
+A `NoAlias` answer refutes the binding (`identity_mismatch`). Every other alias
+answer — may-alias, partial-alias, unknown, or **no row at all** — is
+`alias_indeterminate`, not coverage. In real Go that is a common answer:
+interface receivers, method values, and struct-embedded actors all depend on
+points-to precision the engine does not have.
+
+Alias answers are flow-insensitive, so a bound identity is checked again against
+the operations between the guard and the protected call. A write to either
+bound place's root there answers `identity_reassigned`: a violation when the
+write's source is a place with a provably different root, unknown otherwise.
+
+Positions index a call's source-order arguments and never its receiver. Variadic
+packing is not modelled, so a position past a variadic callee's fixed parameters
+names whichever source argument sits there. Cross-package identity is not
+attempted.
 
 ### Documented Limits
 

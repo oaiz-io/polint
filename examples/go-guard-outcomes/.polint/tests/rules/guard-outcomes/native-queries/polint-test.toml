@@ -53,18 +53,23 @@ severity = "warn"
 message_contains = "Guard outcome: unknown."
 range_start_line = 109
 
+# authorizesDifferentActor: the guard ran and its error was checked, but it
+# authorized a different actor than the operation consumed. No alias row relates
+# the two places, so the identity claim is explicitly undecided.
 [[expect.diagnostic]]
 rule_id = "local/guard-outcomes"
 file = "cases.go"
-severity = "info"
-message_contains = "Guard outcome: covered."
+severity = "warn"
+message_contains = "Guard outcome: unknown."
 range_start_line = 118
 
+# replacesActor: the authorized place was rebound from a provably different root
+# between the guard and the operation.
 [[expect.diagnostic]]
 rule_id = "local/guard-outcomes"
 file = "cases.go"
-severity = "info"
-message_contains = "Guard outcome: covered."
+severity = "error"
+message_contains = "Guard outcome: violation."
 range_start_line = 128
 
 [[expect.diagnostic]]

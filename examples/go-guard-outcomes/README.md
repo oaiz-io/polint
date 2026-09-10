@@ -8,7 +8,8 @@ violation list.
 function in [`cases.go`](cases.go) is one control-flow shape. The rule sets
 `require_checked_error = true`, so a covered operation needs a guard whose block
 dominates it, a nil-comparison branch on the guard's returned error, and an error
-edge that cannot reach the operation.
+edge that cannot reach the operation. It also sets `argument_binding`, so a
+covered operation must additionally be the one the guard authorized.
 
 Run it:
 
@@ -28,18 +29,27 @@ polint test --rule local/guard-outcomes
 | `conditionalGuard` | violation | `guard_does_not_dominate` |
 | `logsErrorWithoutExit` | violation | `error_path_reaches_operation` |
 | `checksDifferentError` | unknown | `ambiguous_error_definition` |
-| `authorizesDifferentActor` | covered | control flow only; identity unchecked |
-| `replacesActor` | covered | control flow only; identity unchecked |
+| `authorizesDifferentActor` | unknown | `alias_indeterminate` |
+| `replacesActor` | violation | `identity_reassigned` |
 | `guardInUnusedClosure` | violation | `guard_does_not_dominate` |
 | `validTransactionCallback` | covered | `checked_error_exits` |
 | `aliasTenantFlow` | violation | `guard_missing` |
 | `unrelatedNearbyTenant` | violation | `guard_missing` |
 
-`authorizesDifferentActor` and `replacesActor` are the honest limit of the
-control dimension: the guard runs and its error is checked, but it authorized a
-*different* value than the one the operation consumed. Every covered result
-carries `identity_binding` evidence saying which — `unchecked` unless the query
-sets `argument_binding`. See
+`authorizesDifferentActor` and `replacesActor` are where identity binding earns
+its place. On control flow alone both are *covered*: the guard runs and its error
+is checked. The rule sets `argument_binding = (1, 1)`, so the query also asks
+whether the authorized actor is the consumed actor.
+
+- `replacesActor` is refuted: `actor = other` between the guard and the
+  operation rebinds the authorized place from a provably different root.
+- `authorizesDifferentActor` is undecided: the two places are distinct and no
+  alias answer relates them, so the query reports `alias_indeterminate` rather
+  than guessing. That is the common real-world answer, and it is still a strict
+  improvement over claiming coverage.
+
+Every covered result carries `identity_binding` evidence saying how identity was
+established — `unchecked` when the query sets no `argument_binding`. See
 [docs/facts/control-flow.md](../../docs/facts/control-flow.md).
 
 `guardInUnusedClosure` reports `guard_does_not_dominate` rather than

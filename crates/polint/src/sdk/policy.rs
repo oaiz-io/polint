@@ -406,6 +406,36 @@ pub struct GuardQuery {
     /// ordering-plus-dominance meaning. Defaults to `false`, which proves
     /// coverage on the ordering-plus-dominance dimension alone.
     pub require_checked_error: bool,
+    /// Relate one guard argument to one protected-call argument.
+    ///
+    /// Only `guard_outcomes` reads this. `None` (the default) leaves identity
+    /// explicitly unchecked, and covered results say so through their
+    /// `identity_binding` evidence.
+    pub argument_binding: Option<ArgumentBinding>,
+}
+
+/// Which guard argument must match which protected-call argument.
+///
+/// Positions are zero-based over each call's source-order arguments and never
+/// name the receiver.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ArgumentBinding {
+    /// Position in the guard call's arguments.
+    pub guard_position: usize,
+    /// Position in the protected call's arguments.
+    pub event_position: usize,
+}
+
+impl ArgumentBinding {
+    /// Binds the guard argument at `guard_position` to the protected-call
+    /// argument at `event_position`.
+    pub fn new(guard_position: usize, event_position: usize) -> Self {
+        Self {
+            guard_position,
+            event_position,
+        }
+    }
 }
 
 impl GuardQuery {
@@ -419,6 +449,7 @@ impl GuardQuery {
             minimum_precision: PolicyPrecision::Conservative,
             report_unknown_coverage: false,
             require_checked_error: false,
+            argument_binding: None,
         }
     }
 
@@ -438,6 +469,7 @@ impl GuardQuery {
                 policy_precision_label(self.minimum_precision)
             ),
             format!("require_checked_error={}", self.require_checked_error),
+            encode_argument_binding(self.argument_binding),
         ])
     }
 
@@ -645,14 +677,32 @@ impl SourcePattern {
 pub struct SinkPattern {
     kind: SinkPatternKind,
     values: Vec<String>,
+    argument_position: Option<usize>,
 }
 
 impl SinkPattern {
     /// Matches a call sink by exact canonical target name.
+    ///
+    /// Any argument or receiver reaching the call is a sink.
     pub fn call(target: impl Into<String>) -> Self {
         Self {
             kind: SinkPatternKind::Call,
             values: vec![target.into()],
+            argument_position: None,
+        }
+    }
+
+    /// Matches a call sink, restricted to one zero-based argument position.
+    ///
+    /// Positions index the call's source-order arguments and never the
+    /// receiver. Variadic packing is not modelled, so a position past a
+    /// variadic callee's fixed parameters names whichever source argument sits
+    /// there.
+    pub fn call_argument(target: impl Into<String>, position: usize) -> Self {
+        Self {
+            kind: SinkPatternKind::Call,
+            values: vec![target.into()],
+            argument_position: Some(position),
         }
     }
 
@@ -661,6 +711,7 @@ impl SinkPattern {
         Self {
             kind: SinkPatternKind::Logger,
             values: Vec::new(),
+            argument_position: None,
         }
     }
 
@@ -670,6 +721,10 @@ impl SinkPattern {
 
     pub(crate) fn values(&self) -> &[String] {
         &self.values
+    }
+
+    pub(crate) fn argument_position(&self) -> Option<usize> {
+        self.argument_position
     }
 }
 
@@ -814,11 +869,25 @@ fn encode_source_pattern(label: &str, pattern: &SourcePattern) -> String {
 
 fn encode_sink_pattern(label: &str, pattern: &SinkPattern) -> String {
     format!(
-        "{}=kind:{};values:{}",
+        "{}=kind:{};values:{};argument_position:{}",
         encode_str(label),
         sink_pattern_kind_label(pattern.kind),
-        encode_string_set(&pattern.values)
+        encode_string_set(&pattern.values),
+        pattern
+            .argument_position
+            .map(|position| position.to_string())
+            .unwrap_or_else(|| "any".to_string())
     )
+}
+
+fn encode_argument_binding(binding: Option<ArgumentBinding>) -> String {
+    match binding {
+        Some(binding) => format!(
+            "argument_binding={}:{}",
+            binding.guard_position, binding.event_position
+        ),
+        None => "argument_binding=none".to_string(),
+    }
 }
 
 fn encode_guard_pattern(label: &str, pattern: &GuardPattern) -> String {

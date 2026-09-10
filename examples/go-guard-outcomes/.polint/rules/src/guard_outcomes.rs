@@ -20,6 +20,10 @@ pub(crate) fn guard_outcomes(ctx: &mut RuleCtx<'_>, control: ControlFlow<'_>) ->
         GuardPattern::call_any([GUARD]),
     );
     query.require_checked_error = true;
+    // CheckAccess(ctx, actor) authorizes argument 1; SaveRecord(ctx, actor, record)
+    // consumes argument 1. Binding them is what separates "a guard ran" from
+    // "the guard authorized this actor".
+    query.argument_binding = Some(ArgumentBinding::new(1, 1));
 
     let mut diagnostics = Vec::new();
     for result in control.guard_outcomes(query) {

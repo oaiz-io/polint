@@ -1,3 +1,4 @@
+use crate::analysis::aliases::facts::{AliasOperand, AliasStatus};
 use crate::analysis::calls::facts::{CallCallee, CallPrecision, CallSiteFact, CallTargetStatus};
 use crate::analysis::cfg::facts::{CfgEdgeKind, CfgView};
 use crate::analysis::cfg::ids::BasicBlockId;
@@ -18,10 +19,11 @@ use crate::analysis::reachability::facts::{ReachabilityRootFact, RootKind};
 use crate::analysis::refined_calls::facts::{RefinedCallConfidence, RefinedCallEdgeFact};
 use crate::core::{AnalysisDb, FileId, FunctionFact, FunctionId};
 use crate::sdk::policy::{
-    BarrierPattern, BarrierPatternKind, EventPattern, EventPatternKind, FlowQuery, GuardPattern,
-    GuardPatternKind, GuardQuery, LifecycleQuery, PolicyConfidence, PolicyEvidenceEdgeKind,
-    PolicyOperation, PolicyOutcome, PolicyPrecision, PolicyResult, PolicyStatus, PolicyViolation,
-    ReachQuery, SinkPattern, SinkPatternKind, SourcePattern, SourcePatternKind,
+    ArgumentBinding, BarrierPattern, BarrierPatternKind, EventPattern, EventPatternKind, FlowQuery,
+    GuardPattern, GuardPatternKind, GuardQuery, LifecycleQuery, PolicyConfidence,
+    PolicyEvidenceEdgeKind, PolicyOperation, PolicyOutcome, PolicyPrecision, PolicyResult,
+    PolicyStatus, PolicyViolation, ReachQuery, SinkPattern, SinkPatternKind, SourcePattern,
+    SourcePatternKind,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -436,10 +438,19 @@ const REASON_CHECKED_ERROR_EXITS: &str = "checked_error_exits";
 /// Budget label for the bounded error-path search.
 const BUDGET_ERROR_PATH_SEARCH: &str = "guard_outcome_error_path_budget";
 const BUDGET_GUARD_OUTCOME_QUERY: &str = "guard_outcome_query_budget";
-/// Identity binding a covered result claims. Slice-scoped: without an
-/// `argument_binding` the query never relates the guard's argument to the
-/// operation's, so a covered result says so instead of implying it checked.
+/// Identity binding a covered result claims. Without an `argument_binding` the
+/// query never relates the guard's argument to the operation's, so a covered
+/// result says so instead of implying it checked.
 const IDENTITY_UNCHECKED: &str = "unchecked";
+const IDENTITY_SAME_PLACE: &str = "same_place";
+const IDENTITY_PROJECTION_EXTENSION: &str = "projection_extension";
+const IDENTITY_MUST_ALIAS: &str = "must_alias";
+/// Reason an identity binding was refuted or could not be decided.
+const REASON_IDENTITY_MISMATCH: &str = "identity_mismatch";
+const REASON_IDENTITY_REASSIGNED: &str = "identity_reassigned";
+const REASON_ALIAS_INDETERMINATE: &str = "alias_indeterminate";
+const REASON_ARGUMENT_POSITION_OUT_OF_RANGE: &str = "argument_position_out_of_range";
+const REASON_CROSS_BODY_IDENTITY: &str = "cross_body_identity";
 /// Blocks the bounded error-path search may visit before giving up.
 const MAX_ERROR_PATH_BLOCKS: usize = 4_096;
 
@@ -478,8 +489,15 @@ fn guard_outcome_results(
                 truncated = true;
                 break 'functions;
             }
-            let verdict =
-                guard_verdict(function_events, position, event, query, &dominators, &index);
+            let verdict = guard_verdict(
+                db,
+                function_events,
+                position,
+                event,
+                query,
+                &dominators,
+                &index,
+            );
             results.push(guard_outcome_result(
                 db,
                 event,
@@ -545,6 +563,11 @@ impl GuardVerdict {
         self
     }
 
+    fn with_identity(mut self, identity: &'static str) -> Self {
+        self.identity = identity;
+        self
+    }
+
     /// Preference when several guards answer for the same operation: a proof
     /// wins, and "could not decide" outranks a refutation so one unevaluated
     /// guard never turns into a claimed violation.
@@ -558,6 +581,7 @@ impl GuardVerdict {
 }
 
 fn guard_verdict(
+    db: &AnalysisDb,
     function_events: &[&ControlCallEvent],
     position: usize,
     event: &ControlCallEvent,
@@ -570,7 +594,7 @@ fn guard_verdict(
         .iter()
         .filter(|candidate| guard_matches_event(candidate, &query.guard))
     {
-        let verdict = guard_candidate_verdict(candidate, event, query, dominators, index);
+        let verdict = guard_candidate_verdict(db, candidate, event, query, dominators, index);
         if best.is_none_or(|current| verdict.rank() < current.rank()) {
             best = Some(verdict);
         }
@@ -592,6 +616,7 @@ fn guard_verdict(
 }
 
 fn guard_candidate_verdict(
+    db: &AnalysisDb,
     candidate: &ControlCallEvent,
     event: &ControlCallEvent,
     query: &GuardQuery,
@@ -608,10 +633,195 @@ fn guard_candidate_verdict(
         }
         DominanceAnswer::Holds => {}
     }
-    if !query.require_checked_error {
-        return GuardVerdict::covered(REASON_GUARD_DOMINATES_OPERATION);
+    let control = if query.require_checked_error {
+        checked_error_verdict(candidate, event, dominators, index)
+    } else {
+        GuardVerdict::covered(REASON_GUARD_DOMINATES_OPERATION)
+    };
+    let Some(binding) = query.argument_binding else {
+        return control;
+    };
+    if control.outcome != PolicyOutcome::Covered {
+        return control;
     }
-    checked_error_verdict(candidate, event, dominators, index)
+    match identity_answer(db, candidate, event, binding, index) {
+        IdentityAnswer::Bound(identity) => control.with_identity(identity),
+        IdentityAnswer::Mismatch(reason) => {
+            GuardVerdict::violation(reason, DOMINANCE_FROM_RELATION).with_identity(reason)
+        }
+        IdentityAnswer::Indeterminate(reason) => {
+            GuardVerdict::unknown(reason, DOMINANCE_FROM_RELATION).with_identity(reason)
+        }
+    }
+}
+
+/// Whether the value the guard authorized is the value the operation consumed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdentityAnswer {
+    /// Bound, carrying the label naming how it was established.
+    Bound(&'static str),
+    /// Refuted: the two arguments are different values.
+    Mismatch(&'static str),
+    /// Could not be decided; the reason names what was missing.
+    Indeterminate(&'static str),
+}
+
+/// Relates one guard argument to one protected-call argument.
+///
+/// Cheapest evidence first: the same place, then a projection of the same
+/// place, then a must-alias answer. A flow-sensitivity gate runs afterwards
+/// because alias answers are flow-insensitive and say nothing about *when* two
+/// places held the same value.
+fn identity_answer(
+    db: &AnalysisDb,
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    binding: ArgumentBinding,
+    index: &GuardOutcomeIndex<'_>,
+) -> IdentityAnswer {
+    let (Some(guard_argument), Some(event_argument)) = (
+        candidate.arguments.get(binding.guard_position).copied(),
+        event.arguments.get(binding.event_position).copied(),
+    ) else {
+        return IdentityAnswer::Indeterminate(REASON_ARGUMENT_POSITION_OUT_OF_RANGE);
+    };
+
+    let bound = match place_relation(db, guard_argument, event_argument) {
+        PlaceRelation::Same => IdentityAnswer::Bound(IDENTITY_SAME_PLACE),
+        PlaceRelation::ProjectionExtension => IdentityAnswer::Bound(IDENTITY_PROJECTION_EXTENSION),
+        PlaceRelation::Unrelated => match alias_status(db, guard_argument, event_argument) {
+            Some(AliasStatus::MustAlias) => IdentityAnswer::Bound(IDENTITY_MUST_ALIAS),
+            Some(AliasStatus::NoAlias) => IdentityAnswer::Mismatch(REASON_IDENTITY_MISMATCH),
+            _ => IdentityAnswer::Indeterminate(REASON_ALIAS_INDETERMINATE),
+        },
+    };
+    let IdentityAnswer::Bound(_) = bound else {
+        return bound;
+    };
+
+    match reassignment_between(db, candidate, event, guard_argument, event_argument, index) {
+        Reassignment::None => bound,
+        Reassignment::FromDistinctRoot => IdentityAnswer::Mismatch(REASON_IDENTITY_REASSIGNED),
+        Reassignment::Unknown => IdentityAnswer::Indeterminate(REASON_IDENTITY_REASSIGNED),
+        Reassignment::Unreadable => IdentityAnswer::Indeterminate(REASON_CROSS_BODY_IDENTITY),
+    }
+}
+
+/// How two argument places relate structurally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlaceRelation {
+    Same,
+    /// The consumed place is a projection of the authorized one, such as
+    /// `actor.TenantID` after `actor` was authorized.
+    ProjectionExtension,
+    Unrelated,
+}
+
+fn place_relation(db: &AnalysisDb, authorized: PlaceId, consumed: PlaceId) -> PlaceRelation {
+    if authorized == consumed {
+        return PlaceRelation::Same;
+    }
+    let (Some(authorized), Some(consumed)) =
+        (place_by_id(db, authorized), place_by_id(db, consumed))
+    else {
+        return PlaceRelation::Unrelated;
+    };
+    if authorized.root == consumed.root
+        && consumed.projections.len() > authorized.projections.len()
+        && consumed.projections.starts_with(&authorized.projections)
+    {
+        return PlaceRelation::ProjectionExtension;
+    }
+    PlaceRelation::Unrelated
+}
+
+fn alias_status(db: &AnalysisDb, left: PlaceId, right: PlaceId) -> Option<AliasStatus> {
+    let wanted = [
+        (AliasOperand::Place(left), AliasOperand::Place(right)),
+        (AliasOperand::Place(right), AliasOperand::Place(left)),
+    ];
+    db.alias_answers()
+        .iter()
+        .find(|answer| wanted.contains(&(answer.left, answer.right)))
+        .map(|answer| answer.status)
+}
+
+/// Whether either bound place's root was written between the guard and the
+/// protected call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reassignment {
+    None,
+    /// The write's source is a place with a different root, so the authorized
+    /// value is provably not the consumed one.
+    FromDistinctRoot,
+    /// A write happened but its source cannot be attributed.
+    Unknown,
+    /// The two calls are not in one body, so no ordered walk exists.
+    Unreadable,
+}
+
+fn reassignment_between(
+    db: &AnalysisDb,
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    guard_argument: PlaceId,
+    event_argument: PlaceId,
+    index: &GuardOutcomeIndex<'_>,
+) -> Reassignment {
+    if candidate.body != event.body {
+        return Reassignment::Unreadable;
+    }
+    let Some(operations) = index.operations.get(&candidate.body) else {
+        return Reassignment::Unreadable;
+    };
+    let (Some(start), Some(end)) = (
+        operations
+            .iter()
+            .position(|operation| operation.id == candidate.operation),
+        operations
+            .iter()
+            .position(|operation| operation.id == event.operation),
+    ) else {
+        return Reassignment::Unreadable;
+    };
+    if end <= start {
+        return Reassignment::None;
+    }
+
+    let roots = [guard_argument, event_argument]
+        .into_iter()
+        .filter_map(|place| place_by_id(db, place).map(|place| place.root.clone()))
+        .collect::<Vec<_>>();
+    let mut answer = Reassignment::None;
+    for operation in &operations[start + 1..end] {
+        let Some((written, value)) = assigned_place_and_value(operation) else {
+            continue;
+        };
+        let Some(written) = place_by_id(db, written) else {
+            continue;
+        };
+        if !roots.contains(&written.root) {
+            continue;
+        }
+        answer = match value {
+            Some(MirValue::Place(source)) => match place_by_id(db, *source) {
+                Some(source) if source.root != written.root => Reassignment::FromDistinctRoot,
+                _ => Reassignment::Unknown,
+            },
+            _ => Reassignment::Unknown,
+        };
+    }
+    answer
+}
+
+fn assigned_place_and_value(operation: &MirOperation) -> Option<(PlaceId, Option<&MirValue>)> {
+    match &operation.kind {
+        MirOperationKind::Assign { place, value, .. }
+        | MirOperationKind::Bind { place, value }
+        | MirOperationKind::Write { place, value } => Some((*place, Some(value))),
+        MirOperationKind::Call { return_place, .. } => Some((*return_place, None)),
+        _ => None,
+    }
 }
 
 /// Decides whether the guard's returned error is tested and its error path
@@ -1351,7 +1561,7 @@ fn push_flow_sinks_for_site(
     };
     let sink_heuristic = pattern.kind() == SinkPatternKind::Logger;
 
-    for place in site.arguments.iter().copied().chain(site.receiver) {
+    for place in sink_places_for_site(pattern, site) {
         for node in nodes_for_place(store, place) {
             sinks.insert(
                 (site.id, node.id),
@@ -1366,6 +1576,22 @@ fn push_flow_sinks_for_site(
                 },
             );
         }
+    }
+}
+
+/// Places a sink pattern watches at one call site.
+///
+/// A positional pattern names exactly one source-order argument and never the
+/// receiver; an unpositioned one watches every argument plus the receiver.
+fn sink_places_for_site(pattern: &SinkPattern, site: &CallSiteFact) -> Vec<PlaceId> {
+    match pattern.argument_position() {
+        Some(position) => site.arguments.get(position).copied().into_iter().collect(),
+        None => site
+            .arguments
+            .iter()
+            .copied()
+            .chain(site.receiver)
+            .collect(),
     }
 }
 
@@ -2656,6 +2882,8 @@ fn confidence_label(confidence: RefinedCallConfidence) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::aliases::facts::{AliasAnswerFact, AliasPrecision, AliasReason};
+    use crate::analysis::aliases::store::AliasOutput;
     use crate::analysis::calls::facts::{
         CallAlgorithm, CallEdgeKind, CallProvenance, CallSyntaxKind, CallTargetFact,
         UnresolvedCallReason,
@@ -2676,8 +2904,8 @@ mod tests {
     };
     use crate::analysis::data_flow::store::DataFlowOutput;
     use crate::analysis::ids::{
-        CallTargetId, DataFlowEdgeId, DataFlowModelId, DataFlowNodeId, MirBodyId, MirOpId,
-        MirPredicateId, PlaceId, ReachabilityRootId, RefinedCallEdgeId,
+        AliasAnswerId, CallTargetId, DataFlowEdgeId, DataFlowModelId, DataFlowNodeId, MirBodyId,
+        MirOpId, MirPredicateId, PlaceId, ReachabilityRootId, RefinedCallEdgeId,
     };
     use crate::analysis::mir::body::{MirBody, MirOutput, MirStatus};
     use crate::analysis::mir::op::{AssignMode, BranchNilTest, MirOperation, MirOperationKind};
@@ -2689,6 +2917,7 @@ mod tests {
     };
     use crate::analysis::refined_calls::facts::{RefinedCallTier, RefinedCallValidation};
     use crate::analysis::refined_calls::store::RefinedCallOutput;
+    use crate::analysis::types::store::TypeValueAliasOutput;
     use crate::core::{FileId, FunctionFact, Language, Span};
     use std::path::PathBuf;
 
@@ -3408,6 +3637,183 @@ mod tests {
     }
 
     #[test]
+    fn guard_outcome_binds_same_place_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::SamePlace,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_SAME_PLACE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_binds_projection_extension_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::ProjectionExtension,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_PROJECTION_EXTENSION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_binds_must_alias_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::MustAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_MUST_ALIAS
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_no_alias_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::NoAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_IDENTITY_MISMATCH
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_for_may_alias_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::MayAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ALIAS_INDETERMINATE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_no_alias_row_relates_the_arguments() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::NoAliasRow,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ALIAS_INDETERMINATE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_identity_reassigned_from_distinct_root() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Reassigned,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_IDENTITY_REASSIGNED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_for_argument_position_out_of_range() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::SamePlace,
+            ..GuardShape::default()
+        });
+        let mut query = checked_error_query();
+        query.argument_binding = Some(ArgumentBinding::new(4, 0));
+
+        let results = guard_outcomes(&db, query);
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ARGUMENT_POSITION_OUT_OF_RANGE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_without_argument_binding_leaves_identity_unchecked() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::NoAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_UNCHECKED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_query_digest_changes_with_argument_binding() {
+        let baseline = checked_error_query();
+        let mut bound = baseline.clone();
+        bound.argument_binding = Some(ArgumentBinding::new(0, 0));
+
+        assert_ne!(
+            baseline.outcome_query_digest(),
+            bound.outcome_query_digest()
+        );
+    }
+
+    #[test]
+    fn guard_outcome_query_digest_changes_with_argument_binding_positions() {
+        let mut left = checked_error_query();
+        left.argument_binding = Some(ArgumentBinding::new(0, 1));
+        let mut right = checked_error_query();
+        right.argument_binding = Some(ArgumentBinding::new(1, 0));
+
+        assert_ne!(left.outcome_query_digest(), right.outcome_query_digest());
+    }
+
+    #[test]
     fn guard_outcome_query_digest_differs_from_missing_guard_digest() {
         let query = checked_error_query();
 
@@ -3494,6 +3900,55 @@ mod tests {
 
         assert_eq!(violations.len(), 2);
         assert_ne!(violations[0].stable_key(), violations[1].stable_key());
+    }
+
+    #[test]
+    fn data_flow_forbidden_call_argument_matches_the_named_position() {
+        let db = data_flow_policy_db_with_two_sink_arguments();
+
+        let violations = forbidden_flows(
+            &db,
+            FlowQuery::new(
+                SourcePattern::http_request(),
+                SinkPattern::call_argument("dangerous", 1),
+            ),
+        );
+
+        assert_eq!(violations.len(), 1);
+    }
+
+    #[test]
+    fn data_flow_forbidden_call_argument_skips_other_positions() {
+        let db = data_flow_policy_db_with_two_sink_arguments();
+
+        let violations = forbidden_flows(
+            &db,
+            FlowQuery::new(
+                SourcePattern::http_request(),
+                SinkPattern::call_argument("dangerous", 0),
+            ),
+        );
+
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn data_flow_query_digest_changes_with_sink_argument_position() {
+        let left = FlowQuery::new(
+            SourcePattern::http_request(),
+            SinkPattern::call_argument("dangerous", 0),
+        );
+        let right = FlowQuery::new(
+            SourcePattern::http_request(),
+            SinkPattern::call_argument("dangerous", 1),
+        );
+        let any = FlowQuery::new(
+            SourcePattern::http_request(),
+            SinkPattern::call("dangerous"),
+        );
+
+        assert_ne!(left.query_digest(), right.query_digest());
+        assert_ne!(left.query_digest(), any.query_digest());
     }
 
     #[test]
@@ -3830,6 +4285,12 @@ mod tests {
         query
     }
 
+    fn bound_identity_query() -> GuardQuery {
+        let mut query = checked_error_query();
+        query.argument_binding = Some(ArgumentBinding::new(0, 0));
+        query
+    }
+
     fn outcome_evidence(result: &PolicyResult, label: &str, value: &str) -> bool {
         result
             .evidence()
@@ -3861,6 +4322,25 @@ mod tests {
         guard_in_other_body: bool,
         /// An unrelated call placed in a separate enclosing function.
         outer_body_call: Option<&'static str>,
+        /// How the guard's argument relates to the operation's argument.
+        identity: IdentityShape,
+    }
+
+    /// Relationship between the authorized argument and the consumed argument.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum IdentityShape {
+        /// Neither call records arguments.
+        None,
+        /// Both calls pass the same place.
+        SamePlace,
+        /// The operation consumes a field of the authorized place.
+        ProjectionExtension,
+        /// The two places are distinct and carry the given alias answer.
+        Alias(AliasStatus),
+        /// Distinct places with no alias row at all.
+        NoAliasRow,
+        /// Same place, rebound from another root between guard and operation.
+        Reassigned,
     }
 
     impl Default for GuardShape {
@@ -3874,6 +4354,7 @@ mod tests {
                 dominator_rows: true,
                 guard_in_other_body: false,
                 outer_body_call: None,
+                identity: IdentityShape::None,
             }
         }
     }
@@ -3952,6 +4433,16 @@ mod tests {
         let error_place = push_place("err");
         let event_result = push_place("eventResult");
         let outer_result = push_place("outerResult");
+        let actor = push_place("actor");
+        let other = push_place("other");
+        let actor_tenant = push_projection_place(&mut places, &interner, file, handler, "actor");
+
+        let (guard_arguments, event_arguments) = match shape.identity {
+            IdentityShape::None => (Vec::new(), Vec::new()),
+            IdentityShape::SamePlace | IdentityShape::Reassigned => (vec![actor], vec![actor]),
+            IdentityShape::ProjectionExtension => (vec![actor], vec![actor_tenant]),
+            IdentityShape::Alias(_) | IdentityShape::NoAliasRow => (vec![actor], vec![other]),
+        };
 
         let mut operations = Vec::new();
         let mut push_operation = |kind: MirOperationKind, body: MirBodyId, ordinal: u32| {
@@ -4019,6 +4510,19 @@ mod tests {
             ordinal += 1;
         }
 
+        if shape.identity == IdentityShape::Reassigned {
+            push_operation(
+                MirOperationKind::Assign {
+                    place: actor,
+                    value: MirValue::Place(other),
+                    mode: AssignMode::Overwrite,
+                },
+                guard_body,
+                ordinal,
+            );
+            ordinal += 1;
+        }
+
         let event_operation = push_operation(
             MirOperationKind::Call {
                 site: CallSiteId(1),
@@ -4057,9 +4561,11 @@ mod tests {
                 guard_operation,
                 "authorize",
             )
-            .with_result(guard_result),
+            .with_result(guard_result)
+            .with_arguments(guard_arguments),
             checked_error_call_site(1, file, handler, handler_body, event_operation, "dangerous")
-                .with_result(event_result),
+                .with_result(event_result)
+                .with_arguments(event_arguments),
         ];
         let mut targets = vec![
             call_target(0, CallSiteId(0), guard_owner, authorize),
@@ -4237,7 +4743,51 @@ mod tests {
         .expect("valid call facts");
         db.replace_refined_call_facts(RefinedCallOutput { edges: refined })
             .expect("valid refined call facts");
+        if let IdentityShape::Alias(status) = shape.identity {
+            let interner = db.stable_key_interner();
+            db.replace_type_value_alias_facts(TypeValueAliasOutput {
+                aliases: AliasOutput {
+                    answers: vec![AliasAnswerFact {
+                        id: AliasAnswerId(0),
+                        left: AliasOperand::Place(actor),
+                        right: AliasOperand::Place(other),
+                        status,
+                        reason: AliasReason::DisjointLocals,
+                        evidence: Vec::new(),
+                        precision: AliasPrecision::FlowInsensitive,
+                        stable_key: interner.intern("alias:answer:0"),
+                    }],
+                },
+                ..TypeValueAliasOutput::default()
+            });
+        }
         db
+    }
+
+    /// A place rooted at `name` with one field projection, used for the
+    /// `actor` / `actor.TenantID` prefix-extension shape.
+    fn push_projection_place(
+        places: &mut Vec<PlaceFact>,
+        interner: &crate::core::StableKeyInterner,
+        file: FileId,
+        function: FunctionId,
+        name: &str,
+    ) -> PlaceId {
+        let id = PlaceId(places.len() as u64);
+        places.push(PlaceFact {
+            id,
+            language: Language::Go,
+            file: Some(file),
+            function: Some(function),
+            root: PlaceRoot::Local {
+                function,
+                name: name.to_string(),
+            },
+            projections: vec![PlaceProjection::Field("TenantID".to_string())],
+            stable_key: interner.intern(format!("mir:place:{:05}", id.0)),
+            status: crate::analysis::places::PlaceStatus::Resolved,
+        });
+        id
     }
 
     fn checked_error_call_site(
@@ -4261,6 +4811,17 @@ mod tests {
     impl WithResult for CallSiteFact {
         fn with_result(mut self, result: PlaceId) -> Self {
             self.result = Some(result);
+            self
+        }
+    }
+
+    trait WithArguments {
+        fn with_arguments(self, arguments: Vec<PlaceId>) -> Self;
+    }
+
+    impl WithArguments for CallSiteFact {
+        fn with_arguments(mut self, arguments: Vec<PlaceId>) -> Self {
+            self.arguments = arguments;
             self
         }
     }
@@ -5032,6 +5593,46 @@ mod tests {
         db.replace_data_flow_facts(DataFlowOutput {
             nodes: data_flow_nodes(file, handler),
             edges,
+            models: vec![source_model()],
+            budgets: Vec::new(),
+        })
+        .expect("valid data-flow facts");
+        db
+    }
+
+    /// One `dangerous` call whose second argument carries the tainted place, so
+    /// a positional sink pattern can be checked against both positions.
+    fn data_flow_policy_db_with_two_sink_arguments() -> AnalysisDb {
+        let mut db = AnalysisDb::new();
+        let file = db.add_file(
+            PathBuf::from("src/main.go"),
+            "src/main.go".to_string(),
+            "package main\nfunc handler() { dangerous(other, input) }\n".to_string(),
+        );
+        let handler = push_test_function(&mut db, file, "handler", 1, false);
+        let dangerous = push_test_function(&mut db, file, "dangerous", 2, false);
+        let site = call_site_with_args(1, file, handler, "dangerous", vec![PlaceId(2), PlaceId(1)]);
+
+        db.replace_call_facts(CallOutput {
+            sites: vec![site.clone()],
+            targets: vec![call_target(1, site.id, handler, dangerous)],
+            unresolved: Vec::new(),
+        })
+        .expect("valid call facts");
+        db.replace_refined_call_facts(RefinedCallOutput {
+            edges: vec![refined_edge(1, site.id, handler, dangerous, "dangerous")],
+        })
+        .expect("valid refined call facts");
+        db.replace_data_flow_facts(DataFlowOutput {
+            nodes: data_flow_nodes(file, handler),
+            edges: vec![data_flow_edge(
+                0,
+                0,
+                1,
+                DataFlowEdgeKind::SourceIntroduction,
+                DataFlowStatus::Present,
+                Vec::new(),
+            )],
             models: vec![source_model()],
             budgets: Vec::new(),
         })
