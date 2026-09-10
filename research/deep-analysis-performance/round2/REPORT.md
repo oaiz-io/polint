@@ -298,3 +298,61 @@ asking the interner to hand the text back.
    the symbol and semantic sidecars remains a source-evidence hypothesis, not a
    measured gain; their pinned x/tools versions still differ (0.42.0 vs 0.45.0)
    and `NeedDeps` must stay.
+
+
+## Validation
+
+- `cargo clippy -p polint --all-targets --all-features --locked -- -D warnings`:
+  passed. The same command under each CI language-feature configuration
+  (`--no-default-features`, `--features lang-go`, `--features lang-typescript`):
+  passed.
+- `cargo fmt --all -- --check` and `cargo check -p polint --all-targets
+  --all-features --locked`: passed. Each of the two mechanism commits was checked
+  out into a scratch worktree and `cargo check`ed on its own, so the slices build
+  independently and not just as a set.
+- `cargo test -p polint --lib --all-features --locked`: **2,505 passed, 14
+  ignored, 0 failed** of the 2,519 tests in the suite. The single test not
+  reached, `eval::bench::sweep::tests::sweep_entry_point_skips_absent_checkouts_
+  without_failing`, re-analyses the whole scale corpora through the debug build;
+  it was still running after an hour on a host whose load average had spent much
+  of that time above 100, and was stopped rather than left to hold the session.
+  It passed in the earlier full run of the same mechanism.
+- An earlier full run of the same code, taken while the shared host was at load
+  20–35 with `rustc` processes being OOM-killed, failed two fixture determinism
+  tests (`eval_cfg_core_observes_required_families_and_determinism` and the
+  direct-calls equivalent). Both pass when run individually against that same
+  binary, and both pass in the quiet full run above. Their failure text names a
+  pre-existing duplicate-identity condition — "Fact metadata stable key conflict
+  detected for DomainObservation stable key" — produced by
+  `analysis_neutral/domains/store.rs::observation`, whose key is
+  `(source, slot, location, place)` with `place` falling back to the literal
+  `"none"` when a place is missing from `place_stable_keys`. That construction
+  site is on the unmigrated text path and is untouched by this branch.
+- **Accuracy is unchanged, proven by running the fixed gate at both revisions.**
+  `POLINT_REQUIRE_BENCH_CORPUS=1 POLINT_WRITE_GRAPH_BENCH=1
+  POLINT_GRAPH_BENCH_TIER=release cargo test -p polint --lib --all-features
+  --locked eval::external::tests::external_graph_baseline_reports_can_be_generated`
+  passes on this branch. Because `POLINT_WRITE_GRAPH_BENCH` regenerates
+  `research/evaluation-harness/baselines/persisted-graph-accuracy.json` in place,
+  the same command was also run in a scratch worktree at `4906af0e`, and the two
+  regenerate byte-identical accuracy columns:
+
+  | Suite | Recall | Precision | Edges observed | Unknowns |
+  |---|---:|---:|---:|---:|
+  | jelly-callgraph-micro, `4906af0e` | 0.6666666666666666 | 0.970472440944882 | 1,016 | 913 |
+  | jelly-callgraph-micro, this branch | 0.6666666666666666 | 0.970472440944882 | 1,016 | 913 |
+  | go-x-tools-rta-callgraph, `4906af0e` | 1.0 | 0.04993252361673414 | 10,016 | 0 |
+  | go-x-tools-rta-callgraph, this branch | 1.0 | 0.04993252361673414 | 10,016 | 0 |
+
+  Jelly F1 is 0.790430 on both, against the committed baseline's 0.790227 and a
+  0.005 tolerance. Only the cost columns differ, and in this branch's favour
+  (jelly `peak_rss_bytes` 1,422,745,600 → 1,360,035,840, Go 113,487,872 →
+  109,395,968). The regenerated file was reverted in both worktrees: **no
+  baseline, tolerance or gate is modified by this branch.** The committed
+  baseline's own accuracy columns already differ slightly from what either
+  revision regenerates, and its `reference` string still describes cost columns
+  the current writer no longer emits, so that drift predates this work.
+- Determinism: the interned key count is identical before and after on every
+  suite, and every provider output digest and the diagnostics digest is
+  byte-identical on jelly and Excalidraw (deep and syntactic, cold and all three
+  warm samples) and on Hugo when both binaries are run in the same session.
