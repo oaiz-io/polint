@@ -574,7 +574,9 @@ pub(crate) fn derive_import_to_package_edges(db: &AnalysisDb) -> Vec<ImportToPac
             {
                 candidates.extend(package_candidates_for_file(db, file));
             }
-            candidates.sort_by_cached_key(|package| interner.resolve(package.stable_key));
+            candidates.sort_by(|package, other| {
+                interner.compare_canonical(package.stable_key, other.stable_key)
+            });
             candidates.dedup_by_key(|package| package.id);
 
             let status = import_to_package_status(
@@ -758,7 +760,8 @@ fn semantic_imports_by_file_path<'a>(
     semantic_imports: &'a [SemanticImportFact],
 ) -> BTreeMap<(FileId, String), Vec<&'a SemanticImportFact>> {
     let mut imports = semantic_imports.iter().collect::<Vec<_>>();
-    imports.sort_by_key(|import| interner.resolve(import.stable_key));
+    imports
+        .sort_by(|import, other| interner.compare_canonical(import.stable_key, other.stable_key));
     let mut by_file_path = BTreeMap::new();
     for import in imports {
         if let Some(file) = import.file {

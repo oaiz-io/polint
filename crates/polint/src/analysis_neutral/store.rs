@@ -189,7 +189,7 @@ fn normalize_bodies(
     mut bodies: Vec<MirBody>,
     interner: &StableKeyInterner,
 ) -> (Vec<MirBody>, BTreeMap<MirBodyId, MirBodyId>) {
-    bodies.sort_by_cached_key(|body| interner.resolve(body.stable_key));
+    bodies.sort_by(|body, other| interner.compare_canonical(body.stable_key, other.stable_key));
     let mut body_ids = BTreeMap::new();
     for (index, body) in bodies.iter_mut().enumerate() {
         let new_id = MirBodyId(index as u64);
@@ -204,7 +204,7 @@ fn normalize_places(
     body_ids: &BTreeMap<MirBodyId, MirBodyId>,
     interner: &StableKeyInterner,
 ) -> Result<(Vec<PlaceFact>, BTreeMap<PlaceId, PlaceId>), AnalysisError> {
-    places.sort_by_cached_key(|place| interner.resolve(place.stable_key));
+    places.sort_by(|place, other| interner.compare_canonical(place.stable_key, other.stable_key));
     let mut place_ids = BTreeMap::new();
     for (index, place) in places.iter_mut().enumerate() {
         let new_id = PlaceId(index as u64);
@@ -222,7 +222,9 @@ fn normalize_operations(
     unsupported_ids: &BTreeMap<UnsupportedId, UnsupportedId>,
     interner: &StableKeyInterner,
 ) -> Result<(Vec<MirOperation>, BTreeMap<MirOpId, MirOpId>), AnalysisError> {
-    operations.sort_by_cached_key(|operation| interner.resolve(operation.stable_key));
+    operations.sort_by(|operation, other| {
+        interner.compare_canonical(operation.stable_key, other.stable_key)
+    });
     let mut operation_ids = BTreeMap::new();
     for (index, operation) in operations.iter_mut().enumerate() {
         let new_id = MirOpId(index as u64);
@@ -260,7 +262,7 @@ fn normalize_statements(
     statement_ids: &BTreeMap<MirStatementId, MirStatementId>,
     interner: &StableKeyInterner,
 ) -> Result<Vec<MirStatement>, AnalysisError> {
-    rows.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    rows.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     for row in &mut rows {
         row.id = remap_id(row.id, statement_ids, "dangling MIR statement id")?;
         row.body = remap_body_id(row.body, body_ids, "dangling MIR statement body")?;
@@ -282,7 +284,7 @@ fn normalize_terminators(
     terminator_ids: &BTreeMap<MirTerminatorId, MirTerminatorId>,
     interner: &StableKeyInterner,
 ) -> Result<Vec<MirTerminator>, AnalysisError> {
-    rows.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    rows.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     for row in &mut rows {
         row.id = remap_id(row.id, terminator_ids, "dangling MIR terminator id")?;
         row.body = remap_body_id(row.body, body_ids, "dangling MIR terminator body")?;
@@ -305,7 +307,7 @@ fn normalize_blocks(
     terminator_ids: &BTreeMap<MirTerminatorId, MirTerminatorId>,
     interner: &StableKeyInterner,
 ) -> Result<Vec<MirBlock>, AnalysisError> {
-    rows.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    rows.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     for row in &mut rows {
         row.id = remap_id(row.id, block_ids, "dangling MIR block id")?;
         row.body = remap_body_id(row.body, body_ids, "dangling MIR block body")?;
@@ -417,7 +419,7 @@ fn normalize_unsupported_with_ids(
     unsupported_ids: &BTreeMap<UnsupportedId, UnsupportedId>,
     interner: &StableKeyInterner,
 ) -> Result<Vec<UnsupportedSemanticFact>, AnalysisError> {
-    rows.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    rows.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     for (index, row) in rows.iter_mut().enumerate() {
         let new_id = UnsupportedId(index as u64);
         let expected_id = unsupported_ids

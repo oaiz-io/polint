@@ -113,8 +113,9 @@ pub fn resolve_direct_call_targets(
     }
 
     rows.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.site)
-            .cmp(&(interner.resolve(right.stable_key), right.site))
+        interner
+            .compare_canonical(left.stable_key, right.stable_key)
+            .then_with(|| left.site.cmp(&right.site))
     });
     rows.dedup_by(|left, right| left.stable_key == right.stable_key);
     for (index, row) in rows.iter_mut().enumerate() {

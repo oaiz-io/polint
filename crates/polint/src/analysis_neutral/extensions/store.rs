@@ -83,34 +83,21 @@ impl ExtensionOutput {
                 ))
         });
         self.accepted.sort_by(|left, right| {
-            (
-                left.extension_id.as_str(),
-                left.provider_id.as_str(),
-                left.fact_family.as_str(),
-                interner.resolve(left.stable_key),
-            )
-                .cmp(&(
-                    right.extension_id.as_str(),
-                    right.provider_id.as_str(),
-                    right.fact_family.as_str(),
-                    interner.resolve(right.stable_key),
-                ))
+            left.extension_id
+                .as_str()
+                .cmp(right.extension_id.as_str())
+                .then_with(|| left.provider_id.as_str().cmp(right.provider_id.as_str()))
+                .then_with(|| left.fact_family.as_str().cmp(right.fact_family.as_str()))
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
         });
         self.rejected.sort_by(|left, right| {
-            (
-                left.extension_id.as_str(),
-                left.provider_id.as_str(),
-                left.fact_family.as_str(),
-                interner.resolve(left.stable_key),
-                left.reason,
-            )
-                .cmp(&(
-                    right.extension_id.as_str(),
-                    right.provider_id.as_str(),
-                    right.fact_family.as_str(),
-                    interner.resolve(right.stable_key),
-                    right.reason,
-                ))
+            left.extension_id
+                .as_str()
+                .cmp(right.extension_id.as_str())
+                .then_with(|| left.provider_id.as_str().cmp(right.provider_id.as_str()))
+                .then_with(|| left.fact_family.as_str().cmp(right.fact_family.as_str()))
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
+                .then_with(|| left.reason.cmp(&right.reason))
         });
         self
     }

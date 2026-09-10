@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analysis_api::FactFamily;
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts};
 use crate::analysis_neutral::cfg::facts::{
     BasicBlockKind, CfgEdgeFact, CfgPrecision, CfgStatus, CfgView, ControlDependenceFact,
     DominatorFact, PostDominatorFact, ReachabilityFact,
@@ -11,6 +11,7 @@ use crate::analysis_neutral::cfg::ids::{
 };
 use crate::analysis_neutral::cfg::store::CfgOutput;
 use crate::analysis_neutral::stable_key::semantic_stable_key;
+use crate::internal_core::KeyPart;
 
 /// How much of a dominance relation a run materialises as facts.
 ///
@@ -44,13 +45,13 @@ pub fn derive_reachability(
                 view,
                 block: block.id,
                 reachable: reachable.contains(&block.id),
-                stable_key: stable_key(
+                stable_key: stable_key_ref(
                     interner,
                     FactFamily::CfgReachability,
-                    &[
-                        ("function", function_key.clone()),
-                        ("view", format!("{view:?}")),
-                        ("block", interner.resolve(block.stable_key).to_string()),
+                    [
+                        ("function", KeyPart::Text(&function_key.clone())),
+                        ("view", KeyPart::Text(&format!("{view:?}"))),
+                        ("block", KeyPart::Key(block.stable_key)),
                     ],
                 ),
                 status: CfgStatus::Resolved,
@@ -59,7 +60,7 @@ pub fn derive_reachability(
             next_id += 1;
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 
@@ -113,7 +114,7 @@ pub fn derive_dominators(
             }
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 
@@ -196,7 +197,7 @@ pub fn derive_postdominators(
             }
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 
@@ -252,7 +253,7 @@ pub fn derive_control_dependence(
             }
         }
     }
-    facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+    facts.sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
     facts
 }
 
@@ -273,14 +274,14 @@ fn control_dependence_fact(
         controlling_edge: edge.id,
         controlling_edge_kind: edge.kind,
         controlled_block,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::CfgControlDependence,
-            &[
-                ("function", function_key.to_string()),
-                ("view", format!("{view:?}")),
-                ("edge", interner.resolve(edge.stable_key).to_string()),
-                ("controlled_block", controlled_block_key),
+            [
+                ("function", KeyPart::Text(function_key)),
+                ("view", KeyPart::Text(&format!("{view:?}"))),
+                ("edge", KeyPart::Key(edge.stable_key)),
+                ("controlled_block", KeyPart::Text(&controlled_block_key)),
             ],
         ),
         status: edge.status,
@@ -518,6 +519,15 @@ fn stable_key(
     parts: &[(&str, String)],
 ) -> crate::internal_core::StableKeyId {
     interner.intern(semantic_stable_key(family, parts).into_string())
+}
+
+/// Like [`stable_key`], for a key that embeds another key's identity.
+fn stable_key_ref<const N: usize>(
+    interner: &crate::internal_core::StableKeyInterner,
+    family: FactFamily,
+    parts: [(&str, KeyPart<'_>); N],
+) -> crate::internal_core::StableKeyId {
+    crate::analysis_api::stable_key_from_key_parts(interner, family, parts)
 }
 
 #[cfg(test)]

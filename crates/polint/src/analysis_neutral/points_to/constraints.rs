@@ -269,11 +269,8 @@ impl ConstraintBuilder {
         mut self,
         interner: &crate::internal_core::StableKeyInterner,
     ) -> Vec<PointsToConstraintFact> {
-        self.constraints.sort_by(|left, right| {
-            interner
-                .resolve(left.stable_key)
-                .cmp(&interner.resolve(right.stable_key))
-        });
+        self.constraints
+            .sort_by(|left, right| interner.compare_canonical(left.stable_key, right.stable_key));
         self.constraints
             .dedup_by(|left, right| left.stable_key == right.stable_key);
         for (index, constraint) in self.constraints.iter_mut().enumerate() {

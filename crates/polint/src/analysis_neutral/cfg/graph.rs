@@ -23,7 +23,8 @@ impl<'a> CfgGraphIndex<'a> {
         output: &'a CfgOutput,
     ) -> Self {
         let mut functions = output.functions.iter().collect::<Vec<_>>();
-        functions.sort_by_cached_key(|row| interner.resolve(row.stable_key));
+        functions
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         let function_by_id = output
             .functions
             .iter()
@@ -38,12 +39,11 @@ impl<'a> CfgGraphIndex<'a> {
                 .push(node);
         }
         for nodes in nodes_by_function.values_mut() {
-            nodes.sort_by_cached_key(|row| {
-                (
-                    row.block,
-                    row.operation_ordinal,
-                    interner.resolve(row.stable_key),
-                )
+            nodes.sort_by(|row, other| {
+                row.block
+                    .cmp(&other.block)
+                    .then_with(|| row.operation_ordinal.cmp(&other.operation_ordinal))
+                    .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
             });
         }
 
@@ -55,8 +55,10 @@ impl<'a> CfgGraphIndex<'a> {
                 .push(block);
         }
         for blocks in blocks_by_function.values_mut() {
-            blocks.sort_by_cached_key(|row| {
-                (row.reverse_postorder, interner.resolve(row.stable_key))
+            blocks.sort_by(|row, other| {
+                row.reverse_postorder
+                    .cmp(&other.reverse_postorder)
+                    .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
             });
         }
 
@@ -69,13 +71,12 @@ impl<'a> CfgGraphIndex<'a> {
                 .push(edge);
         }
         for edges in edges_by_function_view.values_mut() {
-            edges.sort_by_cached_key(|row| {
-                (
-                    row.from_block,
-                    row.to_block,
-                    row.kind,
-                    interner.resolve(row.stable_key),
-                )
+            edges.sort_by(|row, other| {
+                row.from_block
+                    .cmp(&other.from_block)
+                    .then_with(|| row.to_block.cmp(&other.to_block))
+                    .then_with(|| row.kind.cmp(&other.kind))
+                    .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
             });
         }
 
@@ -149,12 +150,11 @@ impl<'a> CfgGraph<'a> {
             .iter()
             .filter(|node| node.cfg_function == function)
             .collect::<Vec<_>>();
-        nodes.sort_by_cached_key(|row| {
-            (
-                row.block,
-                row.operation_ordinal,
-                interner.resolve(row.stable_key),
-            )
+        nodes.sort_by(|row, other| {
+            row.block
+                .cmp(&other.block)
+                .then_with(|| row.operation_ordinal.cmp(&other.operation_ordinal))
+                .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
         });
 
         let mut blocks = output
@@ -162,20 +162,23 @@ impl<'a> CfgGraph<'a> {
             .iter()
             .filter(|block| block.cfg_function == function)
             .collect::<Vec<_>>();
-        blocks.sort_by_cached_key(|row| (row.reverse_postorder, interner.resolve(row.stable_key)));
+        blocks.sort_by(|row, other| {
+            row.reverse_postorder
+                .cmp(&other.reverse_postorder)
+                .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
+        });
 
         let mut edges = output
             .edges
             .iter()
             .filter(|edge| edge.cfg_function == function && edge.view == view)
             .collect::<Vec<_>>();
-        edges.sort_by_cached_key(|row| {
-            (
-                row.from_block,
-                row.to_block,
-                row.kind,
-                interner.resolve(row.stable_key),
-            )
+        edges.sort_by(|row, other| {
+            row.from_block
+                .cmp(&other.from_block)
+                .then_with(|| row.to_block.cmp(&other.to_block))
+                .then_with(|| row.kind.cmp(&other.kind))
+                .then_with(|| interner.compare_canonical(row.stable_key, other.stable_key))
         });
 
         let mut successors = BTreeMap::<BasicBlockId, Vec<BasicBlockId>>::new();

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analysis_api::FactFamily;
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts};
 use crate::analysis_neutral::cfg::facts::{
     BasicBlockFact, BasicBlockKind, CfgEdgeFact, CfgEdgeKind, CfgFunctionFact, CfgNodeFact,
     CfgNodeKind, CfgPrecision, CfgStatus, CfgView,
@@ -11,7 +11,7 @@ use crate::analysis_neutral::ids::{MirBodyId, MirOpId};
 use crate::analysis_neutral::mir_body::MirBody;
 use crate::analysis_neutral::mir_op::MirOperation;
 use crate::analysis_neutral::stable_key::semantic_stable_key;
-use crate::internal_core::{Span, StableKeyId};
+use crate::internal_core::{KeyPart, Span, StableKeyId};
 
 #[derive(Debug, Clone)]
 pub struct CfgBuilder {
@@ -78,7 +78,7 @@ impl CfgBuilder {
     ) -> CfgFunctionId {
         let function_id = self.alloc_function_id();
         let body_stable_key = body.stable_key;
-        let owner_stable_key = interner.resolve(body.owner_stable_key).to_string();
+        let owner_stable_key = body.owner_stable_key;
         self.current_function = Some(function_id);
         self.current_body = Some(body.id);
         self.current_body_stable_key = Some(body_stable_key);
@@ -93,12 +93,12 @@ impl CfgBuilder {
             span: Some(body.span.clone()),
             generated: true,
             operation_ordinal: 0,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::CfgNode,
-                &[
-                    ("body", interner.resolve(body_stable_key).to_string()),
-                    ("kind", "entry".to_string()),
+                [
+                    ("body", KeyPart::Key(body_stable_key)),
+                    ("kind", KeyPart::Text("entry")),
                 ],
             ),
         });
@@ -108,12 +108,12 @@ impl CfgBuilder {
             Some(entry_node),
             Some(entry_node),
             0,
-            stable_key(
+            stable_key_ref(
                 interner,
                 FactFamily::BasicBlock,
-                &[
-                    ("body", interner.resolve(body_stable_key).to_string()),
-                    ("kind", "entry".to_string()),
+                [
+                    ("body", KeyPart::Key(body_stable_key)),
+                    ("kind", KeyPart::Text("entry")),
                 ],
             ),
         );
@@ -126,12 +126,12 @@ impl CfgBuilder {
             span: Some(body.span.clone()),
             generated: true,
             operation_ordinal: u32::MAX - 1,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::CfgNode,
-                &[
-                    ("body", interner.resolve(body_stable_key).to_string()),
-                    ("kind", "exit-normal".to_string()),
+                [
+                    ("body", KeyPart::Key(body_stable_key)),
+                    ("kind", KeyPart::Text("exit-normal")),
                 ],
             ),
         });
@@ -141,12 +141,12 @@ impl CfgBuilder {
             Some(normal_exit_node),
             Some(normal_exit_node),
             u32::MAX - 1,
-            stable_key(
+            stable_key_ref(
                 interner,
                 FactFamily::BasicBlock,
-                &[
-                    ("body", interner.resolve(body_stable_key).to_string()),
-                    ("kind", "exit-normal".to_string()),
+                [
+                    ("body", KeyPart::Key(body_stable_key)),
+                    ("kind", KeyPart::Text("exit-normal")),
                 ],
             ),
         );
@@ -162,12 +162,12 @@ impl CfgBuilder {
                 span: Some(body.span.clone()),
                 generated: true,
                 operation_ordinal: u32::MAX,
-                stable_key: stable_key(
+                stable_key: stable_key_ref(
                     interner,
                     FactFamily::CfgNode,
-                    &[
-                        ("body", interner.resolve(body_stable_key).to_string()),
-                        ("kind", "exit-exceptional".to_string()),
+                    [
+                        ("body", KeyPart::Key(body_stable_key)),
+                        ("kind", KeyPart::Text("exit-exceptional")),
                     ],
                 ),
             })
@@ -179,12 +179,12 @@ impl CfgBuilder {
                 Some(node),
                 Some(node),
                 u32::MAX,
-                stable_key(
+                stable_key_ref(
                     interner,
                     FactFamily::BasicBlock,
-                    &[
-                        ("body", interner.resolve(body_stable_key).to_string()),
-                        ("kind", "exit-exceptional".to_string()),
+                    [
+                        ("body", KeyPart::Key(body_stable_key)),
+                        ("kind", KeyPart::Text("exit-exceptional")),
                     ],
                 ),
             );
@@ -202,12 +202,12 @@ impl CfgBuilder {
             entry_node,
             normal_exit_node,
             exceptional_exit_node,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::CfgFunction,
-                &[
-                    ("body", interner.resolve(body_stable_key).to_string()),
-                    ("owner", owner_stable_key),
+                [
+                    ("body", KeyPart::Key(body_stable_key)),
+                    ("owner", KeyPart::Key(owner_stable_key)),
                 ],
             ),
             status: CfgStatus::Resolved,
@@ -245,20 +245,20 @@ impl CfgBuilder {
         let function = self.expect_function();
         let ordinal = self.next_body_block_ordinal;
         self.next_body_block_ordinal += 1;
-        let body_key = interner.resolve(self.expect_body_stable_key()).to_string();
+        let body_key = self.expect_body_stable_key();
         let block_id = self.new_block(
             function,
             kind,
             None,
             None,
             ordinal,
-            stable_key(
+            stable_key_ref(
                 interner,
                 FactFamily::BasicBlock,
-                &[
-                    ("body", body_key),
-                    ("ordinal", ordinal.to_string()),
-                    ("kind", format!("{kind:?}")),
+                [
+                    ("body", KeyPart::Key(body_key)),
+                    ("ordinal", KeyPart::Text(&ordinal.to_string())),
+                    ("kind", KeyPart::Text(&format!("{kind:?}"))),
                 ],
             ),
         );
@@ -278,18 +278,19 @@ impl CfgBuilder {
             .current_body
             .expect("CfgBuilder::start_function must be called before append_operation_node");
         let block = self.current_block();
-        let block_key = interner.resolve(self.block(block).stable_key).to_string();
+        let block_key = self.block(block).stable_key;
         let previous_last = self.block_mut(block).last_node;
         let operation_ordinal = operation.map_or_else(
             || self.alloc_synthetic_node_ordinal(),
             |operation| operation.ordinal,
         );
         let operation_id = operation.map(|operation| operation.id);
-        let operation_key = operation.map_or_else(
-            || format!("synthetic:{operation_ordinal}"),
-            |operation| interner.resolve(operation.stable_key).to_string(),
-        );
-        let body_key = interner.resolve(self.expect_body_stable_key()).to_string();
+        let synthetic_operation_key = format!("synthetic:{operation_ordinal}");
+        let operation_key = operation
+            .map_or(KeyPart::Text(&synthetic_operation_key), |operation| {
+                KeyPart::Key(operation.stable_key)
+            });
+        let body_key = self.expect_body_stable_key();
         let node_id = self.new_node(CfgNodeDraft {
             function,
             body,
@@ -298,15 +299,15 @@ impl CfgBuilder {
             span,
             generated: false,
             operation_ordinal,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::CfgNode,
-                &[
-                    ("body", body_key),
-                    ("block", block_key),
+                [
+                    ("body", KeyPart::Key(body_key)),
+                    ("block", KeyPart::Key(block_key)),
                     ("operation", operation_key),
-                    ("ordinal", operation_ordinal.to_string()),
-                    ("kind", format!("{kind:?}")),
+                    ("ordinal", KeyPart::Text(&operation_ordinal.to_string())),
+                    ("kind", KeyPart::Text(&format!("{kind:?}"))),
                 ],
             ),
         });
@@ -441,15 +442,11 @@ impl CfgBuilder {
         kind: CfgEdgeKind,
     ) -> CfgEdgeId {
         let function = self.expect_function();
-        let body_key = interner.resolve(self.expect_body_stable_key()).to_string();
-        let from_block_key = interner
-            .resolve(self.block(from_block).stable_key)
-            .to_string();
-        let to_block_key = interner
-            .resolve(self.block(to_block).stable_key)
-            .to_string();
-        let from_node_key = interner.resolve(self.node(from).stable_key).to_string();
-        let to_node_key = interner.resolve(self.node(to).stable_key).to_string();
+        let body_key = self.expect_body_stable_key();
+        let from_block_key = self.block(from_block).stable_key;
+        let to_block_key = self.block(to_block).stable_key;
+        let from_node_key = self.node(from).stable_key;
+        let to_node_key = self.node(to).stable_key;
         let edge_id = self.alloc_edge_id();
         self.output.edges.push(CfgEdgeFact {
             id: edge_id,
@@ -461,16 +458,16 @@ impl CfgBuilder {
             to_block,
             kind,
             label: None,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::CfgEdge,
-                &[
-                    ("body", body_key),
-                    ("from_block", from_block_key),
-                    ("to_block", to_block_key),
-                    ("from_node", from_node_key),
-                    ("to_node", to_node_key),
-                    ("kind", format!("{kind:?}")),
+                [
+                    ("body", KeyPart::Key(body_key)),
+                    ("from_block", KeyPart::Key(from_block_key)),
+                    ("to_block", KeyPart::Key(to_block_key)),
+                    ("from_node", KeyPart::Key(from_node_key)),
+                    ("to_node", KeyPart::Key(to_node_key)),
+                    ("kind", KeyPart::Text(&format!("{kind:?}"))),
                 ],
             ),
             status: CfgStatus::Resolved,
@@ -615,6 +612,15 @@ fn stable_key(
     parts: &[(&str, String)],
 ) -> StableKeyId {
     interner.intern(semantic_stable_key(family, parts).into_string())
+}
+
+/// Like [`stable_key`], for a key that embeds another key's identity.
+fn stable_key_ref<const N: usize>(
+    interner: &crate::internal_core::StableKeyInterner,
+    family: FactFamily,
+    parts: [(&str, KeyPart<'_>); N],
+) -> StableKeyId {
+    crate::analysis_api::stable_key_from_key_parts(interner, family, parts)
 }
 
 #[cfg(test)]

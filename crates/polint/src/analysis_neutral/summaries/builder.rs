@@ -6,7 +6,7 @@ use super::facts::{
     SummaryFact, SummaryFlowEdge, SummaryPrecision, SummaryProvenance, SummaryStatus,
 };
 use super::store::SummaryOutput;
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::UnresolvedCallFact;
 use crate::analysis_neutral::cfg::facts::{
@@ -20,7 +20,7 @@ use crate::analysis_neutral::ids::{MirBodyId, PlaceId, SummaryEventId, SummaryId
 use crate::analysis_neutral::mir_body::MirBody;
 use crate::analysis_neutral::mir_op::{AssignMode, MirOperationKind, MirValue};
 use crate::analysis_neutral::places::PlaceRoot;
-use crate::internal_core::{FunctionId, StableKeyId};
+use crate::internal_core::{FunctionId, KeyPart, StableKeyId};
 
 /// Computes direct (local, single-function) summaries from LocalAnalysisDb facts.
 ///
@@ -57,8 +57,9 @@ impl DirectSummaryBuilder {
             }
             for ops in map.values_mut() {
                 ops.sort_by(|a, b| {
-                    (a.ordinal, interner.resolve(a.stable_key))
-                        .cmp(&(b.ordinal, interner.resolve(b.stable_key)))
+                    a.ordinal
+                        .cmp(&b.ordinal)
+                        .then_with(|| interner.compare_canonical(a.stable_key, b.stable_key))
                 });
             }
             map
@@ -904,13 +905,13 @@ fn summary_event_stable_key(
     domain: &str,
     event: &str,
 ) -> StableKeyId {
-    stable_key_from_parts(
+    stable_key_from_key_parts(
         interner,
         FactFamily::SummaryEvent,
-        &[
-            ("callable", interner.resolve(callable_key).to_string()),
-            ("domain", domain.to_string()),
-            ("event", event.to_string()),
+        [
+            ("callable", KeyPart::Key(callable_key)),
+            ("domain", KeyPart::Text(domain)),
+            ("event", KeyPart::Text(event)),
         ],
     )
 }
