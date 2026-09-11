@@ -239,6 +239,27 @@ pub(crate) struct ProviderOutcomeRow {
     pub(crate) counts: BTreeMap<String, u64>,
 }
 
+impl ProviderOutcomeRow {
+    /// Drops the fields whose value is a measurement rather than a decision.
+    ///
+    /// `polint check --format json` is a byte-stable contract: two runs over
+    /// the same sources must produce identical output. Wall time and heap are
+    /// not properties of the analysis, so they belong to `--format ai-friendly`
+    /// (which is timestamped anyway) and to the `polint::kernel::stage` log,
+    /// not to the deterministic report.
+    fn without_measurements(&self) -> Self {
+        let mut row = self.clone();
+        row.elapsed_ms = None;
+        row.counts
+            .retain(|key, _| !is_measurement_counter(key.as_str()));
+        row
+    }
+}
+
+fn is_measurement_counter(key: &str) -> bool {
+    key.ends_with("elapsed_ms") || key.ends_with("peak_heap_bytes")
+}
+
 /// Cache counters for one provider, flattened for the report.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub(crate) struct ProviderCacheRow {
@@ -360,7 +381,7 @@ struct PolintReportWire<'a> {
 #[derive(Serialize)]
 struct PolintReportSummaryWire<'a> {
     rules: &'a [RuleExecutionRow],
-    providers: &'a [ProviderOutcomeRow],
+    providers: Vec<ProviderOutcomeRow>,
     budgets: &'a [BudgetRow],
 }
 
@@ -990,7 +1011,11 @@ fn render_json(
 ) -> String {
     let summary = (!rule_execution.is_empty()).then_some(PolintReportSummaryWire {
         rules: rule_execution,
-        providers: &run_summary.providers,
+        providers: run_summary
+            .providers
+            .iter()
+            .map(ProviderOutcomeRow::without_measurements)
+            .collect(),
         budgets: &run_summary.budgets,
     });
     let wire = PolintReportWire {

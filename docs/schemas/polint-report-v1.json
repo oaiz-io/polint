@@ -48,7 +48,7 @@
         },
         "providers": {
           "type": "array",
-          "description": "Providers that failed or were blocked, plus providers that reported counters.",
+          "description": "Providers a consumer can act on. This report is byte-stable across runs, so rows carry decisions and workload but not wall time or heap; those are in the ai-friendly report and the polint::kernel::stage log.",
           "items": { "$ref": "polint-ai-friendly-v1.json#/$defs/providerOutcome" }
         },
         "budgets": {

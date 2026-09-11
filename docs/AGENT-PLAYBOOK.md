@@ -136,6 +136,10 @@ there). This is where a slow or failed run is attributed. Providers this run
 never selected, and internal fact families that quietly succeeded, are not
 listed; their stage timings are on the `polint::kernel::stage` log target.
 
+`--format json` is byte-stable across runs, so its provider rows carry the
+decision and the workload but not the wall time or heap. Read timings from
+`--format ai-friendly` (which is timestamped anyway) or from the log.
+
 `summary.budgets[]` — one row per budget the run exhausted, so "polint bounded
 itself" is distinguishable from "polint found nothing".
 

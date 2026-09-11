@@ -10007,13 +10007,51 @@ mod capability_planning {
         let providers = summary["providers"]
             .as_array()
             .unwrap_or_else(|| panic!("expected provider rows: {json:#?}"));
+        let semantic = providers
+            .iter()
+            .find(|provider| provider["provider_id"] == "polint.go.semantic")
+            .unwrap_or_else(|| panic!("expected a Go semantic provider row: {json:#?}"));
+        // `--format json` is byte-stable across runs, so it carries the
+        // sidecar's workload but not its wall time or heap.
         assert!(
-            providers
-                .iter()
-                .any(|provider| provider["provider_id"] == "polint.go.semantic"),
-            "provider rows should cover the Go semantic provider: {json:#?}"
+            semantic.get("elapsed_ms").is_none(),
+            "the deterministic report must not carry wall time: {json:#?}"
+        );
+        assert!(
+            semantic["counts"]["go_semantic.packages"]
+                .as_u64()
+                .is_some(),
+            "the deterministic report should carry the sidecar workload: {json:#?}"
+        );
+        assert!(
+            semantic["counts"]
+                .as_object()
+                .is_some_and(|counts| counts.keys().all(|key| !key.ends_with("elapsed_ms"))),
+            "the deterministic report must not carry per-stage timings: {json:#?}"
         );
         assert_eq!(json["version"], 2);
+    }
+
+    #[test]
+    fn the_run_summary_keeps_the_json_report_byte_stable_across_runs() {
+        let temp = tempfile::tempdir().unwrap();
+        write_control_flow_rule_repo(temp.path());
+
+        let run = || {
+            stdout_string(
+                polint_cmd()
+                    .current_dir(temp.path())
+                    .args(["check", "--format", "json", "--fail-on", "none"])
+                    .assert()
+                    .success(),
+            )
+        };
+
+        assert_eq!(
+            run(),
+            run(),
+            "a run summary carrying provider rows must not make the report vary"
+        );
     }
 
     #[test]
