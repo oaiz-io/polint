@@ -48,6 +48,11 @@ impl ProviderOutputMeta {
 pub(crate) struct ProviderTelemetry {
     pub(crate) provider_id: String,
     pub(crate) cache_stats: CacheStats,
+    /// Wall time the provider stage took, or `None` when it did not run.
+    pub(crate) elapsed_ms: Option<u64>,
+    /// Stage-specific counters the provider reported, such as a sidecar's
+    /// per-phase timings and workload sizes.
+    pub(crate) counts: std::collections::BTreeMap<String, u64>,
 }
 
 impl ProviderTelemetry {
@@ -55,7 +60,19 @@ impl ProviderTelemetry {
         Self {
             provider_id: provider_id.into(),
             cache_stats,
+            elapsed_ms: None,
+            counts: std::collections::BTreeMap::new(),
         }
+    }
+
+    pub(crate) fn with_stage(
+        mut self,
+        elapsed_ms: Option<u64>,
+        counts: std::collections::BTreeMap<String, u64>,
+    ) -> Self {
+        self.elapsed_ms = elapsed_ms;
+        self.counts = counts;
+        self
     }
 }
 
@@ -107,8 +124,10 @@ mod tests {
     }
 
     #[test]
-    fn provider_telemetry_contains_only_provider_key_and_cache_stats() {
+    fn provider_telemetry_defaults_to_provider_key_and_cache_stats() {
         let telemetry = ProviderTelemetry::new("polint.ts.syntax", CacheStats::default());
+        assert!(telemetry.elapsed_ms.is_none());
+        assert!(telemetry.counts.is_empty());
 
         assert_eq!(telemetry.provider_id, "polint.ts.syntax");
         assert_eq!(telemetry.cache_stats, CacheStats::default());

@@ -115,6 +115,7 @@ pub(crate) fn analyze_files_with_plan_options_and_cache_stats(
     let mut cache_stats = CacheStats::default();
     if files.is_empty() {
         return ProviderRunResult {
+            counts: Default::default(),
             diagnostics: Vec::new(),
             cache_stats,
             output_digest: None,
@@ -148,6 +149,7 @@ pub(crate) fn analyze_files_with_plan_options_and_cache_stats(
                 .take()
                 .expect("layer cache hit ran the validator, which keeps the parsed payload");
             ProviderRunResult {
+                counts: Default::default(),
                 diagnostics: restore_syntax_layer_payload(db, payload),
                 cache_stats,
                 output_digest: read.output_digest,
@@ -167,6 +169,7 @@ pub(crate) fn analyze_files_with_plan_options_and_cache_stats(
             );
             let output_digest = payload.output_digest.clone();
             ProviderRunResult {
+                counts: Default::default(),
                 diagnostics: restore_syntax_layer_payload(db, payload),
                 cache_stats,
                 output_digest,
@@ -199,6 +202,7 @@ pub(crate) fn analyze_files_with_plan_options_and_cache_stats(
             let mut diagnostics = restore_syntax_layer_payload(db, payload);
             diagnostics.extend(write_diagnostics);
             ProviderRunResult {
+                counts: Default::default(),
                 diagnostics,
                 cache_stats,
                 output_digest,

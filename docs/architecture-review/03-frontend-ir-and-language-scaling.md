@@ -667,7 +667,7 @@ of the refactor that follows.
 |---|---|---|
 | Go | `tree-sitter` 0.26.8 + `tree-sitter-go` 0.25.0, 2 sites | historical; first language |
 | TS/JS | Oxc 0.129.0 (`parser`, `ast`, `semantic`, `span`) + `oxc_resolver` 11.19.1, 13 sites | speed, and `oxc_semantic` gives real scope/binding resolution |
-| Go *deep semantics* | **out-of-process Go sidecar** — `crates/polint/go-sidecar/polint-go-frontend` (1,352 prod LOC of Go), NDJSON over stdout, schema `polint-go-semantic-2` (`go/semantic/protocol.rs:4`), driven by `go/semantic/{client,process}.rs` | `go/packages` + `go/ssa` with `ssa.InstantiateGenerics` — real types, real SSA |
+| Go *deep semantics* | **out-of-process Go sidecar** — `crates/polint/go-sidecar/polint-go-frontend` (1,352 prod LOC of Go), NDJSON over stdout, schema `polint-go-semantic-3` (`go/semantic/protocol.rs:4`), driven by `go/semantic/{client,process}.rs` | `go/packages` + `go/ssa` with `ssa.InstantiateGenerics` — real types, real SSA |
 
 There is no stated rule. The pattern is: *use whatever was convenient, then bolt
 on a sidecar when precision demanded it.* And note the asymmetry — Go got a

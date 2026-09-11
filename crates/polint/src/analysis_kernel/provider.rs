@@ -104,6 +104,7 @@ impl Provider for SourceProvider {
         // Source files are already loaded into the db before providers run;
         // this stage only records the discovery provider output metadata.
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: Vec::new(),
             cache_stats: CacheStats::default(),
             output_digest: None,
@@ -207,6 +208,7 @@ impl Provider for ModuleGraphProvider {
         let updated = derivation.support_view(&ctx.capability_support);
         ctx.capability_support = updated;
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -240,6 +242,7 @@ impl Provider for SymbolGraphProvider {
         let updated = derivation.support_view(&ctx.capability_support);
         ctx.capability_support = updated;
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -266,6 +269,7 @@ impl Provider for ModuleTopologyProvider {
             ctx.dependency_digest("polint.symbol_graph"),
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -295,6 +299,7 @@ impl Provider for SemanticMirProvider {
             ],
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -323,6 +328,7 @@ impl Provider for CfgProvider {
             ],
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -356,6 +362,7 @@ impl Provider for CallsProvider {
             ],
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -390,6 +397,7 @@ impl Provider for GoSemanticProvider {
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
             execution: derivation.execution,
+            counts: derivation.counts,
         }
     }
 }
@@ -411,6 +419,7 @@ impl Provider for IdentityProvider {
             ctx.dependency_digest("polint.go.semantic"),
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -468,6 +477,7 @@ impl Provider for AbstractDomainsProvider {
             )
         };
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -539,6 +549,7 @@ impl Provider for DirectSummariesProvider {
             &final_direct_summaries_output,
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics,
             cache_stats,
             output_digest: Some(output_digest),
@@ -572,6 +583,7 @@ impl Provider for EntrypointsProvider {
                 ],
             );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -602,6 +614,7 @@ impl Provider for ReachabilityProvider {
                 ctx.dependency_digest("polint.module_topology"),
             );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -626,6 +639,7 @@ impl Provider for ExtensionsProvider {
             self.manifest(),
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -671,6 +685,7 @@ impl Provider for TypeValueAliasProvider {
             ],
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -710,6 +725,7 @@ impl Provider for SemanticGraphProvider {
                 ctx.dependency_digest("polint.go.semantic"),
             );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -737,6 +753,7 @@ impl Provider for SolverProvider {
             ctx.dependency_digest("polint.go.semantic"),
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -767,6 +784,7 @@ impl Provider for RefinedCallsProvider {
                 ctx.dependency_digest("polint.solver"),
             );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -798,6 +816,7 @@ impl Provider for DataFlowProvider {
             ctx.dependency_digest("polint.extensions"),
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -830,6 +849,7 @@ impl Provider for EvidenceProvider {
             ctx.dependency_digest("polint.data_flow"),
         );
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,
@@ -856,6 +876,7 @@ impl Provider for MetricsProvider {
             Ok(derivation) => derivation,
             Err(error) => {
                 return ProviderRunResult {
+                    counts: Default::default(),
                     diagnostics: vec![Diagnostic::error(
                         "internal/metrics",
                         "<workspace>",
@@ -872,6 +893,7 @@ impl Provider for MetricsProvider {
             }
         };
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: derivation.diagnostics,
             cache_stats: derivation.cache_stats,
             output_digest: derivation.output_digest,

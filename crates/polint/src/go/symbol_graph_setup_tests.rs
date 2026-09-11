@@ -110,6 +110,7 @@ include_tests = false
                 build_tags: vec!["enterprise".to_string(), "polint".to_string()],
                 include_tests: false,
                 offline: false,
+                semantic_timeout_ms: None,
                 files_without_module_root: Vec::new(),
             }
         );

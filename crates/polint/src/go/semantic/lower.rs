@@ -348,9 +348,9 @@ mod tests {
     fn lower_accepts_in_repository_path() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"main.go","span":{"start_byte":1,"end_byte":2,"start_line":1,"start_column":1,"end_line":1,"end_column":2}}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"main.go","span":{"start_byte":1,"end_byte":2,"start_line":1,"start_column":1,"end_line":1,"end_column":2}}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -362,12 +362,12 @@ mod tests {
     fn lower_harvests_rta_signal_rows() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F","stable_key":"at"}
-{"schema":"polint-go-semantic-2","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","stable_key":"it"}
-{"schema":"polint-go-semantic-2","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.call","callsite_stable_key":"cs","interface_type":"example.com/p.I","method":"M","stable_key":"dd"}
-{"schema":"polint-go-semantic-2","kind":"rta_edge","package_id":"example.com/p","package_path":"example.com/p","caller":"main","callee":"init$1","edge_kind":"dynamic function call","stable_key":"rta"}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F","stable_key":"at"}
+{"schema":"polint-go-semantic-3","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","stable_key":"it"}
+{"schema":"polint-go-semantic-3","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.call","callsite_stable_key":"cs","interface_type":"example.com/p.I","method":"M","stable_key":"dd"}
+{"schema":"polint-go-semantic-3","kind":"rta_edge","package_id":"example.com/p","package_path":"example.com/p","caller":"main","callee":"init$1","edge_kind":"dynamic function call","stable_key":"rta"}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -401,9 +401,9 @@ mod tests {
         // fatal here.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F"}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F"}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -429,9 +429,9 @@ mod tests {
         // FINDING B/C: same row-resilient contract for the instantiated_type harvest row.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T"}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T"}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -457,9 +457,9 @@ mod tests {
         // package's types onto one key). With a stable_key present, it is used as-is.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"method_set","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","methods":["M"],"stable_key":"ms|example.com/p.T"}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"method_set","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","methods":["M"],"stable_key":"ms|example.com/p.T"}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -477,9 +477,9 @@ mod tests {
     fn lower_dynamic_dispatch_func_value_carries_signature() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.apply","callsite_stable_key":"cs2","signature":"func()","stable_key":"dd2"}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.apply","callsite_stable_key":"cs2","signature":"func()","stable_key":"dd2"}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -544,9 +544,9 @@ mod tests {
     fn lower_preserves_package_load_errors() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"load failed"}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"load failed"}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -558,10 +558,10 @@ mod tests {
     fn lower_package_error_fallback_stable_key_includes_message() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-2","kind":"session_begin"}
-{"schema":"polint-go-semantic-2","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"first"}
-{"schema":"polint-go-semantic-2","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"second"}
-{"schema":"polint-go-semantic-2","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
+{"schema":"polint-go-semantic-3","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"first"}
+{"schema":"polint-go-semantic-3","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"second"}
+{"schema":"polint-go-semantic-3","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");

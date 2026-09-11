@@ -260,6 +260,16 @@ lifecycle policies.
 `examples/go-guard-outcomes/` is a synthetic Go corpus that pins one outcome per
 shape, including the two that are honestly undecidable.
 
+## Scope And Budget
+
+Requesting `control_flow` requests cross-file analysis, so the run loads every
+discovered file no matter how narrow a rule's `files` list is; `files` narrows
+reporting only. A `polint/scope` note reports the difference. For Go, the
+analysis is bounded by `[languages.go] semantic_timeout_ms` (and the
+`POLINT_GO_SEMANTIC_TIMEOUT_MS` override), and exhausting it blocks the rule
+with `polint/capability` diagnostics rather than answering from partial facts.
+See [Bounding a Go semantic scan](../CONSUMER-SETUP.md#bounding-a-go-semantic-scan).
+
 ## Template Starters
 
 `polint new-rule go require-sensitive-write-guard --template

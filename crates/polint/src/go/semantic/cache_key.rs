@@ -42,9 +42,16 @@ pub fn go_semantic_input_digest(inputs: &GoSemanticCacheInputs) -> String {
 }
 
 pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
+    // The budget is a lifecycle input, not a tuning knob: a run that exhausts
+    // it stores an empty output, so a different budget can produce a different
+    // outcome from identical sources.
     let mut parts = vec![
         format!("include_tests={}", config.include_tests),
         format!("offline={}", config.offline),
+        format!(
+            "semantic_timeout_ms={}",
+            crate::go::semantic::budget::semantic_timeout(config.semantic_timeout_ms).as_millis()
+        ),
     ];
     parts.extend(
         config
@@ -209,6 +216,7 @@ mod tests {
             build_tags: Vec::new(),
             include_tests: true,
             offline: false,
+            semantic_timeout_ms: None,
             files_without_module_root: Vec::new(),
         }
     }

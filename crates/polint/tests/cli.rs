@@ -5183,6 +5183,73 @@ export const value = token;
     write_file(&root.join("src/token.ts"), r#"export const token = "ok";"#);
 }
 
+fn write_narrow_scope_rule_repo(root: &Path) {
+    let polint_path = repo_root()
+        .join("crates/polint")
+        .to_string_lossy()
+        .replace('\\', "/");
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+
+[[rules.config]]
+id = "local/needs-references-narrow"
+files = ["src/component.ts"]
+"#,
+    );
+    write_file(
+        &root.join(".polint/rules/Cargo.toml"),
+        &format!(
+            r#"[package]
+name = "polint-local-rules"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+polint = {{ path = "{polint_path}" }}
+
+[workspace]
+"#,
+        ),
+    );
+    write_file(
+        &root.join(".polint/rules/src/main.rs"),
+        r#"use std::process::ExitCode;
+
+use polint::sdk::prelude::*;
+
+#[polint::rule(
+    id = "local/needs-references-narrow",
+    description = "Needs reference facts but reports on one file.",
+    severity = "warn"
+)]
+fn needs_references_narrow(ctx: &mut RuleCtx<'_>, references: References<'_>) -> RuleResult {
+    let _ = references.iter().count();
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    polint::runner::run_cli(vec![needs_references_narrow()])
+}
+"#,
+    );
+    write_file(
+        &root.join("src/component.ts"),
+        r#"import { token } from "./token";
+
+export const value = token;
+"#,
+    );
+    write_file(&root.join("src/token.ts"), r#"export const token = "ok";"#);
+}
+
 fn write_symbol_reference_cache_rule_repo(root: &Path) {
     let polint_path = repo_root()
         .join("crates/polint")
@@ -9819,6 +9886,55 @@ mod capability_planning {
                 .iter()
                 .all(|diagnostic| diagnostic["rule_id"] != "polint/capability"),
             "supported TS symbol/reference providers should not emit capability diagnostics: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn narrow_rule_scope_with_a_cross_file_capability_reports_a_scope_note() {
+        let temp = tempfile::tempdir().unwrap();
+        write_narrow_scope_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let scope = diagnostics(&json)
+            .iter()
+            .find(|diagnostic| diagnostic["rule_id"] == "polint/scope")
+            .cloned()
+            .unwrap_or_else(|| panic!("expected a polint/scope note: {json:#?}"));
+        assert_eq!(scope["severity"], "info");
+        assert!(diagnostic_has_evidence(&scope, "files_in_scope", "1"));
+        assert!(diagnostic_has_evidence(&scope, "analyzed_files", "2"));
+        assert!(diagnostic_has_evidence(
+            &scope,
+            "cross_file_capabilities",
+            "references"
+        ));
+    }
+
+    #[test]
+    fn a_rule_scope_matching_every_analyzed_file_reports_no_scope_note() {
+        let temp = tempfile::tempdir().unwrap();
+        write_symbol_capability_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        assert!(
+            diagnostics(&json)
+                .iter()
+                .all(|diagnostic| diagnostic["rule_id"] != "polint/scope"),
+            "an unnarrowed rule scope should not produce a scope note: {json:#?}"
         );
     }
 

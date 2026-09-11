@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::BTreeSet;
 
-pub const GO_SEMANTIC_SCHEMA: &str = "polint-go-semantic-2";
+pub const GO_SEMANTIC_SCHEMA: &str = "polint-go-semantic-3";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GoSemanticProtocolError {
@@ -102,6 +102,49 @@ pub struct GoSemanticRawFrame {
     pub go_version: String,
     #[serde(default)]
     pub x_tools_version: String,
+    #[serde(default)]
+    pub phase: String,
+    #[serde(default)]
+    pub elapsed_ms: u64,
+    #[serde(default)]
+    pub packages: u64,
+    #[serde(default)]
+    pub compiled_go_files: u64,
+    #[serde(default)]
+    pub deps_with_types: u64,
+    #[serde(default)]
+    pub rows_emitted: u64,
+    #[serde(default)]
+    pub peak_heap_bytes: u64,
+}
+
+/// One stage of the Go semantic sidecar, with the workload it saw.
+///
+/// `peak_heap_bytes` is the largest heap allocation the sidecar observed at a
+/// stage boundary, not a continuously sampled high-water mark.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GoSemanticPhase {
+    pub phase: String,
+    pub elapsed_ms: u64,
+    pub packages: u64,
+    pub compiled_go_files: u64,
+    pub deps_with_types: u64,
+    pub rows_emitted: u64,
+    pub peak_heap_bytes: u64,
+}
+
+impl GoSemanticPhase {
+    fn from_frame(frame: &GoSemanticRawFrame) -> Self {
+        Self {
+            phase: frame.phase.clone(),
+            elapsed_ms: frame.elapsed_ms,
+            packages: frame.packages,
+            compiled_go_files: frame.compiled_go_files,
+            deps_with_types: frame.deps_with_types,
+            rows_emitted: frame.rows_emitted,
+            peak_heap_bytes: frame.peak_heap_bytes,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -121,13 +164,19 @@ pub struct GoSemanticOutput {
     pub go_version: String,
     pub x_tools_version: String,
     pub rows: Vec<GoSemanticRawFrame>,
+    /// Per-stage timings, in the order the sidecar closed them. Empty when the
+    /// sidecar reported none.
+    pub phases: Vec<GoSemanticPhase>,
+    /// Session totals from `session_end`.
+    pub totals: GoSemanticPhase,
 }
 
 #[derive(Debug, Clone)]
 pub enum GoSemanticFrame {
     SessionBegin(GoSemanticRawFrame),
+    Phase(GoSemanticRawFrame),
     Row(GoSemanticRawFrame),
-    SessionEnd,
+    SessionEnd(GoSemanticRawFrame),
 }
 
 pub fn decode_ndjson(bytes: &[u8]) -> Result<GoSemanticOutput, GoSemanticProtocolError> {
@@ -143,6 +192,8 @@ pub fn decode_ndjson_str(text: &str) -> Result<GoSemanticOutput, GoSemanticProto
     let mut go_version = String::new();
     let mut x_tools_version = String::new();
     let mut rows = Vec::new();
+    let mut phases = Vec::new();
+    let mut totals = GoSemanticPhase::default();
 
     for line in text.lines().filter(|line| !line.trim().is_empty()) {
         let frame: GoSemanticRawFrame = serde_json::from_str(line)
@@ -165,7 +216,7 @@ pub fn decode_ndjson_str(text: &str) -> Result<GoSemanticOutput, GoSemanticProto
                 go_version = frame.go_version.clone();
                 x_tools_version = frame.x_tools_version.clone();
             }
-            GoSemanticFrame::SessionEnd => {
+            GoSemanticFrame::SessionEnd(frame) => {
                 if !saw_begin {
                     return Err(GoSemanticProtocolError::MissingBegin);
                 }
@@ -173,7 +224,16 @@ pub fn decode_ndjson_str(text: &str) -> Result<GoSemanticOutput, GoSemanticProto
                     return Err(GoSemanticProtocolError::DuplicateEnd);
                 }
                 saw_end = true;
+                totals = GoSemanticPhase::from_frame(&frame);
+                totals.phase = "session".to_string();
             }
+            GoSemanticFrame::Phase(frame) if !saw_begin => {
+                return Err(GoSemanticProtocolError::RowBeforeBegin(frame.kind));
+            }
+            GoSemanticFrame::Phase(frame) if saw_end => {
+                return Err(GoSemanticProtocolError::RowAfterEnd(frame.kind));
+            }
+            GoSemanticFrame::Phase(frame) => phases.push(GoSemanticPhase::from_frame(&frame)),
             GoSemanticFrame::Row(frame) if !saw_begin => {
                 return Err(GoSemanticProtocolError::RowBeforeBegin(frame.kind));
             }
@@ -195,13 +255,16 @@ pub fn decode_ndjson_str(text: &str) -> Result<GoSemanticOutput, GoSemanticProto
         go_version,
         x_tools_version,
         rows,
+        phases,
+        totals,
     })
 }
 
 fn classify_frame(frame: GoSemanticRawFrame) -> Result<GoSemanticFrame, GoSemanticProtocolError> {
     match frame.kind.as_str() {
         "session_begin" => Ok(GoSemanticFrame::SessionBegin(frame)),
-        "session_end" => Ok(GoSemanticFrame::SessionEnd),
+        "session_end" => Ok(GoSemanticFrame::SessionEnd(frame)),
+        "phase" => Ok(GoSemanticFrame::Phase(frame)),
         _ => Ok(GoSemanticFrame::Row(frame)),
     }
 }
@@ -210,6 +273,7 @@ fn allowed_kinds() -> BTreeSet<&'static str> {
     [
         "session_begin",
         "session_end",
+        "phase",
         "package",
         "function",
         "method",
@@ -235,17 +299,57 @@ mod tests {
 
     fn framed(row: &str) -> String {
         format!(
-            "{{\"schema\":\"polint-go-semantic-2\",\"kind\":\"session_begin\",\"go_version\":\"go1.25.0\",\"x_tools_version\":\"v0.45.0\"}}\n{row}\n{{\"schema\":\"polint-go-semantic-2\",\"kind\":\"session_end\"}}\n"
+            "{{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\",\"go_version\":\"go1.25.0\",\"x_tools_version\":\"v0.45.0\"}}\n{row}\n{{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\"}}\n"
         )
     }
 
     #[test]
     fn decode_ndjson_accepts_framed_rows() {
         let output = decode_ndjson_str(&framed(
-            "{\"schema\":\"polint-go-semantic-2\",\"kind\":\"package\",\"package_id\":\"p\"}",
+            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"package\",\"package_id\":\"p\"}",
         ))
         .expect("framed output decodes");
         assert_eq!(output.rows.len(), 1);
+    }
+
+    #[test]
+    fn decode_ndjson_collects_phase_rows_without_treating_them_as_facts() {
+        let output = decode_ndjson_str(&framed(
+            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"phase\",\"phase\":\"packages_load\",\
+             \"elapsed_ms\":1200,\"packages\":7,\"compiled_go_files\":31,\"deps_with_types\":94,\
+             \"rows_emitted\":0,\"peak_heap_bytes\":4096}",
+        ))
+        .expect("phase rows decode");
+
+        assert!(output.rows.is_empty());
+        assert_eq!(output.phases.len(), 1);
+        assert_eq!(output.phases[0].phase, "packages_load");
+        assert_eq!(output.phases[0].elapsed_ms, 1200);
+        assert_eq!(output.phases[0].deps_with_types, 94);
+    }
+
+    #[test]
+    fn decode_ndjson_reads_session_totals() {
+        let output = decode_ndjson_str(
+            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n\
+             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\",\"elapsed_ms\":42,\"packages\":3}\n",
+        )
+        .expect("totals decode");
+
+        assert_eq!(output.totals.elapsed_ms, 42);
+        assert_eq!(output.totals.packages, 3);
+    }
+
+    #[test]
+    fn decode_ndjson_accepts_a_sidecar_that_reports_no_phases() {
+        let output = decode_ndjson_str(&framed(
+            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"package\",\"package_id\":\"p\"}",
+        ))
+        .expect("framed output decodes");
+
+        assert!(output.phases.is_empty());
+        assert_eq!(output.totals.elapsed_ms, 0);
+        assert_eq!(output.totals.packages, 0);
     }
 
     #[test]
@@ -264,7 +368,7 @@ mod tests {
     #[test]
     fn decode_ndjson_rejects_unknown_frame_kind() {
         let err = decode_ndjson_str(&framed(
-            "{\"schema\":\"polint-go-semantic-2\",\"kind\":\"mystery\"}",
+            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"mystery\"}",
         ))
         .unwrap_err();
         assert!(err.to_string().contains("unknown Go semantic frame kind"));
@@ -273,7 +377,7 @@ mod tests {
     #[test]
     fn decode_ndjson_rejects_missing_terminator() {
         let err =
-            decode_ndjson_str("{\"schema\":\"polint-go-semantic-2\",\"kind\":\"session_begin\"}\n")
+            decode_ndjson_str("{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n")
                 .unwrap_err();
         assert_eq!(err, GoSemanticProtocolError::MissingEnd);
     }
@@ -281,9 +385,9 @@ mod tests {
     #[test]
     fn decode_ndjson_rejects_rows_after_session_end() {
         let err = decode_ndjson_str(
-            "{\"schema\":\"polint-go-semantic-2\",\"kind\":\"session_begin\"}\n\
-             {\"schema\":\"polint-go-semantic-2\",\"kind\":\"session_end\"}\n\
-             {\"schema\":\"polint-go-semantic-2\",\"kind\":\"package\",\"package_id\":\"p\"}\n",
+            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n\
+             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\"}\n\
+             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"package\",\"package_id\":\"p\"}\n",
         )
         .unwrap_err();
         assert_eq!(

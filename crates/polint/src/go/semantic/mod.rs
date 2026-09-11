@@ -5,6 +5,7 @@
 
 #![allow(dead_code)]
 
+pub(crate) mod budget;
 pub mod cache_key;
 pub mod client;
 pub mod diagnostics;

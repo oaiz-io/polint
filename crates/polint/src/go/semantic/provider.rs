@@ -29,6 +29,64 @@ pub struct GoSemanticProviderRunOutput {
     pub cache_stats: CacheStats,
     pub output_digest: Option<Digest>,
     pub execution: ProviderExecution,
+    /// Sidecar stage timings and workload sizes, keyed for the run report.
+    /// Empty when the sidecar did not run or reported no phases.
+    pub counts: BTreeMap<String, u64>,
+}
+
+/// Folds the sidecar's phase frames into report counters and logs each stage.
+///
+/// Timings are the answer to "why was this run slow", so they are logged on the
+/// same target as every other kernel stage and carried into the run report
+/// rather than staying stderr-only.
+fn phase_counts(output: &crate::go::semantic::protocol::GoSemanticOutput) -> BTreeMap<String, u64> {
+    let mut counts = BTreeMap::new();
+    for phase in &output.phases {
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            provider = "polint.go.semantic",
+            phase = phase.phase.as_str(),
+            elapsed_ms = phase.elapsed_ms,
+            packages = phase.packages,
+            compiled_go_files = phase.compiled_go_files,
+            deps_with_types = phase.deps_with_types,
+            rows_emitted = phase.rows_emitted,
+            peak_heap_bytes = phase.peak_heap_bytes,
+            "go semantic phase"
+        );
+        counts.insert(
+            format!("go_semantic.phase.{}.elapsed_ms", phase.phase),
+            phase.elapsed_ms,
+        );
+    }
+    let totals = &output.totals;
+    if totals.elapsed_ms > 0 || totals.packages > 0 {
+        tracing::info!(
+            target: "polint::kernel::stage",
+            provider = "polint.go.semantic",
+            elapsed_ms = totals.elapsed_ms,
+            packages = totals.packages,
+            compiled_go_files = totals.compiled_go_files,
+            deps_with_types = totals.deps_with_types,
+            peak_heap_bytes = totals.peak_heap_bytes,
+            "go semantic sidecar totals"
+        );
+        counts.insert("go_semantic.elapsed_ms".to_string(), totals.elapsed_ms);
+        counts.insert("go_semantic.packages".to_string(), totals.packages);
+        counts.insert(
+            "go_semantic.compiled_go_files".to_string(),
+            totals.compiled_go_files,
+        );
+        counts.insert(
+            "go_semantic.deps_with_types".to_string(),
+            totals.deps_with_types,
+        );
+        counts.insert(
+            "go_semantic.peak_heap_bytes".to_string(),
+            totals.peak_heap_bytes,
+        );
+    }
+    counts
 }
 
 pub fn derive_go_semantic_with_cache_stats(
@@ -46,7 +104,7 @@ pub fn derive_go_semantic_with_cache_stats(
         config_digest,
         manifest,
         go_syntax_output_digest,
-        |config| GoSemanticClient::new(root.to_path_buf()).run(config),
+        |config| GoSemanticClient::new(root.to_path_buf(), config).run(config),
     )
 }
 
@@ -186,6 +244,7 @@ fn derive_go_semantic_with_runner(
         }
     };
 
+    let counts = phase_counts(&run.output);
     let lowered = match lower_go_semantic(db, &run.output) {
         Ok(output) => output,
         Err(error) => {
@@ -197,6 +256,7 @@ fn derive_go_semantic_with_runner(
                     stage: ProviderFailureStage::Execution,
                     reason: ProviderFailureReason::ExecutionFailed,
                 },
+                counts,
             };
         }
     };
@@ -206,7 +266,7 @@ fn derive_go_semantic_with_runner(
         go_version: run.output.go_version,
         x_tools_version: run.output.x_tools_version,
     };
-    store_output(
+    let mut stored = store_output(
         db,
         config_digest,
         manifest,
@@ -219,7 +279,9 @@ fn derive_go_semantic_with_runner(
             diagnostics,
             execution: ProviderExecution::Succeeded,
         },
-    )
+    );
+    stored.counts = counts;
+    stored
 }
 
 #[derive(Debug, Clone)]
@@ -300,6 +362,7 @@ fn store_output(
                 &report.structural_duplicates,
             ));
             GoSemanticProviderRunOutput {
+                counts: BTreeMap::new(),
                 diagnostics,
                 cache_stats: parts.cache_stats,
                 output_digest: Some(output_digest),
@@ -307,12 +370,14 @@ fn store_output(
             }
         }
         Ok(_report) => GoSemanticProviderRunOutput {
+            counts: BTreeMap::new(),
             diagnostics: parts.diagnostics,
             cache_stats: parts.cache_stats,
             output_digest: None,
             execution,
         },
         Err(error) => GoSemanticProviderRunOutput {
+            counts: BTreeMap::new(),
             diagnostics: vec![provider_error_diagnostic(error.to_string())],
             cache_stats: parts.cache_stats,
             output_digest: None,
@@ -595,6 +660,7 @@ fn default_lifecycle() -> GoAnalysisConfig {
         build_tags: Vec::new(),
         include_tests: true,
         offline: false,
+        semantic_timeout_ms: None,
         files_without_module_root: Vec::new(),
     }
 }
