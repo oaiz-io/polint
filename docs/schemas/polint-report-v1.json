@@ -4,17 +4,13 @@
   "title": "PolintReport",
   "description": "Machine output from `polint check --format json` and from repo-local `polint-local-rules check --format json`. Diagnostics are sorted for stable ordering (see README / sort_diagnostics).",
   "type": "object",
-  "required": [
-    "version",
-    "tool",
-    "diagnostics"
-  ],
+  "required": ["version", "tool", "diagnostics"],
   "additionalProperties": true,
   "properties": {
     "version": {
       "type": "integer",
       "const": 2,
-      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional."
+      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional, so a v1 consumer still reads a v2 report."
     },
     "schema": {
       "type": "string",
@@ -23,10 +19,7 @@
     },
     "tool": {
       "type": "object",
-      "required": [
-        "name",
-        "version"
-      ],
+      "required": ["name", "version"],
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -41,35 +34,27 @@
     },
     "diagnostics": {
       "type": "array",
-      "items": {
-        "$ref": "#/$defs/diagnostic"
-      }
+      "items": { "$ref": "#/$defs/diagnostic" }
     },
     "summary": {
       "type": "object",
       "description": "Optional run telemetry (present when the emitter has a rule registry).",
-      "required": [
-        "rules"
-      ],
+      "required": ["rules"],
       "additionalProperties": false,
       "properties": {
         "rules": {
           "type": "array",
-          "items": {
-            "$ref": "polint-ai-friendly-v1.json#/$defs/ruleExecution"
-          }
+          "items": { "$ref": "polint-ai-friendly-v1.json#/$defs/ruleExecution" }
         },
         "providers": {
           "type": "array",
-          "items": {
-            "$ref": "polint-ai-friendly-v1.json#/$defs/providerOutcome"
-          }
+          "description": "Providers that failed or were blocked, plus providers that reported counters.",
+          "items": { "$ref": "polint-ai-friendly-v1.json#/$defs/providerOutcome" }
         },
         "budgets": {
           "type": "array",
-          "items": {
-            "$ref": "polint-ai-friendly-v1.json#/$defs/budget"
-          }
+          "description": "Budgets this run exhausted.",
+          "items": { "$ref": "polint-ai-friendly-v1.json#/$defs/budget" }
         }
       }
     }
@@ -77,11 +62,7 @@
   "$defs": {
     "severity": {
       "type": "string",
-      "enum": [
-        "info",
-        "warn",
-        "error"
-      ]
+      "enum": ["info", "warn", "error"]
     },
     "evidenceString": {
       "type": "string",
@@ -89,101 +70,37 @@
     },
     "evidenceStatus": {
       "type": "string",
-      "enum": [
-        "Present",
-        "Partial",
-        "Unknown",
-        "Unsupported",
-        "SetupMissing",
-        "BudgetExceeded",
-        "Rejected"
-      ]
+      "enum": ["Present", "Partial", "Unknown", "Unsupported", "SetupMissing", "BudgetExceeded", "Rejected"]
     },
     "evidencePrecision": {
       "type": "string",
-      "enum": [
-        "Exact",
-        "SetupAware",
-        "Syntax",
-        "Conservative",
-        "Heuristic",
-        "Unknown"
-      ]
+      "enum": ["Exact", "SetupAware", "Syntax", "Conservative", "Heuristic", "Unknown"]
     },
     "evidenceProvenance": {
       "type": "string",
-      "enum": [
-        "Native",
-        "Summary",
-        "Extension",
-        "Model",
-        "Query",
-        "Synthetic"
-      ]
+      "enum": ["Native", "Summary", "Extension", "Model", "Query", "Synthetic"]
     },
     "evidenceValidation": {
       "type": "string",
-      "enum": [
-        "Native",
-        "ReferentiallyValidated",
-        "ExtensionValidated",
-        "BudgetValidated",
-        "RendererValidated",
-        "Rejected"
-      ]
+      "enum": ["Native", "ReferentiallyValidated", "ExtensionValidated", "BudgetValidated", "RendererValidated", "Rejected"]
     },
     "evidenceConfidence": {
       "type": "string",
-      "enum": [
-        "High",
-        "Medium",
-        "Low"
-      ]
+      "enum": ["High", "Medium", "Low"]
     },
     "evidenceEdgeKind": {
       "type": "string",
-      "enum": [
-        "DataValue",
-        "DataTaint",
-        "DataAddress",
-        "Control",
-        "Call",
-        "Return",
-        "ParameterIn",
-        "ParameterOut",
-        "Summary",
-        "Model",
-        "Alias",
-        "Unknown",
-        "ExplanationOnly"
-      ]
+      "enum": ["DataValue", "DataTaint", "DataAddress", "Control", "Call", "Return", "ParameterIn", "ParameterOut", "Summary", "Model", "Alias", "Unknown", "ExplanationOnly"]
     },
     "textRange": {
       "type": "object",
-      "required": [
-        "start_line",
-        "start_col",
-        "end_line",
-        "end_col"
-      ],
+      "required": ["start_line", "start_col", "end_line", "end_col"],
       "additionalProperties": false,
       "properties": {
-        "start_line": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "start_col": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "end_line": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "end_col": {
-          "type": "integer",
-          "minimum": 0
-        }
+        "start_line": { "type": "integer", "minimum": 0 },
+        "start_col": { "type": "integer", "minimum": 0 },
+        "end_line": { "type": "integer", "minimum": 0 },
+        "end_col": { "type": "integer", "minimum": 0 }
       }
     },
     "diagnostic": {
@@ -203,176 +120,80 @@
       ],
       "additionalProperties": true,
       "properties": {
-        "rule_id": {
-          "type": "string"
-        },
-        "severity": {
-          "$ref": "#/$defs/severity"
-        },
-        "file": {
-          "type": "string"
-        },
-        "range": {
-          "$ref": "#/$defs/textRange"
-        },
-        "message": {
-          "type": "string"
-        },
+        "rule_id": { "type": "string" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "file": { "type": "string" },
+        "range": { "$ref": "#/$defs/textRange" },
+        "message": { "type": "string" },
         "labels": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "range",
-              "message"
-            ],
+            "required": ["range", "message"],
             "additionalProperties": false,
             "properties": {
-              "range": {
-                "$ref": "#/$defs/textRange"
-              },
-              "message": {
-                "type": "string"
-              }
+              "range": { "$ref": "#/$defs/textRange" },
+              "message": { "type": "string" }
             }
           }
         },
-        "help": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
+        "help": { "type": ["string", "null"] },
         "evidence": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "label",
-              "value"
-            ],
+            "required": ["label", "value"],
             "additionalProperties": false,
             "properties": {
-              "label": {
-                "type": "string"
-              },
-              "value": {
-                "type": "string"
-              }
+              "label": { "type": "string" },
+              "value": { "type": "string" }
             }
           }
         },
-        "evidence_v1": {
-          "$ref": "#/$defs/evidenceV1"
-        },
+        "evidence_v1": { "$ref": "#/$defs/evidenceV1" },
         "suggestions": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "message"
-            ],
+            "required": ["message"],
             "additionalProperties": false,
             "properties": {
-              "message": {
-                "type": "string"
-              }
+              "message": { "type": "string" }
             }
           }
         },
         "fix": {
-          "type": [
-            "object",
-            "null"
-          ],
+          "type": ["object", "null"],
           "additionalProperties": false,
-          "required": [
-            "message",
-            "replacement"
-          ],
+          "required": ["message", "replacement"],
           "properties": {
-            "message": {
-              "type": "string"
-            },
-            "replacement": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
+            "message": { "type": "string" },
+            "replacement": { "type": ["string", "null"] }
           }
         },
-        "stable_fingerprint": {
-          "type": "string"
-        }
+        "stable_fingerprint": { "type": "string" }
       }
     },
     "evidenceV1": {
       "type": "object",
-      "required": [
-        "version",
-        "bundle",
-        "paths",
-        "unknowns",
-        "omitted_regions",
-        "limits"
-      ],
+      "required": ["version", "bundle", "paths", "unknowns", "omitted_regions", "limits"],
       "additionalProperties": false,
       "properties": {
-        "version": {
-          "type": "integer",
-          "const": 1
-        },
+        "version": { "type": "integer", "const": 1 },
         "bundle": {
           "type": "object",
-          "required": [
-            "id",
-            "stable_key",
-            "diagnostic_stable_key",
-            "status",
-            "precision",
-            "provenance",
-            "validation",
-            "confidence",
-            "replay_key"
-          ],
+          "required": ["id", "stable_key", "diagnostic_stable_key", "status", "precision", "provenance", "validation", "confidence", "replay_key"],
           "additionalProperties": false,
           "properties": {
-            "id": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "stable_key": {
-              "$ref": "#/$defs/evidenceString"
-            },
-            "diagnostic_stable_key": {
-              "$ref": "#/$defs/evidenceString"
-            },
-            "status": {
-              "$ref": "#/$defs/evidenceStatus"
-            },
-            "precision": {
-              "$ref": "#/$defs/evidencePrecision"
-            },
-            "provenance": {
-              "$ref": "#/$defs/evidenceProvenance"
-            },
-            "validation": {
-              "$ref": "#/$defs/evidenceValidation"
-            },
-            "confidence": {
-              "$ref": "#/$defs/evidenceConfidence"
-            },
-            "replay_key": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/evidenceString"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
+            "id": { "type": "integer", "minimum": 0 },
+            "stable_key": { "$ref": "#/$defs/evidenceString" },
+            "diagnostic_stable_key": { "$ref": "#/$defs/evidenceString" },
+            "status": { "$ref": "#/$defs/evidenceStatus" },
+            "precision": { "$ref": "#/$defs/evidencePrecision" },
+            "provenance": { "$ref": "#/$defs/evidenceProvenance" },
+            "validation": { "$ref": "#/$defs/evidenceValidation" },
+            "confidence": { "$ref": "#/$defs/evidenceConfidence" },
+            "replay_key": { "anyOf": [{ "$ref": "#/$defs/evidenceString" }, { "type": "null" }] }
           }
         },
         "paths": {
@@ -380,166 +201,59 @@
           "maxItems": 64,
           "items": {
             "type": "object",
-            "required": [
-              "id",
-              "stable_key",
-              "rank",
-              "status",
-              "hidden_node_count",
-              "nodes",
-              "edges",
-              "omitted_regions",
-              "total_edges",
-              "rendered_edges",
-              "edges_truncated"
-            ],
+            "required": ["id", "stable_key", "rank", "status", "hidden_node_count", "nodes", "edges", "omitted_regions", "total_edges", "rendered_edges", "edges_truncated"],
             "additionalProperties": false,
             "properties": {
-              "id": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "stable_key": {
-                "$ref": "#/$defs/evidenceString"
-              },
-              "rank": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "status": {
-                "$ref": "#/$defs/evidenceStatus"
-              },
-              "hidden_node_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "nodes": {
-                "type": "array",
-                "maxItems": 4096,
-                "items": {
-                  "type": "integer",
-                  "minimum": 0
-                }
-              },
+              "id": { "type": "integer", "minimum": 0 },
+              "stable_key": { "$ref": "#/$defs/evidenceString" },
+              "rank": { "type": "integer", "minimum": 0 },
+              "status": { "$ref": "#/$defs/evidenceStatus" },
+              "hidden_node_count": { "type": "integer", "minimum": 0 },
+              "nodes": { "type": "array", "maxItems": 4096, "items": { "type": "integer", "minimum": 0 } },
               "edges": {
                 "type": "array",
                 "maxItems": 512,
                 "items": {
                   "type": "object",
-                  "required": [
-                    "id",
-                    "stable_key",
-                    "kind",
-                    "status",
-                    "precision",
-                    "provenance",
-                    "validation",
-                    "confidence",
-                    "summary_stable_key",
-                    "expansion"
-                  ],
+                  "required": ["id", "stable_key", "kind", "status", "precision", "provenance", "validation", "confidence", "summary_stable_key", "expansion"],
                   "additionalProperties": false,
                   "properties": {
-                    "id": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "stable_key": {
-                      "$ref": "#/$defs/evidenceString"
-                    },
-                    "kind": {
-                      "$ref": "#/$defs/evidenceEdgeKind"
-                    },
-                    "status": {
-                      "$ref": "#/$defs/evidenceStatus"
-                    },
-                    "precision": {
-                      "$ref": "#/$defs/evidencePrecision"
-                    },
-                    "provenance": {
-                      "$ref": "#/$defs/evidenceProvenance"
-                    },
-                    "validation": {
-                      "$ref": "#/$defs/evidenceValidation"
-                    },
-                    "confidence": {
-                      "$ref": "#/$defs/evidenceConfidence"
-                    },
-                    "summary_stable_key": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/$defs/evidenceString"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
+                    "id": { "type": "integer", "minimum": 0 },
+                    "stable_key": { "$ref": "#/$defs/evidenceString" },
+                    "kind": { "$ref": "#/$defs/evidenceEdgeKind" },
+                    "status": { "$ref": "#/$defs/evidenceStatus" },
+                    "precision": { "$ref": "#/$defs/evidencePrecision" },
+                    "provenance": { "$ref": "#/$defs/evidenceProvenance" },
+                    "validation": { "$ref": "#/$defs/evidenceValidation" },
+                    "confidence": { "$ref": "#/$defs/evidenceConfidence" },
+                    "summary_stable_key": { "anyOf": [{ "$ref": "#/$defs/evidenceString" }, { "type": "null" }] },
                     "expansion": {
                       "type": "object",
-                      "required": [
-                        "state"
-                      ],
+                      "required": ["state"],
                       "additionalProperties": false,
                       "properties": {
-                        "state": {
-                          "type": "string",
-                          "enum": [
-                            "none",
-                            "expandable",
-                            "opaque",
-                            "external_model"
-                          ]
-                        },
-                        "key": {
-                          "$ref": "#/$defs/evidenceString"
-                        },
-                        "reason": {
-                          "$ref": "#/$defs/evidenceString"
-                        },
-                        "model": {
-                          "$ref": "#/$defs/evidenceString"
-                        }
+                        "state": { "type": "string", "enum": ["none", "expandable", "opaque", "external_model"] },
+                        "key": { "$ref": "#/$defs/evidenceString" },
+                        "reason": { "$ref": "#/$defs/evidenceString" },
+                        "model": { "$ref": "#/$defs/evidenceString" }
                       }
                     },
                     "location": {
                       "type": "object",
-                      "required": [
-                        "uri",
-                        "range"
-                      ],
+                      "required": ["uri", "range"],
                       "additionalProperties": false,
                       "properties": {
-                        "uri": {
-                          "$ref": "#/$defs/evidenceString"
-                        },
-                        "range": {
-                          "$ref": "#/$defs/textRange"
-                        }
+                        "uri": { "$ref": "#/$defs/evidenceString" },
+                        "range": { "$ref": "#/$defs/textRange" }
                       }
                     }
                   }
                 }
               },
-              "omitted_regions": {
-                "type": "array",
-                "maxItems": 512,
-                "items": {
-                  "type": "integer",
-                  "minimum": 0
-                }
-              },
-              "total_edges": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "rendered_edges": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "edges_truncated": {
-                "type": "boolean"
-              }
+              "omitted_regions": { "type": "array", "maxItems": 512, "items": { "type": "integer", "minimum": 0 } },
+              "total_edges": { "type": "integer", "minimum": 0 },
+              "rendered_edges": { "type": "integer", "minimum": 0 },
+              "edges_truncated": { "type": "boolean" }
             }
           }
         },
@@ -548,30 +262,13 @@
           "maxItems": 512,
           "items": {
             "type": "object",
-            "required": [
-              "stable_key",
-              "reason",
-              "message",
-              "edge"
-            ],
+            "required": ["stable_key", "reason", "message", "edge"],
             "additionalProperties": false,
             "properties": {
-              "stable_key": {
-                "$ref": "#/$defs/evidenceString"
-              },
-              "reason": {
-                "$ref": "#/$defs/evidenceString"
-              },
-              "message": {
-                "$ref": "#/$defs/evidenceString"
-              },
-              "edge": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "minimum": 0
-              }
+              "stable_key": { "$ref": "#/$defs/evidenceString" },
+              "reason": { "$ref": "#/$defs/evidenceString" },
+              "message": { "$ref": "#/$defs/evidenceString" },
+              "edge": { "type": ["integer", "null"], "minimum": 0 }
             }
           }
         },
@@ -580,44 +277,15 @@
           "maxItems": 512,
           "items": {
             "type": "object",
-            "required": [
-              "id",
-              "stable_key",
-              "reason",
-              "hidden_node_count",
-              "hidden_edge_count",
-              "budget_label"
-            ],
+            "required": ["id", "stable_key", "reason", "hidden_node_count", "hidden_edge_count", "budget_label"],
             "additionalProperties": false,
             "properties": {
-              "id": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "stable_key": {
-                "$ref": "#/$defs/evidenceString"
-              },
-              "reason": {
-                "$ref": "#/$defs/evidenceString"
-              },
-              "hidden_node_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "hidden_edge_count": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "budget_label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/evidenceString"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
+              "id": { "type": "integer", "minimum": 0 },
+              "stable_key": { "$ref": "#/$defs/evidenceString" },
+              "reason": { "$ref": "#/$defs/evidenceString" },
+              "hidden_node_count": { "type": "integer", "minimum": 0 },
+              "hidden_edge_count": { "type": "integer", "minimum": 0 },
+              "budget_label": { "anyOf": [{ "$ref": "#/$defs/evidenceString" }, { "type": "null" }] }
             }
           }
         },
@@ -640,55 +308,19 @@
           ],
           "additionalProperties": false,
           "properties": {
-            "max_paths": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "max_edges_per_path": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "max_unknowns": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "max_omitted_regions": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "total_paths": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "rendered_paths": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "paths_truncated": {
-              "type": "boolean"
-            },
-            "total_unknowns": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "rendered_unknowns": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "unknowns_truncated": {
-              "type": "boolean"
-            },
-            "total_omitted_regions": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "rendered_omitted_regions": {
-              "type": "integer",
-              "minimum": 0
-            },
-            "omitted_regions_truncated": {
-              "type": "boolean"
-            }
+            "max_paths": { "type": "integer", "minimum": 0 },
+            "max_edges_per_path": { "type": "integer", "minimum": 0 },
+            "max_unknowns": { "type": "integer", "minimum": 0 },
+            "max_omitted_regions": { "type": "integer", "minimum": 0 },
+            "total_paths": { "type": "integer", "minimum": 0 },
+            "rendered_paths": { "type": "integer", "minimum": 0 },
+            "paths_truncated": { "type": "boolean" },
+            "total_unknowns": { "type": "integer", "minimum": 0 },
+            "rendered_unknowns": { "type": "integer", "minimum": 0 },
+            "unknowns_truncated": { "type": "boolean" },
+            "total_omitted_regions": { "type": "integer", "minimum": 0 },
+            "rendered_omitted_regions": { "type": "integer", "minimum": 0 },
+            "omitted_regions_truncated": { "type": "boolean" }
           }
         }
       }

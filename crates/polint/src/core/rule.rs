@@ -359,6 +359,9 @@ pub(crate) fn run_rules_with_runtime_provider_blockers(
     run_rules_observed(db, rules, options, enabled, parallel, runtime).diagnostics
 }
 
+/// One rule's diagnostics, plus its id and observation count when it ran.
+type RuleRunRow = (Vec<Diagnostic>, Option<(String, u64)>);
+
 /// What one rule-execution pass produced.
 #[derive(Debug, Default)]
 pub(crate) struct RuleRunOutput {
@@ -375,7 +378,7 @@ pub(crate) fn run_rules_observed(
     parallel: bool,
     runtime: &RuleRuntimeViews<'_>,
 ) -> RuleRunOutput {
-    let run_one = |rule: &Rule| -> (Vec<Diagnostic>, Option<(String, u64)>) {
+    let run_one = |rule: &Rule| -> RuleRunRow {
         let meta = match catch_unwind(AssertUnwindSafe(|| rule.meta())) {
             Ok(meta) => meta,
             Err(_) => {
@@ -427,10 +430,10 @@ pub(crate) fn run_rules_observed(
             Ok(Err(error)) => vec![internal_rule_error(db, &meta, error.to_string())],
             Err(_) => vec![internal_rule_error(db, &meta, "rule panicked".to_string())],
         };
-        (diagnostics, Some((meta.id.clone(), observed)))
+        (diagnostics, Some((meta.id, observed)))
     };
 
-    let runs: Vec<(Vec<Diagnostic>, Option<(String, u64)>)> = if parallel {
+    let runs: Vec<RuleRunRow> = if parallel {
         rules.par_iter().map(run_one).collect()
     } else {
         rules.iter().map(run_one).collect()

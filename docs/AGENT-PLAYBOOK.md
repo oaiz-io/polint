@@ -127,10 +127,14 @@ nothing. `outcome = capability_blocked` means it never ran, and
 `blocking_providers` names why. Those are different states and only the first one
 is evidence of a clean repository.
 
-`summary.providers[]` — one row per analysis provider, with `status`,
-`elapsed_ms`, cache counters, and provider-specific `counts` (the Go semantic
-sidecar reports its per-stage timings and workload there). This is where a slow
-or failed run is attributed.
+`summary.providers[]` — one row per provider you can act on: any provider that
+failed or was blocked, any provider that reported counters, and the providers
+whose names the rest of the output already uses. Each row carries
+`status`, `blockers`, `elapsed_ms`, cache counters, and provider-specific
+`counts` (the Go semantic sidecar reports its per-stage timings and workload
+there). This is where a slow or failed run is attributed. Providers this run
+never selected, and internal fact families that quietly succeeded, are not
+listed; their stage timings are on the `polint::kernel::stage` log target.
 
 `summary.budgets[]` — one row per budget the run exhausted, so "polint bounded
 itself" is distinguishable from "polint found nothing".

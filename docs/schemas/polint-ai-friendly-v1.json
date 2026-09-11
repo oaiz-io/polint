@@ -18,7 +18,7 @@
     "version": {
       "type": "integer",
       "const": 2,
-      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional."
+      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional, so a v1 consumer still reads a v2 report."
     },
     "schema": {
       "type": "string",
@@ -26,18 +26,11 @@
     },
     "tool": {
       "type": "object",
-      "required": [
-        "name",
-        "version"
-      ],
+      "required": ["name", "version"],
       "additionalProperties": false,
       "properties": {
-        "name": {
-          "type": "string"
-        },
-        "version": {
-          "type": "string"
-        }
+        "name": { "type": "string" },
+        "version": { "type": "string" }
       }
     },
     "generated_at": {
@@ -56,165 +49,85 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "total_diagnostics": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "rules_triggered": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "by_severity": {
-          "$ref": "#/$defs/severityCounts"
-        },
+        "total_diagnostics": { "type": "integer", "minimum": 0 },
+        "rules_triggered": { "type": "integer", "minimum": 0 },
+        "by_severity": { "$ref": "#/$defs/severityCounts" },
         "by_rule": {
           "type": "array",
-          "items": {
-            "$ref": "#/$defs/ruleSummary"
-          }
+          "items": { "$ref": "#/$defs/ruleSummary" }
         },
         "rules": {
           "type": "array",
           "description": "Per registered rule, including zero-finding and capability-skipped rules.",
-          "items": {
-            "$ref": "#/$defs/ruleExecution"
-          }
-        },
-        "examples_limit": {
-          "type": "integer",
-          "const": 10
+          "items": { "$ref": "#/$defs/ruleExecution" }
         },
         "providers": {
           "type": "array",
-          "items": {
-            "$ref": "#/$defs/providerOutcome"
-          },
-          "description": "Per provider, so a blocked rule names the provider that blocked it."
+          "description": "Providers that failed or were blocked, plus providers that reported counters.",
+          "items": { "$ref": "#/$defs/providerOutcome" }
         },
         "budgets": {
           "type": "array",
-          "items": {
-            "$ref": "#/$defs/budget"
-          },
-          "description": "Budgets this run exhausted."
-        }
+          "description": "Budgets this run exhausted.",
+          "items": { "$ref": "#/$defs/budget" }
+        },
+        "examples_limit": { "type": "integer", "const": 10 }
       }
     },
     "examples": {
       "type": "array",
       "maxItems": 10,
-      "items": {
-        "$ref": "#/$defs/example"
-      }
+      "items": { "$ref": "#/$defs/example" }
     },
     "truncation": {
       "type": "object",
-      "required": [
-        "total_diagnostics",
-        "included_diagnostics",
-        "reason"
-      ],
+      "required": ["total_diagnostics", "included_diagnostics", "reason"],
       "additionalProperties": false,
       "properties": {
-        "total_diagnostics": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "included_diagnostics": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "reason": {
-          "type": "string"
-        }
+        "total_diagnostics": { "type": "integer", "minimum": 0 },
+        "included_diagnostics": { "type": "integer", "minimum": 0 },
+        "reason": { "type": "string" }
       }
     },
     "diagnostics": {
       "type": "array",
-      "items": {
-        "$ref": "polint-report-v1.json#/$defs/diagnostic"
-      }
+      "items": { "$ref": "polint-report-v1.json#/$defs/diagnostic" }
     }
   },
   "$defs": {
     "severity": {
       "type": "string",
-      "enum": [
-        "info",
-        "warn",
-        "error"
-      ]
+      "enum": ["info", "warn", "error"]
     },
     "severityCounts": {
       "type": "object",
-      "required": [
-        "error",
-        "warn",
-        "info"
-      ],
+      "required": ["error", "warn", "info"],
       "additionalProperties": false,
       "properties": {
-        "error": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "warn": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "info": {
-          "type": "integer",
-          "minimum": 0
-        }
+        "error": { "type": "integer", "minimum": 0 },
+        "warn": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 }
       }
     },
     "textRange": {
       "type": "object",
-      "required": [
-        "start_line",
-        "start_col",
-        "end_line",
-        "end_col"
-      ],
+      "required": ["start_line", "start_col", "end_line", "end_col"],
       "additionalProperties": false,
       "properties": {
-        "start_line": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "start_col": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "end_line": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "end_col": {
-          "type": "integer",
-          "minimum": 0
-        }
+        "start_line": { "type": "integer", "minimum": 0 },
+        "start_col": { "type": "integer", "minimum": 0 },
+        "end_line": { "type": "integer", "minimum": 0 },
+        "end_col": { "type": "integer", "minimum": 0 }
       }
     },
     "ruleSummary": {
       "type": "object",
-      "required": [
-        "rule_id",
-        "total",
-        "by_severity"
-      ],
+      "required": ["rule_id", "total", "by_severity"],
       "additionalProperties": false,
       "properties": {
-        "rule_id": {
-          "type": "string"
-        },
-        "total": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "by_severity": {
-          "$ref": "#/$defs/severityCounts"
-        }
+        "rule_id": { "type": "string" },
+        "total": { "type": "integer", "minimum": 0 },
+        "by_severity": { "$ref": "#/$defs/severityCounts" }
       }
     },
     "ruleExecution": {
@@ -228,9 +141,7 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "rule_id": {
-          "type": "string"
-        },
+        "rule_id": { "type": "string" },
         "planned": {
           "type": "boolean",
           "description": "True when the rule survived capability planning and will execute."
@@ -244,28 +155,19 @@
           "minimum": 0,
           "description": "Analyzed files matching this rule's files/allow_files filters."
         },
-        "diagnostics_emitted": {
-          "type": "integer",
-          "minimum": 0
-        },
+        "diagnostics_emitted": { "type": "integer", "minimum": 0 },
         "skipped_reason": {
           "type": "string",
           "description": "Present when planned or capabilities_ok is false; uses polint/capability wording."
         },
         "outcome": {
           "type": "string",
-          "enum": [
-            "analyzed",
-            "capability_blocked",
-            "not_planned"
-          ],
+          "enum": ["analyzed", "capability_blocked", "not_planned"],
           "description": "What happened to this rule. Zero diagnostics mean different things in each."
         },
         "blocking_providers": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "description": "Providers whose failure blocked this rule."
         },
         "observed_events": {
@@ -275,164 +177,23 @@
         }
       }
     },
-    "example": {
-      "type": "object",
-      "required": [
-        "rule_id",
-        "severity",
-        "file",
-        "range",
-        "message",
-        "labels",
-        "help",
-        "evidence",
-        "suggestions",
-        "fix",
-        "stable_fingerprint"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "rule_id": {
-          "type": "string"
-        },
-        "severity": {
-          "$ref": "#/$defs/severity"
-        },
-        "file": {
-          "type": "string"
-        },
-        "range": {
-          "$ref": "#/$defs/textRange"
-        },
-        "message": {
-          "type": "string"
-        },
-        "labels": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "range",
-              "message"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "range": {
-                "$ref": "#/$defs/textRange"
-              },
-              "message": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "help": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "evidence": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "label",
-              "value"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "label": {
-                "type": "string"
-              },
-              "value": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "suggestions": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "message"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "fix": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "required": [
-            "message",
-            "replacement"
-          ],
-          "properties": {
-            "message": {
-              "type": "string"
-            },
-            "replacement": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        },
-        "stable_fingerprint": {
-          "type": "string"
-        }
-      }
-    },
     "providerCache": {
       "type": "object",
-      "required": [
-        "hits",
-        "misses",
-        "recomputes",
-        "writes"
-      ],
+      "required": ["hits", "misses", "recomputes", "writes"],
       "additionalProperties": false,
       "properties": {
-        "hits": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "misses": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "recomputes": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "writes": {
-          "type": "integer",
-          "minimum": 0
-        }
+        "hits": { "type": "integer", "minimum": 0 },
+        "misses": { "type": "integer", "minimum": 0 },
+        "recomputes": { "type": "integer", "minimum": 0 },
+        "writes": { "type": "integer", "minimum": 0 }
       }
     },
     "providerOutcome": {
       "type": "object",
-      "required": [
-        "provider_id",
-        "status",
-        "cache"
-      ],
+      "required": ["provider_id", "status", "cache"],
       "additionalProperties": false,
       "properties": {
-        "provider_id": {
-          "type": "string"
-        },
+        "provider_id": { "type": "string" },
         "status": {
           "type": "string",
           "description": "Sealed provider outcome status."
@@ -452,48 +213,102 @@
         },
         "blockers": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string" },
           "description": "Providers whose failure blocked this one."
         },
-        "cache": {
-          "$ref": "#/$defs/providerCache"
-        },
+        "cache": { "$ref": "#/$defs/providerCache" },
         "counts": {
           "type": "object",
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0
-          },
+          "additionalProperties": { "type": "integer", "minimum": 0 },
           "description": "Provider-specific counters, such as a sidecar's per-stage timings."
         }
       }
     },
     "budget": {
       "type": "object",
-      "required": [
-        "budget",
-        "status",
-        "reported_by",
-        "detail"
-      ],
+      "required": ["budget", "status", "reported_by", "detail"],
       "additionalProperties": false,
       "properties": {
         "budget": {
           "type": "string",
           "description": "Budget identifier, such as cfg_dominance_pairs or solver_steps."
         },
-        "status": {
-          "type": "string"
-        },
+        "status": { "type": "string" },
         "reported_by": {
           "type": "string",
           "description": "Diagnostic rule id that reported the trip."
         },
-        "detail": {
-          "type": "string"
-        }
+        "detail": { "type": "string" }
+      }
+    },
+    "example": {
+      "type": "object",
+      "required": [
+        "rule_id",
+        "severity",
+        "file",
+        "range",
+        "message",
+        "labels",
+        "help",
+        "evidence",
+        "suggestions",
+        "fix",
+        "stable_fingerprint"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": { "type": "string" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "file": { "type": "string" },
+        "range": { "$ref": "#/$defs/textRange" },
+        "message": { "type": "string" },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["range", "message"],
+            "additionalProperties": false,
+            "properties": {
+              "range": { "$ref": "#/$defs/textRange" },
+              "message": { "type": "string" }
+            }
+          }
+        },
+        "help": { "type": ["string", "null"] },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["message"],
+            "additionalProperties": false,
+            "properties": {
+              "message": { "type": "string" }
+            }
+          }
+        },
+        "fix": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["message", "replacement"],
+          "properties": {
+            "message": { "type": "string" },
+            "replacement": { "type": ["string", "null"] }
+          }
+        },
+        "stable_fingerprint": { "type": "string" }
       }
     }
   }

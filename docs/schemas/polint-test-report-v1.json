@@ -4,18 +4,12 @@
   "title": "polint test report v1",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "version",
-    "schema",
-    "tool",
-    "summary",
-    "cases"
-  ],
+  "required": ["version", "schema", "tool", "summary", "cases"],
   "properties": {
     "version": {
       "type": "integer",
       "const": 2,
-      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional."
+      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional, so a v1 consumer still reads a v2 report."
     },
     "schema": {
       "type": "string",
@@ -24,10 +18,7 @@
     "tool": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "name",
-        "version"
-      ],
+      "required": ["name", "version"],
       "properties": {
         "name": {
           "type": "string"
@@ -50,20 +41,12 @@
   "$defs": {
     "severity": {
       "type": "string",
-      "enum": [
-        "info",
-        "warn",
-        "error"
-      ]
+      "enum": ["info", "warn", "error"]
     },
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "passed",
-        "failed",
-        "total"
-      ],
+      "required": ["passed", "failed", "total"],
       "properties": {
         "passed": {
           "type": "integer",
@@ -99,10 +82,7 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "passed",
-            "failed"
-          ]
+          "enum": ["passed", "failed"]
         },
         "expected_diagnostics": {
           "type": "array",
@@ -127,11 +107,7 @@
     "expected_diagnostic": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "rule_id",
-        "file",
-        "severity"
-      ],
+      "required": ["rule_id", "file", "severity"],
       "properties": {
         "rule_id": {
           "type": "string"
@@ -143,23 +119,14 @@
           "$ref": "#/$defs/severity"
         },
         "message_contains": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "range_start_line": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "minimum": 0
         },
         "range_start_column": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "minimum": 0
         }
       }
@@ -201,9 +168,7 @@
     "failure": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "message"
-      ],
+      "required": ["message"],
       "properties": {
         "message": {
           "type": "string"

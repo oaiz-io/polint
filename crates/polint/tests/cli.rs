@@ -676,7 +676,14 @@ fn phase41_public_json_contracts_are_stable() {
         assert_eq!(first, second, "{command:?} should be deterministic");
         let value: serde_json::Value = serde_json::from_str(&first)
             .unwrap_or_else(|error| panic!("{command:?} stdout was not JSON: {error}\n{first}"));
-        assert_eq!(value["version"], 1, "{command:?}");
+        // The rule-test and check reports moved to body version 2 together; the
+        // inspect/facts/unknowns/explain surfaces are unchanged.
+        let expected_version = if command.first() == Some(&"test") {
+            2
+        } else {
+            1
+        };
+        assert_eq!(value["version"], expected_version, "{command:?}");
         assert_eq!(value["tool"]["name"], "polint", "{command:?}");
         assert!(value["schema"].as_str().is_some(), "{command:?}");
 
@@ -728,7 +735,7 @@ fn polint_test_json_matches_schema_v1() {
             .assert()
             .success(),
     );
-    assert_eq!(value["version"], 1);
+    assert_eq!(value["version"], 2);
     assert_eq!(value["tool"]["name"], "polint");
     assert_eq!(
         value["schema"],
@@ -9030,7 +9037,7 @@ rules = []
             .success(),
     );
     assert!(
-        json.get("version").and_then(|v| v.as_u64()) == Some(1) && diagnostics(&json).is_empty(),
+        json.get("version").and_then(|v| v.as_u64()) == Some(2) && diagnostics(&json).is_empty(),
         "check output should be polint JSON report: {json:#?}"
     );
 }

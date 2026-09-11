@@ -686,6 +686,73 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
         _ => &[],
     }
 }
+/// Projects sealed provider outcomes and their telemetry into report rows.
+///
+/// The kernel already decides every field; this is the projection that stops
+/// the decision from being dropped after the run.
+///
+/// Providers whose ids the public output already names.
+///
+/// These back a public capability or already appear in `polint/capability`
+/// blockers and `polint/go-semantic` diagnostics, so reporting their cost adds
+/// no new vocabulary. Providers outside this set are internal fact families and
+/// are named only when they failed, which is the one case a consumer must be
+/// able to trace.
+const PUBLICLY_NAMED_PROVIDERS: [&str; 9] = [
+    "polint.evidence",
+    "polint.go.semantic",
+    "polint.go.syntax",
+    "polint.identity",
+    "polint.metrics",
+    "polint.module_graph",
+    "polint.refined_calls",
+    "polint.symbol_graph",
+    "polint.ts.syntax",
+];
+
+/// Only providers a consumer can act on are named: one that failed or was
+/// blocked (so a blocked rule can be traced to it), one that reported counters
+/// (so a measured stage can be read), and one whose id the public output
+/// already uses (so its cost is attributable). A provider that quietly
+/// succeeded outside that vocabulary, or that this run never selected, stays an
+/// implementation detail.
+pub(crate) fn provider_outcome_rows(
+    outcomes: &[ProviderOutcome],
+    telemetry: &[crate::analysis_kernel::incremental::ProviderTelemetry],
+) -> Vec<crate::diagnostics::ProviderOutcomeRow> {
+    outcomes
+        .iter()
+        .zip(telemetry)
+        .filter(|(outcome, telemetry)| {
+            if outcome.status == ProviderOutcomeStatus::PlannedAbsent {
+                return false;
+            }
+            outcome.status != ProviderOutcomeStatus::Succeeded
+                || !telemetry.counts.is_empty()
+                || PUBLICLY_NAMED_PROVIDERS.contains(&outcome.provider_id.as_str())
+        })
+        .map(
+            |(outcome, telemetry)| crate::diagnostics::ProviderOutcomeRow {
+                provider_id: outcome.provider_id.clone(),
+                status: outcome.status.label().to_string(),
+                stage: outcome.failure_stage.map(|stage| stage.label().to_string()),
+                reason: outcome
+                    .failure_reason
+                    .map(|reason| reason.label().to_string()),
+                elapsed_ms: telemetry.elapsed_ms,
+                blockers: outcome.blockers.clone(),
+                cache: crate::diagnostics::ProviderCacheRow {
+                    hits: telemetry.cache_stats.hits,
+                    misses: telemetry.cache_stats.misses,
+                    recomputes: telemetry.cache_stats.recomputes,
+                    writes: telemetry.cache_stats.writes,
+                },
+                counts: telemetry.counts.clone(),
+            },
+        )
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -964,35 +1031,4 @@ mod tests {
             );
         }
     }
-}
-
-/// Projects sealed provider outcomes and their telemetry into report rows.
-///
-/// The kernel already decides every field; this is the projection that stops
-/// the decision from being dropped after the run.
-pub(crate) fn provider_outcome_rows(
-    outcomes: &[ProviderOutcome],
-    telemetry: &[crate::analysis_kernel::incremental::ProviderTelemetry],
-) -> Vec<crate::diagnostics::ProviderOutcomeRow> {
-    outcomes
-        .iter()
-        .zip(telemetry)
-        .map(
-            |(outcome, telemetry)| crate::diagnostics::ProviderOutcomeRow {
-                provider_id: outcome.provider_id.clone(),
-                status: outcome.status.label().to_string(),
-                stage: outcome.failure_stage.map(|stage| format!("{stage:?}")),
-                reason: outcome.failure_reason.map(|reason| format!("{reason:?}")),
-                elapsed_ms: telemetry.elapsed_ms,
-                blockers: outcome.blockers.clone(),
-                cache: crate::diagnostics::ProviderCacheRow {
-                    hits: telemetry.cache_stats.hits,
-                    misses: telemetry.cache_stats.misses,
-                    recomputes: telemetry.cache_stats.recomputes,
-                    writes: telemetry.cache_stats.writes,
-                },
-                counts: telemetry.counts.clone(),
-            },
-        )
-        .collect()
 }

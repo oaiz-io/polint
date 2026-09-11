@@ -214,6 +214,11 @@ pub(crate) const RULE_OUTCOME_NOT_PLANNED: &str = "not_planned";
 /// The kernel already decides every field here; before this row existed the
 /// decision was computed each run and then dropped, so a blocked rule could not
 /// be traced back to the provider that blocked it from the report alone.
+///
+/// Rows cover providers that failed or were blocked, providers that reported
+/// counters, and providers whose ids the public output already names. A
+/// provider this run never selected, or an internal fact family that quietly
+/// succeeded, is not named: those are not a public vocabulary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ProviderOutcomeRow {
     pub(crate) provider_id: String,

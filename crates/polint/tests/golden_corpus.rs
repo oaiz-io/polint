@@ -175,8 +175,8 @@ fn golden_corpus_inputs_match_on_disk_targets() {
 
     assert_eq!(
         declared_packs.len(),
-        17,
-        "expected 17 example rule packs, found {}",
+        18,
+        "expected 18 example rule packs, found {}",
         declared_packs.len()
     );
     assert_eq!(
