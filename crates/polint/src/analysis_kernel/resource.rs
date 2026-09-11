@@ -145,6 +145,11 @@ pub(crate) fn budget_diagnostic(trip: &ResourceTrip) -> crate::diagnostics::Diag
             trip.source.label(),
         ),
     )
+    .with_evidence(crate::diagnostics::BUDGET_EVIDENCE_LABEL, "memory_ceiling")
+    .with_evidence(crate::diagnostics::BUDGET_STATUS_EVIDENCE_LABEL, "exceeded")
+    .with_evidence("after_provider", trip.after_provider)
+    .with_evidence("observed_bytes", trip.observed_bytes.to_string())
+    .with_evidence("ceiling_bytes", trip.ceiling_bytes.to_string())
 }
 
 /// Total host memory in bytes, read from `/proc/meminfo` on Linux.

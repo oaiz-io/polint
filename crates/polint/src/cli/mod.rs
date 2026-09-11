@@ -59,7 +59,7 @@ fn json_report_meta() -> JsonReportMeta<'static> {
 fn render_opts<'a>(
     args: &CheckArgs,
     sources: Option<&'a BTreeMap<String, Arc<str>>>,
-    rule_execution: &'a [crate::diagnostics::RuleExecutionRow],
+    run_summary: &'a crate::diagnostics::RunSummary,
 ) -> RenderOpts<'a> {
     RenderOpts {
         json: json_report_meta(),
@@ -69,7 +69,8 @@ fn render_opts<'a>(
             ColorArg::Never => ColorChoice::Never,
         },
         sources,
-        rule_execution,
+        rule_execution: &run_summary.rules,
+        run_summary,
     }
 }
 
@@ -86,7 +87,7 @@ fn write_ai_friendly_report(
     diagnostics: &[Diagnostic],
     persisted_diagnostics: &[Diagnostic],
     json_meta: JsonReportMeta<'_>,
-    rule_execution: &[crate::diagnostics::RuleExecutionRow],
+    run_summary: &crate::diagnostics::RunSummary,
 ) -> Result<AiFriendlyOutput> {
     crate::repo_fs::ensure_repo_dir(root, AI_FRIENDLY_OUTPUT_DIR).with_context(|| {
         format!(
@@ -102,7 +103,8 @@ fn write_ai_friendly_report(
         persisted_diagnostics,
         json_meta,
         generated_at.clone(),
-        rule_execution,
+        &run_summary.rules,
+        run_summary,
     );
     let json = serde_json::to_string_pretty(&report)?;
     let hash = crate::cache::stable_hash(&[&json]);
@@ -3496,7 +3498,7 @@ fn check(root: PathBuf, args: &CheckArgs) -> Result<u8> {
             &diagnostics,
             &rendered_diagnostics,
             json_report_meta(),
-            &[],
+            &crate::diagnostics::RunSummary::default(),
         )?;
         print!(
             "{}",
@@ -3508,7 +3510,7 @@ fn check(root: PathBuf, args: &CheckArgs) -> Result<u8> {
             render_with_sarif_help(
                 format,
                 &rendered_diagnostics,
-                render_opts(args, sources, &[]),
+                render_opts(args, sources, &crate::diagnostics::RunSummary::default()),
                 sarif_help_map(&loaded),
             )
         );
@@ -3987,14 +3989,16 @@ fn check_local_rule_hosts(root: &Path, args: &CheckArgs, manifests: &[PathBuf]) 
     let child_applies_ignores =
         args.ignore_comments && manifests.len() == 1 && !should_render_check_stats(args);
     let mut diagnostics = Vec::new();
-    let mut rule_execution = Vec::new();
+    let mut run_summary = crate::diagnostics::RunSummary::default();
     for manifest in manifests {
-        let (host_diagnostics, host_rules) =
+        let (host_diagnostics, host_summary) =
             run_local_rule_host(root, manifest, args, child_applies_ignores)?;
         diagnostics.extend(host_diagnostics);
-        rule_execution.extend(host_rules);
+        run_summary.rules.extend(host_summary.rules);
+        run_summary.providers.extend(host_summary.providers);
+        run_summary.budgets.extend(host_summary.budgets);
     }
-    merge_rule_execution_rows(&mut rule_execution);
+    merge_run_summary(&mut run_summary);
 
     let mut db = None;
     let mut ignore_report = None;
@@ -4043,7 +4047,7 @@ fn check_local_rule_hosts(root: &Path, args: &CheckArgs, manifests: &[PathBuf]) 
             &diagnostics,
             &rendered_diagnostics,
             json_report_meta(),
-            &rule_execution,
+            &run_summary,
         )?;
         print!(
             "{}",
@@ -4055,7 +4059,7 @@ fn check_local_rule_hosts(root: &Path, args: &CheckArgs, manifests: &[PathBuf]) 
             render_with_sarif_help(
                 format,
                 &rendered_diagnostics,
-                render_opts(args, sources, &rule_execution),
+                render_opts(args, sources, &run_summary),
                 sarif_help_map(&config),
             )
         );
@@ -4124,9 +4128,9 @@ fn review(root: PathBuf, args: &ReviewArgs) -> Result<u8> {
     let enabled = selected_rule_patterns(&config, check_args.profile.as_deref())?;
     let child_applies_ignores = check_args.ignore_comments && manifests.len() == 1;
     let mut diagnostics = Vec::new();
-    let mut rule_execution = Vec::new();
+    let mut run_summary = crate::diagnostics::RunSummary::default();
     for manifest in &manifests {
-        let (host_diagnostics, host_rules) = run_local_rule_host_kind(
+        let (host_diagnostics, host_summary) = run_local_rule_host_kind(
             &root,
             manifest,
             &check_args,
@@ -4135,9 +4139,11 @@ fn review(root: PathBuf, args: &ReviewArgs) -> Result<u8> {
             Some(changeset_file.as_path()),
         )?;
         diagnostics.extend(host_diagnostics);
-        rule_execution.extend(host_rules);
+        run_summary.rules.extend(host_summary.rules);
+        run_summary.providers.extend(host_summary.providers);
+        run_summary.budgets.extend(host_summary.budgets);
     }
-    merge_rule_execution_rows(&mut rule_execution);
+    merge_run_summary(&mut run_summary);
 
     if check_args.ignore_comments && !child_applies_ignores {
         let rule_scope = config_rule_scope_globset(&config, enabled.as_ref());
@@ -4180,7 +4186,7 @@ fn review(root: PathBuf, args: &ReviewArgs) -> Result<u8> {
             &diagnostics,
             &rendered_diagnostics,
             json_report_meta(),
-            &rule_execution,
+            &run_summary,
         )?;
         print!(
             "{}",
@@ -4192,7 +4198,7 @@ fn review(root: PathBuf, args: &ReviewArgs) -> Result<u8> {
             render_with_sarif_help(
                 format,
                 &rendered_diagnostics,
-                render_opts(&check_args, sources, &rule_execution),
+                render_opts(&check_args, sources, &run_summary),
                 sarif_help_map(&config),
             )
         );
@@ -4272,7 +4278,7 @@ fn run_local_rule_host(
     manifest: &Path,
     args: &CheckArgs,
     apply_ignore_comments: bool,
-) -> Result<(Vec<Diagnostic>, Vec<crate::diagnostics::RuleExecutionRow>)> {
+) -> Result<(Vec<Diagnostic>, crate::diagnostics::RunSummary)> {
     // The outer `check` path always runs Check-kind rules and injects no diff.
     run_local_rule_host_kind(root, manifest, args, apply_ignore_comments, "check", None)
 }
@@ -4296,7 +4302,7 @@ fn run_local_rule_host_kind(
     apply_ignore_comments: bool,
     kind: &str,
     changed_files: Option<&Path>,
-) -> Result<(Vec<Diagnostic>, Vec<crate::diagnostics::RuleExecutionRow>)> {
+) -> Result<(Vec<Diagnostic>, crate::diagnostics::RunSummary)> {
     let cargo = local_rule_host_cargo();
     let cache_layout = CacheLayout::for_repo(root);
     let rules_target_dir = cache_layout.rules_target_dir();
@@ -4627,7 +4633,7 @@ fn run_local_rule_host_binary(
     binary: &Path,
     cache_layout: &CacheLayout,
     host_args: &[OsString],
-) -> Option<Result<(Vec<Diagnostic>, Vec<crate::diagnostics::RuleExecutionRow>)>> {
+) -> Option<Result<(Vec<Diagnostic>, crate::diagnostics::RunSummary)>> {
     let mut command = ProcessCommand::new(binary);
     command.current_dir(root).args(host_args);
     apply_local_rule_host_env(&mut command, cache_layout);
@@ -4653,7 +4659,7 @@ fn run_local_rule_host_through_cargo(
     cargo: &str,
     cache_layout: &CacheLayout,
     host_args: &[OsString],
-) -> Result<(Vec<Diagnostic>, Vec<crate::diagnostics::RuleExecutionRow>)> {
+) -> Result<(Vec<Diagnostic>, crate::diagnostics::RunSummary)> {
     let mut command = ProcessCommand::new(cargo);
     command.current_dir(root).args(["run", "--quiet"]);
     apply_local_rule_host_profile(&mut command);
@@ -4681,7 +4687,7 @@ fn manifest_path_argument(manifest: &Path) -> Result<&str> {
 fn local_rule_host_report(
     manifest: &Path,
     output: &std::process::Output,
-) -> Result<(Vec<Diagnostic>, Vec<crate::diagnostics::RuleExecutionRow>)> {
+) -> Result<(Vec<Diagnostic>, crate::diagnostics::RunSummary)> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -4710,6 +4716,25 @@ fn local_rule_host_report(
 fn merge_rule_execution_rows(rows: &mut Vec<crate::diagnostics::RuleExecutionRow>) {
     rows.sort_by(|left, right| left.rule_id.cmp(&right.rule_id));
     rows.dedup_by(|left, right| left.rule_id == right.rule_id);
+}
+
+/// Merges the per-host summaries the rule-host subprocesses reported.
+///
+/// Providers and budgets are properties of the analysis each host ran, so
+/// several hosts contribute several rows; they are deduplicated on the same
+/// identity the emitter used.
+fn merge_run_summary(summary: &mut crate::diagnostics::RunSummary) {
+    merge_rule_execution_rows(&mut summary.rules);
+    summary
+        .providers
+        .sort_by(|left, right| left.provider_id.cmp(&right.provider_id));
+    summary
+        .providers
+        .dedup_by(|left, right| left.provider_id == right.provider_id);
+    summary.budgets.sort_by(|left, right| {
+        (&left.budget, &left.reported_by).cmp(&(&right.budget, &right.reported_by))
+    });
+    summary.budgets.dedup();
 }
 
 fn run_local_rule_host_inspect(root: &Path, manifest: &Path) -> Result<InspectRuleReport> {

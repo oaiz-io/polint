@@ -1,7 +1,7 @@
 use crate::analysis_kernel::{AnalysisKernel, KernelInput};
 use crate::analysis_plan::{AnalysisPlan, RulePlanInputs};
 use crate::config::{LoadedConfig, load_config};
-use crate::core::{Rule, RuleKind, RuleRuntimeViews, run_rules_with_runtime_provider_blockers};
+use crate::core::{Rule, RuleKind, RuleRuntimeViews};
 use crate::diagnostics::{
     ColorChoice, JsonReportMeta, OutputFormat, RenderOpts, Severity, apply_report_filters,
     build_ai_friendly_report, limit_report_diagnostics, render_ai_friendly_stdout,
@@ -231,7 +231,8 @@ fn render_inspect_rule_human(report: &InspectRuleReport) -> String {
 }
 
 fn check(root: PathBuf, args: &CheckArgs, rules: &[Rule]) -> Result<u8> {
-    let (mut diagnostics, db, loaded, rule_execution) = analyze_and_run(&root, args, rules)?;
+    let (mut diagnostics, db, loaded, run_summary) = analyze_and_run(&root, args, rules)?;
+    let rule_execution = run_summary.rules.clone();
     if args.ignore_comments {
         diagnostics = apply_ignores(&db, diagnostics, &loaded.config.ignores).diagnostics;
     }
@@ -270,10 +271,16 @@ fn check(root: PathBuf, args: &CheckArgs, rules: &[Rule]) -> Result<u8> {
         },
         sources,
         rule_execution: &rule_execution,
+        run_summary: &run_summary,
     };
     if matches!(args.format, FormatArg::AiFriendly) {
-        let report =
-            write_ai_friendly_report(&root, &diagnostics, &rendered_diagnostics, &rule_execution)?;
+        let report = write_ai_friendly_report(
+            &root,
+            &diagnostics,
+            &rendered_diagnostics,
+            &rule_execution,
+            &run_summary,
+        )?;
         print!(
             "{}",
             render_ai_friendly_stdout(&report, AI_FRIENDLY_LATEST_OUTPUT)
@@ -304,6 +311,7 @@ fn write_ai_friendly_report(
     diagnostics: &[crate::diagnostics::Diagnostic],
     persisted_diagnostics: &[crate::diagnostics::Diagnostic],
     rule_execution: &[crate::diagnostics::RuleExecutionRow],
+    run_summary: &crate::diagnostics::RunSummary,
 ) -> Result<crate::diagnostics::AiFriendlyReport> {
     crate::repo_fs::ensure_repo_dir(root, AI_FRIENDLY_OUTPUT_DIR).with_context(|| {
         format!(
@@ -322,6 +330,7 @@ fn write_ai_friendly_report(
         },
         generated_at.clone(),
         rule_execution,
+        run_summary,
     );
     let json = serde_json::to_string_pretty(&report)?;
     let hash = crate::cache::stable_hash(&[&json]);
@@ -397,7 +406,7 @@ fn analyze_and_run(
     Vec<crate::diagnostics::Diagnostic>,
     crate::core::AnalysisDb,
     LoadedConfig,
-    Vec<crate::diagnostics::RuleExecutionRow>,
+    crate::diagnostics::RunSummary,
 )> {
     let loaded = load_config_for_check(root, &args.paths)?;
     let cache = crate::cache::Cache::default_for_repo(root, !args.no_cache);
@@ -444,22 +453,35 @@ fn analyze_and_run(
         &output.completeness,
         &output.runtime_blocked_rules,
     );
-    diagnostics.extend(run_rules_with_runtime_provider_blockers(
+    let rule_run = crate::core::run_rules_observed(
         &output.db,
         rules,
         &options,
         Some(&exact_enabled),
         true,
         &runtime,
-    ));
+    );
+    diagnostics.extend(rule_run.diagnostics);
     let file_paths = output
         .db
         .files()
         .iter()
         .map(|file| file.relative_path.as_str())
         .collect::<Vec<_>>();
-    let rule_execution = plan.rule_execution_rows(&options, &file_paths, &diagnostics);
-    Ok((diagnostics, output.db, loaded, rule_execution))
+    let run_summary = crate::diagnostics::RunSummary {
+        rules: plan.rule_execution_rows(
+            &options,
+            &file_paths,
+            &diagnostics,
+            &rule_run.observed_events,
+        ),
+        providers: crate::analysis_kernel::provider_outcome_rows(
+            &output.run_report.provider_outcomes,
+            &output.run_report.provider_telemetry,
+        ),
+        budgets: crate::diagnostics::RunSummary::budget_rows(&diagnostics),
+    };
+    Ok((diagnostics, output.db, loaded, run_summary))
 }
 
 /// Read a `polint review` changeset JSON file injected via `--changed-files`.

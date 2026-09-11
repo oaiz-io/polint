@@ -16,6 +16,13 @@ const _: () = {
     let _ = std::mem::size_of::<EvidenceBundleRef>();
 };
 
+/// Version of every polint JSON report body.
+///
+/// Bumped to 2 when `summary` gained the provider-outcome and budget rows and
+/// `summary.rules` gained its outcome fields. Every addition is optional, so a
+/// v1 consumer still reads a v2 report.
+pub(crate) const POLINT_REPORT_JSON_SCHEMA_V: u32 = 2;
+
 /// Public URL of [`crate::diagnostics::PolintReport`] JSON Schema (v1); embedded in `--format json` when present.
 pub const POLINT_REPORT_JSON_SCHEMA_V1_URL: &str =
     "https://raw.githubusercontent.com/oaiz-io/polint/main/docs/schemas/polint-report-v1.json";
@@ -105,6 +112,8 @@ pub struct RenderOpts<'a> {
     pub sources: Option<&'a BTreeMap<String, Arc<str>>>,
     /// Per-rule execution telemetry embedded in `--format json` summary.
     pub(crate) rule_execution: &'a [RuleExecutionRow],
+    /// Per-provider outcomes and per-budget trips for the same summary.
+    pub(crate) run_summary: &'a RunSummary,
 }
 
 /// Tool identity in a [`PolintReport`].
@@ -145,6 +154,12 @@ pub(crate) struct AiFriendlySummary {
     pub(crate) by_rule: Vec<AiFriendlyRuleSummary>,
     /// Per registered rule, including zero-finding and capability-skipped rules.
     pub(crate) rules: Vec<RuleExecutionRow>,
+    /// Per provider, so a blocked rule names the provider that blocked it.
+    #[serde(default)]
+    pub(crate) providers: Vec<ProviderOutcomeRow>,
+    /// Budgets this run exhausted.
+    #[serde(default)]
+    pub(crate) budgets: Vec<BudgetRow>,
     pub(crate) examples_limit: usize,
 }
 
@@ -166,6 +181,136 @@ pub(crate) struct RuleExecutionRow {
     /// Set when `!planned || !capabilities_ok`, using existing capability wording.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) skipped_reason: Option<String>,
+    /// What happened to this rule: `analyzed`, `capability_blocked`, or
+    /// `not_planned`. Zero diagnostics mean different things in each.
+    #[serde(default = "default_rule_outcome")]
+    pub(crate) outcome: String,
+    /// Providers whose failure blocked this rule, when `outcome` is
+    /// `capability_blocked`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) blocking_providers: Vec<String>,
+    /// Operations this rule's policy queries examined.
+    ///
+    /// Zero with `outcome = analyzed` means the rule ran and matched nothing,
+    /// which is a different state from "the analysis never reached it".
+    #[serde(default)]
+    pub(crate) observed_events: u64,
+}
+
+/// Outcome for rows decoded from an emitter that predates the field.
+fn default_rule_outcome() -> String {
+    RULE_OUTCOME_ANALYZED.to_string()
+}
+
+/// The rule ran.
+pub(crate) const RULE_OUTCOME_ANALYZED: &str = "analyzed";
+/// A provider the rule needed did not succeed, so the rule never ran.
+pub(crate) const RULE_OUTCOME_CAPABILITY_BLOCKED: &str = "capability_blocked";
+/// Capability planning rejected the rule before the run started.
+pub(crate) const RULE_OUTCOME_NOT_PLANNED: &str = "not_planned";
+
+/// One provider's outcome and cost for this run.
+///
+/// The kernel already decides every field here; before this row existed the
+/// decision was computed each run and then dropped, so a blocked rule could not
+/// be traced back to the provider that blocked it from the report alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ProviderOutcomeRow {
+    pub(crate) provider_id: String,
+    pub(crate) status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) stage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) reason: Option<String>,
+    /// Wall time of the provider stage, absent when the provider did not run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) elapsed_ms: Option<u64>,
+    /// Providers whose failure blocked this one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) blockers: Vec<String>,
+    pub(crate) cache: ProviderCacheRow,
+    /// Provider-specific counters, such as a sidecar's per-stage timings.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) counts: BTreeMap<String, u64>,
+}
+
+/// Cache counters for one provider, flattened for the report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub(crate) struct ProviderCacheRow {
+    pub(crate) hits: u64,
+    pub(crate) misses: u64,
+    pub(crate) recomputes: u64,
+    pub(crate) writes: u64,
+}
+
+/// One budget this run exhausted.
+///
+/// Budgets already emit free-text diagnostics; this row is the machine-readable
+/// form, so a consumer can tell "bounded itself" apart from "found nothing".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct BudgetRow {
+    pub(crate) budget: String,
+    pub(crate) status: String,
+    /// Diagnostic rule id that reported the trip.
+    pub(crate) reported_by: String,
+    pub(crate) detail: String,
+}
+
+/// Evidence label a budget diagnostic carries to be machine-readable.
+pub(crate) const BUDGET_EVIDENCE_LABEL: &str = "budget";
+/// Evidence label naming a budget's state.
+pub(crate) const BUDGET_STATUS_EVIDENCE_LABEL: &str = "budget_status";
+
+/// Shared empty summary for call sites that report no run telemetry.
+#[cfg(test)]
+pub(crate) static EMPTY_RUN_SUMMARY: &RunSummary = &RunSummary {
+    rules: Vec::new(),
+    providers: Vec::new(),
+    budgets: Vec::new(),
+};
+
+/// Everything a run reports about itself besides the diagnostics.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct RunSummary {
+    #[serde(default)]
+    pub(crate) rules: Vec<RuleExecutionRow>,
+    #[serde(default)]
+    pub(crate) providers: Vec<ProviderOutcomeRow>,
+    #[serde(default)]
+    pub(crate) budgets: Vec<BudgetRow>,
+}
+
+impl RunSummary {
+    /// Collects the machine-readable budget rows a run's diagnostics report.
+    pub(crate) fn budget_rows(diagnostics: &[Diagnostic]) -> Vec<BudgetRow> {
+        let mut rows = diagnostics
+            .iter()
+            .filter_map(|diagnostic| {
+                let budget = evidence_value(diagnostic, BUDGET_EVIDENCE_LABEL)?;
+                Some(BudgetRow {
+                    budget: budget.to_string(),
+                    status: evidence_value(diagnostic, BUDGET_STATUS_EVIDENCE_LABEL)
+                        .unwrap_or("exceeded")
+                        .to_string(),
+                    reported_by: diagnostic.rule_id.clone(),
+                    detail: diagnostic.message.clone(),
+                })
+            })
+            .collect::<Vec<_>>();
+        rows.sort_by(|left, right| {
+            (&left.budget, &left.reported_by).cmp(&(&right.budget, &right.reported_by))
+        });
+        rows.dedup();
+        rows
+    }
+}
+
+fn evidence_value<'a>(diagnostic: &'a Diagnostic, label: &str) -> Option<&'a str> {
+    diagnostic
+        .evidence
+        .iter()
+        .find(|evidence| evidence.label == label)
+        .map(|evidence| evidence.value.as_str())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -210,6 +355,8 @@ struct PolintReportWire<'a> {
 #[derive(Serialize)]
 struct PolintReportSummaryWire<'a> {
     rules: &'a [RuleExecutionRow],
+    providers: &'a [ProviderOutcomeRow],
+    budgets: &'a [BudgetRow],
 }
 
 #[derive(Serialize)]
@@ -222,6 +369,10 @@ struct PolintToolWire<'a> {
 struct HostJsonSummary {
     #[serde(default)]
     rules: Vec<RuleExecutionRow>,
+    #[serde(default)]
+    providers: Vec<ProviderOutcomeRow>,
+    #[serde(default)]
+    budgets: Vec<BudgetRow>,
 }
 
 /// Parse stdout from a `polint-local-rules check --format json` process.
@@ -237,7 +388,7 @@ pub fn diagnostics_from_json_report(s: &str) -> Result<Vec<Diagnostic>, serde_js
 /// store reference that cannot cross a process boundary.
 pub(crate) fn diagnostics_and_rule_execution_from_public_json_report(
     s: &str,
-) -> Result<(Vec<Diagnostic>, Vec<RuleExecutionRow>), serde_json::Error> {
+) -> Result<(Vec<Diagnostic>, RunSummary), serde_json::Error> {
     let report: PublicJsonReportWire = serde_json::from_str(s)?;
     let mut diagnostics = Vec::with_capacity(report.diagnostics.len());
     let mut internal = Vec::new();
@@ -262,11 +413,15 @@ pub(crate) fn diagnostics_and_rule_execution_from_public_json_report(
         diagnostics.push(diagnostic);
     }
     diagnostics.extend(internal);
-    let rules = report
+    let summary = report
         .summary
-        .map(|summary| summary.rules)
+        .map(|summary| RunSummary {
+            rules: summary.rules,
+            providers: summary.providers,
+            budgets: summary.budgets,
+        })
         .unwrap_or_default();
-    Ok((diagnostics, rules))
+    Ok((diagnostics, summary))
 }
 
 #[derive(Deserialize)]
@@ -330,8 +485,9 @@ pub(crate) fn build_ai_friendly_report(
     json_meta: JsonReportMeta<'_>,
     generated_at: impl Into<String>,
     rule_execution: &[RuleExecutionRow],
+    run_summary: &RunSummary,
 ) -> AiFriendlyReport {
-    let summary = ai_friendly_summary(diagnostics, rule_execution);
+    let summary = ai_friendly_summary(diagnostics, rule_execution, run_summary);
     let examples = ai_friendly_examples(diagnostics, &summary.by_rule);
     let truncation = if persisted_diagnostics.len() < diagnostics.len() {
         Some(AiFriendlyTruncation {
@@ -343,7 +499,7 @@ pub(crate) fn build_ai_friendly_report(
         None
     };
     AiFriendlyReport {
-        version: 1,
+        version: POLINT_REPORT_JSON_SCHEMA_V,
         schema: POLINT_AI_FRIENDLY_JSON_SCHEMA_V1_URL.to_string(),
         tool: PolintToolInfo {
             name: json_meta.tool_name.to_string(),
@@ -360,6 +516,7 @@ pub(crate) fn build_ai_friendly_report(
 fn ai_friendly_summary(
     diagnostics: &[Diagnostic],
     rule_execution: &[RuleExecutionRow],
+    run_summary: &RunSummary,
 ) -> AiFriendlySummary {
     let mut by_severity = empty_severity_counts();
     let mut by_rule: BTreeMap<String, RuleSummaryDraft> = BTreeMap::new();
@@ -390,6 +547,8 @@ fn ai_friendly_summary(
     });
 
     AiFriendlySummary {
+        providers: run_summary.providers.clone(),
+        budgets: run_summary.budgets.clone(),
         total_diagnostics: diagnostics.len(),
         rules_triggered: by_rule.len(),
         by_severity,
@@ -747,7 +906,12 @@ pub(crate) fn render_with_sarif_help(
     match format {
         OutputFormat::Human => render_human(diagnostics, opts.color, opts.sources),
         OutputFormat::Github => render_github(diagnostics),
-        OutputFormat::Json => render_json(diagnostics, opts.json, opts.rule_execution),
+        OutputFormat::Json => render_json(
+            diagnostics,
+            opts.json,
+            opts.rule_execution,
+            opts.run_summary,
+        ),
         OutputFormat::Sarif => render_sarif(diagnostics, sarif_rule_help_uri),
         OutputFormat::AiFriendly => {
             let report = build_ai_friendly_report(
@@ -756,6 +920,7 @@ pub(crate) fn render_with_sarif_help(
                 opts.json,
                 "unknown",
                 opts.rule_execution,
+                opts.run_summary,
             );
             render_ai_friendly_stdout(&report, ".polint/output/latest.json")
         }
@@ -816,12 +981,15 @@ fn render_json(
     diagnostics: &[Diagnostic],
     json_meta: JsonReportMeta<'_>,
     rule_execution: &[RuleExecutionRow],
+    run_summary: &RunSummary,
 ) -> String {
     let summary = (!rule_execution.is_empty()).then_some(PolintReportSummaryWire {
         rules: rule_execution,
+        providers: &run_summary.providers,
+        budgets: &run_summary.budgets,
     });
     let wire = PolintReportWire {
-        version: 1,
+        version: POLINT_REPORT_JSON_SCHEMA_V,
         schema: POLINT_REPORT_JSON_SCHEMA_V1_URL,
         tool: PolintToolWire {
             name: json_meta.tool_name,
@@ -1497,6 +1665,7 @@ mod tests {
             color: ColorChoice::Never,
             sources: None,
             rule_execution: &[],
+            run_summary: EMPTY_RUN_SUMMARY,
         }
     }
 
@@ -1932,6 +2101,7 @@ mod tests {
             color: ColorChoice::Never,
             sources: Some(&sources),
             rule_execution: &[],
+            run_summary: EMPTY_RUN_SUMMARY,
         };
         insta::assert_snapshot!(
             render(OutputFormat::Human, &[contract_diagnostic()], opts),
@@ -1959,7 +2129,7 @@ mod tests {
     fn render_json_snapshot_is_stable() {
         let rendered = render(OutputFormat::Json, &[contract_diagnostic()], test_opts());
         let parsed: serde_json::Value = serde_json::from_str(&rendered).unwrap();
-        assert_eq!(parsed["version"], 1);
+        assert_eq!(parsed["version"], POLINT_REPORT_JSON_SCHEMA_V);
         assert_eq!(
             parsed["schema"].as_str().unwrap(),
             POLINT_REPORT_JSON_SCHEMA_V1_URL
@@ -1971,7 +2141,7 @@ mod tests {
         let normalized = rendered.replace(env!("CARGO_PKG_VERSION"), "<PKG_VERSION>");
         insta::assert_snapshot!(normalized, @r###"
         {
-          "version": 1,
+          "version": 2,
           "schema": "https://raw.githubusercontent.com/oaiz-io/polint/main/docs/schemas/polint-report-v1.json",
           "tool": {
             "name": "polint",
@@ -2043,10 +2213,16 @@ mod tests {
         sort_diagnostics(&mut diagnostics);
 
         let persisted = diagnostics[..3].to_vec();
-        let report =
-            build_ai_friendly_report(&diagnostics, &persisted, test_opts().json, "123456", &[]);
+        let report = build_ai_friendly_report(
+            &diagnostics,
+            &persisted,
+            test_opts().json,
+            "123456",
+            &[],
+            &RunSummary::default(),
+        );
 
-        assert_eq!(report.version, 1);
+        assert_eq!(report.version, POLINT_REPORT_JSON_SCHEMA_V);
         assert_eq!(report.schema, POLINT_AI_FRIENDLY_JSON_SCHEMA_V1_URL);
         assert_eq!(report.summary.total_diagnostics, 13);
         assert_eq!(report.summary.rules_triggered, 12);
@@ -2066,8 +2242,14 @@ mod tests {
     #[test]
     fn render_ai_friendly_stdout_is_compact_and_query_oriented() {
         let diagnostics = vec![contract_diagnostic()];
-        let report =
-            build_ai_friendly_report(&diagnostics, &diagnostics, test_opts().json, "123456", &[]);
+        let report = build_ai_friendly_report(
+            &diagnostics,
+            &diagnostics,
+            test_opts().json,
+            "123456",
+            &[],
+            &RunSummary::default(),
+        );
         let rendered = render_ai_friendly_stdout(&report, ".polint/output/latest.json");
 
         assert!(rendered.contains("polint: 1 diagnostic across 1 rule"));
@@ -2158,6 +2340,7 @@ mod tests {
                 color: ColorChoice::Never,
                 sources: None,
                 rule_execution: &[],
+                run_summary: EMPTY_RUN_SUMMARY,
             },
             Some(&help),
         );
@@ -2637,7 +2820,7 @@ mod tests {
     fn render_empty_json_report_is_stable() {
         let rendered = render(OutputFormat::Json, &[], test_opts());
         let parsed: PolintReport = serde_json::from_str(&rendered).unwrap();
-        assert_eq!(parsed.version, 1);
+        assert_eq!(parsed.version, POLINT_REPORT_JSON_SCHEMA_V);
         assert_eq!(parsed.tool.name, "polint");
         assert!(parsed.diagnostics.is_empty());
     }

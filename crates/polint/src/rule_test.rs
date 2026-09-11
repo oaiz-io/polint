@@ -11,6 +11,13 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 
+/// Version of the `polint test` report body.
+///
+/// Tracks [`crate::diagnostics::POLINT_REPORT_JSON_SCHEMA_V`] so a consumer
+/// reading both reports sees one version vocabulary.
+pub(crate) const POLINT_TEST_REPORT_JSON_SCHEMA_V: u32 =
+    crate::diagnostics::POLINT_REPORT_JSON_SCHEMA_V;
+
 pub(crate) const POLINT_TEST_REPORT_JSON_SCHEMA_V1_URL: &str =
     "https://raw.githubusercontent.com/oaiz-io/polint/main/docs/schemas/polint-test-report-v1.json";
 
@@ -208,7 +215,7 @@ impl RuleTestReport {
         let total = cases.len() as u32;
         let failed = cases.iter().filter(|case| case.status == "failed").count() as u32;
         Self {
-            version: 1,
+            version: POLINT_TEST_REPORT_JSON_SCHEMA_V,
             schema: POLINT_TEST_REPORT_JSON_SCHEMA_V1_URL.to_string(),
             tool: PolintToolInfo {
                 name: tool_name.into(),
@@ -744,7 +751,7 @@ paths = ["src/**"]
         );
         let json = serde_json::to_string(&report).unwrap();
 
-        assert!(json.contains(r#""version":1"#));
+        assert!(json.contains(r#""version":2"#));
         assert!(json.contains(r#""schema":"https://raw.githubusercontent.com/oaiz-io/polint/main/docs/schemas/polint-test-report-v1.json""#));
         assert!(json.contains(r#""summary":{"passed":1,"failed":0,"total":1}"#));
         assert!(json.contains(r#""cases":["#));

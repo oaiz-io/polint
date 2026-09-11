@@ -194,7 +194,11 @@ fn budget_exceeded_diagnostic(budget_reasons: &BTreeSet<String>) -> Diagnostic {
          surviving derived edges keep their own status and precision.",
     )
     .with_evidence("provider", SOLVER_PROVIDER_ID)
-    .with_evidence("budget_status", BudgetStatus::BudgetExceeded.as_str());
+    .with_evidence(crate::diagnostics::BUDGET_EVIDENCE_LABEL, "solver_steps")
+    .with_evidence(
+        crate::diagnostics::BUDGET_STATUS_EVIDENCE_LABEL,
+        BudgetStatus::BudgetExceeded.as_str(),
+    );
     for reason in budget_reasons {
         diagnostic = diagnostic.with_evidence("budget_reason", reason.clone());
     }

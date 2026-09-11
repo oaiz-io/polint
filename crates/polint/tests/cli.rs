@@ -5183,6 +5183,91 @@ export const value = token;
     write_file(&root.join("src/token.ts"), r#"export const token = "ok";"#);
 }
 
+fn write_control_flow_rule_repo(root: &Path) {
+    let polint_path = repo_root()
+        .join("crates/polint")
+        .to_string_lossy()
+        .replace('\\', "/");
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["*.go"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_file(
+        &root.join("go.mod"),
+        "module example.com/guarded\n\ngo 1.24\n",
+    );
+    write_file(
+        &root.join("app.go"),
+        r#"package guarded
+
+func CheckAccess() error { return nil }
+
+func SaveRecord() {}
+
+func handler() error {
+	if err := CheckAccess(); err != nil {
+		return err
+	}
+	SaveRecord()
+	return nil
+}
+"#,
+    );
+    write_file(
+        &root.join(".polint/rules/Cargo.toml"),
+        &format!(
+            r#"[package]
+name = "polint-local-rules"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+polint = {{ path = "{polint_path}" }}
+
+[workspace]
+"#,
+        ),
+    );
+    write_file(
+        &root.join(".polint/rules/src/main.rs"),
+        r#"use std::process::ExitCode;
+
+use polint::sdk::prelude::*;
+
+#[polint::rule(
+    id = "local/guard-outcomes",
+    description = "Report guard outcomes.",
+    severity = "error"
+)]
+fn guard_outcomes(ctx: &mut RuleCtx<'_>, control: ControlFlow<'_>) -> RuleResult {
+    let mut query = GuardQuery::new(
+        EventPattern::call("SaveRecord"),
+        GuardPattern::call_any(["CheckAccess"]),
+    );
+    query.require_checked_error = true;
+    for result in control.guard_outcomes(query) {
+        if let Some(diagnostic) = result.diagnostic(ctx.rule_id(), "guard outcome") {
+            ctx.report(diagnostic);
+        }
+    }
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    polint::runner::run_cli(vec![guard_outcomes()])
+}
+"#,
+    );
+}
+
 fn write_narrow_scope_rule_repo(root: &Path) {
     let polint_path = repo_root()
         .join("crates/polint")
@@ -9886,6 +9971,78 @@ mod capability_planning {
                 .iter()
                 .all(|diagnostic| diagnostic["rule_id"] != "polint/capability"),
             "supported TS symbol/reference providers should not emit capability diagnostics: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn a_rule_that_examined_operations_reports_them_and_the_providers_that_ran() {
+        let temp = tempfile::tempdir().unwrap();
+        write_control_flow_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let summary = &json["summary"];
+        let rule = summary["rules"]
+            .as_array()
+            .and_then(|rules| rules.first())
+            .unwrap_or_else(|| panic!("expected a rule row: {json:#?}"));
+        assert_eq!(rule["outcome"], "analyzed");
+        assert_eq!(
+            rule["observed_events"], 1,
+            "the rule examined one protected operation: {json:#?}"
+        );
+        let providers = summary["providers"]
+            .as_array()
+            .unwrap_or_else(|| panic!("expected provider rows: {json:#?}"));
+        assert!(
+            providers
+                .iter()
+                .any(|provider| provider["provider_id"] == "polint.go.semantic"),
+            "provider rows should cover the Go semantic provider: {json:#?}"
+        );
+        assert_eq!(json["version"], 2);
+    }
+
+    #[test]
+    fn a_rule_blocked_by_a_failed_provider_names_it_and_fails_the_run() {
+        let temp = tempfile::tempdir().unwrap();
+        write_control_flow_rule_repo(temp.path());
+        let missing_frontend = temp.path().join("missing-polint-go-frontend");
+
+        let assertion = polint_cmd()
+            .current_dir(temp.path())
+            .env("POLINT_GO_FRONTEND", &missing_frontend)
+            .args(["check", "--format", "json", "--fail-on", "error"])
+            .assert()
+            .failure();
+        let json = stdout_json(assertion);
+
+        let rule = json["summary"]["rules"]
+            .as_array()
+            .and_then(|rules| rules.first())
+            .unwrap_or_else(|| panic!("expected a rule row: {json:#?}"));
+        assert_eq!(rule["outcome"], "capability_blocked");
+        assert_eq!(rule["observed_events"], 0);
+        assert!(
+            rule["blocking_providers"]
+                .as_array()
+                .is_some_and(|providers| !providers.is_empty()),
+            "a blocked rule must name the providers that blocked it: {json:#?}"
+        );
+        assert!(
+            json["summary"]["providers"]
+                .as_array()
+                .is_some_and(|providers| providers.iter().any(|provider| {
+                    provider["provider_id"] == "polint.go.semantic"
+                        && provider["status"] != "succeeded"
+                })),
+            "the failing provider must appear with a non-success status: {json:#?}"
         );
     }
 

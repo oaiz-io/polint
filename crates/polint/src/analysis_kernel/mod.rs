@@ -28,6 +28,7 @@ pub(crate) use metadata::{
 };
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 pub(crate) use outcome::hard_dependencies;
+pub(crate) use outcome::provider_outcome_rows;
 pub(crate) use outcome::{
     ProviderFailureReason, ProviderFailureStage, ProviderOutcome, ProviderOutcomeStatus,
     ProviderOutcomeTracker, ProviderOutputIdentity, ValidationDowngrades,
@@ -480,13 +481,6 @@ pub(crate) struct KernelOutput {
     pub(crate) diagnostics: Vec<Diagnostic>,
     pub(crate) capability_support: CapabilitySupportView,
     pub(crate) completeness: crate::core::CompletenessView,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The crate-private run report is consumed by internal tests and eval fixtures before a public surface exists."
-        )
-    )]
     pub(crate) run_report: incremental::KernelRunReport,
     pub(crate) runtime_blocked_rules: BTreeSet<String>,
 }
@@ -1429,6 +1423,7 @@ mod tests {
                     color: ColorChoice::Never,
                     sources: None,
                     rule_execution: &[],
+                    run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
                 },
             );
 
@@ -2420,6 +2415,7 @@ function cleanup(value: string) {{ return value.trim(); }}
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
                 rule_execution: &[],
+                run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
             },
         );
         assert_no_framework_markers("polint check --format json", &rendered, &markers);
@@ -2467,6 +2463,7 @@ function cleanup(value: string) {{ return value.trim(); }}
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
                 rule_execution: &[],
+                run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
             },
         );
         assert_no_refined_call_markers("polint check --format json", &rendered, &markers);
@@ -2513,6 +2510,7 @@ function cleanup(value: string) {{ return value.trim(); }}
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
                 rule_execution: &[],
+                run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
             },
         );
         assert_no_data_flow_markers("polint check --format json", &rendered, &markers);

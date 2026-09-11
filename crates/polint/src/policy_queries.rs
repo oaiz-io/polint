@@ -27,17 +27,40 @@ use crate::sdk::policy::{
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+thread_local! {
+    /// Operations the policy queries on this thread have examined.
+    ///
+    /// Rules run one at a time per rayon worker, so a thread-local counter
+    /// attributes observations to the rule that made them without threading a
+    /// counter through every fact view. The runner resets it before each rule
+    /// and reads it after.
+    static OBSERVED_EVENTS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn observe_events(count: usize) {
+    OBSERVED_EVENTS.with(|observed| observed.set(observed.get().saturating_add(count as u64)));
+}
+
+/// Resets the per-rule observation counter and returns what it held.
+pub(crate) fn take_observed_events() -> u64 {
+    OBSERVED_EVENTS.with(|observed| observed.replace(0))
+}
+
 pub(crate) fn matching_events(db: &AnalysisDb, query: EventPattern) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
-    normalize_policy_results(match query.kind() {
+    let results = normalize_policy_results(match query.kind() {
         EventPatternKind::Call => matching_call_events(db, &query, &query_digest),
         EventPatternKind::WriteField => Vec::new(),
-    })
+    });
+    observe_events(results.len());
+    results
 }
 
 pub(crate) fn forbidden_reachable(db: &AnalysisDb, query: ReachQuery) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
-    normalize_policy_results(forbidden_reachable_calls(db, &query, &query_digest))
+    let results = normalize_policy_results(forbidden_reachable_calls(db, &query, &query_digest));
+    observe_events(results.len());
+    results
 }
 
 pub(crate) fn missing_guards(db: &AnalysisDb, query: GuardQuery) -> Vec<PolicyViolation> {
@@ -57,7 +80,9 @@ pub(crate) fn missing_cleanup(db: &AnalysisDb, query: LifecycleQuery) -> Vec<Pol
 
 pub(crate) fn forbidden_flows(db: &AnalysisDb, query: FlowQuery) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
-    normalize_policy_results(forbidden_data_flows(db, &query, &query_digest))
+    let results = normalize_policy_results(forbidden_data_flows(db, &query, &query_digest));
+    observe_events(results.len());
+    results
 }
 
 fn normalize_policy_results(mut results: Vec<PolicyViolation>) -> Vec<PolicyViolation> {
@@ -355,6 +380,7 @@ fn missing_guard_calls(
             if !event_matches_pattern(event, &query.event) {
                 continue;
             }
+            observe_events(1);
             let coverage = relation_coverage(
                 function_events[..index]
                     .iter()
@@ -485,6 +511,7 @@ fn guard_outcome_results(
             if !decided.insert(event.site) {
                 continue;
             }
+            observe_events(1);
             if results.len() >= query.max_paths {
                 truncated = true;
                 break 'functions;
@@ -1188,6 +1215,7 @@ fn missing_cleanup_calls(
             if !event_matches_pattern(event, &query.start) {
                 continue;
             }
+            observe_events(1);
             let coverage = relation_coverage(
                 function_events[index + 1..]
                     .iter()

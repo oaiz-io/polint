@@ -965,3 +965,34 @@ mod tests {
         }
     }
 }
+
+/// Projects sealed provider outcomes and their telemetry into report rows.
+///
+/// The kernel already decides every field; this is the projection that stops
+/// the decision from being dropped after the run.
+pub(crate) fn provider_outcome_rows(
+    outcomes: &[ProviderOutcome],
+    telemetry: &[crate::analysis_kernel::incremental::ProviderTelemetry],
+) -> Vec<crate::diagnostics::ProviderOutcomeRow> {
+    outcomes
+        .iter()
+        .zip(telemetry)
+        .map(
+            |(outcome, telemetry)| crate::diagnostics::ProviderOutcomeRow {
+                provider_id: outcome.provider_id.clone(),
+                status: outcome.status.label().to_string(),
+                stage: outcome.failure_stage.map(|stage| format!("{stage:?}")),
+                reason: outcome.failure_reason.map(|reason| format!("{reason:?}")),
+                elapsed_ms: telemetry.elapsed_ms,
+                blockers: outcome.blockers.clone(),
+                cache: crate::diagnostics::ProviderCacheRow {
+                    hits: telemetry.cache_stats.hits,
+                    misses: telemetry.cache_stats.misses,
+                    recomputes: telemetry.cache_stats.recomputes,
+                    writes: telemetry.cache_stats.writes,
+                },
+                counts: telemetry.counts.clone(),
+            },
+        )
+        .collect()
+}
