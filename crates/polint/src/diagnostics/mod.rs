@@ -233,7 +233,9 @@ pub(crate) struct ProviderOutcomeRow {
     /// Providers whose failure blocked this one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) blockers: Vec<String>,
-    pub(crate) cache: ProviderCacheRow,
+    /// Cache counters, present only where the report is not byte-stable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) cache: Option<ProviderCacheRow>,
     /// Provider-specific counters, such as a sidecar's per-stage timings.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) counts: BTreeMap<String, u64>,
@@ -243,13 +245,16 @@ impl ProviderOutcomeRow {
     /// Drops the fields whose value is a measurement rather than a decision.
     ///
     /// `polint check --format json` is a byte-stable contract: two runs over
-    /// the same sources must produce identical output. Wall time and heap are
-    /// not properties of the analysis, so they belong to `--format ai-friendly`
-    /// (which is timestamped anyway) and to the `polint::kernel::stage` log,
-    /// not to the deterministic report.
+    /// the same sources must produce identical output. Wall time, heap, and
+    /// cache hit counts are properties of the machine and its cache state, not
+    /// of the analysis, so they belong to `--format ai-friendly` (which is
+    /// timestamped anyway) and to the `polint::kernel::stage` log. What stays
+    /// is the decision — status, failure stage and reason, blockers — and the
+    /// workload the provider saw.
     fn without_measurements(&self) -> Self {
         let mut row = self.clone();
         row.elapsed_ms = None;
+        row.cache = None;
         row.counts
             .retain(|key, _| !is_measurement_counter(key.as_str()));
         row

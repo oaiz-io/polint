@@ -190,7 +190,7 @@
     },
     "providerOutcome": {
       "type": "object",
-      "required": ["provider_id", "status", "cache"],
+      "required": ["provider_id", "status"],
       "additionalProperties": false,
       "properties": {
         "provider_id": { "type": "string" },
@@ -216,7 +216,10 @@
           "items": { "type": "string" },
           "description": "Providers whose failure blocked this one."
         },
-        "cache": { "$ref": "#/$defs/providerCache" },
+        "cache": {
+          "$ref": "#/$defs/providerCache",
+          "description": "Cache counters; absent from the byte-stable check report because they describe the machine's cache state, not the analysis."
+        },
         "counts": {
           "type": "object",
           "additionalProperties": { "type": "integer", "minimum": 0 },

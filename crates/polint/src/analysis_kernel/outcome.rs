@@ -741,12 +741,12 @@ pub(crate) fn provider_outcome_rows(
                     .map(|reason| reason.label().to_string()),
                 elapsed_ms: telemetry.elapsed_ms,
                 blockers: outcome.blockers.clone(),
-                cache: crate::diagnostics::ProviderCacheRow {
+                cache: Some(crate::diagnostics::ProviderCacheRow {
                     hits: telemetry.cache_stats.hits,
                     misses: telemetry.cache_stats.misses,
                     recomputes: telemetry.cache_stats.recomputes,
                     writes: telemetry.cache_stats.writes,
-                },
+                }),
                 counts: telemetry.counts.clone(),
             },
         )
