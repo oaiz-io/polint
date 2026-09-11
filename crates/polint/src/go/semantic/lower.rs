@@ -51,18 +51,30 @@ pub(crate) fn lower_go_semantic(
         .map(|file| (file.relative_path.as_str(), file.id))
         .collect::<BTreeMap<_, _>>();
     let mut lowered = GoSemanticFactsOutput::default();
+    // The sidecar loads WHOLE packages (`package_patterns`), so it routinely reports files a
+    // narrower scan never discovered — a PATH-argument scan of two files still gets rows for
+    // every file of every loaded package. Those rows are ordinary input, not corruption: they
+    // are skipped and counted, never raised. The scope reduction is already visible through
+    // the `polint/scope` diagnostic and the run summary.
+    let mut out_of_scope_rows = 0usize;
 
     for row in &output.rows {
         match row.kind.as_str() {
-            "package" => lowered.packages.push(lower_package(interner, row, &files)?),
-            "function" | "method" | "init_function" => {
-                lowered
-                    .functions
-                    .push(lower_function(interner, row, &files)?);
-            }
-            "callsite" => lowered
-                .callsites
-                .push(lower_callsite(interner, row, &files)?),
+            "package" => push_in_scope(
+                &mut lowered.packages,
+                lower_package(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "function" | "method" | "init_function" => push_in_scope(
+                &mut lowered.functions,
+                lower_function(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "callsite" => push_in_scope(
+                &mut lowered.callsites,
+                lower_callsite(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
             "method_set" => lowered.method_sets.push(lower_method_set(interner, row)),
             "address_taken" => lowered
                 .address_taken
@@ -84,41 +96,68 @@ pub(crate) fn lower_go_semantic(
         }
     }
 
+    if out_of_scope_rows > 0 {
+        tracing::debug!(
+            rows = out_of_scope_rows,
+            "skipped Go semantic rows naming files outside the scan scope"
+        );
+    }
+
     Ok(lowered.normalized(interner))
 }
 
+/// Collect a lowered fact, or count the row as out of scope when lowering returned `None`.
+fn push_in_scope<T>(target: &mut Vec<T>, fact: Option<T>, out_of_scope_rows: &mut usize) {
+    match fact {
+        Some(fact) => target.push(fact),
+        None => *out_of_scope_rows += 1,
+    }
+}
+
+/// Lower a `package` row, keeping only the files this scan discovered.
+///
+/// A path that escapes the repository is still FATAL: the sidecar is reporting somewhere it
+/// has no business reporting, and no scope can make that path legitimate. A well-formed
+/// relative path that simply was not discovered is not an error — it is a file outside the
+/// scan scope — so it is dropped from `files`. A row that named files but kept none has no
+/// in-scope content left to contribute and is skipped entirely (`Ok(None)`); a row that
+/// named no files at all is unaffected, as a location-less function row is.
 fn lower_package(
     interner: &crate::internal_core::StableKeyInterner,
     row: &GoSemanticRawFrame,
     files: &BTreeMap<&str, FileId>,
-) -> Result<GoSemanticPackageFact, GoSemanticLowerError> {
+) -> Result<Option<GoSemanticPackageFact>, GoSemanticLowerError> {
+    let mut in_scope = Vec::with_capacity(row.files.len());
     for file in &row.files {
         validate_relative_path(file)
             .map_err(|error| GoSemanticLowerError::InvalidPath(error.to_string()))?;
-        if !files.contains_key(file.as_str()) {
-            return Err(GoSemanticLowerError::InvalidPath(format!(
-                "Go semantic sidecar file path `{file}` was not discovered as an in-repository Go file"
-            )));
+        if files.contains_key(file.as_str()) {
+            in_scope.push(file.clone());
         }
     }
-    Ok(GoSemanticPackageFact {
+    if in_scope.is_empty() && !row.files.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(GoSemanticPackageFact {
         id: GoSemanticPackageId(0),
         stable_key: row_stable_key(interner, row, "package"),
         package_id: row.package_id.clone(),
         package_path: row.package_path.clone(),
         package_name: row.package_name.clone(),
         module_path: row.module_path.clone(),
-        files: row.files.clone(),
-    })
+        files: in_scope,
+    }))
 }
 
 fn lower_function(
     interner: &crate::internal_core::StableKeyInterner,
     row: &GoSemanticRawFrame,
     files: &BTreeMap<&str, FileId>,
-) -> Result<GoSemanticFunctionFact, GoSemanticLowerError> {
-    let location = lower_optional_file_span(row, files)?;
-    Ok(GoSemanticFunctionFact {
+) -> Result<Option<GoSemanticFunctionFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticFunctionFact {
         id: GoSemanticFunctionId(0),
         stable_key: row_stable_key(interner, row, row.kind.as_str()),
         package_id: row.package_id.clone(),
@@ -135,16 +174,18 @@ fn lower_function(
         relative_file: location.relative_file,
         file: location.file,
         span: location.span,
-    })
+    }))
 }
 
 fn lower_callsite(
     interner: &crate::internal_core::StableKeyInterner,
     row: &GoSemanticRawFrame,
     files: &BTreeMap<&str, FileId>,
-) -> Result<GoSemanticCallsiteFact, GoSemanticLowerError> {
-    let location = lower_optional_file_span(row, files)?;
-    Ok(GoSemanticCallsiteFact {
+) -> Result<Option<GoSemanticCallsiteFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticCallsiteFact {
         id: GoSemanticCallsiteId(0),
         stable_key: row_stable_key(interner, row, "callsite"),
         package_id: row.package_id.clone(),
@@ -160,7 +201,7 @@ fn lower_callsite(
         relative_file: location.relative_file,
         file: location.file,
         span: location.span,
-    })
+    }))
 }
 
 fn lower_method_set(
@@ -253,31 +294,34 @@ fn lower_package_error(
     }
 }
 
+/// Resolve a row's optional `file` against the discovered files.
+///
+/// `Ok(None)` means the row names a valid in-repository path this scan did not discover —
+/// the row belongs to a file outside the scan scope and its caller skips it. A row with no
+/// file at all is unaffected (it lowers to a location-less fact). A path that escapes the
+/// repository is still an error.
 fn lower_optional_file_span(
     row: &GoSemanticRawFrame,
     files: &BTreeMap<&str, FileId>,
-) -> Result<LoweredLocation, GoSemanticLowerError> {
+) -> Result<Option<LoweredLocation>, GoSemanticLowerError> {
     if row.file.is_empty() {
-        return Ok(LoweredLocation {
+        return Ok(Some(LoweredLocation {
             relative_file: None,
             file: None,
             span: None,
-        });
+        }));
     }
     validate_relative_path(&row.file)
         .map_err(|error| GoSemanticLowerError::InvalidPath(error.to_string()))?;
     let Some(&file) = files.get(row.file.as_str()) else {
-        return Err(GoSemanticLowerError::InvalidPath(format!(
-            "Go semantic sidecar file path `{}` was not discovered as an in-repository Go file",
-            row.file
-        )));
+        return Ok(None);
     };
     let span = row.span.as_ref().map(|span| to_span(file, span));
-    Ok(LoweredLocation {
+    Ok(Some(LoweredLocation {
         relative_file: Some(row.file.clone()),
         file: Some(file),
         span,
-    })
+    }))
 }
 
 fn to_span(file: FileId, span: &GoSemanticSpan) -> Span {
@@ -513,31 +557,103 @@ mod tests {
     }
 
     #[test]
-    fn lower_rejects_undiscovered_in_repository_path() {
+    fn lower_rejects_relative_repo_escaping_path() {
+        // The remaining fatal path case: `validate_relative_path` must keep firing. A path
+        // that climbs out of the repository is never "just out of scope" — no scan could
+        // legitimately discover it — so it stays an error for both row shapes.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(&format!(
             r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
-{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"deleted.go"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"../secrets.go"}}
 {{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
 "#,
         ))
         .expect("valid protocol");
         let err = lower_go_semantic(&db, &output).unwrap_err();
-        assert!(err.to_string().contains("was not discovered"));
+        assert!(err.to_string().contains("escapes repository"));
+
+        let package_output = decode_ndjson_str(&format!(
+            r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"package","package_id":"example.com/p","package_path":"example.com/p","stable_key":"pkg","files":["main.go","../secrets.go"]}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
+"#,
+        ))
+        .expect("valid protocol");
+        let err = lower_go_semantic(&db, &package_output).unwrap_err();
+        assert!(err.to_string().contains("escapes repository"));
     }
 
     #[test]
-    fn lower_rejects_package_files_not_discovered_by_polint() {
+    fn lower_skips_rows_naming_files_outside_the_scan_scope() {
+        // A PATH-argument scan discovers only the named files, while the sidecar loads whole
+        // packages — so rows for undiscovered files are normal input. They are skipped, not
+        // raised: the whole Go fact set must survive a narrowed scope.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(&format!(
             r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
-{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"package","package_id":"example.com/p","package_path":"example.com/p","files":["main.go","other.go"]}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"main.go"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"G","qualified":"example.com/p.G","stable_key":"fn_out","file":"out_of_scope.go"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"callsite","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.G","static_callee":"example.com/p.F","status":"resolved_static","stable_key":"cs_out","file":"out_of_scope.go"}}
 {{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
 "#,
         ))
         .expect("valid protocol");
-        let err = lower_go_semantic(&db, &output).unwrap_err();
-        assert!(err.to_string().contains("other.go"));
+        let lowered = lower_go_semantic(&db, &output).expect("out-of-scope rows are not fatal");
+        assert_eq!(lowered.functions.len(), 1);
+        assert_eq!(lowered.functions[0].qualified, "example.com/p.F");
+        assert!(lowered.callsites.is_empty());
+    }
+
+    #[test]
+    fn lower_package_keeps_only_the_files_this_scan_discovered() {
+        let db = db_with_go_file("main.go");
+        let output = decode_ndjson_str(&format!(
+            r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"package","package_id":"example.com/p","package_path":"example.com/p","stable_key":"pkg","files":["main.go","other.go"]}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
+"#,
+        ))
+        .expect("valid protocol");
+        let lowered = lower_go_semantic(&db, &output).expect("out-of-scope files are not fatal");
+        assert_eq!(lowered.packages.len(), 1);
+        assert_eq!(lowered.packages[0].files, vec!["main.go".to_string()]);
+    }
+
+    #[test]
+    fn lower_skips_package_with_no_in_scope_files() {
+        let db = db_with_go_file("main.go");
+        let output = decode_ndjson_str(&format!(
+            r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"package","package_id":"example.com/dep","package_path":"example.com/dep","stable_key":"pkg_dep","files":["dep/a.go","dep/b.go"]}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
+"#,
+        ))
+        .expect("valid protocol");
+        let lowered = lower_go_semantic(&db, &output).expect("out-of-scope package is not fatal");
+        assert!(lowered.packages.is_empty());
+    }
+
+    #[test]
+    fn lower_keeps_rows_without_a_file() {
+        // Scope filtering keys on the row's file; a row that names none is untouched.
+        let db = db_with_go_file("main.go");
+        let output = decode_ndjson_str(&format!(
+            r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"package","package_id":"example.com/p","package_path":"example.com/p","stable_key":"pkg"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"callsite","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.F","static_callee":"example.com/p.G","status":"resolved_static","stable_key":"cs"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
+"#,
+        ))
+        .expect("valid protocol");
+        let lowered = lower_go_semantic(&db, &output).expect("lowered");
+        assert_eq!(lowered.packages.len(), 1);
+        assert!(lowered.packages[0].files.is_empty());
+        assert_eq!(lowered.functions.len(), 1);
+        assert_eq!(lowered.functions[0].relative_file, None);
+        assert_eq!(lowered.functions[0].file, None);
+        assert_eq!(lowered.callsites.len(), 1);
+        assert_eq!(lowered.callsites[0].relative_file, None);
     }
 
     #[test]
