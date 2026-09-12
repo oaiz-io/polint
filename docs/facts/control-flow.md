@@ -151,7 +151,7 @@ A `NoAlias` answer refutes the binding (`identity_mismatch`). Every other alias
 answer — may-alias, partial-alias, unknown, or **no row at all** — is
 `alias_indeterminate`, not coverage. In real Go that is a common answer:
 interface receivers, method values, and struct-embedded actors all depend on
-points-to precision the engine does not have.
+pointer-target precision the engine does not have.
 
 Alias answers are flow-insensitive, so a bound identity is checked again against
 the operations between the guard and the protected call. A write to either
