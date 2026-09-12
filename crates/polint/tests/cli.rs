@@ -2499,14 +2499,16 @@ pub(crate) fn no_raw_colors(ctx: &mut RuleCtx<'_>, literals: StringLiterals<'_>)
 
 #[test]
 fn inspect_and_test_schema_files_are_valid_json() {
-    for schema in [
-        "docs/schemas/polint-rule-inspect-v1.json",
-        "docs/schemas/polint-test-report-v1.json",
+    for (schema, version) in [
+        ("docs/schemas/polint-rule-inspect-v1.json", 1u64),
+        // The test-report schema moved to version 2 when the report gained
+        // provider rows; the inspect schema is still on version 1.
+        ("docs/schemas/polint-test-report-v1.json", 2u64),
     ] {
         let raw = fs::read_to_string(repo_root().join(schema)).unwrap();
         let value: serde_json::Value = serde_json::from_str(&raw)
             .unwrap_or_else(|error| panic!("{schema} is not valid JSON: {error}"));
-        assert_eq!(value["properties"]["version"]["const"], 1);
+        assert_eq!(value["properties"]["version"]["const"], version);
         assert!(value["properties"]["schema"].is_object());
     }
 }
