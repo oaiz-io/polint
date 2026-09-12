@@ -116,12 +116,13 @@ fn push_in_scope<T>(target: &mut Vec<T>, fact: Option<T>, out_of_scope_rows: &mu
 
 /// Lower a `package` row, keeping only the files this scan discovered.
 ///
-/// A path that escapes the repository is still FATAL: the sidecar is reporting somewhere it
-/// has no business reporting, and no scope can make that path legitimate. A well-formed
-/// relative path that simply was not discovered is not an error — it is a file outside the
-/// scan scope — so it is dropped from `files`. A row that named files but kept none has no
-/// in-scope content left to contribute and is skipped entirely (`Ok(None)`); a row that
-/// named no files at all is unaffected, as a location-less function row is.
+/// The discovered-file map is the only trust anchor: every path it does not contain is out of
+/// scope and is dropped, whatever shape the path has. That includes paths escaping the
+/// repository — `--tests` makes x/tools report a synthesized `<pkg>.test` main package whose
+/// sole "file" is a GOCACHE build artifact, reached by climbing out of the root — so those are
+/// dropped like any other undiscovered path rather than raised. A row that named files but
+/// kept none has no in-scope content left to contribute and is skipped entirely (`Ok(None)`);
+/// a row that named no files at all is unaffected, as a location-less function row is.
 fn lower_package(
     interner: &crate::internal_core::StableKeyInterner,
     row: &GoSemanticRawFrame,
@@ -129,9 +130,7 @@ fn lower_package(
 ) -> Result<Option<GoSemanticPackageFact>, GoSemanticLowerError> {
     let mut in_scope = Vec::with_capacity(row.files.len());
     for file in &row.files {
-        validate_relative_path(file)
-            .map_err(|error| GoSemanticLowerError::InvalidPath(error.to_string()))?;
-        if files.contains_key(file.as_str()) {
+        if validate_relative_path(file).is_ok() && files.contains_key(file.as_str()) {
             in_scope.push(file.clone());
         }
     }
@@ -296,10 +295,11 @@ fn lower_package_error(
 
 /// Resolve a row's optional `file` against the discovered files.
 ///
-/// `Ok(None)` means the row names a valid in-repository path this scan did not discover —
-/// the row belongs to a file outside the scan scope and its caller skips it. A row with no
-/// file at all is unaffected (it lowers to a location-less fact). A path that escapes the
-/// repository is still an error.
+/// `Ok(None)` means the row names a path this scan did not discover — it belongs outside the
+/// scan scope and its caller skips it. A path that escapes the repository takes the same
+/// route: it can never be a discovered file, so it is undiscoverable by definition rather
+/// than an error. A row with no file at all is unaffected (it lowers to a location-less
+/// fact).
 fn lower_optional_file_span(
     row: &GoSemanticRawFrame,
     files: &BTreeMap<&str, FileId>,
@@ -311,8 +311,9 @@ fn lower_optional_file_span(
             span: None,
         }));
     }
-    validate_relative_path(&row.file)
-        .map_err(|error| GoSemanticLowerError::InvalidPath(error.to_string()))?;
+    if validate_relative_path(&row.file).is_err() {
+        return Ok(None);
+    }
     let Some(&file) = files.get(row.file.as_str()) else {
         return Ok(None);
     };
@@ -537,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn lower_rejects_absolute_repo_escaping_path() {
+    fn lower_skips_absolute_repo_escaping_path() {
         let db = db_with_go_file("main.go");
         let outside = if cfg!(windows) {
             r"C:\tmp\outside.go"
@@ -552,25 +553,30 @@ mod tests {
 "#,
         ))
         .expect("valid protocol");
-        let err = lower_go_semantic(&db, &output).unwrap_err();
-        assert!(err.to_string().contains("escapes repository"));
+        let lowered =
+            lower_go_semantic(&db, &output).expect("a repo-escaping path is skipped, not fatal");
+        assert!(lowered.functions.is_empty());
     }
 
     #[test]
-    fn lower_rejects_relative_repo_escaping_path() {
-        // The remaining fatal path case: `validate_relative_path` must keep firing. A path
-        // that climbs out of the repository is never "just out of scope" — no scan could
-        // legitimately discover it — so it stays an error for both row shapes.
+    fn lower_skips_relative_repo_escaping_path() {
+        // No path shape is fatal during lowering: lowering cannot tell a corrupted path from a
+        // legitimate build artifact, and does not need to — the discovered-file map decides.
+        // A path that climbs out of the repository can never be in that map, so the row is
+        // skipped exactly like any other out-of-scope row, for both row shapes.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(&format!(
             r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
 {{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"../secrets.go"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"callsite","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.F","static_callee":"example.com/p.G","status":"resolved_static","stable_key":"cs","file":"../secrets.go"}}
 {{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
 "#,
         ))
         .expect("valid protocol");
-        let err = lower_go_semantic(&db, &output).unwrap_err();
-        assert!(err.to_string().contains("escapes repository"));
+        let lowered =
+            lower_go_semantic(&db, &output).expect("a repo-escaping path is skipped, not fatal");
+        assert!(lowered.functions.is_empty());
+        assert!(lowered.callsites.is_empty());
 
         let package_output = decode_ndjson_str(&format!(
             r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
@@ -579,8 +585,36 @@ mod tests {
 "#,
         ))
         .expect("valid protocol");
-        let err = lower_go_semantic(&db, &package_output).unwrap_err();
-        assert!(err.to_string().contains("escapes repository"));
+        let lowered = lower_go_semantic(&db, &package_output)
+            .expect("a repo-escaping path is dropped from the file list, not fatal");
+        assert_eq!(lowered.packages.len(), 1);
+        assert_eq!(lowered.packages[0].files, vec!["main.go".to_string()]);
+    }
+
+    #[test]
+    fn lower_skips_synthesized_test_package_naming_only_a_build_cache_artifact() {
+        // With `--tests`, x/tools reports a SYNTHESIZED `<pkg>.test` main package whose files
+        // list holds exactly one entry: a GOCACHE artifact, relative but climbing out of the
+        // repository root. That is legitimate loader output, not corruption, and it must not
+        // fail the run: the row names no discovered file, so it is skipped like any other
+        // out-of-scope row and the real rows lower untouched.
+        let db = db_with_go_file("main.go");
+        let output = decode_ndjson_str(&format!(
+            r#"{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_begin"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"package","package_id":"example.com/p","package_path":"example.com/p","stable_key":"pkg","files":["main.go"]}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"package","package_id":"example.com/p.test","package_path":"example.com/p.test","stable_key":"pkg_testmain","files":["../../home/.cache/go-build/b0/b0ddf933bee58efe09b1d2a18dfe72a91678e47e6e91bb9040231a8727b0573b-d"]}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"main.go"}}
+{{"schema":"{GO_SEMANTIC_SCHEMA}","kind":"session_end"}}
+"#,
+        ))
+        .expect("valid protocol");
+        let lowered = lower_go_semantic(&db, &output)
+            .expect("a synthesized testmain build-cache path is skipped, not fatal");
+        assert_eq!(lowered.packages.len(), 1);
+        assert_eq!(lowered.packages[0].package_path, "example.com/p");
+        assert_eq!(lowered.packages[0].files, vec!["main.go".to_string()]);
+        assert_eq!(lowered.functions.len(), 1);
+        assert_eq!(lowered.functions[0].qualified, "example.com/p.F");
     }
 
     #[test]
