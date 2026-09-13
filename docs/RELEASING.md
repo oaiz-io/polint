@@ -57,7 +57,17 @@ cargo build --workspace
 git commit -am "chore(release): bump crate version to <new>"
 ```
 
-Then either run **Release** to take it from there, or push a tag yourself.
+**Release always bumps again.** It runs the same script on whatever `main`
+holds, so dispatching it after a manual bump ships the *next* version, not the
+one just committed: a manual `0.4.0` plus a `minor` run tags `v0.5.0`. Pick one
+path per release.
+
+- To ship `X.Y.Z` through the workflow, leave `main` at the previous version and
+  dispatch **Release** with the bump level that reaches `X.Y.Z`.
+- To ship a version that is already committed on `main`, tag it yourself
+  (`git tag -a vX.Y.Z -m "polint X.Y.Z" && git push origin vX.Y.Z`). The
+  workflow has no tag trigger, so that path publishes nothing on its own: run
+  `./scripts/publish-crates.sh` and attach the CLI archives separately.
 
 ## Rule pack API changes (SDK)
 
