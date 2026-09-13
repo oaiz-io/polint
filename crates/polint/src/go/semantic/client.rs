@@ -4,8 +4,8 @@ use std::time::Duration;
 use crate::go::lifecycle::{self, GoAnalysisConfig};
 use crate::go::process_runner::{GoProcessError, run_bounded};
 use crate::go::semantic::budget::semantic_timeout;
-use crate::go::semantic::diagnostics::GO_SIDECAR_TIMEOUT;
 use crate::go::semantic::cache_key::go_semantic_sidecar_cache_key;
+use crate::go::semantic::diagnostics::GO_SIDECAR_TIMEOUT;
 use crate::go::semantic::process::{
     GoSemanticProcessError, command_for_frontend, frontend_digest, local_go_toolchain_version,
     resolve_go_semantic_frontend,

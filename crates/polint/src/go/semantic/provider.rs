@@ -109,8 +109,9 @@ pub fn derive_go_semantic_with_cache_stats(
         manifest,
         go_syntax_output_digest,
         move |config| match cache_dir.as_deref() {
-            Some(dir) => GoSemanticClient::new(root_owned, config)
-                .run_cached(config, dir, &upstream_str),
+            Some(dir) => {
+                GoSemanticClient::new(root_owned, config).run_cached(config, dir, &upstream_str)
+            }
             None => GoSemanticClient::new(root_owned, config).run(config),
         },
     )
