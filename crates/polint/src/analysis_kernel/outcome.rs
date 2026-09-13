@@ -686,30 +686,30 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
         _ => &[],
     }
 }
-/// Projects sealed provider outcomes and their telemetry into report rows.
-///
-/// The kernel already decides every field; this is the projection that stops
-/// the decision from being dropped after the run.
-///
+
 /// Providers whose ids the public output already names.
 ///
-/// These back a public capability or already appear in `polint/capability`
-/// blockers and `polint/go-semantic` diagnostics, so reporting their cost adds
-/// no new vocabulary. Providers outside this set are internal fact families and
-/// are named only when they failed, which is the one case a consumer must be
-/// able to trace.
-const PUBLICLY_NAMED_PROVIDERS: [&str; 9] = [
-    "polint.evidence",
+/// Each one backs a public capability and already appears in `polint/capability`
+/// blockers and `polint/go-semantic` diagnostics, so reporting its cost adds no
+/// new vocabulary. Providers outside this set are internal fact families that
+/// the public surface gates against by name, and they are reported only when
+/// they failed or were blocked — the one case a consumer must be able to trace,
+/// and the one the blocker evidence already exposes.
+pub(crate) const PUBLICLY_NAMED_PROVIDERS: [&str; 7] = [
     "polint.go.semantic",
     "polint.go.syntax",
     "polint.identity",
     "polint.metrics",
     "polint.module_graph",
-    "polint.refined_calls",
     "polint.symbol_graph",
     "polint.ts.syntax",
 ];
 
+/// Projects sealed provider outcomes and their telemetry into report rows.
+///
+/// The kernel already decides every field; this is the projection that stops
+/// the decision from being dropped after the run.
+///
 /// Only providers a consumer can act on are named: one that failed or was
 /// blocked (so a blocked rule can be traced to it), one that reported counters
 /// (so a measured stage can be read), and one whose id the public output

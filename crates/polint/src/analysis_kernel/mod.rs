@@ -2404,6 +2404,7 @@ function cleanup(value: string) {{ return value.trim(); }}
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let markers = framework_internal_markers();
 
+        let summary = run_summary_naming_every_reportable_provider();
         let rendered = crate::diagnostics::render(
             crate::diagnostics::OutputFormat::Json,
             &[],
@@ -2414,8 +2415,8 @@ function cleanup(value: string) {{ return value.trim(); }}
                 },
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
-                rule_execution: &[],
-                run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
+                rule_execution: &summary.rules,
+                run_summary: &summary,
             },
         );
         assert_no_framework_markers("polint check --format json", &rendered, &markers);
@@ -2452,6 +2453,7 @@ function cleanup(value: string) {{ return value.trim(); }}
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let markers = refined_call_internal_markers();
 
+        let summary = run_summary_naming_every_reportable_provider();
         let rendered = crate::diagnostics::render(
             crate::diagnostics::OutputFormat::Json,
             &[],
@@ -2462,8 +2464,8 @@ function cleanup(value: string) {{ return value.trim(); }}
                 },
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
-                rule_execution: &[],
-                run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
+                rule_execution: &summary.rules,
+                run_summary: &summary,
             },
         );
         assert_no_refined_call_markers("polint check --format json", &rendered, &markers);
@@ -2499,6 +2501,7 @@ function cleanup(value: string) {{ return value.trim(); }}
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let markers = data_flow_internal_markers();
 
+        let summary = run_summary_naming_every_reportable_provider();
         let rendered = crate::diagnostics::render(
             crate::diagnostics::OutputFormat::Json,
             &[],
@@ -2509,8 +2512,8 @@ function cleanup(value: string) {{ return value.trim(); }}
                 },
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
-                rule_execution: &[],
-                run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
+                rule_execution: &summary.rules,
+                run_summary: &summary,
             },
         );
         assert_no_data_flow_markers("polint check --format json", &rendered, &markers);
@@ -2723,6 +2726,41 @@ function setup() {
             "summary_projected",
             "query path search",
         ]
+    }
+
+    /// A run summary naming every provider a successful run may report.
+    ///
+    /// The leak gates render a report rather than reading source, so they only
+    /// cover `summary.providers[]` if the summary actually carries rows. An
+    /// empty one silently exempts the whole vocabulary from the check.
+    fn run_summary_naming_every_reportable_provider() -> crate::diagnostics::RunSummary {
+        crate::diagnostics::RunSummary {
+            rules: vec![crate::diagnostics::RuleExecutionRow {
+                rule_id: "local/example".to_string(),
+                planned: true,
+                capabilities_ok: true,
+                files_in_scope: 0,
+                diagnostics_emitted: 0,
+                skipped_reason: None,
+                outcome: crate::diagnostics::RULE_OUTCOME_ANALYZED.to_string(),
+                blocking_providers: Vec::new(),
+                observed_events: 0,
+            }],
+            providers: outcome::PUBLICLY_NAMED_PROVIDERS
+                .iter()
+                .map(|provider_id| crate::diagnostics::ProviderOutcomeRow {
+                    provider_id: (*provider_id).to_string(),
+                    status: "succeeded".to_string(),
+                    stage: None,
+                    reason: None,
+                    elapsed_ms: None,
+                    blockers: Vec::new(),
+                    cache: None,
+                    counts: std::collections::BTreeMap::new(),
+                })
+                .collect(),
+            budgets: Vec::new(),
+        }
     }
 
     fn assert_no_refined_call_markers(label: &str, source: &str, markers: &[&str]) {
