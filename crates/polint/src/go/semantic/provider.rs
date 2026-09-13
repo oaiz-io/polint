@@ -96,7 +96,11 @@ pub fn derive_go_semantic_with_cache_stats(
     config_digest: &str,
     manifest: &ProviderManifest,
     go_syntax_output_digest: Digest,
+    sidecar_cache_dir: Option<&Path>,
 ) -> GoSemanticProviderRunOutput {
+    let upstream_str = go_syntax_output_digest.to_string();
+    let cache_dir = sidecar_cache_dir.map(Path::to_path_buf);
+    let root_owned = root.to_path_buf();
     derive_go_semantic_with_runner(
         db,
         root,
@@ -104,7 +108,11 @@ pub fn derive_go_semantic_with_cache_stats(
         config_digest,
         manifest,
         go_syntax_output_digest,
-        |config| GoSemanticClient::new(root.to_path_buf(), config).run(config),
+        move |config| match cache_dir.as_deref() {
+            Some(dir) => GoSemanticClient::new(root_owned, config)
+                .run_cached(config, dir, &upstream_str),
+            None => GoSemanticClient::new(root_owned, config).run(config),
+        },
     )
 }
 

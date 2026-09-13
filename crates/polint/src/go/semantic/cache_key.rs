@@ -29,6 +29,23 @@ pub fn go_semantic_provider_parameter_digest() -> String {
     ])
 }
 
+pub fn go_semantic_sidecar_cache_key(
+    sidecar_digest: &str,
+    go_version: &str,
+    upstream_digest: &str,
+    config: &GoAnalysisConfig,
+) -> String {
+    let lifecycle_digest = go_semantic_lifecycle_digest(config);
+    crate::go::hash::stable_hash(&[
+        "go-semantic-sidecar-cache-v1",
+        go_semantic_provider_parameter_digest().as_str(),
+        sidecar_digest,
+        go_version,
+        upstream_digest,
+        lifecycle_digest.as_str(),
+    ])
+}
+
 pub fn go_semantic_input_digest(inputs: &GoSemanticCacheInputs) -> String {
     let lifecycle_digest = go_semantic_lifecycle_digest(&inputs.lifecycle);
     crate::go::hash::stable_hash(&[

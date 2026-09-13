@@ -384,6 +384,7 @@ impl Provider for GoSemanticProvider {
         let go_settings = ctx.loaded.config.languages.go.clone();
         let config_digest = ctx.config_digest;
         let go_syntax_digest = ctx.dependency_digest("polint.go.syntax");
+        let sidecar_cache_dir = ctx.cache.sidecar_cache_dir();
         let derivation = crate::go::semantic::provider::derive_go_semantic_with_cache_stats(
             ctx.db,
             &root,
@@ -391,6 +392,7 @@ impl Provider for GoSemanticProvider {
             config_digest,
             self.manifest(),
             go_syntax_digest,
+            Some(&sidecar_cache_dir),
         );
         ProviderRunResult {
             diagnostics: derivation.diagnostics,
