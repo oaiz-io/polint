@@ -510,6 +510,7 @@ fn parse_sidecar_output(stdout: &[u8]) -> Result<GoSidecarOutput, GoSidecarFailu
 fn validate_paths(mut output: GoSidecarOutput, db: &dyn FactDatabase) -> GoSidecarOutput {
     let file_ids = go_file_ids(db);
     let dropped = DroppedRows::of(&output, &file_ids);
+    let before = located_row_count(&output);
     output.packages.retain_mut(|package| {
         let named_files = !package.files.is_empty();
         package.files = package
@@ -525,7 +526,28 @@ fn validate_paths(mut output: GoSidecarOutput, db: &dyn FactDatabase) -> GoSidec
     retain_in_scope_rows(&mut output.scopes, |row| &mut row.file, &file_ids);
     retain_in_scope_rows(&mut output.imports, |row| &mut row.file, &file_ids);
     dropped.prune_dependents(&mut output);
+    // The semantic lowering counts its skipped rows the same way. Say how much
+    // the scope reduction removed: an empty symbol graph that came entirely
+    // from out-of-scope paths is otherwise indistinguishable from a repository
+    // with nothing in it.
+    let after = located_row_count(&output);
+    if after < before {
+        tracing::debug!(
+            rows = before - after,
+            "skipped Go symbol sidecar rows naming files outside the scan scope"
+        );
+    }
     output
+}
+
+/// Rows that carry a file, and so can be dropped for naming an undiscovered one.
+fn located_row_count(output: &GoSidecarOutput) -> usize {
+    output.packages.len()
+        + output.symbols.len()
+        + output.definitions.len()
+        + output.references.len()
+        + output.scopes.len()
+        + output.imports.len()
 }
 
 /// The keys of the rows this scan dropped, so the rows that only point at them can go too.
