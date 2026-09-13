@@ -23,7 +23,7 @@ import (
 )
 
 const SchemaVersion = "polint-go-semantic-3"
-const XToolsVersion = "v0.45.0"
+const XToolsVersion = "v0.49.0"
 const topologyManifestMaxBytes int64 = 1_048_576
 
 type Config struct {

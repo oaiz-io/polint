@@ -60,22 +60,22 @@ mod symbol_graph_go_setup {
     }
 
     #[test]
-    fn embedded_go_sidecar_keeps_go_1_24_minimum() {
+    fn embedded_go_sidecar_keeps_go_1_25_minimum() {
         let go_mod = EMBEDDED_GO_SIDECAR_FILES
             .iter()
             .find_map(|(relative_path, contents)| (*relative_path == "go.mod").then_some(*contents))
             .expect("embedded go.mod exists");
 
         assert!(
-            go_mod.lines().any(|line| line == "go 1.24.0"),
-            "embedded sidecar should keep Go 1.24 as its minimum supported toolchain: {go_mod:?}"
+            go_mod.lines().any(|line| line == "go 1.25.0"),
+            "embedded sidecar should keep Go 1.25 as its minimum supported toolchain: {go_mod:?}"
         );
         assert!(
             go_mod
                 .lines()
                 .map(str::trim)
-                .any(|line| line == "golang.org/x/tools v0.42.0"),
-            "embedded sidecar should stay on the Go 1.24-compatible x/tools line: {go_mod:?}"
+                .any(|line| line == "golang.org/x/tools v0.49.0"),
+            "embedded sidecar should stay on the newest Go 1.25-compatible x/tools line: {go_mod:?}"
         );
     }
 
