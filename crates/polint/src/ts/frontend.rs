@@ -85,7 +85,7 @@ impl LanguageFrontend for TsJsFrontend {
         }
         let file = unit.files[0].relative_path.clone();
         ProviderRunResult {
-                counts: Default::default(),
+            counts: Default::default(),
             diagnostics: vec![Diagnostic::warning(
                 "polint/capability",
                 file,
