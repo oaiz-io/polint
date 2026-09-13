@@ -295,8 +295,7 @@ fn derive_go_symbols_with_runner(
             );
         }
     };
-    let sidecar = match parse_sidecar_output(&stdout).and_then(|output| validate_paths(output, db))
-    {
+    let sidecar = match parse_sidecar_output(&stdout).map(|output| validate_paths(output, db)) {
         Ok(output) => output,
         Err(error) => {
             return setup_missing_output(
@@ -496,42 +495,113 @@ fn parse_sidecar_output(stdout: &[u8]) -> Result<GoSidecarOutput, GoSidecarFailu
     Ok(output)
 }
 
-fn validate_paths(
-    mut output: GoSidecarOutput,
-    db: &dyn FactDatabase,
-) -> Result<GoSidecarOutput, GoSidecarFailure> {
+/// Keep only the sidecar rows this scan discovered, dropping the rest.
+///
+/// The sidecar loads WHOLE packages (`package_patterns`), so it legitimately emits rows for
+/// files a narrower scan never discovered — a PATH-argument scan of two files still gets rows
+/// for every file of every loaded package. Those rows are ordinary input, not corruption: the
+/// discovered-file map is the only trust anchor, and any path missing from it is out of scope
+/// and is skipped, never fatal. Paths that are absolute or climb out of the repository take
+/// the same route: they can never be a discovered file, so they are undiscoverable by
+/// definition rather than an error. A row carrying no `file` at all is unaffected (it stays a
+/// location-less row), and a package row that named files but kept none has no in-scope
+/// content left to contribute and is dropped entirely. The scope reduction is already visible
+/// through the `polint/scope` diagnostic and the run summary, so it is not raised here.
+fn validate_paths(mut output: GoSidecarOutput, db: &dyn FactDatabase) -> GoSidecarOutput {
     let file_ids = go_file_ids(db);
-    for package in &mut output.packages {
-        for file in &mut package.files {
-            *file = validate_sidecar_path(file, &file_ids)?;
+    let dropped = DroppedRows::of(&output, &file_ids);
+    output.packages.retain_mut(|package| {
+        let named_files = !package.files.is_empty();
+        package.files = package
+            .files
+            .iter()
+            .filter_map(|file| in_scope_sidecar_path(file, &file_ids))
+            .collect();
+        !named_files || !package.files.is_empty()
+    });
+    retain_in_scope_rows(&mut output.symbols, |row| &mut row.file, &file_ids);
+    retain_in_scope_rows(&mut output.definitions, |row| &mut row.file, &file_ids);
+    retain_in_scope_rows(&mut output.references, |row| &mut row.file, &file_ids);
+    retain_in_scope_rows(&mut output.scopes, |row| &mut row.file, &file_ids);
+    retain_in_scope_rows(&mut output.imports, |row| &mut row.file, &file_ids);
+    dropped.prune_dependents(&mut output);
+    output
+}
+
+/// The keys of the rows this scan dropped, so the rows that only point at them can go too.
+///
+/// `exports` and `resolution_steps` carry no file of their own — they name a symbol or a
+/// reference by key — so they are only ever out of scope by association. Keeping one whose
+/// target is gone would emit a fact whose `symbol_stable_key` / `source_stable_key` /
+/// `target_stable_keys` names nothing in the index, and the semantic index rejects that: a
+/// scope reduction has to shrink the fact set, never invalidate it. Keys the sidecar never
+/// emitted a row for (builtins, symbols outside the loaded packages) are not listed here and
+/// keep their existing treatment, so a scan that drops nothing changes nothing.
+struct DroppedRows {
+    symbols: BTreeSet<String>,
+    references: BTreeSet<String>,
+}
+
+impl DroppedRows {
+    fn of(output: &GoSidecarOutput, file_ids: &BTreeMap<String, FileId>) -> Self {
+        Self {
+            symbols: output
+                .symbols
+                .iter()
+                .filter(|symbol| !row_is_in_scope(&symbol.file, file_ids))
+                .map(|symbol| symbol.key.clone())
+                .collect(),
+            references: output
+                .references
+                .iter()
+                .filter(|reference| !row_is_in_scope(&reference.file, file_ids))
+                .map(go_reference_key)
+                .collect(),
         }
     }
-    for symbol in &mut output.symbols {
-        if !symbol.file.is_empty() {
-            symbol.file = validate_sidecar_path(&symbol.file, &file_ids)?;
+
+    fn prune_dependents(&self, output: &mut GoSidecarOutput) {
+        output
+            .exports
+            .retain(|export| !self.symbols.contains(&export.symbol_key));
+        output
+            .resolution_steps
+            .retain(|step| !self.references.contains(&step.reference_key));
+        for step in &mut output.resolution_steps {
+            if self.symbols.contains(&step.target_key) {
+                step.target_key.clear();
+            }
+            step.candidate_keys
+                .retain(|candidate| !self.symbols.contains(candidate));
         }
     }
-    for definition in &mut output.definitions {
-        if !definition.file.is_empty() {
-            definition.file = validate_sidecar_path(&definition.file, &file_ids)?;
+}
+
+/// Drop every row whose `file` this scan did not discover, normalizing the ones it keeps.
+///
+/// Rows with an empty `file` claim no location and are kept untouched.
+fn retain_in_scope_rows<T>(
+    rows: &mut Vec<T>,
+    file: fn(&mut T) -> &mut String,
+    file_ids: &BTreeMap<String, FileId>,
+) {
+    rows.retain_mut(|row| {
+        let path = file(row);
+        if path.is_empty() {
+            return true;
         }
-    }
-    for reference in &mut output.references {
-        if !reference.file.is_empty() {
-            reference.file = validate_sidecar_path(&reference.file, &file_ids)?;
+        match in_scope_sidecar_path(path, file_ids) {
+            Some(in_scope) => {
+                *path = in_scope;
+                true
+            }
+            None => false,
         }
-    }
-    for scope in &mut output.scopes {
-        if !scope.file.is_empty() {
-            scope.file = validate_sidecar_path(&scope.file, &file_ids)?;
-        }
-    }
-    for import in &mut output.imports {
-        if !import.file.is_empty() {
-            import.file = validate_sidecar_path(&import.file, &file_ids)?;
-        }
-    }
-    Ok(output)
+    });
+}
+
+fn row_is_in_scope(raw_path: &str, file_ids: &BTreeMap<String, FileId>) -> bool {
+    raw_path.is_empty() || in_scope_sidecar_path(raw_path, file_ids).is_some()
 }
 
 fn go_file_ids(db: &dyn FactDatabase) -> BTreeMap<String, FileId> {
@@ -542,17 +612,14 @@ fn go_file_ids(db: &dyn FactDatabase) -> BTreeMap<String, FileId> {
         .collect()
 }
 
-fn validate_sidecar_path(
-    raw_path: &str,
-    file_ids: &BTreeMap<String, FileId>,
-) -> Result<String, GoSidecarFailure> {
-    let path = lexical_repo_relative(raw_path)?;
-    if !file_ids.contains_key(&path) {
-        return Err(GoSidecarFailure::InvalidPath(format!(
-            "Go symbol sidecar file path `{path}` does not map to a discovered Go file."
-        )));
-    }
-    Ok(path)
+/// Normalize a sidecar path, keeping it only when this scan discovered that file.
+///
+/// `None` means the row is out of scope — the path does not resolve inside the repository, or
+/// names a Go file this scan never discovered — and the caller drops it.
+fn in_scope_sidecar_path(raw_path: &str, file_ids: &BTreeMap<String, FileId>) -> Option<String> {
+    lexical_repo_relative(raw_path)
+        .ok()
+        .filter(|path| file_ids.contains_key(path))
 }
 
 fn lexical_repo_relative(raw_path: &str) -> Result<String, GoSidecarFailure> {

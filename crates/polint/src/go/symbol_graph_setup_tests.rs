@@ -331,7 +331,7 @@ module_roots = ["services/payments"]
     }
 
     #[test]
-    fn repo_escaping_sidecar_file_path_reports_setup_missing() {
+    fn repo_escaping_sidecar_file_path_is_skipped_instead_of_failing_the_run() {
         let temp = tempfile::tempdir().expect("tempdir");
         std::fs::write(
             temp.path().join("go.mod"),
@@ -374,15 +374,283 @@ module_roots = ["services/payments"]
         );
 
         assert!(
-            output.capability_support.iter().all(|entry| {
-                entry.status == SymbolCapabilityStatus::SetupMissing
-                    && entry
-                        .reason
-                        .as_deref()
-                        .is_some_and(|reason| reason.contains("escapes repository"))
-            }),
+            output
+                .capability_support
+                .iter()
+                .all(|entry| entry.status == SymbolCapabilityStatus::Supported),
             "{:#?}",
             output.capability_support
         );
+        assert!(builder.finish().symbols.is_empty());
+    }
+
+    fn discovered_db(root: &Path, relative_paths: &[&str]) -> LocalFactDb {
+        let mut db = LocalFactDb::new();
+        for relative_path in relative_paths {
+            add_go_file(&mut db, root, relative_path, "package app\n");
+        }
+        db
+    }
+
+    fn validated(db: &LocalFactDb, payload: &str) -> GoSidecarOutput {
+        validate_paths(
+            parse_sidecar_output(payload.as_bytes()).expect("sidecar output parses"),
+            db,
+        )
+    }
+
+    #[test]
+    fn validate_paths_keeps_only_the_package_files_this_scan_discovered() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+
+        let output = validated(
+            &db,
+            r#"{
+  "schema":"polint-go-symbols-semantic-1",
+  "packages":[{"files":["./main.go","internal/helper.go"]}]
+}"#,
+        );
+
+        assert_eq!(output.packages.len(), 1);
+        assert_eq!(output.packages[0].files, vec!["main.go".to_string()]);
+    }
+
+    #[test]
+    fn validate_paths_drops_a_package_whose_files_are_all_out_of_scope() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+
+        let output = validated(
+            &db,
+            r#"{
+  "schema":"polint-go-symbols-semantic-1",
+  "packages":[
+    {"files":["internal/helper.go","cmd/app/main.go"]},
+    {"files":["main.go"]}
+  ]
+}"#,
+        );
+
+        assert_eq!(output.packages.len(), 1);
+        assert_eq!(output.packages[0].files, vec!["main.go".to_string()]);
+    }
+
+    #[test]
+    fn validate_paths_keeps_a_package_that_named_no_files() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+
+        let output = validated(
+            &db,
+            r#"{
+  "schema":"polint-go-symbols-semantic-1",
+  "packages":[{"files":[]}]
+}"#,
+        );
+
+        assert_eq!(output.packages.len(), 1);
+        assert!(output.packages[0].files.is_empty());
+    }
+
+    #[test]
+    fn validate_paths_drops_rows_for_files_this_scan_did_not_discover() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+
+        let output = validated(
+            &db,
+            r#"{
+  "schema":"polint-go-symbols-semantic-1",
+  "symbols":[
+    {"key":"kept","package_path":"example.com/app","file":"./main.go","name":"Kept","qualified_name":"Kept","namespace":"value","kind":"function","span":{"start_byte":0,"end_byte":4}},
+    {"key":"dropped","package_path":"example.com/app","file":"internal/helper.go","name":"Dropped","qualified_name":"Dropped","namespace":"value","kind":"function","span":{"start_byte":0,"end_byte":7}}
+  ],
+  "definitions":[
+    {"symbol_key":"kept","file":"main.go","name":"Kept","kind":"function","span":{"start_byte":0,"end_byte":4}},
+    {"symbol_key":"dropped","file":"internal/helper.go","name":"Dropped","kind":"function","span":{"start_byte":0,"end_byte":7}}
+  ],
+  "references":[
+    {"package_id":"example.com/app","file":"main.go","name":"Kept","kind":"call","span":{"start_byte":0,"end_byte":4},"precision":"exact"},
+    {"package_id":"example.com/app","file":"internal/helper.go","name":"Dropped","kind":"call","span":{"start_byte":0,"end_byte":7},"precision":"exact"}
+  ],
+  "scopes":[
+    {"key":"kept","kind":"file","package_path":"example.com/app","file":"main.go","span":{"start_byte":0,"end_byte":4}},
+    {"key":"dropped","kind":"file","package_path":"example.com/app","file":"internal/helper.go","span":{"start_byte":0,"end_byte":7}}
+  ],
+  "imports":[
+    {"path":"fmt","alias_kind":"named","file":"main.go","span":{"start_byte":0,"end_byte":4}},
+    {"path":"errors","alias_kind":"named","file":"internal/helper.go","span":{"start_byte":0,"end_byte":7}}
+  ]
+}"#,
+        );
+
+        assert_eq!(
+            output
+                .symbols
+                .iter()
+                .map(|symbol| (symbol.key.as_str(), symbol.file.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("kept", "main.go")]
+        );
+        assert_eq!(
+            output
+                .definitions
+                .iter()
+                .map(|definition| definition.symbol_key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["kept"]
+        );
+        assert_eq!(
+            output
+                .references
+                .iter()
+                .map(|reference| reference.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Kept"]
+        );
+        assert_eq!(
+            output
+                .scopes
+                .iter()
+                .map(|scope| scope.key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["kept"]
+        );
+        assert_eq!(
+            output
+                .imports
+                .iter()
+                .map(|import| import.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["fmt"]
+        );
+    }
+
+    #[test]
+    fn validate_paths_keeps_rows_that_name_no_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+
+        let output = validated(
+            &db,
+            r#"{
+  "schema":"polint-go-symbols-semantic-1",
+  "symbols":[
+    {"key":"package-level","package_path":"example.com/app","name":"App","qualified_name":"App","namespace":"value","kind":"package","span":{"start_byte":0,"end_byte":0}}
+  ],
+  "scopes":[
+    {"key":"go:scope:package:example.com/app","kind":"package","package_path":"example.com/app","span":{"start_byte":0,"end_byte":0}}
+  ]
+}"#,
+        );
+
+        assert_eq!(output.symbols.len(), 1);
+        assert!(output.symbols[0].file.is_empty());
+        assert_eq!(output.scopes.len(), 1);
+        assert!(output.scopes[0].file.is_empty());
+    }
+
+    #[test]
+    fn validate_paths_drops_exports_and_steps_that_only_describe_dropped_rows() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+
+        let output = validated(
+            &db,
+            r#"{
+  "schema":"polint-go-symbols-semantic-1",
+  "symbols":[
+    {"key":"kept","package_path":"example.com/app","file":"main.go","name":"Kept","qualified_name":"Kept","namespace":"value","kind":"function","span":{"start_byte":0,"end_byte":4}},
+    {"key":"dropped","package_path":"example.com/app","file":"internal/helper.go","name":"Dropped","qualified_name":"Dropped","namespace":"value","kind":"function","span":{"start_byte":0,"end_byte":7}}
+  ],
+  "references":[
+    {"package_id":"example.com/app","file":"main.go","name":"Dropped","target_key":"dropped","kind":"call","span":{"start_byte":10,"end_byte":16},"precision":"exact"},
+    {"package_id":"example.com/app","file":"internal/helper.go","name":"Kept","target_key":"kept","kind":"call","span":{"start_byte":20,"end_byte":25},"precision":"exact"}
+  ],
+  "exports":[
+    {"symbol_key":"kept","export_name":"Kept","namespace":"value","object_path":"Kept","package_path":"example.com/app"},
+    {"symbol_key":"dropped","export_name":"Dropped","namespace":"value","object_path":"Dropped","package_path":"example.com/app"}
+  ],
+  "resolution_steps":[
+    {"reference_key":"example.com/app|main.go|Dropped|dropped|call|10|16","step":"LexicalLookup","status":"resolved","target_key":"dropped","candidate_keys":["dropped","kept"]},
+    {"reference_key":"example.com/app|internal/helper.go|Kept|kept|call|20|25","step":"LexicalLookup","status":"resolved","target_key":"kept","candidate_keys":["kept"]}
+  ]
+}"#,
+        );
+
+        assert_eq!(
+            output
+                .exports
+                .iter()
+                .map(|export| export.symbol_key.as_str())
+                .collect::<Vec<_>>(),
+            vec!["kept"]
+        );
+        assert_eq!(output.resolution_steps.len(), 1);
+        let step = &output.resolution_steps[0];
+        assert_eq!(
+            step.reference_key,
+            "example.com/app|main.go|Dropped|dropped|call|10|16"
+        );
+        assert!(step.target_key.is_empty());
+        assert_eq!(step.candidate_keys, vec!["kept".to_string()]);
+    }
+
+    #[test]
+    fn validate_paths_leaves_keys_the_sidecar_emitted_no_row_for_untouched() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+
+        let output = validated(
+            &db,
+            r#"{
+  "schema":"polint-go-symbols-semantic-1",
+  "symbols":[
+    {"key":"kept","package_path":"example.com/app","file":"main.go","name":"Kept","qualified_name":"Kept","namespace":"value","kind":"function","span":{"start_byte":0,"end_byte":4}}
+  ],
+  "exports":[
+    {"symbol_key":"never-emitted","export_name":"Elsewhere","namespace":"value","object_path":"Elsewhere","package_path":"example.com/dep"}
+  ],
+  "resolution_steps":[
+    {"reference_key":"example.com/app|main.go|Elsewhere|never-emitted|call|30|39","step":"LexicalLookup","status":"resolved","target_key":"never-emitted","candidate_keys":["never-emitted","go:builtin|len"]}
+  ]
+}"#,
+        );
+
+        assert_eq!(output.exports.len(), 1);
+        assert_eq!(output.resolution_steps.len(), 1);
+        assert_eq!(output.resolution_steps[0].target_key, "never-emitted");
+        assert_eq!(
+            output.resolution_steps[0].candidate_keys,
+            vec!["never-emitted".to_string(), "go:builtin|len".to_string()]
+        );
+    }
+
+    #[test]
+    fn validate_paths_drops_absolute_sidecar_paths() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db = discovered_db(temp.path(), &["main.go"]);
+        let absolute = temp
+            .path()
+            .join("main.go")
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        let output = validated(
+            &db,
+            &format!(
+                r#"{{
+  "schema":"polint-go-symbols-semantic-1",
+  "packages":[{{"files":["{absolute}"]}}],
+  "symbols":[
+    {{"key":"absolute","package_path":"example.com/app","file":"{absolute}","name":"Absolute","qualified_name":"Absolute","namespace":"value","kind":"function","span":{{"start_byte":0,"end_byte":8}}}}
+  ]
+}}"#
+            ),
+        );
+
+        assert!(output.packages.is_empty());
+        assert!(output.symbols.is_empty());
     }
 }
