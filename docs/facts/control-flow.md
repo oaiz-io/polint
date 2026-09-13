@@ -238,7 +238,7 @@ Emitted results always carry `dominance_evidence`:
 
 | Value | Meaning |
 |---|---|
-| `dominator_relation` | Candidates existed and the relation refuted every one. |
+| `dominator_relation` | The block relation answered the lookup. For `missing_guard` and `missing_cleanup` that means every candidate was refuted; for `guard_outcomes` it is also what a proved result carries. |
 | `no_guard_candidate` | No matching guard call was ordered before the event. |
 | `no_cleanup_candidate` | No matching cleanup call was ordered after the start. |
 | `missing_block_ids` | A call had no CFG node (unknown result only). |
