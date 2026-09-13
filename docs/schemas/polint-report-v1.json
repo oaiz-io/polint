@@ -9,8 +9,8 @@
   "properties": {
     "version": {
       "type": "integer",
-      "const": 1,
-      "description": "Report format version; bump when fields change incompatibly."
+      "const": 2,
+      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional, so a v1 consumer still reads a v2 report."
     },
     "schema": {
       "type": "string",
@@ -38,13 +38,23 @@
     },
     "summary": {
       "type": "object",
-      "description": "Optional rule-execution telemetry (present when the emitter has a rule registry).",
+      "description": "Optional run telemetry (present when the emitter has a rule registry).",
       "required": ["rules"],
       "additionalProperties": false,
       "properties": {
         "rules": {
           "type": "array",
           "items": { "$ref": "polint-ai-friendly-v1.json#/$defs/ruleExecution" }
+        },
+        "providers": {
+          "type": "array",
+          "description": "Providers a consumer can act on. This report is byte-stable across runs, so rows carry decisions and workload but not wall time or heap; those are in the ai-friendly report and the polint::kernel::stage log.",
+          "items": { "$ref": "polint-ai-friendly-v1.json#/$defs/providerOutcome" }
+        },
+        "budgets": {
+          "type": "array",
+          "description": "Budgets this run exhausted.",
+          "items": { "$ref": "polint-ai-friendly-v1.json#/$defs/budget" }
         }
       }
     }

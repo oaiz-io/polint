@@ -33,6 +33,7 @@ module_roots = ["services/payments", "libs/money"]
 package_patterns = ["./..."]
 build_tags = ["enterprise"]
 include_tests = true
+semantic_timeout_ms = 120000
 ```
 
 `package_patterns` are interpreted inside each configured module root. If the
@@ -40,6 +41,49 @@ repository has a root `go.work` that covers every selected module root, polint
 uses it. Otherwise, when package loading needs workspace mode for module roots
 below the repository root, polint creates a temporary internal `go.work`; it does
 not write another setup file into the repository.
+
+### Bounding a Go semantic scan
+
+The Go semantic sidecar type-checks the full dependency graph, builds SSA over
+every package, and runs reachability analysis. It is the heaviest Go subprocess,
+and it is bounded by wall time:
+
+| Lever | Default | Effect |
+|---|---|---|
+| `semantic_timeout_ms` | `120000` | Budget for one sidecar run. `POLINT_GO_SEMANTIC_TIMEOUT_MS` overrides it for one run. |
+| `package_patterns` | `["./..."]` per module root | Which packages are loaded and analysed. |
+| `include_tests` | `true` | Whether `_test.go` files and their synthesized test packages are loaded. |
+
+Exhausting the budget is a *reported outcome*: the provider fails and the rules
+that needed it are blocked with `polint/capability` diagnostics. It never
+silently reduces scope. Raising the number is the wrong first move — read the
+per-stage timings first:
+
+```bash
+RUST_LOG=polint::kernel::stage=debug polint check --format json
+```
+
+Each sidecar stage (`packages_load`, `ssa_build`, `emit_rows`, `rta_analyze`)
+logs its wall time alongside the packages, compiled Go files, and
+type-checked dependencies it saw, and the same counters appear in
+`summary.providers` of `--format json`. A run dominated by `packages_load` with
+a large `deps_with_types` is a scope problem that `package_patterns` can fix; a
+run dominated by `rta_analyze` is not.
+
+**A rule's `files` list does not bound analysis.** Requesting a cross-file
+capability (`calls`, `control_flow`, `dataflow`, `module_graph`, `references`,
+`resolved_imports`, `symbols`) loads every discovered file regardless, because
+those analyses cross file boundaries by definition. `files` narrows which
+findings are *reported*. polint emits a `polint/scope` note when a rule's
+`files` list is strictly narrower than the analysed set, so the distinction is
+visible rather than folklore. Narrowing `[workspace] include` to a handful of
+files is not a performance fix either: it breaks discovery of the imported
+in-repo files those files depend on, which is a correctness hazard.
+
+Go semantic facts are derived in memory and are not persisted between runs, so a
+second run of the same repository costs the same as the first. The provider's
+cache policy is in-memory only and the semantic store is disabled outside tests;
+persisting them is separate work, not a knob.
 
 ## Inspect and test local rules
 

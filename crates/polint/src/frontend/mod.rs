@@ -101,6 +101,7 @@ mod tests {
         ) -> ProviderRunResult {
             self.analyze_calls.fetch_add(1, Ordering::SeqCst);
             ProviderRunResult {
+                counts: Default::default(),
                 diagnostics: Vec::<Diagnostic>::new(),
                 cache_stats: CacheStats::default(),
                 output_digest: None,

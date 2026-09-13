@@ -153,6 +153,7 @@ const ALLOWED_PRELUDE: &[&str] = &[
     "TsClasses",
     "TsComponents",
     // crate::sdk::policy preview vocabulary
+    "ArgumentBinding",
     "BarrierPattern",
     "EventPattern",
     "FlowQuery",
@@ -160,7 +161,9 @@ const ALLOWED_PRELUDE: &[&str] = &[
     "GuardQuery",
     "LifecycleQuery",
     "PolicyConfidence",
+    "PolicyOutcome",
     "PolicyPrecision",
+    "PolicyResult",
     "PolicyStatus",
     "PolicyViolation",
     "ReachQuery",
@@ -664,11 +667,11 @@ fn allowlist_has_no_duplicates_and_expected_count() {
         ALLOWED_PRELUDE.len(),
         "ALLOWED_PRELUDE contains duplicate entries"
     );
-    // Locked count derived from sdk/mod.rs; last bumped for the rule-visible
-    // completeness accessor and its typed result vocabulary.
+    // Locked count derived from sdk/mod.rs; last bumped for the guard-outcome
+    // vocabulary and its argument-identity binding.
     assert_eq!(
         ALLOWED_PRELUDE.len(),
-        122,
+        125,
         "ALLOWED_PRELUDE count changed — update this assertion ONLY alongside a sanctioned \
          API promotion record"
     );

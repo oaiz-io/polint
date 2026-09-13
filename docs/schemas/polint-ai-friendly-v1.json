@@ -17,7 +17,8 @@
   "properties": {
     "version": {
       "type": "integer",
-      "const": 1
+      "const": 2,
+      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional, so a v1 consumer still reads a v2 report."
     },
     "schema": {
       "type": "string",
@@ -59,6 +60,16 @@
           "type": "array",
           "description": "Per registered rule, including zero-finding and capability-skipped rules.",
           "items": { "$ref": "#/$defs/ruleExecution" }
+        },
+        "providers": {
+          "type": "array",
+          "description": "Providers that failed or were blocked, plus providers that reported counters.",
+          "items": { "$ref": "#/$defs/providerOutcome" }
+        },
+        "budgets": {
+          "type": "array",
+          "description": "Budgets this run exhausted.",
+          "items": { "$ref": "#/$defs/budget" }
         },
         "examples_limit": { "type": "integer", "const": 10 }
       }
@@ -148,7 +159,89 @@
         "skipped_reason": {
           "type": "string",
           "description": "Present when planned or capabilities_ok is false; uses polint/capability wording."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["analyzed", "capability_blocked", "not_planned"],
+          "description": "What happened to this rule. Zero diagnostics mean different things in each."
+        },
+        "blocking_providers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Providers whose failure blocked this rule."
+        },
+        "observed_events": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Operations this rule's policy queries examined. Zero with outcome=analyzed means the rule ran and matched nothing."
         }
+      }
+    },
+    "providerCache": {
+      "type": "object",
+      "required": ["hits", "misses", "recomputes", "writes"],
+      "additionalProperties": false,
+      "properties": {
+        "hits": { "type": "integer", "minimum": 0 },
+        "misses": { "type": "integer", "minimum": 0 },
+        "recomputes": { "type": "integer", "minimum": 0 },
+        "writes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "providerOutcome": {
+      "type": "object",
+      "required": ["provider_id", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "provider_id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "description": "Sealed provider outcome status."
+        },
+        "stage": {
+          "type": "string",
+          "description": "Failure stage, when the provider failed."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Failure reason, when the provider failed."
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Wall time of the provider stage; absent when it did not run."
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Providers whose failure blocked this one."
+        },
+        "cache": {
+          "$ref": "#/$defs/providerCache",
+          "description": "Cache counters; absent from the byte-stable check report because they describe the machine's cache state, not the analysis."
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "description": "Provider-specific counters, such as a sidecar's per-stage timings."
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["budget", "status", "reported_by", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "budget": {
+          "type": "string",
+          "description": "Budget identifier, such as cfg_dominance_pairs or solver_steps."
+        },
+        "status": { "type": "string" },
+        "reported_by": {
+          "type": "string",
+          "description": "Diagnostic rule id that reported the trip."
+        },
+        "detail": { "type": "string" }
       }
     },
     "example": {

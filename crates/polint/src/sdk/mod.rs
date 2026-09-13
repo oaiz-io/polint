@@ -55,9 +55,9 @@ pub mod prelude {
         TsComponents,
     };
     pub use crate::sdk::policy::{
-        BarrierPattern, EventPattern, FlowQuery, GuardPattern, GuardQuery, LifecycleQuery,
-        PolicyConfidence, PolicyPrecision, PolicyStatus, PolicyViolation, ReachQuery, SinkPattern,
-        SourcePattern,
+        ArgumentBinding, BarrierPattern, EventPattern, FlowQuery, GuardPattern, GuardQuery,
+        LifecycleQuery, PolicyConfidence, PolicyOutcome, PolicyPrecision, PolicyResult,
+        PolicyStatus, PolicyViolation, ReachQuery, SinkPattern, SourcePattern,
     };
     pub use crate::sdk::scope::{file_in_scope, file_matches_globs, glob_matches};
 }

@@ -13,7 +13,7 @@ use crate::core::{
     SymbolResolutionStatus, TestFact, TsClassFact, TsComponentFact,
 };
 use crate::sdk::policy::{
-    EventPattern, FlowQuery, GuardQuery, LifecycleQuery, PolicyViolation, ReachQuery,
+    EventPattern, FlowQuery, GuardQuery, LifecycleQuery, PolicyResult, PolicyViolation, ReachQuery,
 };
 use crate::symbol_graph::query;
 
@@ -913,6 +913,22 @@ impl<'a> ControlFlow<'a> {
     /// remain preview vocabulary until backed facts land.
     pub fn missing_guard(self, query: GuardQuery) -> Vec<PolicyViolation> {
         crate::policy_queries::missing_guards(self.db, query)
+    }
+
+    /// Decides, per protected operation, whether a required guard covers it.
+    ///
+    /// Unlike [`ControlFlow::missing_guard`], every matched operation produces
+    /// a [`PolicyResult`], so "proved covered", "refuted", and "could not
+    /// decide" are separate answers instead of presence or absence in a list.
+    ///
+    /// The decision is same-function and covers one guard call and one
+    /// protected call. With `require_checked_error` the guard's returned error
+    /// must also be tested by a nil-comparison branch that dominates the
+    /// operation, on an error edge that cannot reach it. See
+    /// `docs/facts/control-flow.md` for the reason vocabulary and the
+    /// documented limits.
+    pub fn guard_outcomes(self, query: GuardQuery) -> Vec<PolicyResult> {
+        crate::policy_queries::guard_outcomes(self.db, query)
     }
 
     /// Finds lifecycle starts missing required cleanup.

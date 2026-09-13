@@ -260,6 +260,12 @@ fn strip_volatile_strings(value: &mut Value, roots: &[PathBuf]) {
                 "hostname",
                 "machine",
                 "machine_name",
+                // Provider counters carry per-stage timings and heap samples,
+                // and the Go dependency counts follow the toolchain's stdlib.
+                // Their shape is pinned by the CLI suite; their values are not
+                // a property of this repository.
+                "counts",
+                "peak_heap_bytes",
             ];
             for key in DROP_KEYS {
                 map.remove(*key);
@@ -454,6 +460,12 @@ fn cost_within_budget(
     abs_floor: u64,
 ) -> Result<(), String> {
     if baseline == 0 {
+        // A zero baseline is only suspicious when the run measured growth
+        // against it. Platforms whose RSS-delta accounting reports nothing
+        // record a legitimate zero, and 0-vs-0 is not a regression.
+        if measured == 0 {
+            return Ok(());
+        }
         return Err(format!("{metric}: missing baseline (0 denominator)"));
     }
     let allowed = (baseline as f64 * MAX_COST_RATIO).max(baseline as f64 + abs_floor as f64);
@@ -707,6 +719,26 @@ fn diagnostic_set_diff_names_lost_fingerprints() {
 }
 
 #[test]
+fn guard_outcome_corpus_copies_stay_identical() {
+    // `polint test` copies a case directory into a temp repo, so the fixture
+    // keeps its own copy of the corpus the golden case analyses. Drift between
+    // the two would silently split the characterization in half.
+    let root = repo_root();
+    let example = root.join("examples/go-guard-outcomes/cases.go");
+    let fixture = root.join(
+        "examples/go-guard-outcomes/.polint/tests/rules/guard-outcomes/native-queries/cases.go",
+    );
+
+    assert_eq!(
+        fs::read_to_string(&example).expect("example corpus"),
+        fs::read_to_string(&fixture).expect("fixture corpus"),
+        "{} and {} must stay byte-identical",
+        example.display(),
+        fixture.display()
+    );
+}
+
+#[test]
 fn example_golden_cases_cover_inventory_rule_packs() {
     let root = repo_root();
     let inputs = load_toml(&root.join(INPUTS_REL));
@@ -832,4 +864,15 @@ fn cost_budget_helper_rejects_clear_regression() {
         cost_within_budget("wall_clock_ms", 110, 100, COST_WALL_ABS_FLOOR_MS).is_ok(),
         "values inside the absolute floor must pass"
     );
+}
+
+#[test]
+fn cost_budget_helper_accepts_a_metric_that_measures_nothing_on_either_side() {
+    assert!(
+        cost_within_budget("peak_rss_delta_bytes", 0, 0, COST_RSS_ABS_FLOOR_BYTES).is_ok(),
+        "a platform that reports no RSS delta records a legitimate zero"
+    );
+    let err =
+        cost_within_budget("peak_rss_delta_bytes", 1, 0, COST_RSS_ABS_FLOOR_BYTES).unwrap_err();
+    assert!(err.contains("missing baseline"), "{err}");
 }

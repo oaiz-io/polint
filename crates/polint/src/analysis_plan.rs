@@ -223,6 +223,7 @@ impl AnalysisPlan {
         options: &BTreeMap<String, RuleOptions>,
         file_paths: &[&str],
         diagnostics: &[Diagnostic],
+        observed_events: &BTreeMap<String, u64>,
     ) -> Vec<crate::diagnostics::RuleExecutionRow> {
         self.rules
             .iter()
@@ -247,6 +248,19 @@ impl AnalysisPlan {
                 } else {
                     capability_skip_reason_from_diagnostics(&rule.id, diagnostics)
                 };
+                let blocking_providers = blocking_providers_from_diagnostics(&rule.id, diagnostics);
+                // A rule blocked at runtime survives capability *planning*, so
+                // `planned` alone cannot tell a blocked rule from one that ran
+                // and found nothing. The capability diagnostic can.
+                let outcome = if !blocking_providers.is_empty()
+                    || capability_diagnostic_for(&rule.id, diagnostics).is_some()
+                {
+                    crate::diagnostics::RULE_OUTCOME_CAPABILITY_BLOCKED
+                } else if !planned {
+                    crate::diagnostics::RULE_OUTCOME_NOT_PLANNED
+                } else {
+                    crate::diagnostics::RULE_OUTCOME_ANALYZED
+                };
                 crate::diagnostics::RuleExecutionRow {
                     rule_id: rule.id.clone(),
                     planned,
@@ -254,6 +268,9 @@ impl AnalysisPlan {
                     files_in_scope,
                     diagnostics_emitted,
                     skipped_reason,
+                    outcome: outcome.to_string(),
+                    blocking_providers,
+                    observed_events: observed_events.get(&rule.id).copied().unwrap_or_default(),
                 }
             })
             .collect()
@@ -631,16 +648,48 @@ fn capability_skip_reason_from_diagnostics(
     rule_id: &str,
     diagnostics: &[Diagnostic],
 ) -> Option<String> {
-    diagnostics.iter().find_map(|diagnostic| {
-        if diagnostic.rule_id != "polint/capability" {
-            return None;
-        }
-        let about_rule = diagnostic
-            .evidence
-            .iter()
-            .any(|evidence| evidence.label == "rule" && evidence.value == rule_id);
-        about_rule.then(|| diagnostic.message.clone())
+    capability_diagnostic_for(rule_id, diagnostics).map(|diagnostic| diagnostic.message.clone())
+}
+
+fn capability_diagnostic_for<'a>(
+    rule_id: &str,
+    diagnostics: &'a [Diagnostic],
+) -> Option<&'a Diagnostic> {
+    diagnostics.iter().find(|diagnostic| {
+        diagnostic.rule_id == "polint/capability"
+            && diagnostic
+                .evidence
+                .iter()
+                .any(|evidence| evidence.label == "rule" && evidence.value == rule_id)
     })
+}
+
+/// Providers whose failure blocked `rule_id`, read from the capability
+/// diagnostics the kernel already emits.
+fn blocking_providers_from_diagnostics(rule_id: &str, diagnostics: &[Diagnostic]) -> Vec<String> {
+    let mut providers = diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.rule_id == "polint/capability"
+                && diagnostic
+                    .evidence
+                    .iter()
+                    .any(|evidence| evidence.label == "rule" && evidence.value == rule_id)
+        })
+        .flat_map(|diagnostic| {
+            diagnostic
+                .evidence
+                .iter()
+                .filter(|evidence| evidence.label == "blockers")
+                .flat_map(|evidence| evidence.value.split(','))
+                .map(str::trim)
+                .filter(|provider| !provider.is_empty())
+                .map(str::to_string)
+        })
+        .collect::<Vec<_>>();
+    providers.sort();
+    providers.dedup();
+    providers
 }
 
 #[cfg(test)]
@@ -1695,8 +1744,12 @@ mod tests {
         )];
         let plan = AnalysisPlan::from_rules(&rules, None, &BTreeMap::new());
         let diagnostics = plan.diagnostics();
-        let rows =
-            plan.rule_execution_rows(&BTreeMap::new(), &["src/a.ts", "src/b.ts"], &diagnostics);
+        let rows = plan.rule_execution_rows(
+            &BTreeMap::new(),
+            &["src/a.ts", "src/b.ts"],
+            &diagnostics,
+            &BTreeMap::new(),
+        );
         let row = rows
             .iter()
             .find(|row| row.rule_id == "local/silent")
@@ -1709,6 +1762,119 @@ mod tests {
     }
 
     #[test]
+    fn a_rule_that_matched_nothing_reports_zero_observed_events_and_an_analyzed_outcome() {
+        let rules = vec![rule(
+            "local/silent",
+            "Never matches",
+            Severity::Warn,
+            Capabilities::new().imports(),
+        )];
+        let plan = AnalysisPlan::from_rules(&rules, None, &BTreeMap::new());
+        let observed = BTreeMap::from([("local/silent".to_string(), 0)]);
+
+        let rows = plan.rule_execution_rows(&BTreeMap::new(), &["src/a.ts"], &[], &observed);
+        let row = rows
+            .iter()
+            .find(|row| row.rule_id == "local/silent")
+            .expect("silent rule row");
+
+        assert_eq!(row.outcome, crate::diagnostics::RULE_OUTCOME_ANALYZED);
+        assert_eq!(row.observed_events, 0);
+        assert!(row.blocking_providers.is_empty());
+    }
+
+    #[test]
+    fn a_rule_that_examined_operations_reports_them() {
+        let rules = vec![rule(
+            "local/busy",
+            "Examines operations",
+            Severity::Warn,
+            Capabilities::new().imports(),
+        )];
+        let plan = AnalysisPlan::from_rules(&rules, None, &BTreeMap::new());
+        let observed = BTreeMap::from([("local/busy".to_string(), 13)]);
+
+        let rows = plan.rule_execution_rows(&BTreeMap::new(), &["src/a.ts"], &[], &observed);
+
+        assert_eq!(rows[0].observed_events, 13);
+    }
+
+    #[test]
+    fn a_runtime_blocked_rule_names_the_providers_that_blocked_it() {
+        let rules = vec![rule(
+            "local/blocked",
+            "Blocked at runtime",
+            Severity::Warn,
+            Capabilities::new().imports(),
+        )];
+        let plan = AnalysisPlan::from_rules(&rules, None, &BTreeMap::new());
+        let diagnostics = vec![
+            Diagnostic::error(
+                "polint/capability",
+                "<workspace>",
+                crate::diagnostics::TextRange::point(1, 1),
+                "Rule `local/blocked` requested capability `control_flow`, but provider closure did not succeed.",
+            )
+            .with_evidence("rule", "local/blocked")
+            .with_evidence("blockers", "polint.go.semantic,polint.refined_calls"),
+        ];
+
+        let rows = plan.rule_execution_rows(
+            &BTreeMap::new(),
+            &["src/a.ts"],
+            &diagnostics,
+            &BTreeMap::new(),
+        );
+
+        assert_eq!(
+            rows[0].outcome,
+            crate::diagnostics::RULE_OUTCOME_CAPABILITY_BLOCKED
+        );
+        assert_eq!(
+            rows[0].blocking_providers,
+            vec![
+                "polint.go.semantic".to_string(),
+                "polint.refined_calls".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn budget_rows_come_from_the_diagnostics_that_reported_them() {
+        let diagnostics = vec![
+            Diagnostic::warning(
+                "polint/resource-budget",
+                "<workspace>",
+                crate::diagnostics::TextRange::point(1, 1),
+                "control-flow dominance materialisation bounded",
+            )
+            .with_evidence(
+                crate::diagnostics::BUDGET_EVIDENCE_LABEL,
+                "cfg_dominance_pairs",
+            )
+            .with_evidence(crate::diagnostics::BUDGET_STATUS_EVIDENCE_LABEL, "exceeded"),
+            Diagnostic::warning(
+                "polint/internal",
+                "<workspace>",
+                crate::diagnostics::TextRange::point(1, 1),
+                "not a budget",
+            ),
+        ];
+
+        let rows = crate::diagnostics::RunSummary::budget_rows(&diagnostics);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].budget, "cfg_dominance_pairs");
+        assert_eq!(rows[0].status, "exceeded");
+        assert_eq!(rows[0].reported_by, "polint/resource-budget");
+    }
+
+    #[test]
+    fn a_run_without_budget_trips_reports_no_budget_rows() {
+        assert!(crate::diagnostics::RunSummary::budget_rows(&[]).is_empty());
+    }
+
+    #[test]
     fn a_rule_dropped_by_capability_planning_reports_why() {
         let rules = vec![rule(
             "local/needs-cfg",
@@ -1718,7 +1884,12 @@ mod tests {
         )];
         let plan = AnalysisPlan::from_rules(&rules, None, &BTreeMap::new());
         let diagnostics = plan.diagnostics();
-        let rows = plan.rule_execution_rows(&BTreeMap::new(), &["src/a.ts"], &diagnostics);
+        let rows = plan.rule_execution_rows(
+            &BTreeMap::new(),
+            &["src/a.ts"],
+            &diagnostics,
+            &BTreeMap::new(),
+        );
         let row = rows
             .iter()
             .find(|row| row.rule_id == "local/needs-cfg")
@@ -1749,7 +1920,12 @@ mod tests {
         );
         let plan = AnalysisPlan::from_rules(&rules, None, &options);
         let diagnostics = plan.diagnostics();
-        let rows = plan.rule_execution_rows(&options, &["src/a.ts", "src/b.ts"], &diagnostics);
+        let rows = plan.rule_execution_rows(
+            &options,
+            &["src/a.ts", "src/b.ts"],
+            &diagnostics,
+            &BTreeMap::new(),
+        );
         let row = rows
             .iter()
             .find(|row| row.rule_id == "local/scoped")

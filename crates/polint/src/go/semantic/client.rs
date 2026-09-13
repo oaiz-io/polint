@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use crate::go::lifecycle::{self, GoAnalysisConfig};
 use crate::go::process_runner::{GoProcessError, run_bounded};
+use crate::go::semantic::budget::semantic_timeout;
 use crate::go::semantic::diagnostics::GO_SIDECAR_TIMEOUT;
 use crate::go::semantic::process::{
     GoSemanticProcessError, command_for_frontend, frontend_digest, resolve_go_semantic_frontend,
@@ -51,10 +52,13 @@ pub struct GoSemanticClientRun {
 }
 
 impl GoSemanticClient {
-    pub fn new(root: PathBuf) -> Self {
+    /// Builds a client whose budget is resolved from `config`, the
+    /// `POLINT_GO_SEMANTIC_TIMEOUT_MS` environment override, and the shared Go
+    /// subprocess default, in that precedence order.
+    pub fn new(root: PathBuf, config: &GoAnalysisConfig) -> Self {
         Self {
             root,
-            timeout: Duration::from_secs(30),
+            timeout: semantic_timeout(config.semantic_timeout_ms),
         }
     }
 
@@ -72,6 +76,12 @@ impl GoSemanticClient {
         let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
         append_request_args(&mut command, &self.root, config);
         let stdout = run_with_timeout(command, self.timeout, &self.root)?;
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            provider = "polint.go.semantic",
+            timeout_ms = self.timeout.as_millis() as u64,
+            "go semantic sidecar returned"
+        );
         let output = decode_ndjson(&stdout).map_err(GoSemanticClientError::from)?;
         Ok(GoSemanticClientRun {
             output,
@@ -183,7 +193,7 @@ mod tests {
     #[test]
     fn missing_terminator_from_fake_sidecar_is_typed_protocol_error() {
         let command = fake_stdout_command(
-            "{\"schema\":\"polint-go-semantic-2\",\"kind\":\"session_begin\"}\n",
+            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n",
         );
         let stdout = run_with_timeout(command, Duration::from_secs(5), Path::new("."))
             .expect("fake sidecar exits");

@@ -76,6 +76,7 @@ impl LanguageFrontend for TsJsFrontend {
     fn analyze(&self, _ctx: &mut ProviderCtx<'_>, unit: &AnalysisUnit<'_>) -> ProviderRunResult {
         if unit.files.is_empty() {
             return ProviderRunResult {
+                counts: Default::default(),
                 diagnostics: Vec::new(),
                 cache_stats: CacheStats::default(),
                 output_digest: None,
@@ -84,6 +85,7 @@ impl LanguageFrontend for TsJsFrontend {
         }
         let file = unit.files[0].relative_path.clone();
         ProviderRunResult {
+            counts: Default::default(),
             diagnostics: vec![Diagnostic::warning(
                 "polint/capability",
                 file,

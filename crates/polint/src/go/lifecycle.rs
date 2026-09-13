@@ -23,6 +23,8 @@ pub struct GoAnalysisConfig {
     pub build_tags: Vec<String>,
     pub include_tests: bool,
     pub offline: bool,
+    /// `[languages.go] semantic_timeout_ms`, when configured.
+    pub semantic_timeout_ms: Option<u64>,
     pub files_without_module_root: Vec<String>,
 }
 
@@ -90,6 +92,7 @@ impl GoAnalysisConfig {
                 .get("offline")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            semantic_timeout_ms: positive_integer_setting(settings, "semantic_timeout_ms"),
             files_without_module_root,
         })
     }
@@ -104,6 +107,24 @@ impl GoAnalysisConfig {
 
     pub fn rooted_package_patterns(&self) -> Vec<String> {
         rooted_package_patterns(&self.module_roots, &self.package_patterns)
+    }
+}
+
+/// Reads a positive integer lifecycle setting, warning on a value that is
+/// present but unusable rather than silently treating it as unset.
+fn positive_integer_setting(settings: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
+    let value = settings.get(key)?;
+    match value.as_integer() {
+        Some(raw) if raw > 0 => u64::try_from(raw).ok(),
+        _ => {
+            tracing::warn!(
+                target: "polint::kernel",
+                setting = key,
+                value = %value,
+                "ignoring a Go lifecycle setting that is not a positive integer"
+            );
+            None
+        }
     }
 }
 

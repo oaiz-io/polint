@@ -143,6 +143,13 @@ fn dominance_budget_diagnostic(trip: DominanceBudgetTrip) -> Diagnostic {
             trip.estimated_pairs, trip.limit,
         ),
     )
+    .with_evidence(
+        crate::diagnostics::BUDGET_EVIDENCE_LABEL,
+        "cfg_dominance_pairs",
+    )
+    .with_evidence(crate::diagnostics::BUDGET_STATUS_EVIDENCE_LABEL, "exceeded")
+    .with_evidence("estimated_pairs", trip.estimated_pairs.to_string())
+    .with_evidence("limit", trip.limit.to_string())
 }
 
 fn cfg_output_digest(

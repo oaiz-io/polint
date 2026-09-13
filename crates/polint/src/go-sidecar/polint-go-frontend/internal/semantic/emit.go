@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/tools/go/callgraph"
@@ -21,8 +22,8 @@ import (
 	"golang.org/x/tools/go/ssa/ssautil"
 )
 
-const SchemaVersion = "polint-go-semantic-2"
-const XToolsVersion = "v0.45.0"
+const SchemaVersion = "polint-go-semantic-3"
+const XToolsVersion = "v0.49.0"
 const topologyManifestMaxBytes int64 = 1_048_576
 
 type Config struct {
@@ -34,6 +35,77 @@ type Config struct {
 }
 
 type Row map[string]any
+
+// phaseTimer records one stage's wall time and the workload it saw, so a slow
+// run can be attributed to a stage instead of guessed at.
+//
+// peakHeapBytes is the largest HeapAlloc observed at a stage boundary, not a
+// true high-water mark: Go does not expose one without continuous sampling.
+type phaseTimer struct {
+	started       time.Time
+	sessionStart  time.Time
+	peakHeapBytes uint64
+	rows          []Row
+}
+
+func newPhaseTimer() *phaseTimer {
+	now := time.Now()
+	return &phaseTimer{started: now, sessionStart: now}
+}
+
+func (t *phaseTimer) sampleHeap() uint64 {
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	if stats.HeapAlloc > t.peakHeapBytes {
+		t.peakHeapBytes = stats.HeapAlloc
+	}
+	return t.peakHeapBytes
+}
+
+// finish closes the current stage, records it, and starts the next one.
+func (t *phaseTimer) finish(phase string, workload phaseWorkload) {
+	now := time.Now()
+	t.rows = append(t.rows, Row{
+		"kind":              "phase",
+		"schema":            SchemaVersion,
+		"phase":             phase,
+		"elapsed_ms":        now.Sub(t.started).Milliseconds(),
+		"packages":          workload.packages,
+		"compiled_go_files": workload.compiledGoFiles,
+		"deps_with_types":   workload.depsWithTypes,
+		"rows_emitted":      workload.rowsEmitted,
+		"peak_heap_bytes":   t.sampleHeap(),
+	})
+	t.started = now
+}
+
+func (t *phaseTimer) totalMillis() int64 {
+	return time.Since(t.sessionStart).Milliseconds()
+}
+
+// phaseWorkload is what a stage saw, counted at the stage boundary.
+type phaseWorkload struct {
+	packages        int
+	compiledGoFiles int
+	depsWithTypes   int
+	rowsEmitted     int
+}
+
+// countWorkload walks the loaded roots and their whole dependency graph, so
+// deps_with_types shows the type-checking cost NeedDeps imposes rather than
+// only the packages the patterns named.
+func countWorkload(pkgs []*packages.Package) phaseWorkload {
+	workload := phaseWorkload{packages: len(pkgs)}
+	for _, pkg := range pkgs {
+		workload.compiledGoFiles += len(pkg.CompiledGoFiles)
+	}
+	packages.Visit(pkgs, nil, func(pkg *packages.Package) {
+		if pkg.Types != nil {
+			workload.depsWithTypes++
+		}
+	})
+	return workload
+}
 
 type Span struct {
 	StartByte   int `json:"start_byte"`
@@ -126,17 +198,22 @@ func Emit(config Config) ([]Row, error) {
 	}
 	loadConfig.BuildFlags = goBuildFlags(config.BuildTags)
 
+	timer := newPhaseTimer()
+
 	pkgs, err := packages.Load(loadConfig, patterns...)
 	if err != nil {
 		return nil, err
 	}
 	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].ID < pkgs[j].ID })
+	workload := countWorkload(pkgs)
+	timer.finish("packages_load", workload)
 
 	prog, ssaPkgs := ssautil.AllPackages(pkgs, ssa.SanityCheckFunctions|ssa.InstantiateGenerics)
 	prog.Build()
 	sort.Slice(ssaPkgs, func(i, j int) bool {
 		return packageID(ssaPkgs[i]) < packageID(ssaPkgs[j])
 	})
+	timer.finish("ssa_build", workload)
 
 	e := &emitter{
 		root:                 root,
@@ -150,6 +227,9 @@ func Emit(config Config) ([]Row, error) {
 		"go_version":      runtime.Version(),
 		"x_tools_version": XToolsVersion,
 	})
+	for _, row := range timer.rows {
+		e.add(row)
+	}
 	for _, pkg := range pkgs {
 		e.emitPackage(pkg)
 		e.emitPackageErrors(pkg)
@@ -157,14 +237,32 @@ func Emit(config Config) ([]Row, error) {
 	for _, pkg := range ssaPkgs {
 		e.emitSSAPackage(pkg)
 	}
+	e.addPhase(timer, "emit_rows", workload)
 	e.emitRTAEdges(ssaPkgs)
+	e.addPhase(timer, "rta_analyze", workload)
 	e.add(Row{
-		"kind":       "session_end",
-		"schema":     SchemaVersion,
-		"row_count":  len(e.rows) + 1,
-		"go_version": runtime.Version(),
+		"kind":              "session_end",
+		"schema":            SchemaVersion,
+		"row_count":         len(e.rows) + 1,
+		"go_version":        runtime.Version(),
+		"elapsed_ms":        timer.totalMillis(),
+		"packages":          workload.packages,
+		"compiled_go_files": workload.compiledGoFiles,
+		"deps_with_types":   workload.depsWithTypes,
+		"peak_heap_bytes":   timer.sampleHeap(),
 	})
 	return e.rows, nil
+}
+
+// addPhase closes a stage that ran after the emitter existed, so its row can
+// report how many rows the stage had produced.
+func (e *emitter) addPhase(timer *phaseTimer, phase string, workload phaseWorkload) {
+	workload.rowsEmitted = len(e.rows)
+	before := len(timer.rows)
+	timer.finish(phase, workload)
+	for _, row := range timer.rows[before:] {
+		e.add(row)
+	}
 }
 
 func (e *emitter) add(row Row) {

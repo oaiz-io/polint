@@ -107,6 +107,42 @@ diagnostics (`polint/unused-ignore`, `polint/malformed-ignore`,
 SARIF for GitHub Code Scanning: `polint check --format sarif` then
 `github/codeql-action/upload-sarif` (see root `.github/workflows/ci.yml`).
 
+## Reading `summary`: an empty report is not a proof
+
+`--format json` and `--format ai-friendly` both carry a `summary` object that
+says what the run actually did. Read it before concluding that zero diagnostics
+means zero problems.
+
+`summary.rules[]` — one row per registered rule:
+
+| Field | Says |
+|---|---|
+| `outcome` | `analyzed`, `capability_blocked`, or `not_planned`. |
+| `observed_events` | Operations the rule's policy queries examined. |
+| `blocking_providers` | Providers whose failure blocked the rule. |
+| `files_in_scope` | Analyzed files the rule's `files` filter kept. |
+
+`outcome = analyzed` with `observed_events = 0` means the rule ran and matched
+nothing. `outcome = capability_blocked` means it never ran, and
+`blocking_providers` names why. Those are different states and only the first one
+is evidence of a clean repository.
+
+`summary.providers[]` — one row per provider you can act on: any provider that
+failed or was blocked, any provider that reported counters, and the providers
+whose names the rest of the output already uses. Each row carries
+`status`, `blockers`, `elapsed_ms`, cache counters, and provider-specific
+`counts` (the Go semantic sidecar reports its per-stage timings and workload
+there). This is where a slow or failed run is attributed. Providers this run
+never selected, and internal fact families that quietly succeeded, are not
+listed; their stage timings are on the `polint::kernel::stage` log target.
+
+`--format json` is byte-stable across runs, so its provider rows carry the
+decision and the workload but not the wall time or heap. Read timings from
+`--format ai-friendly` (which is timestamped anyway) or from the log.
+
+`summary.budgets[]` — one row per budget the run exhausted, so "polint bounded
+itself" is distinguishable from "polint found nothing".
+
 ## Prompt starter (copy-paste)
 
 > Use the polint JSON report (`polint check --format json`). The schema is in
@@ -114,8 +150,10 @@ SARIF for GitHub Code Scanning: `polint check --format sarif` then
 > `polint check --format ai-friendly --fail-on none` and query
 > `.polint/output/latest.json` instead of reading the whole file. Parse
 > `diagnostics[]`; each item has `rule_id`, `severity`, `file`, `range`,
-> `message`, optional `fix`. Apply fixes and re-run until the report is empty or
-> only allowed severities remain. To ratchet adoption, run
+> `message`, optional `fix`. Before trusting an empty report, read `summary`:
+> a rule row with `outcome = capability_blocked` never ran, and one with
+> `observed_events = 0` matched nothing. Apply fixes and re-run until the report
+> is empty or only allowed severities remain. To ratchet adoption, run
 > `polint check --baseline --new-only`. To remove suppressed debt, run
 > `polint ignores --stat --filter RULE_ID`, fix the underlying code, remove the
 > ignore comment, and rerun `polint check`.

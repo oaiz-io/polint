@@ -28,6 +28,7 @@ pub(crate) use metadata::{
 };
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 pub(crate) use outcome::hard_dependencies;
+pub(crate) use outcome::provider_outcome_rows;
 pub(crate) use outcome::{
     ProviderFailureReason, ProviderFailureStage, ProviderOutcome, ProviderOutcomeStatus,
     ProviderOutcomeTracker, ProviderOutputIdentity, ValidationDowngrades,
@@ -60,6 +61,83 @@ fn requested_trigger_capabilities(plan: &AnalysisPlan) -> std::collections::BTre
         .iter()
         .copied()
         .filter(|capability| plan.requests_capability(capability))
+        .collect()
+}
+
+/// Rule id for scope-versus-analysis notes.
+pub(crate) const SCOPE_RULE_ID: &str = "polint/scope";
+
+/// Capabilities whose analysis crosses file boundaries, so requesting one loads
+/// every discovered file regardless of any rule's `files` list.
+const CROSS_FILE_CAPABILITIES: [&str; 7] = [
+    "calls",
+    "control_flow",
+    "dataflow",
+    "module_graph",
+    "references",
+    "resolved_imports",
+    "symbols",
+];
+
+/// Notes rules whose `files` list is strictly narrower than the analysed set.
+///
+/// A cross-file capability makes the kernel load every discovered file, so
+/// `files` narrows *reporting*, not analysis. That is invisible in the output
+/// and is regularly mistaken for a way to bound a slow scan, so say it once per
+/// affected rule instead of leaving it to folklore.
+fn rule_scope_narrower_than_analysis(plan: &AnalysisPlan, db: &AnalysisDb) -> Vec<Diagnostic> {
+    let analyzed = db.files().len();
+    if analyzed == 0 {
+        return Vec::new();
+    }
+    let paths = db
+        .files()
+        .iter()
+        .map(|file| file.relative_path.as_str())
+        .collect::<Vec<_>>();
+    plan.rules()
+        .iter()
+        .filter_map(|rule| {
+            if rule.files.is_empty() {
+                return None;
+            }
+            let cross_file = rule
+                .requested_capabilities
+                .iter()
+                .filter(|capability| CROSS_FILE_CAPABILITIES.contains(&capability.as_str()))
+                .cloned()
+                .collect::<Vec<_>>();
+            if cross_file.is_empty() {
+                return None;
+            }
+            let globs = crate::config::build_glob_set(&rule.files).ok()?;
+            let in_scope = paths.iter().filter(|path| globs.is_match(path)).count();
+            if in_scope >= analyzed {
+                return None;
+            }
+            Some(
+                Diagnostic::info(
+                    SCOPE_RULE_ID.to_string(),
+                    "<workspace>",
+                    crate::diagnostics::TextRange::point(1, 1),
+                    format!(
+                        "Rule `{}` reports on {in_scope} of {analyzed} analyzed files, but `{}` \
+                         analyzes every discovered file.",
+                        rule.id,
+                        cross_file.join("`, `")
+                    ),
+                )
+                .with_evidence("rule", rule.id.clone())
+                .with_evidence("files_in_scope", in_scope.to_string())
+                .with_evidence("analyzed_files", analyzed.to_string())
+                .with_evidence("cross_file_capabilities", cross_file.join(","))
+                .with_help(
+                    "`files` narrows which findings are reported, not which files are analyzed. \
+                     Bound the analysis with `[languages.go] package_patterns` and \
+                     `include_tests`, or with `[workspace] include` / `exclude`.",
+                ),
+            )
+        })
         .collect()
 }
 
@@ -131,6 +209,7 @@ fn skipped_direct_summaries_result(
         &final_output,
     );
     ProviderRunResult {
+        counts: Default::default(),
         diagnostics: Vec::new(),
         cache_stats: incremental::CacheStats::default(),
         output_digest: Some(output_digest),
@@ -227,8 +306,10 @@ fn run_scheduled_providers<'a>(
                 cache_stats: incremental::CacheStats::default(),
                 output_digest: None,
                 execution: Default::default(),
+                counts: std::collections::BTreeMap::new(),
             }
         };
+        let stage_elapsed_ms = ready.then(|| stage_started.elapsed().as_millis() as u64);
         // A provider owns the truth of whether its output is usable. Never let
         // a failed result's digest enter the dependency map or the identity
         // report; downstream blockers must observe the failure immediately.
@@ -267,10 +348,10 @@ fn run_scheduled_providers<'a>(
         if let Some(digest) = output_digest.clone() {
             upstream_digests.insert(provider_id, digest);
         }
-        provider_telemetry.push(incremental::ProviderTelemetry::new(
-            provider_id,
-            cache_stats.clone(),
-        ));
+        provider_telemetry.push(
+            incremental::ProviderTelemetry::new(provider_id, cache_stats.clone())
+                .with_stage(stage_elapsed_ms, result.counts),
+        );
         provider_outputs.push(AnalysisKernel::provider_output_for_with_optional_digest(
             provider_id,
             db,
@@ -400,13 +481,6 @@ pub(crate) struct KernelOutput {
     pub(crate) diagnostics: Vec<Diagnostic>,
     pub(crate) capability_support: CapabilitySupportView,
     pub(crate) completeness: crate::core::CompletenessView,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The crate-private run report is consumed by internal tests and eval fixtures before a public surface exists."
-        )
-    )]
     pub(crate) run_report: incremental::KernelRunReport,
     pub(crate) runtime_blocked_rules: BTreeSet<String>,
 }
@@ -445,6 +519,11 @@ impl AnalysisKernel {
         let (mut db, load_diagnostics) =
             crate::fs::load_analysis_files_scoped(input.loaded, rule_scope.as_ref())?;
         log_loaded_source_files(&db);
+        let scope_diagnostics = if run_cross_file_analysis {
+            rule_scope_narrower_than_analysis(input.plan, &db)
+        } else {
+            Vec::new()
+        };
 
         let input_snapshot = incremental::input_snapshot_from_run_inputs(
             input.loaded,
@@ -455,6 +534,7 @@ impl AnalysisKernel {
             Self::provider_manifests(),
         );
         let mut diagnostics = load_diagnostics;
+        diagnostics.extend(scope_diagnostics);
         let mut provider_outputs = Vec::new();
         let enabled_providers = providers_enabled_by_capability_closure(&requested_capabilities);
         debug_assert_eq!(
@@ -1343,6 +1423,7 @@ mod tests {
                     color: ColorChoice::Never,
                     sources: None,
                     rule_execution: &[],
+                    run_summary: crate::diagnostics::EMPTY_RUN_SUMMARY,
                 },
             );
 
@@ -2323,6 +2404,7 @@ function cleanup(value: string) {{ return value.trim(); }}
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let markers = framework_internal_markers();
 
+        let summary = run_summary_naming_every_reportable_provider();
         let rendered = crate::diagnostics::render(
             crate::diagnostics::OutputFormat::Json,
             &[],
@@ -2333,7 +2415,8 @@ function cleanup(value: string) {{ return value.trim(); }}
                 },
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
-                rule_execution: &[],
+                rule_execution: &summary.rules,
+                run_summary: &summary,
             },
         );
         assert_no_framework_markers("polint check --format json", &rendered, &markers);
@@ -2370,6 +2453,7 @@ function cleanup(value: string) {{ return value.trim(); }}
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let markers = refined_call_internal_markers();
 
+        let summary = run_summary_naming_every_reportable_provider();
         let rendered = crate::diagnostics::render(
             crate::diagnostics::OutputFormat::Json,
             &[],
@@ -2380,7 +2464,8 @@ function cleanup(value: string) {{ return value.trim(); }}
                 },
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
-                rule_execution: &[],
+                rule_execution: &summary.rules,
+                run_summary: &summary,
             },
         );
         assert_no_refined_call_markers("polint check --format json", &rendered, &markers);
@@ -2416,6 +2501,7 @@ function cleanup(value: string) {{ return value.trim(); }}
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let markers = data_flow_internal_markers();
 
+        let summary = run_summary_naming_every_reportable_provider();
         let rendered = crate::diagnostics::render(
             crate::diagnostics::OutputFormat::Json,
             &[],
@@ -2426,7 +2512,8 @@ function cleanup(value: string) {{ return value.trim(); }}
                 },
                 color: crate::diagnostics::ColorChoice::Never,
                 sources: None,
-                rule_execution: &[],
+                rule_execution: &summary.rules,
+                run_summary: &summary,
             },
         );
         assert_no_data_flow_markers("polint check --format json", &rendered, &markers);
@@ -2639,6 +2726,41 @@ function setup() {
             "summary_projected",
             "query path search",
         ]
+    }
+
+    /// A run summary naming every provider a successful run may report.
+    ///
+    /// The leak gates render a report rather than reading source, so they only
+    /// cover `summary.providers[]` if the summary actually carries rows. An
+    /// empty one silently exempts the whole vocabulary from the check.
+    fn run_summary_naming_every_reportable_provider() -> crate::diagnostics::RunSummary {
+        crate::diagnostics::RunSummary {
+            rules: vec![crate::diagnostics::RuleExecutionRow {
+                rule_id: "local/example".to_string(),
+                planned: true,
+                capabilities_ok: true,
+                files_in_scope: 0,
+                diagnostics_emitted: 0,
+                skipped_reason: None,
+                outcome: crate::diagnostics::RULE_OUTCOME_ANALYZED.to_string(),
+                blocking_providers: Vec::new(),
+                observed_events: 0,
+            }],
+            providers: outcome::PUBLICLY_NAMED_PROVIDERS
+                .iter()
+                .map(|provider_id| crate::diagnostics::ProviderOutcomeRow {
+                    provider_id: (*provider_id).to_string(),
+                    status: "succeeded".to_string(),
+                    stage: None,
+                    reason: None,
+                    elapsed_ms: None,
+                    blockers: Vec::new(),
+                    cache: None,
+                    counts: std::collections::BTreeMap::new(),
+                })
+                .collect(),
+            budgets: Vec::new(),
+        }
     }
 
     fn assert_no_refined_call_markers(label: &str, source: &str, markers: &[&str]) {

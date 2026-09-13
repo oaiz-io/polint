@@ -686,6 +686,73 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
         _ => &[],
     }
 }
+
+/// Providers whose ids the public output already names.
+///
+/// Each one backs a public capability and already appears in `polint/capability`
+/// blockers and `polint/go-semantic` diagnostics, so reporting its cost adds no
+/// new vocabulary. Providers outside this set are internal fact families that
+/// the public surface gates against by name, and they are reported only when
+/// they failed or were blocked — the one case a consumer must be able to trace,
+/// and the one the blocker evidence already exposes.
+pub(crate) const PUBLICLY_NAMED_PROVIDERS: [&str; 7] = [
+    "polint.go.semantic",
+    "polint.go.syntax",
+    "polint.identity",
+    "polint.metrics",
+    "polint.module_graph",
+    "polint.symbol_graph",
+    "polint.ts.syntax",
+];
+
+/// Projects sealed provider outcomes and their telemetry into report rows.
+///
+/// The kernel already decides every field; this is the projection that stops
+/// the decision from being dropped after the run.
+///
+/// Only providers a consumer can act on are named: one that failed or was
+/// blocked (so a blocked rule can be traced to it), one that reported counters
+/// (so a measured stage can be read), and one whose id the public output
+/// already uses (so its cost is attributable). A provider that quietly
+/// succeeded outside that vocabulary, or that this run never selected, stays an
+/// implementation detail.
+pub(crate) fn provider_outcome_rows(
+    outcomes: &[ProviderOutcome],
+    telemetry: &[crate::analysis_kernel::incremental::ProviderTelemetry],
+) -> Vec<crate::diagnostics::ProviderOutcomeRow> {
+    outcomes
+        .iter()
+        .zip(telemetry)
+        .filter(|(outcome, telemetry)| {
+            if outcome.status == ProviderOutcomeStatus::PlannedAbsent {
+                return false;
+            }
+            outcome.status != ProviderOutcomeStatus::Succeeded
+                || !telemetry.counts.is_empty()
+                || PUBLICLY_NAMED_PROVIDERS.contains(&outcome.provider_id.as_str())
+        })
+        .map(
+            |(outcome, telemetry)| crate::diagnostics::ProviderOutcomeRow {
+                provider_id: outcome.provider_id.clone(),
+                status: outcome.status.label().to_string(),
+                stage: outcome.failure_stage.map(|stage| stage.label().to_string()),
+                reason: outcome
+                    .failure_reason
+                    .map(|reason| reason.label().to_string()),
+                elapsed_ms: telemetry.elapsed_ms,
+                blockers: outcome.blockers.clone(),
+                cache: Some(crate::diagnostics::ProviderCacheRow {
+                    hits: telemetry.cache_stats.hits,
+                    misses: telemetry.cache_stats.misses,
+                    recomputes: telemetry.cache_stats.recomputes,
+                    writes: telemetry.cache_stats.writes,
+                }),
+                counts: telemetry.counts.clone(),
+            },
+        )
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -225,6 +225,9 @@ pub struct ProviderRunResult {
     pub cache_stats: CacheStats,
     pub output_digest: Option<Digest>,
     pub execution: ProviderExecution,
+    /// Stage-specific counters a provider chose to report, such as a sidecar's
+    /// per-phase timings. Empty for providers with nothing to add.
+    pub counts: std::collections::BTreeMap<String, u64>,
 }
 
 pub trait Provider: Send + Sync {

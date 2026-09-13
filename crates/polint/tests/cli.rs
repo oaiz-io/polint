@@ -676,7 +676,14 @@ fn phase41_public_json_contracts_are_stable() {
         assert_eq!(first, second, "{command:?} should be deterministic");
         let value: serde_json::Value = serde_json::from_str(&first)
             .unwrap_or_else(|error| panic!("{command:?} stdout was not JSON: {error}\n{first}"));
-        assert_eq!(value["version"], 1, "{command:?}");
+        // The rule-test and check reports moved to body version 2 together; the
+        // inspect/facts/unknowns/explain surfaces are unchanged.
+        let expected_version = if command.first() == Some(&"test") {
+            2
+        } else {
+            1
+        };
+        assert_eq!(value["version"], expected_version, "{command:?}");
         assert_eq!(value["tool"]["name"], "polint", "{command:?}");
         assert!(value["schema"].as_str().is_some(), "{command:?}");
 
@@ -728,7 +735,7 @@ fn polint_test_json_matches_schema_v1() {
             .assert()
             .success(),
     );
-    assert_eq!(value["version"], 1);
+    assert_eq!(value["version"], 2);
     assert_eq!(value["tool"]["name"], "polint");
     assert_eq!(
         value["schema"],
@@ -2492,14 +2499,16 @@ pub(crate) fn no_raw_colors(ctx: &mut RuleCtx<'_>, literals: StringLiterals<'_>)
 
 #[test]
 fn inspect_and_test_schema_files_are_valid_json() {
-    for schema in [
-        "docs/schemas/polint-rule-inspect-v1.json",
-        "docs/schemas/polint-test-report-v1.json",
+    for (schema, version) in [
+        ("docs/schemas/polint-rule-inspect-v1.json", 1u64),
+        // The test-report schema moved to version 2 when the report gained
+        // provider rows; the inspect schema is still on version 1.
+        ("docs/schemas/polint-test-report-v1.json", 2u64),
     ] {
         let raw = fs::read_to_string(repo_root().join(schema)).unwrap();
         let value: serde_json::Value = serde_json::from_str(&raw)
             .unwrap_or_else(|error| panic!("{schema} is not valid JSON: {error}"));
-        assert_eq!(value["properties"]["version"]["const"], 1);
+        assert_eq!(value["properties"]["version"]["const"], version);
         assert!(value["properties"]["schema"].is_object());
     }
 }
@@ -5170,6 +5179,158 @@ fn supported_imports(ctx: &mut RuleCtx<'_>, imports: Imports<'_>) -> RuleResult 
 
 fn main() -> ExitCode {
     polint::runner::run_cli(vec![needs_references(), supported_imports()])
+}
+"#,
+    );
+    write_file(
+        &root.join("src/component.ts"),
+        r#"import { token } from "./token";
+
+export const value = token;
+"#,
+    );
+    write_file(&root.join("src/token.ts"), r#"export const token = "ok";"#);
+}
+
+fn write_control_flow_rule_repo(root: &Path) {
+    let polint_path = repo_root()
+        .join("crates/polint")
+        .to_string_lossy()
+        .replace('\\', "/");
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["*.go"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_file(
+        &root.join("go.mod"),
+        "module example.com/guarded\n\ngo 1.24\n",
+    );
+    write_file(
+        &root.join("app.go"),
+        r#"package guarded
+
+func CheckAccess() error { return nil }
+
+func SaveRecord() {}
+
+func handler() error {
+	if err := CheckAccess(); err != nil {
+		return err
+	}
+	SaveRecord()
+	return nil
+}
+"#,
+    );
+    write_file(
+        &root.join(".polint/rules/Cargo.toml"),
+        &format!(
+            r#"[package]
+name = "polint-local-rules"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+polint = {{ path = "{polint_path}" }}
+
+[workspace]
+"#,
+        ),
+    );
+    write_file(
+        &root.join(".polint/rules/src/main.rs"),
+        r#"use std::process::ExitCode;
+
+use polint::sdk::prelude::*;
+
+#[polint::rule(
+    id = "local/guard-outcomes",
+    description = "Report guard outcomes.",
+    severity = "error"
+)]
+fn guard_outcomes(ctx: &mut RuleCtx<'_>, control: ControlFlow<'_>) -> RuleResult {
+    let mut query = GuardQuery::new(
+        EventPattern::call("SaveRecord"),
+        GuardPattern::call_any(["CheckAccess"]),
+    );
+    query.require_checked_error = true;
+    for result in control.guard_outcomes(query) {
+        if let Some(diagnostic) = result.diagnostic(ctx.rule_id(), "guard outcome") {
+            ctx.report(diagnostic);
+        }
+    }
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    polint::runner::run_cli(vec![guard_outcomes()])
+}
+"#,
+    );
+}
+
+fn write_narrow_scope_rule_repo(root: &Path) {
+    let polint_path = repo_root()
+        .join("crates/polint")
+        .to_string_lossy()
+        .replace('\\', "/");
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+
+[[rules.config]]
+id = "local/needs-references-narrow"
+files = ["src/component.ts"]
+"#,
+    );
+    write_file(
+        &root.join(".polint/rules/Cargo.toml"),
+        &format!(
+            r#"[package]
+name = "polint-local-rules"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+polint = {{ path = "{polint_path}" }}
+
+[workspace]
+"#,
+        ),
+    );
+    write_file(
+        &root.join(".polint/rules/src/main.rs"),
+        r#"use std::process::ExitCode;
+
+use polint::sdk::prelude::*;
+
+#[polint::rule(
+    id = "local/needs-references-narrow",
+    description = "Needs reference facts but reports on one file.",
+    severity = "warn"
+)]
+fn needs_references_narrow(ctx: &mut RuleCtx<'_>, references: References<'_>) -> RuleResult {
+    let _ = references.iter().count();
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    polint::runner::run_cli(vec![needs_references_narrow()])
 }
 "#,
     );
@@ -8878,7 +9039,7 @@ rules = []
             .success(),
     );
     assert!(
-        json.get("version").and_then(|v| v.as_u64()) == Some(1) && diagnostics(&json).is_empty(),
+        json.get("version").and_then(|v| v.as_u64()) == Some(2) && diagnostics(&json).is_empty(),
         "check output should be polint JSON report: {json:#?}"
     );
 }
@@ -9819,6 +9980,165 @@ mod capability_planning {
                 .iter()
                 .all(|diagnostic| diagnostic["rule_id"] != "polint/capability"),
             "supported TS symbol/reference providers should not emit capability diagnostics: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn a_rule_that_examined_operations_reports_them_and_the_providers_that_ran() {
+        let temp = tempfile::tempdir().unwrap();
+        write_control_flow_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let summary = &json["summary"];
+        let rule = summary["rules"]
+            .as_array()
+            .and_then(|rules| rules.first())
+            .unwrap_or_else(|| panic!("expected a rule row: {json:#?}"));
+        assert_eq!(rule["outcome"], "analyzed");
+        assert_eq!(
+            rule["observed_events"], 1,
+            "the rule examined one protected operation: {json:#?}"
+        );
+        let providers = summary["providers"]
+            .as_array()
+            .unwrap_or_else(|| panic!("expected provider rows: {json:#?}"));
+        let semantic = providers
+            .iter()
+            .find(|provider| provider["provider_id"] == "polint.go.semantic")
+            .unwrap_or_else(|| panic!("expected a Go semantic provider row: {json:#?}"));
+        // `--format json` is byte-stable across runs, so it carries the
+        // sidecar's workload but not its wall time or heap.
+        assert!(
+            semantic.get("elapsed_ms").is_none(),
+            "the deterministic report must not carry wall time: {json:#?}"
+        );
+        assert!(
+            semantic["counts"]["go_semantic.packages"]
+                .as_u64()
+                .is_some(),
+            "the deterministic report should carry the sidecar workload: {json:#?}"
+        );
+        assert!(
+            semantic["counts"]
+                .as_object()
+                .is_some_and(|counts| counts.keys().all(|key| !key.ends_with("elapsed_ms"))),
+            "the deterministic report must not carry per-stage timings: {json:#?}"
+        );
+        assert_eq!(json["version"], 2);
+    }
+
+    #[test]
+    fn the_run_summary_keeps_the_json_report_byte_stable_across_runs() {
+        let temp = tempfile::tempdir().unwrap();
+        write_control_flow_rule_repo(temp.path());
+
+        let run = || {
+            stdout_string(
+                polint_cmd()
+                    .current_dir(temp.path())
+                    .args(["check", "--format", "json", "--fail-on", "none"])
+                    .assert()
+                    .success(),
+            )
+        };
+
+        assert_eq!(
+            run(),
+            run(),
+            "a run summary carrying provider rows must not make the report vary"
+        );
+    }
+
+    #[test]
+    fn a_rule_blocked_by_a_failed_provider_names_it_and_fails_the_run() {
+        let temp = tempfile::tempdir().unwrap();
+        write_control_flow_rule_repo(temp.path());
+        let missing_frontend = temp.path().join("missing-polint-go-frontend");
+
+        let assertion = polint_cmd()
+            .current_dir(temp.path())
+            .env("POLINT_GO_FRONTEND", &missing_frontend)
+            .args(["check", "--format", "json", "--fail-on", "error"])
+            .assert()
+            .failure();
+        let json = stdout_json(assertion);
+
+        let rule = json["summary"]["rules"]
+            .as_array()
+            .and_then(|rules| rules.first())
+            .unwrap_or_else(|| panic!("expected a rule row: {json:#?}"));
+        assert_eq!(rule["outcome"], "capability_blocked");
+        assert_eq!(rule["observed_events"], 0);
+        assert!(
+            rule["blocking_providers"]
+                .as_array()
+                .is_some_and(|providers| !providers.is_empty()),
+            "a blocked rule must name the providers that blocked it: {json:#?}"
+        );
+        assert!(
+            json["summary"]["providers"]
+                .as_array()
+                .is_some_and(|providers| providers.iter().any(|provider| {
+                    provider["provider_id"] == "polint.go.semantic"
+                        && provider["status"] != "succeeded"
+                })),
+            "the failing provider must appear with a non-success status: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn narrow_rule_scope_with_a_cross_file_capability_reports_a_scope_note() {
+        let temp = tempfile::tempdir().unwrap();
+        write_narrow_scope_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let scope = diagnostics(&json)
+            .iter()
+            .find(|diagnostic| diagnostic["rule_id"] == "polint/scope")
+            .cloned()
+            .unwrap_or_else(|| panic!("expected a polint/scope note: {json:#?}"));
+        assert_eq!(scope["severity"], "info");
+        assert!(diagnostic_has_evidence(&scope, "files_in_scope", "1"));
+        assert!(diagnostic_has_evidence(&scope, "analyzed_files", "2"));
+        assert!(diagnostic_has_evidence(
+            &scope,
+            "cross_file_capabilities",
+            "references"
+        ));
+    }
+
+    #[test]
+    fn a_rule_scope_matching_every_analyzed_file_reports_no_scope_note() {
+        let temp = tempfile::tempdir().unwrap();
+        write_symbol_capability_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        assert!(
+            diagnostics(&json)
+                .iter()
+                .all(|diagnostic| diagnostic["rule_id"] != "polint/scope"),
+            "an unnarrowed rule scope should not produce a scope note: {json:#?}"
         );
     }
 

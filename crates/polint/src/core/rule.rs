@@ -356,15 +356,40 @@ pub(crate) fn run_rules_with_runtime_provider_blockers(
     parallel: bool,
     runtime: &RuleRuntimeViews<'_>,
 ) -> Vec<Diagnostic> {
-    let run_one = |rule: &Rule| {
+    run_rules_observed(db, rules, options, enabled, parallel, runtime).diagnostics
+}
+
+/// One rule's diagnostics, plus its id and observation count when it ran.
+type RuleRunRow = (Vec<Diagnostic>, Option<(String, u64)>);
+
+/// What one rule-execution pass produced.
+#[derive(Debug, Default)]
+pub(crate) struct RuleRunOutput {
+    pub(crate) diagnostics: Vec<Diagnostic>,
+    /// Operations each rule's policy queries examined, keyed by rule id.
+    pub(crate) observed_events: BTreeMap<String, u64>,
+}
+
+pub(crate) fn run_rules_observed(
+    db: &AnalysisDb,
+    rules: &[Rule],
+    options: &BTreeMap<String, RuleOptions>,
+    enabled: Option<&BTreeSet<String>>,
+    parallel: bool,
+    runtime: &RuleRuntimeViews<'_>,
+) -> RuleRunOutput {
+    let run_one = |rule: &Rule| -> RuleRunRow {
         let meta = match catch_unwind(AssertUnwindSafe(|| rule.meta())) {
             Ok(meta) => meta,
             Err(_) => {
-                return vec![internal_rule_error_for_id(
-                    db,
-                    "unknown",
-                    "rule metadata panicked".to_string(),
-                )];
+                return (
+                    vec![internal_rule_error_for_id(
+                        db,
+                        "unknown",
+                        "rule metadata panicked".to_string(),
+                    )],
+                    None,
+                );
             }
         };
         if let Some(enabled) = enabled
@@ -372,12 +397,12 @@ pub(crate) fn run_rules_with_runtime_provider_blockers(
                 .iter()
                 .any(|pattern| rule_id_matches(pattern, &meta.id))
         {
-            return Vec::new();
+            return (Vec::new(), None);
         }
         if has_blocking_capability(&meta.id, runtime.capability_support)
             || runtime.runtime_blocked_rules.contains(&meta.id)
         {
-            return Vec::new();
+            return (Vec::new(), None);
         }
         let rule_options = options.get(&meta.id).cloned().unwrap_or_default();
         let mut ctx = RuleCtx::with_runtime_views(
@@ -388,33 +413,45 @@ pub(crate) fn run_rules_with_runtime_provider_blockers(
             runtime.completeness.for_rule(&meta.id),
         );
         let started = std::time::Instant::now();
+        // Rules run one at a time per worker, so the thread-local observation
+        // counter belongs to this rule for the duration of its run.
+        let _ = crate::policy_queries::take_observed_events();
         let result = catch_unwind(AssertUnwindSafe(|| rule.run(db, &mut ctx)));
+        let observed = crate::policy_queries::take_observed_events();
         tracing::info!(
             target: "polint::rules",
             rule = %meta.id,
             elapsed_ms = started.elapsed().as_millis() as u64,
+            observed_events = observed,
             "rule finished"
         );
-        match result {
+        let diagnostics = match result {
             Ok(Ok(())) => ctx.into_diagnostics(),
             Ok(Err(error)) => vec![internal_rule_error(db, &meta, error.to_string())],
             Err(_) => vec![internal_rule_error(db, &meta, "rule panicked".to_string())],
-        }
+        };
+        (diagnostics, Some((meta.id, observed)))
     };
 
-    let diagnostics = if parallel {
-        rules
-            .par_iter()
-            .map(run_one)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .flatten()
-            .collect()
+    let runs: Vec<RuleRunRow> = if parallel {
+        rules.par_iter().map(run_one).collect()
     } else {
-        rules.iter().flat_map(run_one).collect()
+        rules.iter().map(run_one).collect()
     };
 
-    dedupe_diagnostics(diagnostics)
+    let mut diagnostics = Vec::new();
+    let mut observed_events = BTreeMap::new();
+    for (rule_diagnostics, observed) in runs {
+        diagnostics.extend(rule_diagnostics);
+        if let Some((rule_id, count)) = observed {
+            *observed_events.entry(rule_id).or_insert(0) += count;
+        }
+    }
+
+    RuleRunOutput {
+        diagnostics: dedupe_diagnostics(diagnostics),
+        observed_events,
+    }
 }
 
 fn has_blocking_capability(rule_id: &str, support: &CapabilitySupportView) -> bool {

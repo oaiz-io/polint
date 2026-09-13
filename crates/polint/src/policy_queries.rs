@@ -1,4 +1,6 @@
+use crate::analysis::aliases::facts::{AliasOperand, AliasStatus};
 use crate::analysis::calls::facts::{CallCallee, CallPrecision, CallSiteFact, CallTargetStatus};
+use crate::analysis::cfg::facts::{CfgEdgeKind, CfgView};
 use crate::analysis::cfg::ids::BasicBlockId;
 use crate::analysis::data_flow::facts::{
     DataFlowConfidence, DataFlowEdgeFact, DataFlowEdgeKind, DataFlowNodeFact, DataFlowNodeKind,
@@ -9,34 +11,66 @@ use crate::analysis::ids::{CallSiteId, DataFlowNodeId, MirBodyId, MirOpId, Place
 use crate::analysis::ifds::{
     DataFlowPath, DataFlowPathStatus, DataFlowSearchBudget, find_taint_paths,
 };
+use crate::analysis::mir::op::{
+    AssignMode, BranchNilTest, MirOperation, MirOperationKind, MirValue,
+};
 use crate::analysis::places::{PlaceFact, PlaceProjection, PlaceRoot};
 use crate::analysis::reachability::facts::{ReachabilityRootFact, RootKind};
 use crate::analysis::refined_calls::facts::{RefinedCallConfidence, RefinedCallEdgeFact};
 use crate::core::{AnalysisDb, FileId, FunctionFact, FunctionId};
 use crate::sdk::policy::{
-    BarrierPattern, BarrierPatternKind, EventPattern, EventPatternKind, FlowQuery, GuardPattern,
-    GuardPatternKind, GuardQuery, LifecycleQuery, PolicyConfidence, PolicyEvidenceEdgeKind,
-    PolicyOperation, PolicyPrecision, PolicyStatus, PolicyViolation, ReachQuery, SinkPattern,
-    SinkPatternKind, SourcePattern, SourcePatternKind,
+    ArgumentBinding, BarrierPattern, BarrierPatternKind, EventPattern, EventPatternKind, FlowQuery,
+    GuardPattern, GuardPatternKind, GuardQuery, LifecycleQuery, PolicyConfidence,
+    PolicyEvidenceEdgeKind, PolicyOperation, PolicyOutcome, PolicyPrecision, PolicyResult,
+    PolicyStatus, PolicyViolation, ReachQuery, SinkPattern, SinkPatternKind, SourcePattern,
+    SourcePatternKind,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+thread_local! {
+    /// Operations the policy queries on this thread have examined.
+    ///
+    /// Rules run one at a time per rayon worker, so a thread-local counter
+    /// attributes observations to the rule that made them without threading a
+    /// counter through every fact view. The runner resets it before each rule
+    /// and reads it after.
+    static OBSERVED_EVENTS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn observe_events(count: usize) {
+    OBSERVED_EVENTS.with(|observed| observed.set(observed.get().saturating_add(count as u64)));
+}
+
+/// Resets the per-rule observation counter and returns what it held.
+pub(crate) fn take_observed_events() -> u64 {
+    OBSERVED_EVENTS.with(|observed| observed.replace(0))
+}
+
 pub(crate) fn matching_events(db: &AnalysisDb, query: EventPattern) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
-    normalize_policy_results(match query.kind() {
+    let results = normalize_policy_results(match query.kind() {
         EventPatternKind::Call => matching_call_events(db, &query, &query_digest),
         EventPatternKind::WriteField => Vec::new(),
-    })
+    });
+    observe_events(results.len());
+    results
 }
 
 pub(crate) fn forbidden_reachable(db: &AnalysisDb, query: ReachQuery) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
-    normalize_policy_results(forbidden_reachable_calls(db, &query, &query_digest))
+    let results = normalize_policy_results(forbidden_reachable_calls(db, &query, &query_digest));
+    observe_events(results.len());
+    results
 }
 
 pub(crate) fn missing_guards(db: &AnalysisDb, query: GuardQuery) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
     normalize_policy_results(missing_guard_calls(db, &query, &query_digest))
+}
+
+pub(crate) fn guard_outcomes(db: &AnalysisDb, query: GuardQuery) -> Vec<PolicyResult> {
+    let query_digest = query.outcome_query_digest();
+    normalize_policy_outcomes(guard_outcome_results(db, &query, &query_digest))
 }
 
 pub(crate) fn missing_cleanup(db: &AnalysisDb, query: LifecycleQuery) -> Vec<PolicyViolation> {
@@ -46,11 +80,19 @@ pub(crate) fn missing_cleanup(db: &AnalysisDb, query: LifecycleQuery) -> Vec<Pol
 
 pub(crate) fn forbidden_flows(db: &AnalysisDb, query: FlowQuery) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
-    normalize_policy_results(forbidden_data_flows(db, &query, &query_digest))
+    let results = normalize_policy_results(forbidden_data_flows(db, &query, &query_digest));
+    observe_events(results.len());
+    results
 }
 
 fn normalize_policy_results(mut results: Vec<PolicyViolation>) -> Vec<PolicyViolation> {
     results.sort_by_key(PolicyViolation::stable_key);
+    results.dedup_by(|left, right| left.stable_key() == right.stable_key());
+    results
+}
+
+fn normalize_policy_outcomes(mut results: Vec<PolicyResult>) -> Vec<PolicyResult> {
+    results.sort_by_key(PolicyResult::stable_key);
     results.dedup_by(|left, right| left.stable_key() == right.stable_key());
     results
 }
@@ -338,18 +380,25 @@ fn missing_guard_calls(
             if !event_matches_pattern(event, &query.event) {
                 continue;
             }
-            let has_guard = function_events[..index].iter().any(|candidate| {
-                guard_matches_event(candidate, &query.guard) && dominators.holds(candidate, event)
-            });
-            if has_guard {
-                continue;
+            observe_events(1);
+            let coverage = relation_coverage(
+                function_events[..index]
+                    .iter()
+                    .filter(|candidate| guard_matches_event(candidate, &query.guard)),
+                event,
+                &dominators,
+            );
+            match coverage {
+                RelationCoverage::Established => continue,
+                RelationCoverage::NotEstablished(_) if !query.report_unknown_coverage => continue,
+                RelationCoverage::NotEstablished(_) | RelationCoverage::Refuted { .. } => {}
             }
             if results.len() >= query.max_paths {
                 truncated = true;
                 break 'functions;
             }
-            results.push(
-                control_violation(
+            match coverage {
+                RelationCoverage::NotEstablished(reason) => results.push(unknown_control_result(
                     db,
                     event,
                     PolicyOperation::ControlFlowMissingGuard,
@@ -357,15 +406,35 @@ fn missing_guard_calls(
                     vec![
                         ("policy", "missing_guard".to_string()),
                         ("required_guard", query.guard.values().join(",")),
-                        ("uncovered_path", format!("entry -> {}", event.target_label)),
+                        ("dominance_evidence", reason.to_string()),
                         ("requested_max_depth", query.max_depth.to_string()),
                     ],
-                )
-                .with_path_evidence(
-                    ["entry".to_string(), event.target_label.clone()],
-                    PolicyEvidenceEdgeKind::Control,
+                )),
+                _ => results.push(
+                    control_violation(
+                        db,
+                        event,
+                        PolicyOperation::ControlFlowMissingGuard,
+                        query_digest,
+                        vec![
+                            ("policy", "missing_guard".to_string()),
+                            ("required_guard", query.guard.values().join(",")),
+                            ("uncovered_path", format!("entry -> {}", event.target_label)),
+                            (
+                                "dominance_evidence",
+                                coverage
+                                    .refuted_evidence(DOMINANCE_NO_CANDIDATE)
+                                    .to_string(),
+                            ),
+                            ("requested_max_depth", query.max_depth.to_string()),
+                        ],
+                    )
+                    .with_path_evidence(
+                        ["entry".to_string(), event.target_label.clone()],
+                        PolicyEvidenceEdgeKind::Control,
+                    ),
                 ),
-            );
+            }
         }
     }
 
@@ -374,6 +443,752 @@ fn missing_guard_calls(
     }
 
     results
+}
+
+/// Reason a guard contract was refuted for one operation.
+const REASON_GUARD_MISSING: &str = "guard_missing";
+const REASON_GUARD_NOT_ORDERED_BEFORE: &str = "guard_not_ordered_before";
+const REASON_GUARD_DOES_NOT_DOMINATE: &str = "guard_does_not_dominate";
+const REASON_RESULT_NEVER_TESTED: &str = "result_never_tested";
+const REASON_ERROR_PATH_REACHES_OPERATION: &str = "error_path_reaches_operation";
+/// Reason a guard contract could not be decided for one operation.
+const REASON_AMBIGUOUS_ERROR_DEFINITION: &str = "ambiguous_error_definition";
+const REASON_PARTIAL_NIL_TEST: &str = "partial_nil_test";
+const REASON_UNRECOGNIZED_ERROR_TEST: &str = "unrecognized_error_test";
+const REASON_MISSING_BRANCH_BLOCK: &str = "missing_branch_block";
+const REASON_MISSING_ERROR_EDGE: &str = "missing_error_edge";
+const REASON_MISSING_GUARD_OPERATION: &str = "missing_guard_operation";
+/// Reason a guard contract was proved for one operation.
+const REASON_GUARD_DOMINATES_OPERATION: &str = "guard_dominates_operation";
+const REASON_CHECKED_ERROR_EXITS: &str = "checked_error_exits";
+/// Budget label for the bounded error-path search.
+const BUDGET_ERROR_PATH_SEARCH: &str = "guard_outcome_error_path_budget";
+const BUDGET_GUARD_OUTCOME_QUERY: &str = "guard_outcome_query_budget";
+/// Identity binding a covered result claims. Without an `argument_binding` the
+/// query never relates the guard's argument to the operation's, so a covered
+/// result says so instead of implying it checked.
+const IDENTITY_UNCHECKED: &str = "unchecked";
+const IDENTITY_SAME_PLACE: &str = "same_place";
+const IDENTITY_PROJECTION_EXTENSION: &str = "projection_extension";
+const IDENTITY_MUST_ALIAS: &str = "must_alias";
+/// Reason an identity binding was refuted or could not be decided.
+const REASON_IDENTITY_MISMATCH: &str = "identity_mismatch";
+const REASON_IDENTITY_REASSIGNED: &str = "identity_reassigned";
+const REASON_ALIAS_INDETERMINATE: &str = "alias_indeterminate";
+const REASON_ARGUMENT_POSITION_OUT_OF_RANGE: &str = "argument_position_out_of_range";
+const REASON_CROSS_BODY_IDENTITY: &str = "cross_body_identity";
+/// Blocks the bounded error-path search may visit before giving up.
+const MAX_ERROR_PATH_BLOCKS: usize = 4_096;
+
+fn guard_outcome_results(
+    db: &AnalysisDb,
+    query: &GuardQuery,
+    query_digest: &str,
+) -> Vec<PolicyResult> {
+    if query.max_depth == 0
+        || query.max_paths == 0
+        || query.event.kind() != EventPatternKind::Call
+        || query.guard.kind() != GuardPatternKind::CallAny
+    {
+        return Vec::new();
+    }
+
+    let events = ordered_control_call_events(db, query.minimum_precision);
+    let by_function = control_events_by_function(&events);
+    let dominators = BlockRelation::dominators(db);
+    let index = GuardOutcomeIndex::new(db);
+    let mut results = Vec::new();
+    let mut truncated = false;
+    // One call site can carry several refined call edges (one per resolved
+    // target). A protected operation is one site, so it gets one outcome.
+    let mut decided = BTreeSet::new();
+
+    'functions: for function_events in by_function.values() {
+        for (position, event) in function_events.iter().enumerate() {
+            if !event_matches_pattern(event, &query.event) {
+                continue;
+            }
+            if !decided.insert(event.site) {
+                continue;
+            }
+            observe_events(1);
+            if results.len() >= query.max_paths {
+                truncated = true;
+                break 'functions;
+            }
+            let verdict = guard_verdict(
+                db,
+                function_events,
+                position,
+                event,
+                query,
+                &dominators,
+                &index,
+            );
+            results.push(guard_outcome_result(
+                db,
+                event,
+                query,
+                query_digest,
+                verdict,
+            ));
+        }
+    }
+
+    if truncated && let Some(mut last) = results.pop() {
+        last.set_status(PolicyStatus::BudgetExceeded);
+        last.push_evidence("budget", BUDGET_GUARD_OUTCOME_QUERY);
+        results.push(last);
+    }
+
+    results
+}
+
+/// One operation's decision under a guard contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GuardVerdict {
+    outcome: PolicyOutcome,
+    reason: &'static str,
+    dominance: &'static str,
+    identity: &'static str,
+    budget: Option<&'static str>,
+}
+
+impl GuardVerdict {
+    fn covered(reason: &'static str) -> Self {
+        Self {
+            outcome: PolicyOutcome::Covered,
+            reason,
+            dominance: DOMINANCE_FROM_RELATION,
+            identity: IDENTITY_UNCHECKED,
+            budget: None,
+        }
+    }
+
+    fn violation(reason: &'static str, dominance: &'static str) -> Self {
+        Self {
+            outcome: PolicyOutcome::Violation,
+            reason,
+            dominance,
+            identity: IDENTITY_UNCHECKED,
+            budget: None,
+        }
+    }
+
+    fn unknown(reason: &'static str, dominance: &'static str) -> Self {
+        Self {
+            outcome: PolicyOutcome::Unknown,
+            reason,
+            dominance,
+            identity: IDENTITY_UNCHECKED,
+            budget: None,
+        }
+    }
+
+    fn with_budget(mut self, budget: &'static str) -> Self {
+        self.budget = Some(budget);
+        self
+    }
+
+    fn with_identity(mut self, identity: &'static str) -> Self {
+        self.identity = identity;
+        self
+    }
+
+    /// Preference when several guards answer for the same operation: a proof
+    /// wins, and "could not decide" outranks a refutation so one unevaluated
+    /// guard never turns into a claimed violation.
+    fn rank(self) -> u8 {
+        match self.outcome {
+            PolicyOutcome::Covered => 0,
+            PolicyOutcome::Unknown | PolicyOutcome::NotAnalyzed => 1,
+            PolicyOutcome::Violation => 2,
+        }
+    }
+}
+
+fn guard_verdict(
+    db: &AnalysisDb,
+    function_events: &[&ControlCallEvent],
+    position: usize,
+    event: &ControlCallEvent,
+    query: &GuardQuery,
+    dominators: &BlockRelation,
+    index: &GuardOutcomeIndex<'_>,
+) -> GuardVerdict {
+    let mut best: Option<GuardVerdict> = None;
+    for candidate in function_events[..position]
+        .iter()
+        .filter(|candidate| guard_matches_event(candidate, &query.guard))
+    {
+        let verdict = guard_candidate_verdict(db, candidate, event, query, dominators, index);
+        if best.is_none_or(|current| verdict.rank() < current.rank()) {
+            best = Some(verdict);
+        }
+        if best.is_some_and(|current| current.rank() == 0) {
+            break;
+        }
+    }
+
+    best.unwrap_or_else(|| {
+        let guard_exists_later = function_events[position..]
+            .iter()
+            .any(|candidate| guard_matches_event(candidate, &query.guard));
+        if guard_exists_later {
+            GuardVerdict::violation(REASON_GUARD_NOT_ORDERED_BEFORE, DOMINANCE_NO_CANDIDATE)
+        } else {
+            GuardVerdict::violation(REASON_GUARD_MISSING, DOMINANCE_NO_CANDIDATE)
+        }
+    })
+}
+
+fn guard_candidate_verdict(
+    db: &AnalysisDb,
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    query: &GuardQuery,
+    dominators: &BlockRelation,
+    index: &GuardOutcomeIndex<'_>,
+) -> GuardVerdict {
+    match dominators.answer(candidate, event) {
+        DominanceAnswer::Unknown(reason) => return GuardVerdict::unknown(reason, reason),
+        DominanceAnswer::DoesNotHold => {
+            return GuardVerdict::violation(
+                REASON_GUARD_DOES_NOT_DOMINATE,
+                DOMINANCE_FROM_RELATION,
+            );
+        }
+        DominanceAnswer::Holds => {}
+    }
+    let control = if query.require_checked_error {
+        checked_error_verdict(candidate, event, dominators, index)
+    } else {
+        GuardVerdict::covered(REASON_GUARD_DOMINATES_OPERATION)
+    };
+    let Some(binding) = query.argument_binding else {
+        return control;
+    };
+    if control.outcome != PolicyOutcome::Covered {
+        return control;
+    }
+    match identity_answer(db, candidate, event, binding, index) {
+        IdentityAnswer::Bound(identity) => control.with_identity(identity),
+        IdentityAnswer::Mismatch(reason) => {
+            GuardVerdict::violation(reason, DOMINANCE_FROM_RELATION).with_identity(reason)
+        }
+        IdentityAnswer::Indeterminate(reason) => {
+            GuardVerdict::unknown(reason, DOMINANCE_FROM_RELATION).with_identity(reason)
+        }
+    }
+}
+
+/// Whether the value the guard authorized is the value the operation consumed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdentityAnswer {
+    /// Bound, carrying the label naming how it was established.
+    Bound(&'static str),
+    /// Refuted: the two arguments are different values.
+    Mismatch(&'static str),
+    /// Could not be decided; the reason names what was missing.
+    Indeterminate(&'static str),
+}
+
+/// Relates one guard argument to one protected-call argument.
+///
+/// Cheapest evidence first: the same place, then a projection of the same
+/// place, then a must-alias answer. A flow-sensitivity gate runs afterwards
+/// because alias answers are flow-insensitive and say nothing about *when* two
+/// places held the same value.
+fn identity_answer(
+    db: &AnalysisDb,
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    binding: ArgumentBinding,
+    index: &GuardOutcomeIndex<'_>,
+) -> IdentityAnswer {
+    let (Some(guard_argument), Some(event_argument)) = (
+        candidate.arguments.get(binding.guard_position).copied(),
+        event.arguments.get(binding.event_position).copied(),
+    ) else {
+        return IdentityAnswer::Indeterminate(REASON_ARGUMENT_POSITION_OUT_OF_RANGE);
+    };
+
+    let bound = match place_relation(db, guard_argument, event_argument) {
+        PlaceRelation::Same => IdentityAnswer::Bound(IDENTITY_SAME_PLACE),
+        PlaceRelation::ProjectionExtension => IdentityAnswer::Bound(IDENTITY_PROJECTION_EXTENSION),
+        PlaceRelation::Unrelated => match alias_status(db, guard_argument, event_argument) {
+            Some(AliasStatus::MustAlias) => IdentityAnswer::Bound(IDENTITY_MUST_ALIAS),
+            Some(AliasStatus::NoAlias) => IdentityAnswer::Mismatch(REASON_IDENTITY_MISMATCH),
+            _ => IdentityAnswer::Indeterminate(REASON_ALIAS_INDETERMINATE),
+        },
+    };
+    let IdentityAnswer::Bound(_) = bound else {
+        return bound;
+    };
+
+    match reassignment_between(db, candidate, event, guard_argument, event_argument, index) {
+        Reassignment::None => bound,
+        Reassignment::FromDistinctRoot => IdentityAnswer::Mismatch(REASON_IDENTITY_REASSIGNED),
+        Reassignment::Unknown => IdentityAnswer::Indeterminate(REASON_IDENTITY_REASSIGNED),
+        Reassignment::Unreadable => IdentityAnswer::Indeterminate(REASON_CROSS_BODY_IDENTITY),
+    }
+}
+
+/// How two argument places relate structurally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlaceRelation {
+    Same,
+    /// The consumed place is a projection of the authorized one, such as
+    /// `actor.TenantID` after `actor` was authorized.
+    ProjectionExtension,
+    Unrelated,
+}
+
+fn place_relation(db: &AnalysisDb, authorized: PlaceId, consumed: PlaceId) -> PlaceRelation {
+    if authorized == consumed {
+        return PlaceRelation::Same;
+    }
+    let (Some(authorized), Some(consumed)) =
+        (place_by_id(db, authorized), place_by_id(db, consumed))
+    else {
+        return PlaceRelation::Unrelated;
+    };
+    if authorized.root == consumed.root
+        && consumed.projections.len() > authorized.projections.len()
+        && consumed.projections.starts_with(&authorized.projections)
+    {
+        return PlaceRelation::ProjectionExtension;
+    }
+    PlaceRelation::Unrelated
+}
+
+fn alias_status(db: &AnalysisDb, left: PlaceId, right: PlaceId) -> Option<AliasStatus> {
+    let wanted = [
+        (AliasOperand::Place(left), AliasOperand::Place(right)),
+        (AliasOperand::Place(right), AliasOperand::Place(left)),
+    ];
+    db.alias_answers()
+        .iter()
+        .find(|answer| wanted.contains(&(answer.left, answer.right)))
+        .map(|answer| answer.status)
+}
+
+/// Whether either bound place's root was written between the guard and the
+/// protected call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reassignment {
+    None,
+    /// The write's source is a place with a different root, so the authorized
+    /// value is provably not the consumed one.
+    FromDistinctRoot,
+    /// A write happened but its source cannot be attributed.
+    Unknown,
+    /// The two calls are not in one body, so no ordered walk exists.
+    Unreadable,
+}
+
+fn reassignment_between(
+    db: &AnalysisDb,
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    guard_argument: PlaceId,
+    event_argument: PlaceId,
+    index: &GuardOutcomeIndex<'_>,
+) -> Reassignment {
+    if candidate.body != event.body {
+        return Reassignment::Unreadable;
+    }
+    let Some(operations) = index.operations.get(&candidate.body) else {
+        return Reassignment::Unreadable;
+    };
+    let (Some(start), Some(end)) = (
+        operations
+            .iter()
+            .position(|operation| operation.id == candidate.operation),
+        operations
+            .iter()
+            .position(|operation| operation.id == event.operation),
+    ) else {
+        return Reassignment::Unreadable;
+    };
+    if end <= start {
+        return Reassignment::None;
+    }
+
+    let roots = [guard_argument, event_argument]
+        .into_iter()
+        .filter_map(|place| place_by_id(db, place).map(|place| place.root.clone()))
+        .collect::<Vec<_>>();
+    let mut answer = Reassignment::None;
+    for operation in &operations[start + 1..end] {
+        let Some((written, value)) = assigned_place_and_value(operation) else {
+            continue;
+        };
+        let Some(written) = place_by_id(db, written) else {
+            continue;
+        };
+        if !roots.contains(&written.root) {
+            continue;
+        }
+        answer = match value {
+            Some(MirValue::Place(source)) => match place_by_id(db, *source) {
+                Some(source) if source.root != written.root => Reassignment::FromDistinctRoot,
+                _ => Reassignment::Unknown,
+            },
+            _ => Reassignment::Unknown,
+        };
+    }
+    answer
+}
+
+fn assigned_place_and_value(operation: &MirOperation) -> Option<(PlaceId, Option<&MirValue>)> {
+    match &operation.kind {
+        MirOperationKind::Assign { place, value, .. }
+        | MirOperationKind::Bind { place, value }
+        | MirOperationKind::Write { place, value } => Some((*place, Some(value))),
+        MirOperationKind::Call { return_place, .. } => Some((*return_place, None)),
+        _ => None,
+    }
+}
+
+/// Decides whether the guard's returned error is tested and its error path
+/// leaves before the protected operation.
+fn checked_error_verdict(
+    candidate: &ControlCallEvent,
+    event: &ControlCallEvent,
+    dominators: &BlockRelation,
+    index: &GuardOutcomeIndex<'_>,
+) -> GuardVerdict {
+    let Some(result_place) = candidate.result else {
+        return GuardVerdict::violation(REASON_RESULT_NEVER_TESTED, DOMINANCE_FROM_RELATION);
+    };
+    let Some(event_block) = event.block else {
+        return GuardVerdict::unknown(DOMINANCE_MISSING_BLOCK_IDS, DOMINANCE_MISSING_BLOCK_IDS);
+    };
+    let Some(operations) = index.operations.get(&candidate.body) else {
+        return GuardVerdict::unknown(REASON_MISSING_GUARD_OPERATION, DOMINANCE_FROM_RELATION);
+    };
+    let Some(guard_position) = operations
+        .iter()
+        .position(|operation| operation.id == candidate.operation)
+    else {
+        return GuardVerdict::unknown(REASON_MISSING_GUARD_OPERATION, DOMINANCE_FROM_RELATION);
+    };
+
+    let mut ambiguous = false;
+    for (branch_position, branch) in operations.iter().enumerate().skip(guard_position + 1) {
+        let MirOperationKind::Branch {
+            predicate_place: Some(predicate),
+            nil_test,
+            ..
+        } = branch.kind
+        else {
+            continue;
+        };
+        match definition_reaching(
+            &operations[..branch_position],
+            predicate,
+            result_place,
+            candidate.site,
+        ) {
+            DefinitionReach::Elsewhere => continue,
+            DefinitionReach::Ambiguous => {
+                ambiguous = true;
+                continue;
+            }
+            DefinitionReach::FromGuard => {}
+        }
+        let Some(nil_test) = nil_test else {
+            return GuardVerdict::unknown(REASON_UNRECOGNIZED_ERROR_TEST, DOMINANCE_FROM_RELATION);
+        };
+        if !nil_test.proves_non_nil() {
+            return GuardVerdict::unknown(REASON_PARTIAL_NIL_TEST, DOMINANCE_FROM_RELATION);
+        }
+        let Some(branch_block) = index.blocks.get(&(candidate.body, branch.id)).copied() else {
+            return GuardVerdict::unknown(REASON_MISSING_BRANCH_BLOCK, DOMINANCE_FROM_RELATION);
+        };
+        if dominators.answer_for_blocks(branch_block, event_block) != DominanceAnswer::Holds {
+            continue;
+        }
+        let Some(error_block) = index.error_edge_target(branch_block, nil_test) else {
+            return GuardVerdict::unknown(REASON_MISSING_ERROR_EDGE, DOMINANCE_FROM_RELATION);
+        };
+        return match index.reaches(error_block, event_block) {
+            BlockReach::Reaches => GuardVerdict::violation(
+                REASON_ERROR_PATH_REACHES_OPERATION,
+                DOMINANCE_FROM_RELATION,
+            ),
+            BlockReach::DoesNotReach => GuardVerdict::covered(REASON_CHECKED_ERROR_EXITS),
+            BlockReach::BudgetExceeded => {
+                GuardVerdict::unknown(BUDGET_ERROR_PATH_SEARCH, DOMINANCE_FROM_RELATION)
+                    .with_budget(BUDGET_ERROR_PATH_SEARCH)
+            }
+        };
+    }
+
+    if ambiguous {
+        return GuardVerdict::unknown(REASON_AMBIGUOUS_ERROR_DEFINITION, DOMINANCE_FROM_RELATION);
+    }
+    GuardVerdict::violation(REASON_RESULT_NEVER_TESTED, DOMINANCE_FROM_RELATION)
+}
+
+/// Where the value a branch tests was last defined.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DefinitionReach {
+    /// The last write between the guard and the branch carried the guard's result.
+    FromGuard,
+    /// The place was written from another source, or written in a way the MIR
+    /// cannot attribute. Go block scope is not modelled, so a shadowed variable
+    /// of the same name lands here rather than being called a different value.
+    Ambiguous,
+    /// No write links this place to the guard at all.
+    Elsewhere,
+}
+
+/// Walks the operations that precede a branch, in order, and reports where the
+/// value the branch tests came from.
+///
+/// The window ends just before the branch and starts at the body's first
+/// operation: a language may order a call's binding before the call itself
+/// (Go's `err := f()` lowers the binding at the statement's span and the call at
+/// the callee's), so anchoring the window at the guard call would miss it.
+///
+/// A place is only *ambiguous* when it carried the guard's result at some point
+/// and something else overwrote it; a place that was never linked to the guard
+/// is simply testing something else.
+fn definition_reaching(
+    window: &[&MirOperation],
+    predicate: PlaceId,
+    result_place: PlaceId,
+    site: CallSiteId,
+) -> DefinitionReach {
+    let writes = window
+        .iter()
+        .filter(|operation| writes_place(operation, predicate))
+        .collect::<Vec<_>>();
+    let Some(last) = writes.last() else {
+        return if predicate == result_place {
+            DefinitionReach::FromGuard
+        } else {
+            DefinitionReach::Elsewhere
+        };
+    };
+    if classify_write(last, result_place, site) == DefinitionReach::FromGuard {
+        return DefinitionReach::FromGuard;
+    }
+    let ever_held_guard_result = predicate == result_place
+        || writes
+            .iter()
+            .any(|write| classify_write(write, result_place, site) == DefinitionReach::FromGuard);
+    if ever_held_guard_result {
+        DefinitionReach::Ambiguous
+    } else {
+        DefinitionReach::Elsewhere
+    }
+}
+
+fn writes_place(operation: &MirOperation, place: PlaceId) -> bool {
+    match &operation.kind {
+        MirOperationKind::Assign { place: target, .. }
+        | MirOperationKind::Bind { place: target, .. }
+        | MirOperationKind::Write { place: target, .. } => *target == place,
+        MirOperationKind::Call { return_place, .. } => *return_place == place,
+        _ => false,
+    }
+}
+
+fn classify_write(
+    operation: &MirOperation,
+    result_place: PlaceId,
+    site: CallSiteId,
+) -> DefinitionReach {
+    match &operation.kind {
+        MirOperationKind::Call {
+            site: written_by, ..
+        } => {
+            if *written_by == site {
+                DefinitionReach::FromGuard
+            } else {
+                DefinitionReach::Ambiguous
+            }
+        }
+        MirOperationKind::Assign { value, mode, .. } => {
+            if matches!(
+                mode,
+                AssignMode::UnknownWrite | AssignMode::PartialWrite | AssignMode::Simultaneous
+            ) {
+                DefinitionReach::Ambiguous
+            } else {
+                classify_value(value, result_place, site)
+            }
+        }
+        MirOperationKind::Bind { value, .. } => classify_value(value, result_place, site),
+        _ => DefinitionReach::Ambiguous,
+    }
+}
+
+fn classify_value(value: &MirValue, result_place: PlaceId, site: CallSiteId) -> DefinitionReach {
+    match value {
+        MirValue::Place(place) if *place == result_place => DefinitionReach::FromGuard,
+        MirValue::CallReturn(call) if *call == site => DefinitionReach::FromGuard,
+        _ => DefinitionReach::Ambiguous,
+    }
+}
+
+/// Result of a bounded search from the guard's error edge to the operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockReach {
+    Reaches,
+    DoesNotReach,
+    BudgetExceeded,
+}
+
+/// Facts a guard-outcome evaluation needs, built once per query.
+struct GuardOutcomeIndex<'a> {
+    /// MIR operations per body, in evaluation order.
+    operations: BTreeMap<MirBodyId, Vec<&'a MirOperation>>,
+    blocks: BTreeMap<(MirBodyId, MirOpId), BasicBlockId>,
+    /// Normal-control successors, used for the error-path search.
+    successors: BTreeMap<BasicBlockId, Vec<BasicBlockId>>,
+    /// Normal-control condition edges, used to name the error edge.
+    condition_edges: BTreeMap<BasicBlockId, Vec<(CfgEdgeKind, BasicBlockId)>>,
+}
+
+impl<'a> GuardOutcomeIndex<'a> {
+    fn new(db: &'a AnalysisDb) -> Self {
+        let mut operations = BTreeMap::<MirBodyId, Vec<&'a MirOperation>>::new();
+        for operation in db.mir_operations() {
+            operations
+                .entry(operation.body)
+                .or_default()
+                .push(operation);
+        }
+        for body in operations.values_mut() {
+            body.sort_by_key(|operation| (operation.ordinal, operation.id));
+        }
+
+        let mut successors = BTreeMap::<BasicBlockId, Vec<BasicBlockId>>::new();
+        let mut condition_edges = BTreeMap::<BasicBlockId, Vec<(CfgEdgeKind, BasicBlockId)>>::new();
+        for edge in db.cfg_edges() {
+            if edge.view != CfgView::NormalControl {
+                continue;
+            }
+            successors
+                .entry(edge.from_block)
+                .or_default()
+                .push(edge.to_block);
+            if matches!(edge.kind, CfgEdgeKind::True | CfgEdgeKind::False) {
+                condition_edges
+                    .entry(edge.from_block)
+                    .or_default()
+                    .push((edge.kind, edge.to_block));
+            }
+        }
+
+        Self {
+            operations,
+            blocks: cfg_blocks_by_operation(db),
+            successors,
+            condition_edges,
+        }
+    }
+
+    /// The successor a nil-testing branch takes when the tested place is not nil.
+    ///
+    /// `nil_on_true` names the edge on which the place *is* nil, so the error
+    /// edge is the opposite sense.
+    fn error_edge_target(
+        &self,
+        branch_block: BasicBlockId,
+        nil_test: BranchNilTest,
+    ) -> Option<BasicBlockId> {
+        let error_kind = if nil_test.nil_on_true() {
+            CfgEdgeKind::False
+        } else {
+            CfgEdgeKind::True
+        };
+        self.condition_edges
+            .get(&branch_block)?
+            .iter()
+            .find(|(kind, _)| *kind == error_kind)
+            .map(|(_, target)| *target)
+    }
+
+    fn reaches(&self, start: BasicBlockId, target: BasicBlockId) -> BlockReach {
+        if start == target {
+            return BlockReach::Reaches;
+        }
+        let mut seen = BTreeSet::from([start]);
+        let mut queue = VecDeque::from([start]);
+        while let Some(current) = queue.pop_front() {
+            for destination in self.successors.get(&current).into_iter().flatten().copied() {
+                if destination == target {
+                    return BlockReach::Reaches;
+                }
+                if seen.len() >= MAX_ERROR_PATH_BLOCKS {
+                    return BlockReach::BudgetExceeded;
+                }
+                if seen.insert(destination) {
+                    queue.push_back(destination);
+                }
+            }
+        }
+        BlockReach::DoesNotReach
+    }
+}
+
+fn guard_outcome_result(
+    db: &AnalysisDb,
+    event: &ControlCallEvent,
+    query: &GuardQuery,
+    query_digest: &str,
+    verdict: GuardVerdict,
+) -> PolicyResult {
+    let mut evidence = vec![
+        ("policy", "guard_outcome".to_string()),
+        ("outcome", guard_outcome_label(verdict.outcome).to_string()),
+        ("reason", verdict.reason.to_string()),
+        ("required_guard", query.guard.values().join(",")),
+        ("dominance_evidence", verdict.dominance.to_string()),
+        ("identity_binding", verdict.identity.to_string()),
+        (
+            "require_checked_error",
+            query.require_checked_error.to_string(),
+        ),
+        ("requested_max_depth", query.max_depth.to_string()),
+    ];
+    if let Some(budget) = verdict.budget {
+        evidence.push(("budget", budget.to_string()));
+    }
+
+    let mut violation = control_violation(
+        db,
+        event,
+        PolicyOperation::ControlFlowGuardOutcomes,
+        query_digest,
+        evidence,
+    );
+    match verdict.outcome {
+        PolicyOutcome::Unknown | PolicyOutcome::NotAnalyzed => {
+            violation.set_status(if verdict.budget.is_some() {
+                PolicyStatus::BudgetExceeded
+            } else {
+                PolicyStatus::Unknown
+            });
+            violation.set_precision(PolicyPrecision::Unknown);
+        }
+        PolicyOutcome::Covered | PolicyOutcome::Violation => {}
+    }
+    PolicyResult::new(verdict.outcome, violation)
+}
+
+fn guard_outcome_label(outcome: PolicyOutcome) -> &'static str {
+    match outcome {
+        PolicyOutcome::Covered => "covered",
+        PolicyOutcome::Violation => "violation",
+        PolicyOutcome::Unknown => "unknown",
+        PolicyOutcome::NotAnalyzed => "not_analyzed",
+    }
 }
 
 fn missing_cleanup_calls(
@@ -400,19 +1215,25 @@ fn missing_cleanup_calls(
             if !event_matches_pattern(event, &query.start) {
                 continue;
             }
-            let has_cleanup = function_events[index + 1..].iter().any(|candidate| {
-                event_matches_pattern(candidate, &query.cleanup)
-                    && postdominators.holds(candidate, event)
-            });
-            if has_cleanup {
-                continue;
+            observe_events(1);
+            let coverage = relation_coverage(
+                function_events[index + 1..]
+                    .iter()
+                    .filter(|candidate| event_matches_pattern(candidate, &query.cleanup)),
+                event,
+                &postdominators,
+            );
+            match coverage {
+                RelationCoverage::Established => continue,
+                RelationCoverage::NotEstablished(_) if !query.report_unknown_coverage => continue,
+                RelationCoverage::NotEstablished(_) | RelationCoverage::Refuted { .. } => {}
             }
             if results.len() >= query.max_paths {
                 truncated = true;
                 break 'functions;
             }
-            results.push(
-                control_violation(
+            match coverage {
+                RelationCoverage::NotEstablished(reason) => results.push(unknown_control_result(
                     db,
                     event,
                     PolicyOperation::ControlFlowMissingCleanup,
@@ -420,19 +1241,43 @@ fn missing_cleanup_calls(
                     vec![
                         ("policy", "missing_cleanup".to_string()),
                         ("required_cleanup", query.cleanup.values().join(",")),
-                        ("uncovered_path", format!("{} -> exit", event.target_label)),
+                        ("dominance_evidence", reason.to_string()),
                         (
                             "require_error_cleanup",
                             query.require_error_cleanup.to_string(),
                         ),
                         ("requested_max_depth", query.max_depth.to_string()),
                     ],
-                )
-                .with_path_evidence(
-                    [event.target_label.clone(), "exit".to_string()],
-                    PolicyEvidenceEdgeKind::Control,
+                )),
+                _ => results.push(
+                    control_violation(
+                        db,
+                        event,
+                        PolicyOperation::ControlFlowMissingCleanup,
+                        query_digest,
+                        vec![
+                            ("policy", "missing_cleanup".to_string()),
+                            ("required_cleanup", query.cleanup.values().join(",")),
+                            ("uncovered_path", format!("{} -> exit", event.target_label)),
+                            (
+                                "dominance_evidence",
+                                coverage
+                                    .refuted_evidence(DOMINANCE_NO_CLEANUP_CANDIDATE)
+                                    .to_string(),
+                            ),
+                            (
+                                "require_error_cleanup",
+                                query.require_error_cleanup.to_string(),
+                            ),
+                            ("requested_max_depth", query.max_depth.to_string()),
+                        ],
+                    )
+                    .with_path_evidence(
+                        [event.target_label.clone(), "exit".to_string()],
+                        PolicyEvidenceEdgeKind::Control,
+                    ),
                 ),
-            );
+            }
         }
     }
 
@@ -443,11 +1288,85 @@ fn missing_cleanup_calls(
     results
 }
 
-/// Adjacency over one CFG block relation, built once per query.
+/// Whether one CFG block relation covered an event, across every candidate.
 ///
-/// A relation with no rows means the analysis could not establish it, and every
-/// lookup answers `true` so a query keeps the ordering-only behavior it has
-/// without CFG relation facts rather than silently reporting more.
+/// `Established` is the only answer that proves coverage. `NotEstablished`
+/// carries the first reason a lookup could not be evaluated, and `Refuted`
+/// means every candidate was evaluated and none covered the event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelationCoverage {
+    Established,
+    NotEstablished(&'static str),
+    Refuted { saw_candidate: bool },
+}
+
+impl RelationCoverage {
+    /// Evidence value naming what decided a refuted result.
+    fn refuted_evidence(self, without_candidate: &'static str) -> &'static str {
+        match self {
+            Self::Refuted {
+                saw_candidate: true,
+            } => DOMINANCE_FROM_RELATION,
+            _ => without_candidate,
+        }
+    }
+}
+
+/// Folds every candidate's relation answer into one coverage verdict.
+///
+/// A single `Holds` proves coverage; otherwise the first `Unknown` reason wins
+/// over refutation, because an unevaluated lookup is not a refutation.
+fn relation_coverage<'a>(
+    candidates: impl Iterator<Item = &'a &'a ControlCallEvent>,
+    event: &ControlCallEvent,
+    relation: &BlockRelation,
+) -> RelationCoverage {
+    let mut unknown_reason = None;
+    let mut saw_candidate = false;
+    for candidate in candidates {
+        saw_candidate = true;
+        match relation.answer(candidate, event) {
+            DominanceAnswer::Holds => return RelationCoverage::Established,
+            DominanceAnswer::DoesNotHold => {}
+            DominanceAnswer::Unknown(reason) => {
+                unknown_reason.get_or_insert(reason);
+            }
+        }
+    }
+    match unknown_reason {
+        Some(reason) => RelationCoverage::NotEstablished(reason),
+        None => RelationCoverage::Refuted { saw_candidate },
+    }
+}
+
+/// Reason a CFG block relation could not answer a lookup.
+///
+/// One of the two events carried no basic block, so the relation has nothing to
+/// look up.
+pub(crate) const DOMINANCE_MISSING_BLOCK_IDS: &str = "missing_block_ids";
+/// Reason a CFG block relation could not answer a lookup: the relation itself
+/// has no rows, so the analysis never established it for this run.
+pub(crate) const DOMINANCE_EMPTY_RELATION: &str = "empty_relation";
+/// Evidence value naming the relation that decided an emitted control result.
+const DOMINANCE_FROM_RELATION: &str = "dominator_relation";
+/// Evidence value for a control result decided without any candidate to relate.
+const DOMINANCE_NO_CANDIDATE: &str = "no_guard_candidate";
+/// Evidence value for a lifecycle result decided without any cleanup candidate.
+const DOMINANCE_NO_CLEANUP_CANDIDATE: &str = "no_cleanup_candidate";
+
+/// Three-valued answer from one CFG block relation lookup.
+///
+/// The relation is only a proof when it answers [`DominanceAnswer::Holds`].
+/// Missing inputs answer [`DominanceAnswer::Unknown`] with the reason, so a
+/// caller can report "not established" instead of reading absence as coverage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DominanceAnswer {
+    Holds,
+    DoesNotHold,
+    Unknown(&'static str),
+}
+
+/// Adjacency over one CFG block relation, built once per query.
 struct BlockRelation {
     by_source: BTreeMap<BasicBlockId, Vec<BasicBlockId>>,
 }
@@ -477,13 +1396,24 @@ impl BlockRelation {
         )
     }
 
-    fn holds(&self, candidate: &ControlCallEvent, event: &ControlCallEvent) -> bool {
+    fn answer(&self, candidate: &ControlCallEvent, event: &ControlCallEvent) -> DominanceAnswer {
         match (candidate.block, event.block) {
-            (Some(candidate), Some(event)) if candidate == event => true,
-            (Some(candidate), Some(event)) => {
-                self.by_source.is_empty() || self.reaches(event, candidate)
-            }
-            _ => true,
+            (Some(candidate), Some(event)) => self.answer_for_blocks(candidate, event),
+            _ => DominanceAnswer::Unknown(DOMINANCE_MISSING_BLOCK_IDS),
+        }
+    }
+
+    fn answer_for_blocks(&self, candidate: BasicBlockId, event: BasicBlockId) -> DominanceAnswer {
+        if candidate == event {
+            return DominanceAnswer::Holds;
+        }
+        if self.by_source.is_empty() {
+            return DominanceAnswer::Unknown(DOMINANCE_EMPTY_RELATION);
+        }
+        if self.reaches(event, candidate) {
+            DominanceAnswer::Holds
+        } else {
+            DominanceAnswer::DoesNotHold
         }
     }
 
@@ -659,7 +1589,7 @@ fn push_flow_sinks_for_site(
     };
     let sink_heuristic = pattern.kind() == SinkPatternKind::Logger;
 
-    for place in site.arguments.iter().copied().chain(site.receiver) {
+    for place in sink_places_for_site(pattern, site) {
         for node in nodes_for_place(store, place) {
             sinks.insert(
                 (site.id, node.id),
@@ -674,6 +1604,22 @@ fn push_flow_sinks_for_site(
                 },
             );
         }
+    }
+}
+
+/// Places a sink pattern watches at one call site.
+///
+/// A positional pattern names exactly one source-order argument and never the
+/// receiver; an unpositioned one watches every argument plus the receiver.
+fn sink_places_for_site(pattern: &SinkPattern, site: &CallSiteFact) -> Vec<PlaceId> {
+    match pattern.argument_position() {
+        Some(position) => site.arguments.get(position).copied().into_iter().collect(),
+        None => site
+            .arguments
+            .iter()
+            .copied()
+            .chain(site.receiver)
+            .collect(),
     }
 }
 
@@ -1191,6 +2137,15 @@ struct SearchState {
 struct ControlCallEvent {
     function: FunctionId,
     block: Option<BasicBlockId>,
+    /// MIR body and operation of the call, used to walk definitions between
+    /// this call and a later branch or call in the same body.
+    body: MirBodyId,
+    operation: MirOpId,
+    site: CallSiteId,
+    /// Place holding the call's returned value, when the frontend recorded one.
+    result: Option<PlaceId>,
+    /// Argument places in source order.
+    arguments: Vec<PlaceId>,
     file: String,
     range: crate::diagnostics::TextRange,
     target_label: String,
@@ -1338,6 +2293,11 @@ fn control_event_for_edge(
     Some(ControlCallEvent {
         function: edge.caller,
         block: blocks.get(&(site.body, site.operation)).copied(),
+        body: site.body,
+        operation: site.operation,
+        site: site.id,
+        result: site.result,
+        arguments: site.arguments.clone(),
         file: db.path_for(site.file),
         range: site.span.diagnostic_range(),
         target_label,
@@ -1360,6 +2320,11 @@ fn control_event_for_site(
     ControlCallEvent {
         function: site.caller,
         block: blocks.get(&(site.body, site.operation)).copied(),
+        body: site.body,
+        operation: site.operation,
+        site: site.id,
+        result: site.result,
+        arguments: site.arguments.clone(),
         file: db.path_for(site.file),
         range: site.span.diagnostic_range(),
         target_label: label.clone(),
@@ -1477,6 +2442,23 @@ fn control_violation(
             .map(|(label, value)| (label.to_string(), value))
             .collect(),
     )
+}
+
+/// A control result that reports "not established" rather than a violation.
+///
+/// It carries no `uncovered_path` and no `evidence_v1`: there is no path to
+/// claim when the relation that would have proved coverage was unavailable.
+fn unknown_control_result(
+    db: &AnalysisDb,
+    event: &ControlCallEvent,
+    query: PolicyOperation,
+    query_digest: &str,
+    evidence: Vec<(&'static str, String)>,
+) -> PolicyViolation {
+    let mut result = control_violation(db, event, query, query_digest, evidence);
+    result.set_status(PolicyStatus::Unknown);
+    result.set_precision(PolicyPrecision::Unknown);
+    result
 }
 
 fn control_policy_status(status: CallTargetStatus, precision: CallPrecision) -> PolicyStatus {
@@ -1928,16 +2910,20 @@ fn confidence_label(confidence: RefinedCallConfidence) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::aliases::facts::{AliasAnswerFact, AliasPrecision, AliasReason};
+    use crate::analysis::aliases::store::AliasOutput;
     use crate::analysis::calls::facts::{
         CallAlgorithm, CallEdgeKind, CallProvenance, CallSyntaxKind, CallTargetFact,
         UnresolvedCallReason,
     };
     use crate::analysis::calls::store::CallOutput;
     use crate::analysis::cfg::facts::{
-        BasicBlockFact, BasicBlockKind, CfgFunctionFact, CfgNodeFact, CfgNodeKind, CfgPrecision,
-        CfgStatus,
+        BasicBlockFact, BasicBlockKind, CfgEdgeFact, CfgFunctionFact, CfgNodeFact, CfgNodeKind,
+        CfgPrecision, CfgStatus, CfgView, DominatorFact, PostDominatorFact,
     };
-    use crate::analysis::cfg::ids::{BasicBlockId, CfgFunctionId, CfgNodeId};
+    use crate::analysis::cfg::ids::{
+        BasicBlockId, CfgEdgeId, CfgFunctionId, CfgNodeId, DominatorId, PostDominatorId,
+    };
     use crate::analysis::cfg::store::CfgOutput;
     use crate::analysis::data_flow::facts::{
         DataFlowAlgorithm, DataFlowConfidence, DataFlowEdgeFact, DataFlowEdgeKind,
@@ -1946,11 +2932,11 @@ mod tests {
     };
     use crate::analysis::data_flow::store::DataFlowOutput;
     use crate::analysis::ids::{
-        CallTargetId, DataFlowEdgeId, DataFlowModelId, DataFlowNodeId, MirBodyId, MirOpId,
-        MirPredicateId, PlaceId, ReachabilityRootId, RefinedCallEdgeId,
+        AliasAnswerId, CallTargetId, DataFlowEdgeId, DataFlowModelId, DataFlowNodeId, MirBodyId,
+        MirOpId, MirPredicateId, PlaceId, ReachabilityRootId, RefinedCallEdgeId,
     };
     use crate::analysis::mir::body::{MirBody, MirOutput, MirStatus};
-    use crate::analysis::mir::op::{MirOperation, MirOperationKind};
+    use crate::analysis::mir::op::{AssignMode, BranchNilTest, MirOperation, MirOperationKind};
     use crate::analysis::reachability::facts::{
         RootPrecision, RootProvenance, RootStatus, compute_reachability_root_stable_key,
     };
@@ -1959,6 +2945,7 @@ mod tests {
     };
     use crate::analysis::refined_calls::facts::{RefinedCallTier, RefinedCallValidation};
     use crate::analysis::refined_calls::store::RefinedCallOutput;
+    use crate::analysis::types::store::TypeValueAliasOutput;
     use crate::core::{FileId, FunctionFact, Language, Span};
     use std::path::PathBuf;
 
@@ -2198,6 +3185,188 @@ mod tests {
     }
 
     #[test]
+    fn control_flow_missing_guard_reports_unknown_when_dominator_relation_is_empty() {
+        let db = policy_query_db_with_cfg_ordered_call_sequence(&[
+            ("dangerous", 1, 2),
+            ("authorize", 2, 1),
+        ]);
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status(), PolicyStatus::Unknown);
+        assert_eq!(results[0].precision(), PolicyPrecision::Unknown);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_EMPTY_RELATION
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_guard_reports_unknown_when_operation_has_no_cfg_block() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("authorize", 1, 1),
+                CfgCall::new("dangerous", 2, 2).unplaced(),
+            ],
+            &[(2, 1)],
+        );
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_MISSING_BLOCK_IDS
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_guard_unknown_result_carries_no_uncovered_path() {
+        let db = policy_query_db_with_cfg_ordered_call_sequence(&[
+            ("dangerous", 1, 2),
+            ("authorize", 2, 1),
+        ]);
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+        let diagnostic = results[0].diagnostic("local/test", "coverage unknown");
+
+        assert!(diagnostic.evidence_v1.is_none());
+        assert!(
+            !diagnostic
+                .evidence
+                .iter()
+                .any(|evidence| evidence.label == "uncovered_path")
+        );
+    }
+
+    #[test]
+    fn control_flow_missing_guard_holds_with_immediate_only_dominators() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("authorize", 1, 1),
+                CfgCall::new("intermediate", 2, 2),
+                CfgCall::new("dangerous", 3, 3),
+            ],
+            &[(3, 2), (2, 1)],
+        );
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        assert!(missing_guards(&db, query).is_empty());
+    }
+
+    #[test]
+    fn control_flow_missing_guard_reports_violation_when_dominance_is_refuted() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("authorize", 1, 1),
+                CfgCall::new("dangerous", 2, 2),
+            ],
+            &[(1, 1)],
+        );
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.report_unknown_coverage = true;
+
+        let results = missing_guards(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            "dominator_relation"
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_guard_keeps_fail_open_behavior_by_default() {
+        let db = policy_query_db_with_cfg_ordered_call_sequence(&[
+            ("dangerous", 1, 2),
+            ("authorize", 2, 1),
+        ]);
+        let query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+
+        assert!(missing_guards(&db, query).is_empty());
+    }
+
+    #[test]
+    fn control_flow_missing_cleanup_reports_unknown_when_postdominator_relation_is_empty() {
+        let db =
+            policy_query_db_with_cfg_ordered_call_sequence(&[("Begin", 1, 1), ("Close", 2, 2)]);
+        let mut query =
+            LifecycleQuery::new(EventPattern::call("Begin"), EventPattern::call("Close"));
+        query.report_unknown_coverage = true;
+
+        let results = missing_cleanup(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status(), PolicyStatus::Unknown);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_EMPTY_RELATION
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_cleanup_reports_unknown_when_operation_has_no_cfg_block() {
+        let db = policy_query_db_with_cfg_calls(
+            &[
+                CfgCall::new("Begin", 1, 1),
+                CfgCall::new("Close", 2, 2).unplaced(),
+            ],
+            &[(1, 2)],
+        );
+        let mut query =
+            LifecycleQuery::new(EventPattern::call("Begin"), EventPattern::call("Close"));
+        query.report_unknown_coverage = true;
+
+        let results = missing_cleanup(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert!(has_evidence(
+            &results[0],
+            "dominance_evidence",
+            DOMINANCE_MISSING_BLOCK_IDS
+        ));
+    }
+
+    #[test]
+    fn control_flow_missing_cleanup_keeps_fail_open_behavior_by_default() {
+        let db =
+            policy_query_db_with_cfg_ordered_call_sequence(&[("Begin", 1, 1), ("Close", 2, 2)]);
+        let query = LifecycleQuery::new(EventPattern::call("Begin"), EventPattern::call("Close"));
+
+        assert!(missing_cleanup(&db, query).is_empty());
+    }
+
+    #[test]
     fn control_flow_missing_guard_falls_back_to_mir_order_when_cfg_is_absent() {
         let db =
             policy_query_db_with_mir_ordered_call_sequence(&[("dangerous", 2), ("authorize", 1)]);
@@ -2237,6 +3406,446 @@ mod tests {
         assert!(diagnostic.evidence.iter().any(|evidence| {
             evidence.label == "budget" && evidence.value == "control_flow_query_budget"
         }));
+    }
+
+    #[test]
+    fn guard_outcome_covers_checked_error_that_returns() {
+        let db = checked_error_guard_db(GuardShape::default());
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_CHECKED_ERROR_EXITS
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_covered_result_has_no_diagnostic() {
+        let db = checked_error_guard_db(GuardShape::default());
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert!(results[0].diagnostic("local/test", "covered").is_none());
+    }
+
+    #[test]
+    fn guard_outcome_covered_marks_identity_unchecked() {
+        let db = checked_error_guard_db(GuardShape::default());
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_UNCHECKED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_missing_guard() {
+        let db = policy_query_db_with_call_sequence(&["dangerous"]);
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_MISSING
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_write_before_guard() {
+        let db = policy_query_db_with_call_sequence(&["dangerous", "authorize"]);
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_NOT_ORDERED_BEFORE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_ignored_error() {
+        let db = checked_error_guard_db(GuardShape {
+            tests_result: false,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_RESULT_NEVER_TESTED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_conditional_branch_guard() {
+        let db = checked_error_guard_db(GuardShape {
+            guard_dominates: false,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_DOES_NOT_DOMINATE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_logged_error_without_exit() {
+        let db = checked_error_guard_db(GuardShape {
+            error_path_reaches_operation: true,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ERROR_PATH_REACHES_OPERATION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_for_shadowed_error_definition() {
+        let db = checked_error_guard_db(GuardShape {
+            intervening_write: true,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_AMBIGUOUS_ERROR_DEFINITION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_nil_test_is_partial() {
+        let db = checked_error_guard_db(GuardShape {
+            nil_test: Some(BranchNilTest::NilEdgeOnly { nil_on_true: false }),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_PARTIAL_NIL_TEST
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_error_test_is_not_a_nil_comparison() {
+        let db = checked_error_guard_db(GuardShape {
+            nil_test: None,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_UNRECOGNIZED_ERROR_TEST
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_dominator_relation_is_empty() {
+        let db = checked_error_guard_db(GuardShape {
+            dominator_rows: false,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            DOMINANCE_EMPTY_RELATION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_guard_in_unused_closure() {
+        let db = checked_error_guard_db(GuardShape {
+            guard_in_other_body: true,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_MISSING
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_covers_guard_and_write_in_same_closure_body() {
+        let db = checked_error_guard_db(GuardShape {
+            outer_body_call: Some("withTransaction"),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+    }
+
+    #[test]
+    fn guard_outcome_without_checked_error_covers_on_dominance_alone() {
+        let db = checked_error_guard_db(GuardShape {
+            tests_result: false,
+            ..GuardShape::default()
+        });
+        let query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+
+        let results = guard_outcomes(&db, query);
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_GUARD_DOMINATES_OPERATION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_budget_exceeded_on_path_cap() {
+        let db = policy_query_db_with_two_matching_targets();
+        let mut query = checked_error_query();
+        query.max_paths = 1;
+
+        let results = guard_outcomes(&db, query);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status(), PolicyStatus::BudgetExceeded);
+        let diagnostic = results[0]
+            .diagnostic("local/test", "budget")
+            .expect("non-covered results carry a diagnostic");
+        assert!(diagnostic.evidence.iter().any(|evidence| {
+            evidence.label == "budget" && evidence.value == BUDGET_GUARD_OUTCOME_QUERY
+        }));
+    }
+
+    #[test]
+    fn guard_outcome_binds_same_place_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::SamePlace,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_SAME_PLACE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_binds_projection_extension_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::ProjectionExtension,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_PROJECTION_EXTENSION
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_binds_must_alias_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::MustAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_MUST_ALIAS
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_no_alias_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::NoAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_IDENTITY_MISMATCH
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_for_may_alias_argument() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::MayAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ALIAS_INDETERMINATE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_when_no_alias_row_relates_the_arguments() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::NoAliasRow,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ALIAS_INDETERMINATE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_violates_identity_reassigned_from_distinct_root() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Reassigned,
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, bound_identity_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Violation);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_IDENTITY_REASSIGNED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_unknown_for_argument_position_out_of_range() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::SamePlace,
+            ..GuardShape::default()
+        });
+        let mut query = checked_error_query();
+        query.argument_binding = Some(ArgumentBinding::new(4, 0));
+
+        let results = guard_outcomes(&db, query);
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Unknown);
+        assert!(outcome_evidence(
+            &results[0],
+            "reason",
+            REASON_ARGUMENT_POSITION_OUT_OF_RANGE
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_without_argument_binding_leaves_identity_unchecked() {
+        let db = checked_error_guard_db(GuardShape {
+            identity: IdentityShape::Alias(AliasStatus::NoAlias),
+            ..GuardShape::default()
+        });
+
+        let results = guard_outcomes(&db, checked_error_query());
+
+        assert_eq!(results[0].outcome(), PolicyOutcome::Covered);
+        assert!(outcome_evidence(
+            &results[0],
+            "identity_binding",
+            IDENTITY_UNCHECKED
+        ));
+    }
+
+    #[test]
+    fn guard_outcome_query_digest_changes_with_argument_binding() {
+        let baseline = checked_error_query();
+        let mut bound = baseline.clone();
+        bound.argument_binding = Some(ArgumentBinding::new(0, 0));
+
+        assert_ne!(
+            baseline.outcome_query_digest(),
+            bound.outcome_query_digest()
+        );
+    }
+
+    #[test]
+    fn guard_outcome_query_digest_changes_with_argument_binding_positions() {
+        let mut left = checked_error_query();
+        left.argument_binding = Some(ArgumentBinding::new(0, 1));
+        let mut right = checked_error_query();
+        right.argument_binding = Some(ArgumentBinding::new(1, 0));
+
+        assert_ne!(left.outcome_query_digest(), right.outcome_query_digest());
+    }
+
+    #[test]
+    fn guard_outcome_query_digest_differs_from_missing_guard_digest() {
+        let query = checked_error_query();
+
+        assert_ne!(query.query_digest(), query.outcome_query_digest());
     }
 
     #[test]
@@ -2319,6 +3928,55 @@ mod tests {
 
         assert_eq!(violations.len(), 2);
         assert_ne!(violations[0].stable_key(), violations[1].stable_key());
+    }
+
+    #[test]
+    fn data_flow_forbidden_call_argument_matches_the_named_position() {
+        let db = data_flow_policy_db_with_two_sink_arguments();
+
+        let violations = forbidden_flows(
+            &db,
+            FlowQuery::new(
+                SourcePattern::http_request(),
+                SinkPattern::call_argument("dangerous", 1),
+            ),
+        );
+
+        assert_eq!(violations.len(), 1);
+    }
+
+    #[test]
+    fn data_flow_forbidden_call_argument_skips_other_positions() {
+        let db = data_flow_policy_db_with_two_sink_arguments();
+
+        let violations = forbidden_flows(
+            &db,
+            FlowQuery::new(
+                SourcePattern::http_request(),
+                SinkPattern::call_argument("dangerous", 0),
+            ),
+        );
+
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn data_flow_query_digest_changes_with_sink_argument_position() {
+        let left = FlowQuery::new(
+            SourcePattern::http_request(),
+            SinkPattern::call_argument("dangerous", 0),
+        );
+        let right = FlowQuery::new(
+            SourcePattern::http_request(),
+            SinkPattern::call_argument("dangerous", 1),
+        );
+        let any = FlowQuery::new(
+            SourcePattern::http_request(),
+            SinkPattern::call("dangerous"),
+        );
+
+        assert_ne!(left.query_digest(), right.query_digest());
+        assert_ne!(left.query_digest(), any.query_digest());
     }
 
     #[test]
@@ -2644,6 +4302,634 @@ mod tests {
 
         assert_eq!(first, second);
         assert_eq!(first, sorted);
+    }
+
+    fn checked_error_query() -> GuardQuery {
+        let mut query = GuardQuery::new(
+            EventPattern::call("dangerous"),
+            GuardPattern::call_any(["authorize"]),
+        );
+        query.require_checked_error = true;
+        query
+    }
+
+    fn bound_identity_query() -> GuardQuery {
+        let mut query = checked_error_query();
+        query.argument_binding = Some(ArgumentBinding::new(0, 0));
+        query
+    }
+
+    fn outcome_evidence(result: &PolicyResult, label: &str, value: &str) -> bool {
+        result
+            .evidence()
+            .iter()
+            .any(|(evidence_label, evidence_value)| {
+                evidence_label == label && evidence_value == value
+            })
+    }
+
+    /// Shape of the synthetic checked-error guard function.
+    ///
+    /// The default is the covered shape: guard call, error binding, `!= nil`
+    /// branch whose error edge returns, then the protected call.
+    #[derive(Debug, Clone, Copy)]
+    struct GuardShape {
+        /// A branch tests the place the guard's error was bound to.
+        tests_result: bool,
+        /// Nil-test recorded on that branch.
+        nil_test: Option<BranchNilTest>,
+        /// Another call rebinds the tested place between guard and branch.
+        intervening_write: bool,
+        /// The error edge falls through to the protected call's block.
+        error_path_reaches_operation: bool,
+        /// The guard's block dominates the protected call's block.
+        guard_dominates: bool,
+        /// The dominator relation has rows at all.
+        dominator_rows: bool,
+        /// The guard call belongs to a different function than the operation.
+        guard_in_other_body: bool,
+        /// An unrelated call placed in a separate enclosing function.
+        outer_body_call: Option<&'static str>,
+        /// How the guard's argument relates to the operation's argument.
+        identity: IdentityShape,
+    }
+
+    /// Relationship between the authorized argument and the consumed argument.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum IdentityShape {
+        /// Neither call records arguments.
+        None,
+        /// Both calls pass the same place.
+        SamePlace,
+        /// The operation consumes a field of the authorized place.
+        ProjectionExtension,
+        /// The two places are distinct and carry the given alias answer.
+        Alias(AliasStatus),
+        /// Distinct places with no alias row at all.
+        NoAliasRow,
+        /// Same place, rebound from another root between guard and operation.
+        Reassigned,
+    }
+
+    impl Default for GuardShape {
+        fn default() -> Self {
+            Self {
+                tests_result: true,
+                nil_test: Some(BranchNilTest::Exhaustive { nil_on_true: false }),
+                intervening_write: false,
+                error_path_reaches_operation: false,
+                guard_dominates: true,
+                dominator_rows: true,
+                guard_in_other_body: false,
+                outer_body_call: None,
+                identity: IdentityShape::None,
+            }
+        }
+    }
+
+    fn checked_error_guard_db(shape: GuardShape) -> AnalysisDb {
+        const GUARD_BLOCK: BasicBlockId = BasicBlockId(1);
+        const ERROR_BLOCK: BasicBlockId = BasicBlockId(2);
+        const EVENT_BLOCK: BasicBlockId = BasicBlockId(3);
+        const OTHER_SITE: CallSiteId = CallSiteId(9);
+
+        let mut db = AnalysisDb::new();
+        let interner = db.stable_key_interner();
+        let file = db.add_file(
+            PathBuf::from("src/main.go"),
+            "src/main.go".to_string(),
+            "package main\nfunc handler() {}\n".to_string(),
+        );
+        let handler = push_test_function(&mut db, file, "handler", 1, false);
+        let guard_owner = if shape.guard_in_other_body {
+            push_test_function(&mut db, file, "handler.func1", 2, false)
+        } else {
+            handler
+        };
+        let outer = shape
+            .outer_body_call
+            .map(|_| push_test_function(&mut db, file, "outer", 3, false));
+        let authorize = push_test_function(&mut db, file, "authorize", 10, false);
+        let dangerous = push_test_function(&mut db, file, "dangerous", 11, false);
+
+        // MIR ids are renumbered by stable-key order, so every id is assigned in
+        // push order and every stable key sorts the same way.
+        let mut bodies = Vec::new();
+        let mut push_body = |function: FunctionId, name: &str| {
+            let id = MirBodyId(bodies.len() as u64);
+            bodies.push(MirBody {
+                id,
+                language: Language::Go,
+                file,
+                function,
+                package: None,
+                module: None,
+                owner_stable_key: interner.intern(format!("function:{name}")),
+                span: Span::point(file, 1, 1),
+                stable_key: interner.intern(format!("mir:body:{:05}", id.0)),
+                status: MirStatus::Resolved,
+            });
+            id
+        };
+        let handler_body = push_body(handler, "handler");
+        let guard_body = if shape.guard_in_other_body {
+            push_body(guard_owner, "handler.func1")
+        } else {
+            handler_body
+        };
+        let outer_body = outer.map(|outer| push_body(outer, "outer"));
+
+        let mut places = Vec::new();
+        let mut push_place = |name: &str| {
+            let id = PlaceId(places.len() as u64);
+            places.push(PlaceFact {
+                id,
+                language: Language::Go,
+                file: Some(file),
+                function: Some(handler),
+                root: PlaceRoot::Local {
+                    function: handler,
+                    name: name.to_string(),
+                },
+                projections: Vec::new(),
+                stable_key: interner.intern(format!("mir:place:{:05}", id.0)),
+                status: crate::analysis::places::PlaceStatus::Resolved,
+            });
+            id
+        };
+        let guard_result = push_place("guardResult");
+        let error_place = push_place("err");
+        let event_result = push_place("eventResult");
+        let outer_result = push_place("outerResult");
+        let actor = push_place("actor");
+        let other = push_place("other");
+        let actor_tenant = push_projection_place(&mut places, &interner, file, handler, "actor");
+
+        let (guard_arguments, event_arguments) = match shape.identity {
+            IdentityShape::None => (Vec::new(), Vec::new()),
+            IdentityShape::SamePlace | IdentityShape::Reassigned => (vec![actor], vec![actor]),
+            IdentityShape::ProjectionExtension => (vec![actor], vec![actor_tenant]),
+            IdentityShape::Alias(_) | IdentityShape::NoAliasRow => (vec![actor], vec![other]),
+        };
+
+        let mut operations = Vec::new();
+        let mut push_operation = |kind: MirOperationKind, body: MirBodyId, ordinal: u32| {
+            let id = MirOpId(operations.len() as u64);
+            operations.push(MirOperation {
+                id,
+                body,
+                ordinal,
+                span: Span::point(file, ordinal + 1, 1),
+                kind,
+                stable_key: interner.intern(format!("mir:op:{:05}", id.0)),
+                status: MirStatus::Resolved,
+            });
+            id
+        };
+
+        let mut ordinal = 1;
+        let guard_operation = push_operation(
+            MirOperationKind::Call {
+                site: CallSiteId(0),
+                callee: MirValue::Unknown {
+                    evidence: "authorize".to_string(),
+                },
+                arguments: Vec::new(),
+                return_place: guard_result,
+            },
+            guard_body,
+            ordinal,
+        );
+        ordinal += 1;
+
+        let mut branch_operation = None;
+        if shape.tests_result {
+            push_operation(
+                MirOperationKind::Assign {
+                    place: error_place,
+                    value: MirValue::Place(guard_result),
+                    mode: AssignMode::DeclarationBinding,
+                },
+                guard_body,
+                ordinal,
+            );
+            ordinal += 1;
+            if shape.intervening_write {
+                push_operation(
+                    MirOperationKind::Assign {
+                        place: error_place,
+                        value: MirValue::CallReturn(OTHER_SITE),
+                        mode: AssignMode::DeclarationBinding,
+                    },
+                    guard_body,
+                    ordinal,
+                );
+                ordinal += 1;
+            }
+            branch_operation = Some(push_operation(
+                MirOperationKind::Branch {
+                    predicate: MirPredicateId(0),
+                    predicate_place: Some(error_place),
+                    nil_test: shape.nil_test,
+                },
+                guard_body,
+                ordinal,
+            ));
+            ordinal += 1;
+        }
+
+        if shape.identity == IdentityShape::Reassigned {
+            push_operation(
+                MirOperationKind::Assign {
+                    place: actor,
+                    value: MirValue::Place(other),
+                    mode: AssignMode::Overwrite,
+                },
+                guard_body,
+                ordinal,
+            );
+            ordinal += 1;
+        }
+
+        let event_operation = push_operation(
+            MirOperationKind::Call {
+                site: CallSiteId(1),
+                callee: MirValue::Unknown {
+                    evidence: "dangerous".to_string(),
+                },
+                arguments: Vec::new(),
+                return_place: event_result,
+            },
+            handler_body,
+            ordinal,
+        );
+        let event_ordinal = ordinal;
+
+        let outer_operation = outer_body.map(|outer_body| {
+            push_operation(
+                MirOperationKind::Call {
+                    site: CallSiteId(2),
+                    callee: MirValue::Unknown {
+                        evidence: "withTransaction".to_string(),
+                    },
+                    arguments: Vec::new(),
+                    return_place: outer_result,
+                },
+                outer_body,
+                1,
+            )
+        });
+
+        let mut sites = vec![
+            checked_error_call_site(
+                0,
+                file,
+                guard_owner,
+                guard_body,
+                guard_operation,
+                "authorize",
+            )
+            .with_result(guard_result)
+            .with_arguments(guard_arguments),
+            checked_error_call_site(1, file, handler, handler_body, event_operation, "dangerous")
+                .with_result(event_result)
+                .with_arguments(event_arguments),
+        ];
+        let mut targets = vec![
+            call_target(0, CallSiteId(0), guard_owner, authorize),
+            call_target(1, CallSiteId(1), handler, dangerous),
+        ];
+        let mut refined = vec![
+            refined_edge(0, CallSiteId(0), guard_owner, authorize, "authorize"),
+            refined_edge(1, CallSiteId(1), handler, dangerous, "dangerous"),
+        ];
+
+        let cfg_function = CfgFunctionId(0);
+        let mut cfg_nodes = vec![
+            checked_error_cfg_node(
+                &interner,
+                0,
+                cfg_function,
+                guard_body,
+                guard_operation,
+                GUARD_BLOCK,
+                1,
+            ),
+            checked_error_cfg_node(
+                &interner,
+                1,
+                cfg_function,
+                handler_body,
+                event_operation,
+                EVENT_BLOCK,
+                event_ordinal,
+            ),
+        ];
+        if let Some(branch) = branch_operation {
+            cfg_nodes.push(checked_error_cfg_node(
+                &interner,
+                2,
+                cfg_function,
+                guard_body,
+                branch,
+                GUARD_BLOCK,
+                event_ordinal - 1,
+            ));
+        }
+
+        if let (Some(outer), Some(operation), Some(outer_body), Some(call)) =
+            (outer, outer_operation, outer_body, shape.outer_body_call)
+        {
+            sites.push(checked_error_call_site(
+                2, file, outer, outer_body, operation, call,
+            ));
+            targets.push(call_target(2, CallSiteId(2), outer, handler));
+            refined.push(refined_edge(2, CallSiteId(2), outer, handler, call));
+        }
+
+        let cfg_blocks = vec![
+            checked_error_block(
+                &interner,
+                GUARD_BLOCK,
+                cfg_function,
+                BasicBlockKind::Branch,
+                1,
+            ),
+            checked_error_block(
+                &interner,
+                ERROR_BLOCK,
+                cfg_function,
+                BasicBlockKind::StraightLine,
+                2,
+            ),
+            checked_error_block(
+                &interner,
+                EVENT_BLOCK,
+                cfg_function,
+                BasicBlockKind::Join,
+                3,
+            ),
+        ];
+
+        let mut cfg_edges = Vec::new();
+        if shape.tests_result {
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                0,
+                cfg_function,
+                GUARD_BLOCK,
+                ERROR_BLOCK,
+                CfgEdgeKind::True,
+            ));
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                1,
+                cfg_function,
+                GUARD_BLOCK,
+                EVENT_BLOCK,
+                CfgEdgeKind::False,
+            ));
+        } else {
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                1,
+                cfg_function,
+                GUARD_BLOCK,
+                EVENT_BLOCK,
+                CfgEdgeKind::Normal,
+            ));
+        }
+        if shape.error_path_reaches_operation {
+            cfg_edges.push(checked_error_edge(
+                &interner,
+                2,
+                cfg_function,
+                ERROR_BLOCK,
+                EVENT_BLOCK,
+                CfgEdgeKind::Normal,
+            ));
+        }
+
+        let mut dominator_pairs = Vec::new();
+        if shape.dominator_rows {
+            dominator_pairs.push((ERROR_BLOCK, GUARD_BLOCK));
+            if shape.guard_dominates {
+                dominator_pairs.push((EVENT_BLOCK, GUARD_BLOCK));
+            }
+        }
+        let dominators = dominator_pairs
+            .into_iter()
+            .enumerate()
+            .map(|(index, (dominated, dominator))| DominatorFact {
+                id: DominatorId(index as u64),
+                cfg_function,
+                view: CfgView::NormalControl,
+                dominator,
+                dominated,
+                immediate: true,
+                stable_key: interner.intern(format!("cfg:dom:{}:{}", dominated.0, dominator.0)),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            })
+            .collect::<Vec<_>>();
+
+        db.replace_semantic_mir(MirOutput {
+            bodies,
+            places,
+            operations,
+            unsupported: Vec::new(),
+            ..MirOutput::default()
+        })
+        .expect("valid semantic MIR facts");
+        db.replace_cfg_facts(CfgOutput {
+            functions: vec![CfgFunctionFact {
+                id: cfg_function,
+                body: handler_body,
+                function: handler,
+                language: Language::Go,
+                file,
+                span: Span::point(file, 1, 1),
+                entry_node: CfgNodeId(10_000),
+                normal_exit_node: CfgNodeId(10_001),
+                exceptional_exit_node: None,
+                stable_key: interner.intern("cfg:function:handler"),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            }],
+            nodes: cfg_nodes,
+            blocks: cfg_blocks,
+            edges: cfg_edges,
+            dominators,
+            ..CfgOutput::empty()
+        })
+        .expect("valid CFG facts");
+        db.replace_call_facts(CallOutput {
+            sites,
+            targets,
+            unresolved: Vec::new(),
+        })
+        .expect("valid call facts");
+        db.replace_refined_call_facts(RefinedCallOutput { edges: refined })
+            .expect("valid refined call facts");
+        if let IdentityShape::Alias(status) = shape.identity {
+            let interner = db.stable_key_interner();
+            db.replace_type_value_alias_facts(TypeValueAliasOutput {
+                aliases: AliasOutput {
+                    answers: vec![AliasAnswerFact {
+                        id: AliasAnswerId(0),
+                        left: AliasOperand::Place(actor),
+                        right: AliasOperand::Place(other),
+                        status,
+                        reason: AliasReason::DisjointLocals,
+                        evidence: Vec::new(),
+                        precision: AliasPrecision::FlowInsensitive,
+                        stable_key: interner.intern("alias:answer:0"),
+                    }],
+                },
+                ..TypeValueAliasOutput::default()
+            });
+        }
+        db
+    }
+
+    /// A place rooted at `name` with one field projection, used for the
+    /// `actor` / `actor.TenantID` prefix-extension shape.
+    fn push_projection_place(
+        places: &mut Vec<PlaceFact>,
+        interner: &crate::core::StableKeyInterner,
+        file: FileId,
+        function: FunctionId,
+        name: &str,
+    ) -> PlaceId {
+        let id = PlaceId(places.len() as u64);
+        places.push(PlaceFact {
+            id,
+            language: Language::Go,
+            file: Some(file),
+            function: Some(function),
+            root: PlaceRoot::Local {
+                function,
+                name: name.to_string(),
+            },
+            projections: vec![PlaceProjection::Field("TenantID".to_string())],
+            stable_key: interner.intern(format!("mir:place:{:05}", id.0)),
+            status: crate::analysis::places::PlaceStatus::Resolved,
+        });
+        id
+    }
+
+    fn checked_error_call_site(
+        id: u64,
+        file: FileId,
+        caller: FunctionId,
+        body: MirBodyId,
+        operation: MirOpId,
+        callee: &str,
+    ) -> CallSiteFact {
+        let mut site = call_site(id, file, caller, callee);
+        site.body = body;
+        site.operation = operation;
+        site
+    }
+
+    trait WithResult {
+        fn with_result(self, result: PlaceId) -> Self;
+    }
+
+    impl WithResult for CallSiteFact {
+        fn with_result(mut self, result: PlaceId) -> Self {
+            self.result = Some(result);
+            self
+        }
+    }
+
+    trait WithArguments {
+        fn with_arguments(self, arguments: Vec<PlaceId>) -> Self;
+    }
+
+    impl WithArguments for CallSiteFact {
+        fn with_arguments(mut self, arguments: Vec<PlaceId>) -> Self {
+            self.arguments = arguments;
+            self
+        }
+    }
+
+    fn checked_error_cfg_node(
+        interner: &crate::core::StableKeyInterner,
+        id: u64,
+        cfg_function: CfgFunctionId,
+        body: MirBodyId,
+        operation: MirOpId,
+        block: BasicBlockId,
+        operation_ordinal: u32,
+    ) -> CfgNodeFact {
+        CfgNodeFact {
+            id: CfgNodeId(id),
+            cfg_function,
+            body,
+            operation: Some(operation),
+            block,
+            kind: CfgNodeKind::CallSite,
+            span: None,
+            generated: false,
+            operation_ordinal,
+            stable_key: interner.intern(format!("cfg:node:{id}")),
+            status: CfgStatus::Resolved,
+            precision: CfgPrecision::ExactLowered,
+        }
+    }
+
+    fn checked_error_block(
+        interner: &crate::core::StableKeyInterner,
+        id: BasicBlockId,
+        cfg_function: CfgFunctionId,
+        kind: BasicBlockKind,
+        reverse_postorder: u32,
+    ) -> BasicBlockFact {
+        BasicBlockFact {
+            id,
+            cfg_function,
+            kind,
+            first_node: None,
+            last_node: None,
+            reachable: true,
+            reverse_postorder,
+            stable_key: interner.intern(format!("cfg:block:{}", id.0)),
+            status: CfgStatus::Resolved,
+            precision: CfgPrecision::ExactLowered,
+        }
+    }
+
+    fn checked_error_edge(
+        interner: &crate::core::StableKeyInterner,
+        id: u64,
+        cfg_function: CfgFunctionId,
+        from_block: BasicBlockId,
+        to_block: BasicBlockId,
+        kind: CfgEdgeKind,
+    ) -> CfgEdgeFact {
+        CfgEdgeFact {
+            id: CfgEdgeId(id),
+            cfg_function,
+            view: CfgView::NormalControl,
+            from: CfgNodeId(id),
+            to: CfgNodeId(id + 100),
+            from_block,
+            to_block,
+            kind,
+            label: None,
+            stable_key: interner.intern(format!("cfg:edge:{id}")),
+            status: CfgStatus::Resolved,
+            precision: CfgPrecision::ExactLowered,
+        }
+    }
+
+    fn has_evidence(violation: &PolicyViolation, label: &str, value: &str) -> bool {
+        violation
+            .diagnostic("local/test", "message")
+            .evidence
+            .iter()
+            .any(|evidence| evidence.label == label && evidence.value == value)
     }
 
     fn assert_policy_header(
@@ -3058,7 +5344,52 @@ mod tests {
         db
     }
 
+    /// One call in a synthetic CFG-placed sequence.
+    #[derive(Debug, Clone, Copy)]
+    struct CfgCall<'a> {
+        callee: &'a str,
+        mir_ordinal: u32,
+        cfg_ordinal: u32,
+        /// When false the call keeps its MIR operation but gets no CFG node, so
+        /// the query cannot map it to a basic block.
+        placed: bool,
+    }
+
+    impl<'a> CfgCall<'a> {
+        fn new(callee: &'a str, mir_ordinal: u32, cfg_ordinal: u32) -> Self {
+            Self {
+                callee,
+                mir_ordinal,
+                cfg_ordinal,
+                placed: true,
+            }
+        }
+
+        fn unplaced(mut self) -> Self {
+            self.placed = false;
+            self
+        }
+    }
+
     fn policy_query_db_with_cfg_ordered_call_sequence(callees: &[(&str, u32, u32)]) -> AnalysisDb {
+        let calls = callees
+            .iter()
+            .map(|(callee, mir_ordinal, cfg_ordinal)| {
+                CfgCall::new(callee, *mir_ordinal, *cfg_ordinal)
+            })
+            .collect::<Vec<_>>();
+        policy_query_db_with_cfg_calls(&calls, &[])
+    }
+
+    /// Builds a single-function DB whose calls sit in distinct basic blocks.
+    ///
+    /// `dominators` are `(dominated, dominator)` block pairs; an empty list
+    /// leaves the relation unestablished, which is the shape the fail-open
+    /// fallback used to read as coverage.
+    fn policy_query_db_with_cfg_calls(
+        calls: &[CfgCall<'_>],
+        dominators: &[(u64, u64)],
+    ) -> AnalysisDb {
         let mut db = AnalysisDb::new();
         let interner = db.stable_key_interner();
         let file = db.add_file(
@@ -3076,7 +5407,13 @@ mod tests {
         let mut cfg_nodes = Vec::new();
         let mut cfg_blocks = Vec::new();
 
-        for (index, (callee, mir_ordinal, cfg_ordinal)) in callees.iter().enumerate() {
+        for (index, call) in calls.iter().enumerate() {
+            let CfgCall {
+                callee,
+                mir_ordinal,
+                cfg_ordinal,
+                placed,
+            } = *call;
             let id = index as u64;
             let operation = MirOpId(id);
             let block = BasicBlockId(id + 1);
@@ -3086,41 +5423,68 @@ mod tests {
             let site = call_site(id, file, handler, callee);
             targets.push(call_target(id, site.id, handler, callee_function));
             edges.push(refined_edge(id, site.id, handler, callee_function, callee));
-            operations.push(mir_operation(
-                &interner,
-                operation,
-                body,
-                *mir_ordinal,
-                file,
-            ));
-            cfg_nodes.push(CfgNodeFact {
-                id: cfg_node,
-                cfg_function,
-                body,
-                operation: Some(operation),
-                block,
-                kind: CfgNodeKind::CallSite,
-                span: Some(site.span.clone()),
-                generated: false,
-                operation_ordinal: *cfg_ordinal,
-                stable_key: interner.intern(format!("cfg:node:{id}:{callee}")),
-                status: CfgStatus::Resolved,
-                precision: CfgPrecision::ExactLowered,
-            });
-            cfg_blocks.push(BasicBlockFact {
-                id: block,
-                cfg_function,
-                kind: BasicBlockKind::StraightLine,
-                first_node: Some(cfg_node),
-                last_node: Some(cfg_node),
-                reachable: true,
-                reverse_postorder: *cfg_ordinal,
-                stable_key: interner.intern(format!("cfg:block:{id}:{callee}")),
-                status: CfgStatus::Resolved,
-                precision: CfgPrecision::ExactLowered,
-            });
+            operations.push(mir_operation(&interner, operation, body, mir_ordinal, file));
+            if placed {
+                cfg_nodes.push(CfgNodeFact {
+                    id: cfg_node,
+                    cfg_function,
+                    body,
+                    operation: Some(operation),
+                    block,
+                    kind: CfgNodeKind::CallSite,
+                    span: Some(site.span.clone()),
+                    generated: false,
+                    operation_ordinal: cfg_ordinal,
+                    stable_key: interner.intern(format!("cfg:node:{id}:{callee}")),
+                    status: CfgStatus::Resolved,
+                    precision: CfgPrecision::ExactLowered,
+                });
+                cfg_blocks.push(BasicBlockFact {
+                    id: block,
+                    cfg_function,
+                    kind: BasicBlockKind::StraightLine,
+                    first_node: Some(cfg_node),
+                    last_node: Some(cfg_node),
+                    reachable: true,
+                    reverse_postorder: cfg_ordinal,
+                    stable_key: interner.intern(format!("cfg:block:{id}:{callee}")),
+                    status: CfgStatus::Resolved,
+                    precision: CfgPrecision::ExactLowered,
+                });
+            }
             sites.push(site);
         }
+
+        let dominator_facts = dominators
+            .iter()
+            .enumerate()
+            .map(|(index, (dominated, dominator))| DominatorFact {
+                id: DominatorId(index as u64),
+                cfg_function,
+                view: CfgView::NormalControl,
+                dominator: BasicBlockId(*dominator),
+                dominated: BasicBlockId(*dominated),
+                immediate: true,
+                stable_key: interner.intern(format!("cfg:dom:{dominated}:{dominator}")),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            })
+            .collect::<Vec<_>>();
+        let postdominator_facts = dominators
+            .iter()
+            .enumerate()
+            .map(|(index, (dominated, dominator))| PostDominatorFact {
+                id: PostDominatorId(index as u64),
+                cfg_function,
+                view: CfgView::NormalControl,
+                postdominator: BasicBlockId(*dominator),
+                postdominated: BasicBlockId(*dominated),
+                immediate: true,
+                stable_key: interner.intern(format!("cfg:pdom:{dominated}:{dominator}")),
+                status: CfgStatus::Resolved,
+                precision: CfgPrecision::ExactLowered,
+            })
+            .collect::<Vec<_>>();
 
         db.replace_semantic_mir(MirOutput {
             bodies: vec![mir_body(&interner, file, handler)],
@@ -3147,6 +5511,8 @@ mod tests {
             }],
             nodes: cfg_nodes,
             blocks: cfg_blocks,
+            dominators: dominator_facts,
+            postdominators: postdominator_facts,
             ..CfgOutput::empty()
         })
         .expect("valid CFG facts");
@@ -3255,6 +5621,46 @@ mod tests {
         db.replace_data_flow_facts(DataFlowOutput {
             nodes: data_flow_nodes(file, handler),
             edges,
+            models: vec![source_model()],
+            budgets: Vec::new(),
+        })
+        .expect("valid data-flow facts");
+        db
+    }
+
+    /// One `dangerous` call whose second argument carries the tainted place, so
+    /// a positional sink pattern can be checked against both positions.
+    fn data_flow_policy_db_with_two_sink_arguments() -> AnalysisDb {
+        let mut db = AnalysisDb::new();
+        let file = db.add_file(
+            PathBuf::from("src/main.go"),
+            "src/main.go".to_string(),
+            "package main\nfunc handler() { dangerous(other, input) }\n".to_string(),
+        );
+        let handler = push_test_function(&mut db, file, "handler", 1, false);
+        let dangerous = push_test_function(&mut db, file, "dangerous", 2, false);
+        let site = call_site_with_args(1, file, handler, "dangerous", vec![PlaceId(2), PlaceId(1)]);
+
+        db.replace_call_facts(CallOutput {
+            sites: vec![site.clone()],
+            targets: vec![call_target(1, site.id, handler, dangerous)],
+            unresolved: Vec::new(),
+        })
+        .expect("valid call facts");
+        db.replace_refined_call_facts(RefinedCallOutput {
+            edges: vec![refined_edge(1, site.id, handler, dangerous, "dangerous")],
+        })
+        .expect("valid refined call facts");
+        db.replace_data_flow_facts(DataFlowOutput {
+            nodes: data_flow_nodes(file, handler),
+            edges: vec![data_flow_edge(
+                0,
+                0,
+                1,
+                DataFlowEdgeKind::SourceIntroduction,
+                DataFlowStatus::Present,
+                Vec::new(),
+            )],
             models: vec![source_model()],
             budgets: Vec::new(),
         })
