@@ -9,7 +9,7 @@
     "version": {
       "type": "integer",
       "const": 2,
-      "description": "Report format version; bumped to 2 when the run summary gained provider-outcome and budget rows. Every addition is optional, so a v1 consumer still reads a v2 report."
+      "description": "Report format version. Tracks the polint check report body version so a consumer reading both sees one version vocabulary; this report's own fields are unchanged from version 1."
     },
     "schema": {
       "type": "string",
