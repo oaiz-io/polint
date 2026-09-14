@@ -23,6 +23,9 @@ const AI_FRIENDLY_LATEST_OUTPUT: &str = ".polint/output/latest.json";
 #[command(name = "polint-local-rules")]
 #[command(about = "Run a repo-local native polint rule host.")]
 struct Cli {
+    /// Cap parallel work: a core count, a percentage such as `80%`, or `0` to use every available CPU. Defaults to 80% of available CPUs. `POLINT_JOBS` is the env equivalent; `--jobs` wins when both are set.
+    #[arg(short = 'j', long, value_name = "JOBS", global = true)]
+    jobs: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -158,6 +161,7 @@ pub fn run_cli(rules: Vec<Rule>) -> ExitCode {
 
 fn run(rules: Vec<Rule>) -> Result<u8> {
     let cli = Cli::parse();
+    crate::jobs::install_from_cli_flag(cli.jobs.as_deref())?;
     match cli.command {
         Command::Check(args) => crate::golden_cost::run_with_optional_cost(|| {
             check(std::env::current_dir()?, &args, &rules)

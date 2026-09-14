@@ -235,7 +235,10 @@ per-rule execution telemetry as ai-friendly output. The schema lives in
 the polint repo. Human output uses ANSI colors on a TTY unless `NO_COLOR` is set;
 use `--color never` for plain text. Use `polint check --format sarif` for CI
 upload paths. Use `--fail-on warn`, `error`, or `none` to control the exit
-status. Use `polint check --shortstat` or `polint check --stat` for human scan
+status. Use `--jobs 8` to cap parallel work at 8 CPUs, `--jobs 50%` for a
+fraction of available CPUs, or `--jobs 0` to use every CPU; the default is 80%
+of available CPUs (`POLINT_JOBS` is the env equivalent). Use
+`polint check --shortstat` or `polint check --stat` for human scan
 summaries; these flags do not add prose to JSON or SARIF output.
 
 Use a compact YAML baseline at `.polint/baseline.yaml` when existing findings

@@ -363,6 +363,7 @@ fn run_rule_host_check(
     command
         .env(POLINT_CACHE_DIR_ENV, test_cache.root())
         .env("CARGO_TARGET_DIR", host_cache.rules_target_dir());
+    crate::jobs::apply_to_command(&mut command);
     if let Ok(toolchain) = std::env::var("POLINT_RULES_TOOLCHAIN")
         && !toolchain.is_empty()
     {

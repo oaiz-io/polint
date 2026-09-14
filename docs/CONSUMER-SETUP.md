@@ -155,6 +155,7 @@ internals, or eval/debug schemas.
 | Variable | Effect |
 |----------|--------|
 | `POLINT_CARGO` | Executable used to spawn repo-local rule hosts (default: `cargo` or `CARGO`). |
+| `POLINT_JOBS` | Cap parallel work. Same values as `--jobs`: a core count, a percentage such as `80%`, or `0` to use every available CPU. Unset defaults to 80% of available CPUs. `--jobs` wins when both are set. |
 | `POLINT_CACHE_DIR` | Optional cache root. Defaults to `.polint/cache` relative to the checked repository. |
 | `POLINT_CACHE_STORE` | Absolute path to the machine-global store of compiled rule-host binaries, or `off` / `disabled` / `none` to share nothing. Defaults to the platform user cache directory (`$XDG_CACHE_HOME/polint/store`, `~/Library/Caches/polint/store`, `%LOCALAPPDATA%\polint\store`). |
 | `POLINT_GO_SYMBOLS` | Optional path to a `polint-go-symbols` binary or sidecar source directory. A binary can avoid requiring Go for that sidecar; a source directory still needs Go. |

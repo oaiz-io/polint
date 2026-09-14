@@ -163,6 +163,9 @@ fn read_sources_for_diagnostics(
 )]
 #[command(version)]
 struct Cli {
+    /// Cap parallel work: a core count, a percentage such as `80%`, or `0` to use every available CPU. Defaults to 80% of available CPUs. `POLINT_JOBS` is the env equivalent; `--jobs` wins when both are set.
+    #[arg(short = 'j', long, value_name = "JOBS", global = true)]
+    jobs: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -642,6 +645,7 @@ pub(crate) fn run() -> Result<u8> {
         .ok();
 
     let cli = Cli::parse();
+    crate::jobs::install_from_cli_flag(cli.jobs.as_deref())?;
     match cli.command {
         Command::Init => {
             init_project(std::env::current_dir()?)?;
@@ -4534,6 +4538,7 @@ fn apply_local_rule_host_env(command: &mut ProcessCommand, cache_layout: &CacheL
     command
         .env(POLINT_CACHE_DIR_ENV, cache_layout.root())
         .env("CARGO_TARGET_DIR", cache_layout.rules_target_dir());
+    crate::jobs::apply_to_command(command);
     if let Ok(toolchain) = std::env::var(rules_host_error::POLINT_RULES_TOOLCHAIN)
         && !toolchain.is_empty()
     {
@@ -4759,6 +4764,7 @@ fn run_local_rule_host_inspect(root: &Path, manifest: &Path) -> Result<InspectRu
     command
         .env(POLINT_CACHE_DIR_ENV, cache_layout.root())
         .env("CARGO_TARGET_DIR", cache_layout.rules_target_dir());
+    crate::jobs::apply_to_command(&mut command);
     if let Ok(toolchain) = std::env::var(rules_host_error::POLINT_RULES_TOOLCHAIN)
         && !toolchain.is_empty()
     {

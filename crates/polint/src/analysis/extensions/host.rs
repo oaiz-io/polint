@@ -382,6 +382,7 @@ fn run_std_command(spec: &ExtensionCommandSpec) -> ExtensionCommandOutcome {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    crate::jobs::apply_to_command(&mut command);
     configure_child_process_group(&mut command);
     let mut child = match command.spawn() {
         Ok(child) => child,

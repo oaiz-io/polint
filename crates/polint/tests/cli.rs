@@ -1704,6 +1704,96 @@ fn check_help_guides_ai_agents_to_compact_output() {
 }
 
 #[test]
+fn jobs_flag_is_documented_on_public_help() {
+    let top = polint_help(&["--help"]);
+    let check = polint_help(&["check", "--help"]);
+    for help in [&top, &check] {
+        assert!(help.contains("--jobs"), "{help}");
+        assert!(help.contains("80%"), "{help}");
+        assert!(
+            help.contains("0") && help.to_lowercase().contains("every available cpu"),
+            "{help}"
+        );
+    }
+}
+
+#[test]
+fn jobs_flag_rejects_invalid_values() {
+    let temp = tempfile::tempdir().unwrap();
+    write_file(
+        &temp.path().join(".polint.toml"),
+        "[workspace]\ninclude = [\"src/**\"]\nexclude = []\n",
+    );
+    write_file(&temp.path().join("src/app.ts"), "export const n = 1;\n");
+
+    polint_cmd()
+        .current_dir(temp.path())
+        .args(["check", "--jobs", "max", "--fail-on", "none"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid --jobs value"));
+
+    polint_cmd()
+        .current_dir(temp.path())
+        .args(["check", "--jobs", "101%", "--fail-on", "none"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("percentage"));
+}
+
+#[test]
+fn jobs_env_rejects_invalid_values() {
+    let temp = tempfile::tempdir().unwrap();
+    write_file(
+        &temp.path().join(".polint.toml"),
+        "[workspace]\ninclude = [\"src/**\"]\nexclude = []\n",
+    );
+    write_file(&temp.path().join("src/app.ts"), "export const n = 1;\n");
+
+    polint_cmd()
+        .current_dir(temp.path())
+        .env("POLINT_JOBS", "nope")
+        .args(["check", "--fail-on", "none"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("POLINT_JOBS"));
+}
+
+#[test]
+fn jobs_flag_does_not_change_diagnostics() {
+    let temp = tempfile::tempdir().unwrap();
+    write_file(
+        &temp.path().join(".polint.toml"),
+        "[workspace]\ninclude = [\"src/**\"]\nexclude = []\n",
+    );
+    write_file(&temp.path().join("src/app.ts"), "export const n = 1;\n");
+
+    let run = |jobs: &str| {
+        output_string(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args([
+                    "check",
+                    "--jobs",
+                    jobs,
+                    "--format",
+                    "json",
+                    "--fail-on",
+                    "none",
+                ])
+                .assert()
+                .success(),
+        )
+    };
+
+    let one = run("1");
+    let all = run("0");
+    let percent = run("80%");
+    assert_eq!(one, all);
+    assert_eq!(one, percent);
+}
+
+#[test]
 fn phase33_internals_do_not_leak_from_real_public_cli_surfaces() {
     let temp = tempfile::tempdir().unwrap();
     write_file(
@@ -6832,6 +6922,7 @@ fn add_skill_installs_claude_skill_non_interactively() {
     let contents = fs::read_to_string(skill).unwrap();
     assert!(contents.contains("name: polint"));
     assert!(contents.contains("polint check --format ai-friendly --fail-on none"));
+    assert!(contents.contains("--jobs"));
     assert!(contents.contains(".polint/output/latest.json"));
     assert!(contents.contains("Do not `cat` the whole file"));
     assert!(contents.contains("polint ignores --shortstat"));
