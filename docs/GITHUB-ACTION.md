@@ -22,7 +22,8 @@ jobs:
 
 `--format github` emits GitHub Actions annotations with file, line, column,
 severity, rule id, and message. The command still exits according to polint's
-normal `--fail-on` behavior.
+normal `--fail-on` behavior. Parallel work defaults to 80% of available CPUs;
+pass `--jobs` in `args` (`8`, `50%`, or `0` for every CPU) to change that.
 
 ## Inputs
 

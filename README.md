@@ -153,6 +153,7 @@ Profiles are explicit. `polint check --profile web` runs exactly
 polint check --format ai-friendly --fail-on none   # compact output for agents
 polint check --format sarif                        # for CI upload
 polint check --stat                                # human scan summary
+polint check --jobs 50%                            # cap parallel work; default is 80% of CPUs
 polint baseline create                             # adopt in an existing repo
 polint ignores --stat                              # find suppressions to fix
 polint cache status                                # inspect the local cache

@@ -45,6 +45,7 @@ pub(crate) mod ignores;
 pub(crate) mod internal_core;
 #[allow(dead_code, unreachable_pub, unused_imports)]
 pub(crate) mod ir;
+pub(crate) mod jobs;
 pub(crate) mod measure;
 pub(crate) mod metrics;
 pub(crate) mod module_graph;

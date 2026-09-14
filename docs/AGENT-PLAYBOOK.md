@@ -34,6 +34,7 @@ not rely on stderr prose for pass/fail when JSON is available.
 
 - **One rule pattern**: `--only-rule PATTERN` (same matching as profiles: exact id, `prefix/*`, or `*`).
 - **Cap noise**: `--max-diagnostics N`
+- **CPU cap**: `--jobs N` for a core count, `--jobs 50%` for a fraction of available CPUs, `--jobs 0` to use every CPU. Default is 80% of available CPUs (`POLINT_JOBS` is the env equivalent).
 - **Severity gate**: `--fail-on warn|error|none`
 - **Scan summary**: `--shortstat` for one line, `--stat` for grouped human stats.
 

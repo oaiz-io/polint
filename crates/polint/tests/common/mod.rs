@@ -187,6 +187,7 @@ pub(crate) fn polint_cmd() -> Command {
     // result must not depend on what another checkout left there. The tests
     // that cover sharing point this at a directory of their own.
     command.env("POLINT_CACHE_STORE", "off");
+    command.env_remove("POLINT_JOBS");
     command
 }
 

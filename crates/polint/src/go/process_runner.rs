@@ -45,6 +45,7 @@ pub(crate) fn run_bounded(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    crate::jobs::apply_to_command(&mut command);
     configure_child_process_group(&mut command);
     let mut process_tree = ProcessTreeGuard::before_spawn();
     let mut child = command.spawn().map_err(|error| {
