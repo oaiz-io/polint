@@ -392,7 +392,7 @@ impl Provider for GoSemanticProvider {
             config_digest,
             self.manifest(),
             go_syntax_digest,
-            Some(&sidecar_cache_dir),
+            sidecar_cache_dir.as_deref(),
         );
         ProviderRunResult {
             diagnostics: derivation.diagnostics,
