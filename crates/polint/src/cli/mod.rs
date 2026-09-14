@@ -4704,6 +4704,8 @@ fn local_rule_host_report(
         ));
     }
 
+    forward_rule_host_stderr(&output.stderr);
+
     let stdout = std::str::from_utf8(&output.stdout).with_context(|| {
         format!(
             "local rule host emitted non-UTF-8 output: {}",
@@ -4716,6 +4718,29 @@ fn local_rule_host_report(
             manifest.display()
         )
     })
+}
+
+/// Replays a successful rule host's standard error on this process's own.
+///
+/// A repo with `.polint/rules` runs its whole analysis inside the host, so the
+/// host is where `polint::kernel::stage` timings, sidecar warnings, and every
+/// other `RUST_LOG` line are written. The host's streams are captured because
+/// its standard output is the report this parses and because a failing host
+/// owes the caller its error text, and a captured stream that is only read on
+/// failure is a stream nobody can see: `RUST_LOG=polint::kernel::stage=debug`
+/// produced no output at all for exactly the repos whose runs are slow enough
+/// to need it. Replaying the bytes keeps stdout the report and puts the
+/// diagnostic stream back where the user asked for it. It is written after the
+/// host exits rather than streamed, so the ordering within the host is
+/// preserved and interleaving with this process's own log is not.
+fn forward_rule_host_stderr(stderr: &[u8]) {
+    if stderr.is_empty() {
+        return;
+    }
+    use std::io::Write;
+    let mut sink = std::io::stderr().lock();
+    let _ = sink.write_all(stderr);
+    let _ = sink.flush();
 }
 
 fn merge_rule_execution_rows(rows: &mut Vec<crate::diagnostics::RuleExecutionRow>) {
