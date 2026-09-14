@@ -174,6 +174,7 @@ mod tests {
                 plan,
                 capability_support,
                 scc_closure,
+                go_semantic_prefetch: None,
             },
         );
         let mut host_services = crate::analysis_kernel::host::FacadeHostServices::default();

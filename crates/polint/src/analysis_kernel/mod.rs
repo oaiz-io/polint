@@ -240,6 +240,7 @@ fn run_scheduled_providers<'a>(
             plan: input.plan.clone(),
             capability_support,
             scc_closure: None,
+            go_semantic_prefetch: None,
         },
     );
     let mut host_services = crate::analysis_kernel::host::FacadeHostServices {
@@ -398,6 +399,23 @@ fn run_scheduled_providers<'a>(
                 upstream_digests.insert(provider_id, digest);
             }
         }
+        if provider_id == "polint.go.syntax"
+            && ready
+            && matches!(execution, crate::analysis_api::ProviderExecution::Succeeded)
+            && enabled_providers.contains("polint.go.semantic")
+        {
+            start_go_semantic_prefetch(db, input, &upstream_digests);
+        }
+    }
+
+    // A prefetch nobody read still owns a subprocess. Wait for it rather than
+    // leaving a Go sidecar behind when the run ends.
+    if let Some(prefetch) =
+        crate::analysis_kernel::host::with_provider_host_session_mut(|session| {
+            session.go_semantic_prefetch.take()
+        })
+    {
+        prefetch.abandon();
     }
 
     if let Some(trip) = envelope.trip() {
@@ -411,6 +429,43 @@ fn run_scheduled_providers<'a>(
         tracker,
         provider_telemetry,
     ))
+}
+
+/// Starts the Go semantic sidecar the moment `polint.go.syntax` has fixed its
+/// inputs.
+///
+/// The sidecar reads the working tree, not anything the kernel builds, so every
+/// stage the schedule runs between `polint.go.syntax` and `polint.go.semantic`
+/// is wall time the subprocess could have been using. The digest passed here is
+/// the same one `polint.go.semantic` will ask `ProviderCtx::dependency_digest`
+/// for, so a prefetch keyed on it answers the provider's question or is
+/// discarded; see [`crate::go::semantic::prefetch`].
+fn start_go_semantic_prefetch(
+    db: &AnalysisDb,
+    input: &KernelInput<'_>,
+    upstream_digests: &BTreeMap<&'static str, crate::analysis_api::Digest>,
+) {
+    let upstream = upstream_digests
+        .get("polint.go.syntax")
+        .cloned()
+        .unwrap_or_else(|| {
+            crate::analysis_api::Digest::absent(
+                crate::analysis_api::DigestKind::ProviderOutput,
+                "polint.go.syntax",
+            )
+        });
+    let prefetch = crate::go::semantic::prefetch::GoSemanticPrefetch::start(
+        &input.loaded.root,
+        &input.loaded.config.languages.go,
+        db,
+        input.cache.sidecar_cache_dir(),
+        upstream.to_string(),
+    );
+    if prefetch.is_some() {
+        crate::analysis_kernel::host::with_provider_host_session_mut(|session| {
+            session.go_semantic_prefetch = prefetch;
+        });
+    }
 }
 
 fn provider_failure_outcome(
