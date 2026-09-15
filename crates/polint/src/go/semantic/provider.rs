@@ -18,6 +18,7 @@ use crate::go::semantic::diagnostics::{
     category_for_unsupported_go_version,
 };
 use crate::go::semantic::lower::lower_go_semantic;
+use crate::go::semantic::prefetch::GoSemanticPrefetch;
 use crate::go::semantic::process::GoSemanticProcessError;
 use crate::go::semantic::store::{
     GO_SEMANTIC_STORE_FAMILY, GoSemanticFactsOutput, GoSemanticStore, StructuralDuplicateReport,
@@ -89,6 +90,17 @@ fn phase_counts(output: &crate::go::semantic::protocol::GoSemanticOutput) -> BTr
     counts
 }
 
+/// The two ways this run can reach a sidecar result without starting one here:
+/// the file a previous identical run left behind, and a run this run already
+/// started. Both are optional and neither can change what the sidecar answers.
+#[derive(Default)]
+pub struct GoSemanticSidecarAccess<'a> {
+    /// Where [`GoSemanticClient::run_cached`] reads and writes stored output.
+    pub cache_dir: Option<&'a Path>,
+    /// A run started before this provider was reached.
+    pub prefetch: Option<GoSemanticPrefetch>,
+}
+
 pub fn derive_go_semantic_with_cache_stats(
     db: &mut dyn FactDatabase,
     root: &Path,
@@ -96,7 +108,15 @@ pub fn derive_go_semantic_with_cache_stats(
     config_digest: &str,
     manifest: &ProviderManifest,
     go_syntax_output_digest: Digest,
+    sidecar: GoSemanticSidecarAccess<'_>,
 ) -> GoSemanticProviderRunOutput {
+    let GoSemanticSidecarAccess {
+        cache_dir,
+        prefetch,
+    } = sidecar;
+    let upstream_str = go_syntax_output_digest.to_string();
+    let cache_dir = cache_dir.map(Path::to_path_buf);
+    let root_owned = root.to_path_buf();
     derive_go_semantic_with_runner(
         db,
         root,
@@ -104,7 +124,22 @@ pub fn derive_go_semantic_with_cache_stats(
         config_digest,
         manifest,
         go_syntax_output_digest,
-        |config| GoSemanticClient::new(root.to_path_buf(), config).run(config),
+        move |config| {
+            // A prefetch is only ever an already-started copy of the run below,
+            // and only for the config it was started with; anything else falls
+            // through to the run this provider would always have made.
+            if let Some(prefetch) = prefetch
+                && let Some(prefetched) = prefetch.take_for(config)
+            {
+                return prefetched;
+            }
+            match cache_dir.as_deref() {
+                Some(dir) => {
+                    GoSemanticClient::new(root_owned, config).run_cached(config, dir, &upstream_str)
+                }
+                None => GoSemanticClient::new(root_owned, config).run(config),
+            }
+        },
     )
 }
 

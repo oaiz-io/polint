@@ -174,6 +174,18 @@ impl Cache {
         self.root.join("semantic-store")
     }
 
+    pub(crate) fn sidecar_cache_dir(&self) -> Option<PathBuf> {
+        if self.root.as_os_str().is_empty() || !self.enabled {
+            return None;
+        }
+        if self.root.file_name().and_then(|name| name.to_str()) == Some("analysis")
+            && let Some(parent) = self.root.parent()
+        {
+            return Some(parent.join("sidecar"));
+        }
+        Some(self.root.join("sidecar"))
+    }
+
     pub(crate) fn layer_cache_dir(&self) -> PathBuf {
         if self.root.file_name().and_then(|name| name.to_str()) == Some("analysis")
             && let Some(parent) = self.root.parent()

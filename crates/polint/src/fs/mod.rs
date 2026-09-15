@@ -5,9 +5,10 @@ use crate::path_context::PathContextIndex;
 use crate::repo_fs::{self, RepoFileReadError};
 use anyhow::{Result, anyhow};
 use globset::GlobSet;
-use ignore::WalkBuilder;
+use ignore::{WalkBuilder, WalkState};
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
@@ -41,8 +42,14 @@ pub(crate) fn discover_files_scoped(
 ) -> Result<Vec<DiscoveredFile>> {
     let include = config.include_set()?;
     let exclude = config.exclude_set()?;
-    let mut files = Vec::new();
 
+    // A repo's tree is the first thing every run touches, and on a large
+    // checkout the directory walk dominates the time before any analysis
+    // starts. Walking it in parallel is pure wall-clock: the traversal order
+    // it gives up is already discarded by the sort below, so the discovered
+    // set — and everything downstream of it — is unchanged. The thread count
+    // is the resolved job budget, so the walk stays inside the same CPU cap
+    // as every other parallel stage.
     let walker = WalkBuilder::new(&config.root)
         .hidden(false)
         .ignore(config.respect_gitignore)
@@ -50,37 +57,83 @@ pub(crate) fn discover_files_scoped(
         .git_exclude(config.respect_gitignore)
         .require_git(false)
         .parents(config.respect_gitignore)
-        .build();
+        .threads(crate::jobs::resolved_job_count())
+        .build_parallel();
 
-    for entry in walker {
-        let entry = entry?;
-        if !entry
-            .file_type()
-            .is_some_and(|file_type| file_type.is_file())
-        {
-            continue;
-        }
-        let path = entry.path();
-        if Language::from_path(path) == Language::Unknown {
-            continue;
-        }
-        let relative = relative_path(&config.root, path)?;
-        if !should_include_relative_path(&include, &exclude, &relative) {
-            continue;
-        }
-        if let Some(scope) = scope
-            && !matches_any(scope, &relative)
-        {
-            continue;
-        }
-        files.push(DiscoveredFile {
-            path: path.to_path_buf(),
-            relative_path: relative,
-        });
+    let files = Mutex::new(Vec::new());
+    let failure = Mutex::new(None::<String>);
+
+    walker.run(|| {
+        let include = &include;
+        let exclude = &exclude;
+        let files = &files;
+        let failure = &failure;
+        let root = config.root.as_path();
+
+        Box::new(move |entry| {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    record_walk_failure(failure, error.to_string());
+                    return WalkState::Quit;
+                }
+            };
+            if !entry
+                .file_type()
+                .is_some_and(|file_type| file_type.is_file())
+            {
+                return WalkState::Continue;
+            }
+            let path = entry.path();
+            if Language::from_path(path) == Language::Unknown {
+                return WalkState::Continue;
+            }
+            let relative = match relative_path(root, path) {
+                Ok(relative) => relative,
+                Err(error) => {
+                    record_walk_failure(failure, error.to_string());
+                    return WalkState::Quit;
+                }
+            };
+            if !should_include_relative_path(include, exclude, &relative) {
+                return WalkState::Continue;
+            }
+            if let Some(scope) = scope
+                && !matches_any(scope, &relative)
+            {
+                return WalkState::Continue;
+            }
+            // Only entries that survive every filter reach the lock, so the
+            // shared vector is touched once per discovered source file rather
+            // than once per directory entry.
+            files.lock().expect(POISONED).push(DiscoveredFile {
+                path: path.to_path_buf(),
+                relative_path: relative,
+            });
+            WalkState::Continue
+        })
+    });
+
+    if let Some(message) = failure.into_inner().expect(POISONED) {
+        return Err(anyhow!(message));
     }
 
+    let mut files = files.into_inner().expect(POISONED);
     files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     Ok(files)
+}
+
+const POISONED: &str = "file discovery worker panicked";
+
+/// Keeps the lexicographically smallest failure so a parallel walk reports the
+/// same message on every run; the serial walk reported whichever error it
+/// reached first, which parallel traversal no longer defines.
+fn record_walk_failure(slot: &Mutex<Option<String>>, message: String) {
+    let mut slot = slot.lock().expect(POISONED);
+    match slot.as_ref() {
+        Some(existing) if *existing <= message => {}
+        _ => *slot = Some(message),
+    }
 }
 
 /// Fine-grained timings for [`load_analysis_files_with_timings`] (`polint::_bench::fs` / `polint-bench`).

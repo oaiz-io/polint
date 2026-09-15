@@ -4,9 +4,11 @@ use std::time::Duration;
 use crate::go::lifecycle::{self, GoAnalysisConfig};
 use crate::go::process_runner::{GoProcessError, run_bounded};
 use crate::go::semantic::budget::semantic_timeout;
+use crate::go::semantic::cache_key::go_semantic_sidecar_cache_key;
 use crate::go::semantic::diagnostics::GO_SIDECAR_TIMEOUT;
 use crate::go::semantic::process::{
-    GoSemanticProcessError, command_for_frontend, frontend_digest, resolve_go_semantic_frontend,
+    GoSemanticProcessError, command_for_frontend, frontend_digest, local_go_toolchain_version,
+    resolve_go_semantic_frontend,
 };
 use crate::go::semantic::protocol::{GoSemanticOutput, GoSemanticProtocolError, decode_ndjson};
 
@@ -82,6 +84,58 @@ impl GoSemanticClient {
             timeout_ms = self.timeout.as_millis() as u64,
             "go semantic sidecar returned"
         );
+        let output = decode_ndjson(&stdout).map_err(GoSemanticClientError::from)?;
+        Ok(GoSemanticClientRun {
+            output,
+            frontend_digest: digest,
+        })
+    }
+
+    pub fn run_cached(
+        &self,
+        config: &GoAnalysisConfig,
+        cache_dir: &Path,
+        upstream_digest: &str,
+    ) -> Result<GoSemanticClientRun, GoSemanticClientError> {
+        let frontend = resolve_go_semantic_frontend()?;
+        let digest = frontend_digest(&frontend)?;
+        let go_version = local_go_toolchain_version().unwrap_or_default();
+        let cache_key =
+            go_semantic_sidecar_cache_key(&digest, &go_version, upstream_digest, config);
+        let cache_path = cache_dir.join(format!("{cache_key}.ndjson"));
+
+        if let Ok(cached_bytes) = std::fs::read(&cache_path) {
+            match decode_ndjson(&cached_bytes) {
+                Ok(output) => {
+                    tracing::info!(
+                        target: "polint::kernel::stage",
+                        provider = "polint.go.semantic",
+                        "sidecar cache hit"
+                    );
+                    return Ok(GoSemanticClientRun {
+                        output,
+                        frontend_digest: digest,
+                    });
+                }
+                Err(_) => {
+                    let _ = std::fs::remove_file(&cache_path);
+                }
+            }
+        }
+
+        let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
+        append_request_args(&mut command, &self.root, config);
+        let stdout = run_with_timeout(command, self.timeout, &self.root)?;
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            provider = "polint.go.semantic",
+            timeout_ms = self.timeout.as_millis() as u64,
+            "go semantic sidecar returned"
+        );
+
+        let _ = std::fs::create_dir_all(cache_dir);
+        let _ = std::fs::write(&cache_path, &stdout);
+
         let output = decode_ndjson(&stdout).map_err(GoSemanticClientError::from)?;
         Ok(GoSemanticClientRun {
             output,

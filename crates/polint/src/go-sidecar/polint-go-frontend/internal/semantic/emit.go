@@ -208,8 +208,22 @@ func Emit(config Config) ([]Row, error) {
 	workload := countWorkload(pkgs)
 	timer.finish("packages_load", workload)
 
-	prog, ssaPkgs := ssautil.AllPackages(pkgs, ssa.SanityCheckFunctions|ssa.InstantiateGenerics)
-	prog.Build()
+	hasMain := false
+	for _, pkg := range pkgs {
+		if pkg.Name == "main" {
+			hasMain = true
+			break
+		}
+	}
+	var prog *ssa.Program
+	var ssaPkgs []*ssa.Package
+	if hasMain {
+		prog, ssaPkgs = ssautil.AllPackages(pkgs, ssa.InstantiateGenerics)
+		prog.Build()
+	} else {
+		prog, ssaPkgs = ssautil.Packages(pkgs, ssa.InstantiateGenerics)
+		prog.Build()
+	}
 	sort.Slice(ssaPkgs, func(i, j int) bool {
 		return packageID(ssaPkgs[i]) < packageID(ssaPkgs[j])
 	})

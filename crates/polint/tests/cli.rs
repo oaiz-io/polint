@@ -9537,6 +9537,42 @@ fn check_with_local_rule_host_respects_positional_paths() {
 }
 
 #[test]
+fn check_with_local_rule_host_forwards_host_stage_log_to_stderr() {
+    // A repo with `.polint/rules` runs its analysis inside the rule host, so the
+    // host is the only process that writes `polint::kernel::stage` rows. They are
+    // the documented way to see where a slow run spends its time, and they must
+    // reach the caller rather than dying with the captured child stream.
+    let example_dir = repo_root().join("examples/config-denied-literal");
+
+    let output = polint_cmd()
+        .current_dir(&example_dir)
+        .env("RUST_LOG", "polint::kernel::stage=info")
+        .args([
+            "check",
+            "query.ts",
+            "--format",
+            "json",
+            "--no-cache",
+            "--fail-on",
+            "none",
+        ])
+        .output()
+        .expect("run the local rule host with stage logging on");
+
+    assert!(output.status.success(), "{output:#?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("stage done"),
+        "the rule host's stage rows should reach the caller's stderr: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.trim_start().starts_with('{'),
+        "stdout stays the report: {stdout}"
+    );
+}
+
+#[test]
 fn check_with_local_rule_host_can_emit_github_annotations() {
     let example_dir = repo_root().join("examples/config-denied-literal");
 

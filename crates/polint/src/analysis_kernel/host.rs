@@ -36,6 +36,9 @@ pub(crate) struct ProviderHostSession {
     pub(crate) plan: AnalysisPlan,
     pub(crate) capability_support: CapabilitySupportView,
     pub(crate) scc_closure: Option<SccClosureProviderOutput>,
+    /// A Go semantic sidecar the schedule started before `polint.go.semantic`
+    /// was reached, handed to that provider and to nobody else.
+    pub(crate) go_semantic_prefetch: Option<crate::go::semantic::prefetch::GoSemanticPrefetch>,
 }
 
 /// Installs a provider host session for the current thread and restores the previous
@@ -391,6 +394,7 @@ mod tests {
             capability_support: plan.support_view().clone(),
             plan,
             scc_closure: None,
+            go_semantic_prefetch: None,
         }
     }
 

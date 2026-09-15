@@ -11,6 +11,7 @@ pub mod client;
 pub mod diagnostics;
 pub mod facts;
 pub mod lower;
+pub(crate) mod prefetch;
 pub mod process;
 pub mod protocol;
 pub mod provider;
