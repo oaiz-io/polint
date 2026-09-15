@@ -200,6 +200,80 @@ mod tests {
     }
 
     #[test]
+    fn sidecar_cache_key_invalidates_on_every_input_that_changes_the_ndjson() {
+        // This key names a file on disk (`{key}.ndjson`) holding a whole sidecar
+        // run. A stale hit is silent: unlike a truncated file, which fails to
+        // decode and is deleted, a complete file for different inputs replays
+        // cleanly and answers a question nobody asked. Every input the sidecar
+        // reads must therefore reach the key.
+        let sidecar = "sidecar-a";
+        let go_version = "go1.25.0";
+        let upstream = "go-syntax-a";
+        let base = config();
+        let key = |sidecar: &str, go: &str, upstream: &str, config: &GoAnalysisConfig| {
+            go_semantic_sidecar_cache_key(sidecar, go, upstream, config)
+        };
+        let baseline = key(sidecar, go_version, upstream, &base);
+
+        // A rebuilt sidecar: `sidecar_digest` covers the frontend's *.go plus its
+        // go.mod/go.sum, so an x/tools bump lands here rather than needing its own
+        // key part.
+        assert_ne!(baseline, key("sidecar-b", go_version, upstream, &base));
+        assert_ne!(baseline, key(sidecar, "go1.26.0", upstream, &base));
+        // Different sources under the same config.
+        assert_ne!(baseline, key(sidecar, go_version, "go-syntax-b", &base));
+
+        for changed in [
+            GoAnalysisConfig {
+                package_patterns: vec!["./internal/...".to_string()],
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                module_roots: vec!["core".to_string()],
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                build_tags: vec!["integration".to_string()],
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                include_tests: false,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                offline: true,
+                ..base
+            },
+        ] {
+            assert_ne!(
+                baseline,
+                key(sidecar, go_version, upstream, &changed),
+                "sidecar cache key must change with the lifecycle config the sidecar was asked for"
+            );
+        }
+    }
+
+    #[test]
+    fn sidecar_cache_key_is_stable_for_identical_inputs() {
+        // The other half of the contract: warm runs must actually hit, so equal
+        // inputs may never produce two different file names.
+        let first = go_semantic_sidecar_cache_key("sidecar-a", "go1.25.0", "up-a", &config());
+        let second = go_semantic_sidecar_cache_key("sidecar-a", "go1.25.0", "up-a", &config());
+        assert_eq!(first, second);
+
+        // `files_without_module_root` is reporting state, not a sidecar input, so
+        // it must not split the cache.
+        let unrelated = GoAnalysisConfig {
+            files_without_module_root: vec!["ignored.go".to_string()],
+            ..config()
+        };
+        assert_eq!(
+            first,
+            go_semantic_sidecar_cache_key("sidecar-a", "go1.25.0", "up-a", &unrelated)
+        );
+    }
+
+    #[test]
     fn input_digest_preserves_hit_for_unrelated_config() {
         let base = inputs();
         let same_relevant_inputs = GoSemanticCacheInputs {
