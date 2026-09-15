@@ -13,7 +13,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "symbols" {
-		fmt.Fprintln(os.Stderr, "usage: polint-go-symbols symbols --root <path> --module-roots <comma-list> --patterns <comma-list> --tests <bool> --build-tags <comma-list> --json")
+		fmt.Fprintln(os.Stderr, "usage: polint-go-symbols symbols --root <path> --module-roots <comma-list> --patterns <comma-list> [--rooted-patterns] --tests <bool> --build-tags <comma-list> --json")
 		os.Exit(2)
 	}
 
@@ -23,6 +23,7 @@ func main() {
 	patterns := flags.String("patterns", "./...", "comma-separated package patterns")
 	tests := flags.String("tests", "true", "include test package variants")
 	buildTags := flags.String("build-tags", "", "comma-separated Go build tags")
+	rootedPatterns := flags.Bool("rooted-patterns", false, "treat --patterns as already rooted at --root instead of relative to each module root")
 	jsonOutput := flags.Bool("json", false, "emit JSON")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		fmt.Fprintf(os.Stderr, "parse flags: %v\n", err)
@@ -42,8 +43,9 @@ func main() {
 		Root:         *root,
 		ModuleRoots:  splitComma(*moduleRoots),
 		Patterns:     splitComma(*patterns),
-		IncludeTests: includeTests,
-		BuildTags:    splitComma(*buildTags),
+		IncludeTests:   includeTests,
+		BuildTags:      splitComma(*buildTags),
+		RootedPatterns: *rootedPatterns,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "emit Go symbols: %v\n", err)

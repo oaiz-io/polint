@@ -25,6 +25,17 @@ pub struct GoAnalysisConfig {
     pub offline: bool,
     /// `[languages.go] semantic_timeout_ms`, when configured.
     pub semantic_timeout_ms: Option<u64>,
+    /// `[languages.go] rta_edges`. The analysis kernel never reads `rta_edge`
+    /// rows, and `rta.Analyze` runs once per main package, so this is off by
+    /// default. The polint-eval external-callgraph comparison turns it on.
+    pub emit_rta_edges: bool,
+    /// Package patterns for the symbol sidecar, already rooted at the
+    /// repository root. Every fact family the symbol graph emits is anchored to
+    /// a file, and `validate_paths` deletes each row whose file is out of scope,
+    /// so loading packages that hold no in-scope file cannot change the kept
+    /// output. Derived from the in-scope files unless `package_patterns` is set.
+    pub symbol_rooted_patterns: Vec<String>,
+
     pub files_without_module_root: Vec<String>,
 }
 
@@ -80,19 +91,36 @@ impl GoAnalysisConfig {
             "package_patterns",
             &["./..."],
         ))?;
+        let symbol_rooted_patterns = if settings.contains_key("package_patterns") {
+            rooted_package_patterns(&module_roots, &package_patterns)
+        } else {
+            scoped_rooted_patterns(&module_roots, files)
+        };
+        let symbol_include_tests = match settings.get("include_tests").and_then(Value::as_bool) {
+            Some(configured) => configured,
+            None => files
+                .iter()
+                .any(|file| file.relative_path.ends_with("_test.go")),
+        };
         Ok(Self {
             module_roots,
             package_patterns,
+            symbol_rooted_patterns,
             build_tags: string_or_array_setting(settings, "build_tags", &[]),
-            include_tests: settings
-                .get("include_tests")
-                .and_then(Value::as_bool)
-                .unwrap_or(true),
+            // A scan that discovered no `_test.go` file cannot report a finding
+            // in one, and every test-only type it would load is absent from the
+            // production program the scan was asked about. Loading test variants
+            // anyway triples the package count on this shape of repository.
+            include_tests: symbol_include_tests,
             offline: settings
                 .get("offline")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             semantic_timeout_ms: positive_integer_setting(settings, "semantic_timeout_ms"),
+            emit_rta_edges: settings
+                .get("rta_edges")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             files_without_module_root,
         })
     }
@@ -348,6 +376,40 @@ fn rooted_package_patterns(module_roots: &[String], patterns: &[String]) -> Vec<
         }
     }
     rooted
+}
+
+/// The directories of the in-scope Go files, rooted at the repository root.
+///
+/// `go list` and `packages.Load` take directories, so one entry per directory
+/// that actually holds a scanned file is the smallest sound request. Returns the
+/// rooted `./...` patterns when no in-scope file sits under a module root, so an
+/// empty or non-Go scan behaves exactly as before.
+fn scoped_rooted_patterns(module_roots: &[String], files: &[&SourceFile]) -> Vec<String> {
+    let mut directories = BTreeSet::new();
+    for file in files {
+        let path = file.relative_path.as_str();
+        let directory = match path.rfind('/') {
+            Some(index) => &path[..index],
+            None => ".",
+        };
+        let under_module_root = module_roots.iter().any(|module_root| {
+            module_root == "."
+                || directory == module_root
+                || directory.starts_with(&format!("{module_root}/"))
+        });
+        if !under_module_root {
+            continue;
+        }
+        directories.insert(if directory == "." {
+            ".".to_string()
+        } else {
+            format!("./{directory}")
+        });
+    }
+    if directories.is_empty() {
+        return rooted_package_patterns(module_roots, &["./...".to_string()]);
+    }
+    directories.into_iter().collect()
 }
 
 fn rooted_package_pattern(module_root: &str, pattern: &str) -> String {

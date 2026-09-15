@@ -32,6 +32,14 @@ type Config struct {
 	Patterns     []string
 	IncludeTests bool
 	BuildTags    []string
+	// EmitRTAEdges turns on the `rta_edge` rows. The analysis kernel does not
+	// read them: `AnalysisDb::go_semantic_rta_edges` is `#[cfg(test)]`, and
+	// polint's own RTA runs off `method_set`, `address_taken`,
+	// `instantiated_type` and `dynamic_dispatch`, which `emitSSAPackage`
+	// produces. Only the polint-eval external-callgraph comparison reads these
+	// rows, and `rta.Analyze` runs once per main package, so on a repository
+	// with 8 binaries it is 76% of the run for output nobody consumes.
+	EmitRTAEdges bool
 }
 
 type Row map[string]any
@@ -252,7 +260,9 @@ func Emit(config Config) ([]Row, error) {
 		e.emitSSAPackage(pkg)
 	}
 	e.addPhase(timer, "emit_rows", workload)
-	e.emitRTAEdges(ssaPkgs)
+	if config.EmitRTAEdges {
+		e.emitRTAEdges(ssaPkgs)
+	}
 	e.addPhase(timer, "rta_analyze", workload)
 	e.add(Row{
 		"kind":              "session_end",

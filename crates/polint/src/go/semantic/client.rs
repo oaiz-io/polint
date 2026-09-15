@@ -160,8 +160,11 @@ fn append_request_args(
         .arg("--tests")
         .arg(config.include_tests.to_string())
         .arg("--build-tags")
-        .arg(config.build_tags.join(","))
-        .arg("--ndjson");
+        .arg(config.build_tags.join(","));
+    if config.emit_rta_edges {
+        command.arg("--rta-edges");
+    }
+    command.arg("--ndjson");
     lifecycle::apply_go_offline_env(command, config.offline);
 }
 

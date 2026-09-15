@@ -65,6 +65,7 @@ pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
     let mut parts = vec![
         format!("include_tests={}", config.include_tests),
         format!("offline={}", config.offline),
+        format!("rta_edges={}", config.emit_rta_edges),
         format!(
             "semantic_timeout_ms={}",
             crate::go::semantic::budget::semantic_timeout(config.semantic_timeout_ms).as_millis()
@@ -308,6 +309,8 @@ mod tests {
             include_tests: true,
             offline: false,
             semantic_timeout_ms: None,
+            emit_rta_edges: false,
+            symbol_rooted_patterns: vec!["./...".to_string()],
             files_without_module_root: Vec::new(),
         }
     }

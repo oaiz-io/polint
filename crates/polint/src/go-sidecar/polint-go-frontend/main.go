@@ -13,7 +13,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "semantic" {
-		fmt.Fprintln(os.Stderr, "usage: polint-go-frontend semantic --root <path> --module-roots <comma-list> --patterns <comma-list> --tests <bool> --build-tags <comma-list> --ndjson")
+		fmt.Fprintln(os.Stderr, "usage: polint-go-frontend semantic --root <path> --module-roots <comma-list> --patterns <comma-list> --tests <bool> --build-tags <comma-list> [--rta-edges] --ndjson")
 		os.Exit(2)
 	}
 
@@ -23,6 +23,7 @@ func main() {
 	patterns := flags.String("patterns", "./...", "comma-separated package patterns")
 	tests := flags.String("tests", "true", "include test package variants")
 	buildTags := flags.String("build-tags", "", "comma-separated Go build tags")
+	rtaEdges := flags.Bool("rta-edges", false, "emit rta_edge rows (only the polint-eval callgraph comparison reads them)")
 	ndjson := flags.Bool("ndjson", false, "emit newline-delimited JSON")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		fmt.Fprintf(os.Stderr, "parse flags: %v\n", err)
@@ -44,6 +45,7 @@ func main() {
 		Patterns:     splitComma(*patterns),
 		IncludeTests: includeTests,
 		BuildTags:    splitComma(*buildTags),
+		EmitRTAEdges: *rtaEdges,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "emit Go semantics: %v\n", err)
