@@ -149,7 +149,7 @@ func main() {
 }
 `,
 	})
-	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}, IncludeTests: false})
+	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}, IncludeTests: false, EmitRTAEdges: true})
 	if err != nil {
 		t.Fatalf("Emit failed: %v", err)
 	}

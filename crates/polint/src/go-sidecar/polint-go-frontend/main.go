@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,16 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid --tests value %q: %v\n", *tests, err)
 		os.Exit(2)
+	}
+
+	if path := os.Getenv("POLINT_CPUPROFILE"); path != "" {
+		f, ferr := os.Create(path)
+		if ferr != nil {
+			fmt.Fprintf(os.Stderr, "cpuprofile: %v\n", ferr)
+			os.Exit(1)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	rows, err := semantic.Emit(semantic.Config{

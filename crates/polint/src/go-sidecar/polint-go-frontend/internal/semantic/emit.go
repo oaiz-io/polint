@@ -256,8 +256,41 @@ func Emit(config Config) ([]Row, error) {
 		e.emitPackage(pkg)
 		e.emitPackageErrors(pkg)
 	}
+	// `prog.MethodValue` inside the instantiation walk BUILDS a wrapper, and a built
+	// wrapper can register new `MakeInterface` types, so the program's runtime type set
+	// grows while this loop runs. The per-package version hid that behind 349 fresh
+	// `RuntimeTypes()` calls. Harvest, emit, then re-harvest until the set stops
+	// growing: the emitter's keep-first guards make a repeat pass idempotent, so only
+	// genuinely new instantiations produce rows.
+	//
+	// This also removes an order dependency the per-package version had. There, an
+	// instantiation that only became reachable while a LATER package was emitted was
+	// never seen by an EARLIER package, so the output depended on where a package sat
+	// in the iteration. The fixed point does not.
+	harvested := make(map[string]bool)
+	instantiations := harvestInstantiations(prog, harvested)
 	for _, pkg := range ssaPkgs {
-		e.emitSSAPackage(pkg)
+		// ssautil can hand back a nil package, and a package whose type info failed
+		// carries a nil Pkg. emitSSAPackage guards both; looking the bucket up first
+		// must guard them too.
+		if pkg == nil || pkg.Pkg == nil {
+			continue
+		}
+		e.emitSSAPackage(pkg, instantiations[pkg.Pkg.Path()])
+	}
+	// Each pass marks the keys it consumed, so a pass only ever sees instantiations no
+	// earlier pass did. The runtime type set is finite, so this terminates.
+	for {
+		instantiations = harvestInstantiations(prog, harvested)
+		if len(instantiations) == 0 {
+			break
+		}
+		for _, pkg := range ssaPkgs {
+			if pkg == nil || pkg.Pkg == nil {
+				continue
+			}
+			e.emitInstantiatedMethodSets(pkg, instantiations[pkg.Pkg.Path()])
+		}
 	}
 	e.addPhase(timer, "emit_rows", workload)
 	if config.EmitRTAEdges {
@@ -330,7 +363,7 @@ func (e *emitter) emitPackageErrors(pkg *packages.Package) {
 	}
 }
 
-func (e *emitter) emitSSAPackage(pkg *ssa.Package) {
+func (e *emitter) emitSSAPackage(pkg *ssa.Package, instantiations []instantiation) {
 	if pkg == nil || pkg.Pkg == nil {
 		return
 	}
@@ -342,7 +375,7 @@ func (e *emitter) emitSSAPackage(pkg *ssa.Package) {
 		e.emitAddressTaken(pkg, fn)
 	}
 	e.emitMethodSets(pkg)
-	e.emitInstantiatedMethodSets(pkg)
+	e.emitInstantiatedMethodSets(pkg, instantiations)
 }
 
 func (e *emitter) emitRTAEdges(pkgs []*ssa.Package) {
@@ -538,7 +571,7 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				row["reason"] = "interface or func-value dynamic dispatch"
 				dynamic = true
 			}
-			stableParts := []string{packageID(pkg), fn.String(), fmt.Sprint(call.Pos())}
+			stableParts := []string{packageID(pkg), fn.String(), e.positionKey(call.Pos())}
 			if syntax := callSyntax(fn, call); syntax != nil {
 				if pos := e.positionSpan(syntax.Pos(), syntax.End()); pos != nil {
 					file := posFile(e.fset, syntax.Pos(), e.root)
@@ -862,30 +895,42 @@ func (e *emitter) emitMethodSets(pkg *ssa.Package) {
 // stable source identity are skipped rather than fabricated (D-15). De-duplicated
 // by the instantiated type identity so a type instantiated in two functions is harvested
 // once.
-func (e *emitter) emitInstantiatedMethodSets(pkg *ssa.Package) {
-	prog := pkg.Prog
+// instantiation is one generic instantiation harvested from the program's runtime
+// type set, paired with the import path of the package that declares it.
+type instantiation struct {
+	key   string
+	named *types.Named
+}
+
+// harvestInstantiations walks `prog.RuntimeTypes()` ONCE and buckets every generic
+// instantiation by its declaring package.
+//
+// `RuntimeTypes` is program-global and expands each type's method set through
+// `typesinternal.ForEachElement`, so it costs O(program). Calling it per package and
+// then keeping only the instantiations that package declares made the emit phase
+// O(packages x program): on a 349-package module it was 35% of the sidecar's CPU to
+// recompute the same program-wide set 349 times and discard ~99.7% of each result.
+//
+// The buckets are keyed by declaring package path, which is the same predicate the
+// per-package loop applied, so each package still sees exactly the instantiations it
+// saw before. Each bucket is sorted by identity because `RuntimeTypes` order is not
+// specified and the emitted rows must be deterministic.
+func harvestInstantiations(prog *ssa.Program, seen map[string]bool) map[string][]instantiation {
 	if prog == nil {
-		return
+		return nil
 	}
-	seen := make(map[string]bool)
-	// RuntimeTypes() order is not specified; sort the harvested identities so the emitted
-	// rows are deterministic regardless of x/tools' internal iteration order.
-	type instantiation struct {
-		key   string
-		named *types.Named
-	}
-	var instantiations []instantiation
+	buckets := make(map[string][]instantiation)
 	for _, runtimeType := range prog.RuntimeTypes() {
 		named, ok := runtimeType.(*types.Named)
 		if !ok {
 			continue
 		}
-		// Only generic INSTANTIATIONS (type args present), declared in THIS package, are
-		// harvested here. A non-generic named type is already covered by emitMethodSets.
+		// Only generic INSTANTIATIONS (type args present) are harvested here. A
+		// non-generic named type is already covered by emitMethodSets.
 		if named.TypeArgs() == nil || named.TypeArgs().Len() == 0 {
 			continue
 		}
-		if named.Obj() == nil || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != pkg.Pkg.Path() {
+		if named.Obj() == nil || named.Obj().Pkg() == nil {
 			continue
 		}
 		key := named.String()
@@ -893,9 +938,20 @@ func (e *emitter) emitInstantiatedMethodSets(pkg *ssa.Package) {
 			continue
 		}
 		seen[key] = true
-		instantiations = append(instantiations, instantiation{key: key, named: named})
+		path := named.Obj().Pkg().Path()
+		buckets[path] = append(buckets[path], instantiation{key: key, named: named})
 	}
-	sort.Slice(instantiations, func(i, j int) bool { return instantiations[i].key < instantiations[j].key })
+	for _, bucket := range buckets {
+		sort.Slice(bucket, func(i, j int) bool { return bucket[i].key < bucket[j].key })
+	}
+	return buckets
+}
+
+func (e *emitter) emitInstantiatedMethodSets(pkg *ssa.Package, instantiations []instantiation) {
+	prog := pkg.Prog
+	if prog == nil {
+		return
+	}
 
 	for _, inst := range instantiations {
 		methodSet := prog.MethodSets.MethodSet(types.NewPointer(inst.named))
@@ -1061,6 +1117,25 @@ func (e *emitter) positionSpan(start token.Pos, end token.Pos) *Span {
 		EndLine:     endPos.Line,
 		EndColumn:   endPos.Column,
 	}
+}
+
+// positionKey identifies a source position by file and by the byte offset INSIDE
+// that file.
+//
+// `token.Pos` is an offset into the whole FileSet, so its value depends on the order
+// `packages.Load` added files to the shared FileSet. That load is concurrent, so the
+// order changes between runs: two runs of the same binary over the same tree produced
+// stable keys that differ for ~1.5% of callsites. A key that is not stable defeats its
+// own purpose — the semantic output digest changes on every run, so every layer keyed
+// on it misses even when nothing in the repository changed.
+//
+// `Position.Offset` is relative to its own file and does not move.
+func (e *emitter) positionKey(pos token.Pos) string {
+	if !pos.IsValid() {
+		return "0"
+	}
+	position := e.fset.Position(pos)
+	return e.relative(position.Filename) + ":" + strconv.Itoa(position.Offset)
 }
 
 func posFile(fset *token.FileSet, pos token.Pos, root string) string {
