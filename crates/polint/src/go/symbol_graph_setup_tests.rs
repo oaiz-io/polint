@@ -120,6 +120,7 @@ include_tests = false
                     "./libs/platform/cmd/...".to_string(),
                     "./libs/platform/pkg/...".to_string(),
                 ],
+                scope_files: Vec::new(),
                 files_without_module_root: Vec::new(),
             }
         );

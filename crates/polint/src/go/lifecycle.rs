@@ -35,6 +35,12 @@ pub struct GoAnalysisConfig {
     /// so loading packages that hold no in-scope file cannot change the kept
     /// output. Derived from the in-scope files unless `package_patterns` is set.
     pub symbol_rooted_patterns: Vec<String>,
+    /// The repository-relative Go files this scan discovered, sorted.
+    ///
+    /// The semantic sidecar uses it to skip emitting rows the kernel would drop on
+    /// receipt. It is not a scope for the LOAD: the package patterns still cover the
+    /// whole program, so the rapid-type set is unchanged.
+    pub scope_files: Vec<String>,
 
     pub files_without_module_root: Vec<String>,
 }
@@ -102,10 +108,15 @@ impl GoAnalysisConfig {
                 .iter()
                 .any(|file| file.relative_path.ends_with("_test.go")),
         };
+        let scope_files = files
+            .iter()
+            .map(|file| file.relative_path.clone())
+            .collect::<Vec<_>>();
         Ok(Self {
             module_roots,
             package_patterns,
             symbol_rooted_patterns,
+            scope_files,
             build_tags: string_or_array_setting(settings, "build_tags", &[]),
             // A scan that discovered no `_test.go` file cannot report a finding
             // in one, and every test-only type it would load is absent from the

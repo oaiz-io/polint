@@ -40,6 +40,21 @@ type Config struct {
 	// rows, and `rta.Analyze` runs once per main package, so on a repository
 	// with 8 binaries it is 76% of the run for output nobody consumes.
 	EmitRTAEdges bool
+	// ScopeFiles is the set of repository-relative Go files this scan discovered,
+	// or nil when the caller did not narrow the scan.
+	//
+	// The kernel already applies this exact predicate on receipt: `lower_go_semantic`
+	// routes `package`, `function`, `method`, `init_function` and `callsite` rows
+	// through `push_in_scope`, which drops every row naming a file the scan did not
+	// discover. Emitting those rows only to delete them costs an encode, a pipe and a
+	// decode: on a two-file scan of oaiz/core it is 124k of 161k rows and most of a
+	// 112 MB payload.
+	//
+	// The whole-program families — `method_set`, `address_taken`, `instantiated_type`
+	// and `dynamic_dispatch` — are NEVER filtered. They are the rapid-type set polint's
+	// own RTA runs on, they name no file, and the kernel keeps them unconditionally.
+	// Neither is the package LOAD narrowed, so the rapid-type set is unchanged.
+	ScopeFiles map[string]bool
 }
 
 type Row map[string]any
@@ -128,6 +143,8 @@ type emitter struct {
 	root string
 	fset *token.FileSet
 	rows []Row
+	// scopeFiles mirrors Config.ScopeFiles. nil means emit every row.
+	scopeFiles map[string]bool
 	// emittedMethodSetKeys coordinates the TWO method_set emitters (emitMethodSets and
 	// emitInstantiatedMethodSets) so AT MOST ONE method_set row is emitted per canonical
 	// stable_key across BOTH. A SAME-PACKAGE alias to a generic instantiation
@@ -240,6 +257,7 @@ func Emit(config Config) ([]Row, error) {
 	e := &emitter{
 		root:                 root,
 		fset:                 fset,
+		scopeFiles:           config.ScopeFiles,
 		emittedMethodSetKeys: make(map[string]bool),
 		emittedFunctionKeys:  make(map[string]bool),
 	}
@@ -326,7 +344,61 @@ func (e *emitter) add(row Row) {
 	if _, ok := row["schema"]; !ok {
 		row["schema"] = SchemaVersion
 	}
+	if !e.inScope(row) {
+		return
+	}
 	e.rows = append(e.rows, row)
+}
+
+// fileAnchoredKinds are the row kinds the kernel routes through `push_in_scope`,
+// which drops any row naming a file the scan did not discover. Every other kind the
+// kernel keeps unconditionally, so every other kind must be emitted unconditionally.
+var fileAnchoredKinds = map[string]bool{
+	"package":       true,
+	"function":      true,
+	"method":        true,
+	"init_function": true,
+	"callsite":      true,
+}
+
+// inScope answers whether the kernel would keep this row.
+//
+// It only ever drops a row that NAMES a file outside the scan. A row with no file is
+// always kept: `lower_optional_file_span` returns a location-less fact rather than
+// nothing, so the kernel keeps those, and this filter has to stay a strict subset of
+// what the kernel already discards.
+func (e *emitter) inScope(row Row) bool {
+	if e.scopeFiles == nil {
+		return true
+	}
+	kind, _ := row["kind"].(string)
+	if !fileAnchoredKinds[kind] {
+		return true
+	}
+	if kind == "package" {
+		// `lower_package` keeps the in-scope files and drops the row only when it
+		// named files and kept none.
+		files, ok := row["files"].([]string)
+		if !ok || len(files) == 0 {
+			return true
+		}
+		kept := make([]string, 0, len(files))
+		for _, file := range files {
+			if e.scopeFiles[file] {
+				kept = append(kept, file)
+			}
+		}
+		if len(kept) == 0 {
+			return false
+		}
+		row["files"] = kept
+		return true
+	}
+	file, ok := row["file"].(string)
+	if !ok || file == "" {
+		return true
+	}
+	return e.scopeFiles[file]
 }
 
 func (e *emitter) emitPackage(pkg *packages.Package) {
