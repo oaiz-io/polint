@@ -827,3 +827,108 @@ func writeFixture(t *testing.T, files map[string]string) string {
 	}
 	return root
 }
+
+func TestScopeFilesDropOnlyFileAnchoredRowsOutsideTheScan(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"go.mod": "module example.com\n\ngo 1.24\n",
+		"kept/kept.go": `package kept
+
+type Speaker interface{ Speak() string }
+
+type Dog struct{}
+
+func (Dog) Speak() string { return "woof" }
+
+func Kept() string {
+	var s Speaker = Dog{}
+	return s.Speak()
+}
+`,
+		"dropped/dropped.go": `package dropped
+
+func Dropped() int { return helper() }
+
+func helper() int { return 1 }
+`,
+	})
+
+	config := Config{
+		Root:         root,
+		ModuleRoots:  []string{"."},
+		Patterns:     []string{"./..."},
+		IncludeTests: false,
+	}
+	unscoped, err := Emit(config)
+	if err != nil {
+		t.Fatalf("emit unscoped: %v", err)
+	}
+
+	config.ScopeFiles = map[string]bool{"kept/kept.go": true}
+	scoped, err := Emit(config)
+	if err != nil {
+		t.Fatalf("emit scoped: %v", err)
+	}
+
+	// A file-anchored row naming an undiscovered file is what the kernel drops on
+	// receipt, so the sidecar must not produce it.
+	for _, row := range scoped {
+		file, _ := row["file"].(string)
+		if fileAnchoredKinds[row["kind"].(string)] && file != "" && file != "kept/kept.go" {
+			t.Fatalf("scoped emit kept an out-of-scope row: %#v", row)
+		}
+	}
+	assertKind(t, scoped, "function")
+	assertKind(t, scoped, "callsite")
+
+	// The whole-program families are the rapid-type set polint's own RTA runs on.
+	// Narrowing them would change answers, so the scope must not touch them.
+	for _, kind := range []string{"method_set", "instantiated_type"} {
+		if countKind(unscoped, kind) != countKind(scoped, kind) {
+			t.Fatalf(
+				"scope changed the %s count: %d unscoped, %d scoped",
+				kind,
+				countKind(unscoped, kind),
+				countKind(scoped, kind),
+			)
+		}
+	}
+}
+
+func TestScopeFilesKeepRowsThatNameNoFile(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"go.mod": "module example.com\n\ngo 1.24\n",
+		"a/a.go": "package a\n\nfunc A() {}\n",
+	})
+
+	// A scope that matches nothing still keeps every row without a file, because
+	// `lower_optional_file_span` lowers those to a location-less fact rather than
+	// dropping them. This filter has to stay a strict subset of the kernel's.
+	rows, err := Emit(Config{
+		Root:         root,
+		ModuleRoots:  []string{"."},
+		Patterns:     []string{"./..."},
+		IncludeTests: false,
+		ScopeFiles:   map[string]bool{"nothing/matches.go": true},
+	})
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	for _, row := range rows {
+		file, _ := row["file"].(string)
+		kind, _ := row["kind"].(string)
+		if fileAnchoredKinds[kind] && file != "" {
+			t.Fatalf("a located row survived an empty scope: %#v", row)
+		}
+	}
+	assertKind(t, rows, "session_end")
+}
+
+func countKind(rows []Row, kind string) int {
+	count := 0
+	for _, row := range rows {
+		if row["kind"] == kind {
+			count++
+		}
+	}
+	return count
+}

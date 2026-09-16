@@ -52,7 +52,7 @@ and it is bounded by wall time:
 |---|---|---|
 | `semantic_timeout_ms` | `120000` | Budget for one sidecar run. `POLINT_GO_SEMANTIC_TIMEOUT_MS` overrides it for one run. |
 | `package_patterns` | `["./..."]` per module root | Which packages are loaded and analysed. |
-| `include_tests` | `true` | Whether `_test.go` files and their synthesized test packages are loaded. |
+| `include_tests` | derived | Whether `_test.go` files and their synthesized test packages are loaded. Defaults to whether the scan discovered a `_test.go` file. Set it explicitly to override. |
 
 Exhausting the budget is a *reported outcome*: the provider fails and the rules
 that needed it are blocked with `polint/capability` diagnostics. It never
@@ -80,10 +80,26 @@ visible rather than folklore. Narrowing `[workspace] include` to a handful of
 files is not a performance fix either: it breaks discovery of the imported
 in-repo files those files depend on, which is a correctness hazard.
 
-Go semantic facts are derived in memory and are not persisted between runs, so a
-second run of the same repository costs the same as the first. The provider's
-cache policy is in-memory only and the semantic store is disabled outside tests;
-persisting them is separate work, not a knob.
+**What the discovered-file set does bound.** Two things follow the files a scan
+discovered rather than `package_patterns`:
+
+- The symbol sidecar loads the packages that hold those files. Every fact the
+  symbol graph produces is anchored to a file and a fact naming an undiscovered
+  file is dropped, so a package holding no discovered file cannot contribute a
+  kept row.
+- The semantic sidecar still loads the whole program, because the types and
+  interface implementations its call-graph answers depend on can come from
+  anywhere. It skips *emitting* the file-anchored rows the kernel would drop.
+
+Neither narrows what the analysis knows. Both stop work whose result was already
+being discarded.
+
+Go semantic facts are derived in memory, but the sidecar's raw output is cached
+on disk, keyed by the sidecar binary, the Go toolchain, the upstream syntax
+digest, the lifecycle settings and the discovered-file set. A second run of an
+unchanged repository reuses it and skips the sidecar round trip. `--no-cache`
+disables that, so a `--no-cache` timing is a cold timing and is not what a normal
+run costs.
 
 ## Inspect and test local rules
 

@@ -150,27 +150,39 @@ impl GoSemanticClient {
 ///
 /// The returned handle must outlive the sidecar process: dropping it deletes the file
 /// the child is about to read.
+///
+/// A failure here is not a correctness problem — without the list the sidecar emits
+/// the rows it always emitted and the kernel drops the out-of-scope ones on receipt —
+/// but it silently restores the old cost, so say so rather than degrade quietly.
 fn write_scope_file(config: &GoAnalysisConfig) -> Option<tempfile::NamedTempFile> {
     if config.scope_files.is_empty() {
         return None;
     }
+    match write_scope_file_inner(config) {
+        Ok(file) => Some(file),
+        Err(error) => {
+            tracing::warn!(
+                target: "polint::kernel::stage",
+                provider = "polint.go.semantic",
+                %error,
+                "could not write the sidecar scope list; the sidecar will emit every row"
+            );
+            None
+        }
+    }
+}
+
+fn write_scope_file_inner(config: &GoAnalysisConfig) -> std::io::Result<tempfile::NamedTempFile> {
+    use std::io::Write;
     let mut file = tempfile::Builder::new()
         .prefix("polint-go-scope-")
         .suffix(".txt")
-        .tempfile()
-        .ok()?;
-    {
-        use std::io::Write;
-        for path in &config.scope_files {
-            if writeln!(file, "{path}").is_err() {
-                return None;
-            }
-        }
-        if file.flush().is_err() {
-            return None;
-        }
+        .tempfile()?;
+    for path in &config.scope_files {
+        writeln!(file, "{path}")?;
     }
-    Some(file)
+    file.flush()?;
+    Ok(file)
 }
 
 fn append_request_args(

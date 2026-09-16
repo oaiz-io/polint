@@ -25,9 +25,15 @@ pub struct GoAnalysisConfig {
     pub offline: bool,
     /// `[languages.go] semantic_timeout_ms`, when configured.
     pub semantic_timeout_ms: Option<u64>,
-    /// `[languages.go] rta_edges`. The analysis kernel never reads `rta_edge`
-    /// rows, and `rta.Analyze` runs once per main package, so this is off by
-    /// default. The polint-eval external-callgraph comparison turns it on.
+    /// Whether the semantic sidecar emits `rta_edge` rows.
+    ///
+    /// Always `false` in a release build. The analysis kernel cannot read those
+    /// rows — `AnalysisDb::go_semantic_rta_edges` is `#[cfg(test)]` — and
+    /// `rta.Analyze` runs once per main package, so producing them costs a great
+    /// deal for output nothing consumes. The in-repo evaluation harness compares
+    /// them against the x/tools RTA oracle, so a test build can turn them on with
+    /// `[languages.go] rta_edges`. That key is deliberately not a public
+    /// configuration surface.
     pub emit_rta_edges: bool,
     /// Package patterns for the symbol sidecar, already rooted at the
     /// repository root. Every fact family the symbol graph emits is anchored to
@@ -102,7 +108,7 @@ impl GoAnalysisConfig {
         } else {
             scoped_rooted_patterns(&module_roots, files)
         };
-        let symbol_include_tests = match settings.get("include_tests").and_then(Value::as_bool) {
+        let include_tests = match settings.get("include_tests").and_then(Value::as_bool) {
             Some(configured) => configured,
             None => files
                 .iter()
@@ -122,16 +128,13 @@ impl GoAnalysisConfig {
             // in one, and every test-only type it would load is absent from the
             // production program the scan was asked about. Loading test variants
             // anyway triples the package count on this shape of repository.
-            include_tests: symbol_include_tests,
+            include_tests,
             offline: settings
                 .get("offline")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             semantic_timeout_ms: positive_integer_setting(settings, "semantic_timeout_ms"),
-            emit_rta_edges: settings
-                .get("rta_edges")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            emit_rta_edges: emit_rta_edges_setting(settings),
             files_without_module_root,
         })
     }
@@ -151,6 +154,24 @@ impl GoAnalysisConfig {
 
 /// Reads a positive integer lifecycle setting, warning on a value that is
 /// present but unusable rather than silently treating it as unset.
+/// Reads `[languages.go] rta_edges`, which only a test build honours.
+///
+/// The key exists for the in-repo evaluation harness, which scores the sidecar's
+/// `rta_edge` rows against the x/tools RTA oracle. A release build has no reader for
+/// those rows, so it must not be possible to switch on the cost of producing them.
+#[cfg(test)]
+fn emit_rta_edges_setting(settings: &BTreeMap<String, Value>) -> bool {
+    settings
+        .get("rta_edges")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+#[cfg(not(test))]
+fn emit_rta_edges_setting(_settings: &BTreeMap<String, Value>) -> bool {
+    false
+}
+
 fn positive_integer_setting(settings: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
     let value = settings.get(key)?;
     match value.as_integer() {
@@ -389,13 +410,25 @@ fn rooted_package_patterns(module_roots: &[String], patterns: &[String]) -> Vec<
     rooted
 }
 
+/// How many derived directories are worth naming one by one.
+///
+/// Past this the explicit list stops paying for itself: it approaches whole-module
+/// coverage, every entry lengthens an argument vector that the OS caps, and `go list`
+/// resolves a long pattern list more slowly than one recursive pattern. `./...` is a
+/// superset of any derived list, so falling back costs load time and never results.
+const MAX_DERIVED_PACKAGE_PATTERNS: usize = 256;
+
 /// The directories of the in-scope Go files, rooted at the repository root.
 ///
-/// `go list` and `packages.Load` take directories, so one entry per directory
-/// that actually holds a scanned file is the smallest sound request. Returns the
-/// rooted `./...` patterns when no in-scope file sits under a module root, so an
-/// empty or non-Go scan behaves exactly as before.
+/// `go list` and `packages.Load` take directories, so one entry per directory that
+/// actually holds a scanned file is the smallest sound request. Falls back to the
+/// rooted `./...` when no in-scope file sits under a module root, or when the derived
+/// list grows past [`MAX_DERIVED_PACKAGE_PATTERNS`].
 fn scoped_rooted_patterns(module_roots: &[String], files: &[&SourceFile]) -> Vec<String> {
+    let module_root_prefixes = module_roots
+        .iter()
+        .map(|module_root| format!("{module_root}/"))
+        .collect::<Vec<_>>();
     let mut directories = BTreeSet::new();
     for file in files {
         let path = file.relative_path.as_str();
@@ -403,11 +436,13 @@ fn scoped_rooted_patterns(module_roots: &[String], files: &[&SourceFile]) -> Vec
             Some(index) => &path[..index],
             None => ".",
         };
-        let under_module_root = module_roots.iter().any(|module_root| {
-            module_root == "."
-                || directory == module_root
-                || directory.starts_with(&format!("{module_root}/"))
-        });
+        let under_module_root =
+            module_roots
+                .iter()
+                .zip(&module_root_prefixes)
+                .any(|(module_root, prefix)| {
+                    module_root == "." || directory == module_root || directory.starts_with(prefix)
+                });
         if !under_module_root {
             continue;
         }
@@ -416,6 +451,9 @@ fn scoped_rooted_patterns(module_roots: &[String], files: &[&SourceFile]) -> Vec
         } else {
             format!("./{directory}")
         });
+        if directories.len() > MAX_DERIVED_PACKAGE_PATTERNS {
+            return rooted_package_patterns(module_roots, &["./...".to_string()]);
+        }
     }
     if directories.is_empty() {
         return rooted_package_patterns(module_roots, &["./...".to_string()]);
@@ -730,5 +768,141 @@ pub fn apply_go_offline_env(command: &mut Command, offline: bool) {
             .env("GOAUTH", "off")
             .env("GOTOOLCHAIN", "local")
             .env_remove("GOCACHEPROG");
+    }
+}
+
+#[cfg(test)]
+mod derived_lifecycle_defaults {
+    use super::*;
+    use crate::analysis_api::SourceFile;
+    use crate::internal_core::{FileId, Language};
+
+    fn go_file(relative_path: &str) -> SourceFile {
+        SourceFile::new(
+            FileId(0),
+            std::path::PathBuf::from(relative_path),
+            relative_path.to_string(),
+            Language::Go,
+            std::sync::Arc::from(""),
+            String::new(),
+        )
+    }
+
+    fn config_for(files: &[SourceFile], settings: &[(&str, Value)]) -> GoAnalysisConfig {
+        let settings = settings
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), value.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let borrowed = files.iter().collect::<Vec<_>>();
+        GoAnalysisConfig::from_settings_files(Path::new("/repo"), &settings, &borrowed)
+            .expect("a module root is configured")
+    }
+
+    fn module_root(root: &str) -> (&'static str, Value) {
+        ("module_roots", Value::String(root.to_string()))
+    }
+
+    #[test]
+    fn include_tests_follows_the_discovered_files() {
+        let without = config_for(&[go_file("core/app/service.go")], &[module_root("core")]);
+        assert!(
+            !without.include_tests,
+            "a scan that found no _test.go must not load test variants"
+        );
+
+        let with = config_for(
+            &[
+                go_file("core/app/service.go"),
+                go_file("core/app/service_test.go"),
+            ],
+            &[module_root("core")],
+        );
+        assert!(
+            with.include_tests,
+            "a scan that found a _test.go must load test variants"
+        );
+    }
+
+    #[test]
+    fn an_explicit_include_tests_setting_wins_over_the_discovered_files() {
+        let config = config_for(
+            &[go_file("core/app/service.go")],
+            &[module_root("core"), ("include_tests", Value::Boolean(true))],
+        );
+        assert!(config.include_tests);
+    }
+
+    #[test]
+    fn symbol_patterns_name_the_directories_that_hold_discovered_files() {
+        let config = config_for(
+            &[
+                go_file("core/app/service.go"),
+                go_file("core/app/other.go"),
+                go_file("core/ports/http.go"),
+            ],
+            &[module_root("core")],
+        );
+        assert_eq!(
+            config.symbol_rooted_patterns,
+            vec!["./core/app".to_string(), "./core/ports".to_string()],
+            "one entry per directory, de-duplicated and rooted at the repository"
+        );
+    }
+
+    #[test]
+    fn a_file_outside_every_module_root_does_not_widen_the_symbol_patterns() {
+        let config = config_for(
+            &[go_file("core/app/service.go"), go_file("tools/gen/main.go")],
+            &[module_root("core")],
+        );
+        assert_eq!(
+            config.symbol_rooted_patterns,
+            vec!["./core/app".to_string()]
+        );
+    }
+
+    #[test]
+    fn symbol_patterns_fall_back_to_the_whole_module_past_the_cap() {
+        let files = (0..=MAX_DERIVED_PACKAGE_PATTERNS)
+            .map(|index| go_file(&format!("core/pkg{index}/service.go")))
+            .collect::<Vec<_>>();
+        let config = config_for(&files, &[module_root("core")]);
+        assert_eq!(
+            config.symbol_rooted_patterns,
+            vec!["./core/...".to_string()],
+            "an argument vector cannot grow without bound; ./... is a superset"
+        );
+    }
+
+    #[test]
+    fn scope_files_carry_every_discovered_go_file() {
+        let config = config_for(
+            &[
+                go_file("core/app/service.go"),
+                go_file("core/ports/http.go"),
+            ],
+            &[module_root("core")],
+        );
+        assert_eq!(
+            config.scope_files,
+            vec![
+                "core/app/service.go".to_string(),
+                "core/ports/http.go".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn rta_edges_are_off_unless_the_evaluation_harness_asks() {
+        let files = [go_file("core/app/service.go")];
+        assert!(!config_for(&files, &[module_root("core")]).emit_rta_edges);
+        assert!(
+            config_for(
+                &files,
+                &[module_root("core"), ("rta_edges", Value::Boolean(true))]
+            )
+            .emit_rta_edges,
+            "the in-repo evaluation harness scores these rows against the x/tools oracle"
+        );
     }
 }

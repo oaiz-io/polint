@@ -278,6 +278,7 @@ fn run_polint_for_prepared_case<A: BenchmarkAdapter>(
 ) -> anyhow::Result<Vec<ObservedItem>> {
     let mut loaded = crate::config::load_config(&prepared.workspace_root)?;
     apply_prepared_target_file_filter(&mut loaded, prepared);
+    enable_rta_edges_for_oracle(&mut loaded);
     let config_digest = crate::cache::keys::config_hash(&loaded);
     let rule_digest = crate::cache::keys::rule_hash(&[], None, &std::collections::BTreeMap::new());
     let cache = crate::cache::Cache::default_for_repo(&prepared.workspace_root, false);
@@ -297,6 +298,22 @@ fn run_polint_for_prepared_case<A: BenchmarkAdapter>(
     let mut observed = adapter.normalize_kernel_output(manifest, case, prepared, &output)?;
     observed.extend(crate::eval::observed::adaptation_model_facts_from_kernel_output(&output));
     Ok(observed)
+}
+
+/// Turns on the sidecar's `rta_edge` rows for the evaluation run.
+///
+/// A release build never emits them: nothing in the kernel reads them, and
+/// `rta.Analyze` runs once per main package. The x/tools RTA oracle adapter compares
+/// against exactly those rows and falls back to polint's own derived graph when they
+/// are absent, so without this the accuracy gate would silently score a different
+/// graph than the one it names.
+#[cfg(test)]
+fn enable_rta_edges_for_oracle(loaded: &mut crate::config::LoadedConfig) {
+    loaded
+        .config
+        .languages
+        .go
+        .insert("rta_edges".to_string(), toml::Value::Boolean(true));
 }
 
 #[cfg(test)]
@@ -628,6 +645,7 @@ mod tests {
         };
 
         apply_prepared_target_file_filter(&mut loaded, &prepared);
+        enable_rta_edges_for_oracle(&mut loaded);
 
         assert_eq!(
             loaded.config.workspace.include,
