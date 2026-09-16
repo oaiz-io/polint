@@ -52,7 +52,7 @@ and it is bounded by wall time:
 |---|---|---|
 | `semantic_timeout_ms` | `120000` | Budget for one sidecar run. `POLINT_GO_SEMANTIC_TIMEOUT_MS` overrides it for one run. |
 | `package_patterns` | `["./..."]` per module root | Which packages are loaded and analysed. |
-| `include_tests` | derived | Whether `_test.go` files and their synthesized test packages are loaded. Defaults to whether the scan discovered a `_test.go` file. Set it explicitly to override. |
+| `include_tests` | `true` | Whether `_test.go` files and their synthesized test packages are loaded. |
 
 Exhausting the budget is a *reported outcome*: the provider fails and the rules
 that needed it are blocked with `polint/capability` diagnostics. It never

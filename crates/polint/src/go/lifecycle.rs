@@ -108,12 +108,6 @@ impl GoAnalysisConfig {
         } else {
             scoped_rooted_patterns(&module_roots, files)
         };
-        let include_tests = match settings.get("include_tests").and_then(Value::as_bool) {
-            Some(configured) => configured,
-            None => files
-                .iter()
-                .any(|file| file.relative_path.ends_with("_test.go")),
-        };
         let scope_files = files
             .iter()
             .map(|file| file.relative_path.clone())
@@ -124,11 +118,10 @@ impl GoAnalysisConfig {
             symbol_rooted_patterns,
             scope_files,
             build_tags: string_or_array_setting(settings, "build_tags", &[]),
-            // A scan that discovered no `_test.go` file cannot report a finding
-            // in one, and every test-only type it would load is absent from the
-            // production program the scan was asked about. Loading test variants
-            // anyway triples the package count on this shape of repository.
-            include_tests,
+            include_tests: settings
+                .get("include_tests")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
             offline: settings
                 .get("offline")
                 .and_then(Value::as_bool)
@@ -800,36 +793,6 @@ mod derived_lifecycle_defaults {
 
     fn module_root(root: &str) -> (&'static str, Value) {
         ("module_roots", Value::String(root.to_string()))
-    }
-
-    #[test]
-    fn include_tests_follows_the_discovered_files() {
-        let without = config_for(&[go_file("core/app/service.go")], &[module_root("core")]);
-        assert!(
-            !without.include_tests,
-            "a scan that found no _test.go must not load test variants"
-        );
-
-        let with = config_for(
-            &[
-                go_file("core/app/service.go"),
-                go_file("core/app/service_test.go"),
-            ],
-            &[module_root("core")],
-        );
-        assert!(
-            with.include_tests,
-            "a scan that found a _test.go must load test variants"
-        );
-    }
-
-    #[test]
-    fn an_explicit_include_tests_setting_wins_over_the_discovered_files() {
-        let config = config_for(
-            &[go_file("core/app/service.go")],
-            &[module_root("core"), ("include_tests", Value::Boolean(true))],
-        );
-        assert!(config.include_tests);
     }
 
     #[test]
