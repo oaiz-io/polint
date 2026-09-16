@@ -696,6 +696,9 @@ fn default_lifecycle() -> GoAnalysisConfig {
         include_tests: true,
         offline: false,
         semantic_timeout_ms: None,
+        emit_rta_edges: false,
+        symbol_rooted_patterns: vec!["./...".to_string()],
+        scope_files: Vec::new(),
         files_without_module_root: Vec::new(),
     }
 }

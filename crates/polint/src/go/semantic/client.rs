@@ -76,7 +76,8 @@ impl GoSemanticClient {
         let frontend = resolve_go_semantic_frontend()?;
         let digest = frontend_digest(&frontend)?;
         let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
-        append_request_args(&mut command, &self.root, config);
+        let scope_file = write_scope_file(config);
+        append_request_args(&mut command, &self.root, config, scope_file.as_ref());
         let stdout = run_with_timeout(command, self.timeout, &self.root)?;
         tracing::debug!(
             target: "polint::kernel::stage",
@@ -124,7 +125,8 @@ impl GoSemanticClient {
         }
 
         let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
-        append_request_args(&mut command, &self.root, config);
+        let scope_file = write_scope_file(config);
+        append_request_args(&mut command, &self.root, config, scope_file.as_ref());
         let stdout = run_with_timeout(command, self.timeout, &self.root)?;
         tracing::debug!(
             target: "polint::kernel::stage",
@@ -144,10 +146,50 @@ impl GoSemanticClient {
     }
 }
 
+/// Writes the discovered-file list for `--scope-files`.
+///
+/// The returned handle must outlive the sidecar process: dropping it deletes the file
+/// the child is about to read.
+///
+/// A failure here is not a correctness problem — without the list the sidecar emits
+/// the rows it always emitted and the kernel drops the out-of-scope ones on receipt —
+/// but it silently restores the old cost, so say so rather than degrade quietly.
+fn write_scope_file(config: &GoAnalysisConfig) -> Option<tempfile::NamedTempFile> {
+    if config.scope_files.is_empty() {
+        return None;
+    }
+    match write_scope_file_inner(config) {
+        Ok(file) => Some(file),
+        Err(error) => {
+            tracing::warn!(
+                target: "polint::kernel::stage",
+                provider = "polint.go.semantic",
+                %error,
+                "could not write the sidecar scope list; the sidecar will emit every row"
+            );
+            None
+        }
+    }
+}
+
+fn write_scope_file_inner(config: &GoAnalysisConfig) -> std::io::Result<tempfile::NamedTempFile> {
+    use std::io::Write;
+    let mut file = tempfile::Builder::new()
+        .prefix("polint-go-scope-")
+        .suffix(".txt")
+        .tempfile()?;
+    for path in &config.scope_files {
+        writeln!(file, "{path}")?;
+    }
+    file.flush()?;
+    Ok(file)
+}
+
 fn append_request_args(
     command: &mut std::process::Command,
     root: &Path,
     config: &GoAnalysisConfig,
+    scope_file: Option<&tempfile::NamedTempFile>,
 ) {
     command
         .arg("semantic")
@@ -160,8 +202,14 @@ fn append_request_args(
         .arg("--tests")
         .arg(config.include_tests.to_string())
         .arg("--build-tags")
-        .arg(config.build_tags.join(","))
-        .arg("--ndjson");
+        .arg(config.build_tags.join(","));
+    if config.emit_rta_edges {
+        command.arg("--rta-edges");
+    }
+    if let Some(scope_file) = scope_file {
+        command.arg("--scope-files").arg(scope_file.path());
+    }
+    command.arg("--ndjson");
     lifecycle::apply_go_offline_env(command, config.offline);
 }
 

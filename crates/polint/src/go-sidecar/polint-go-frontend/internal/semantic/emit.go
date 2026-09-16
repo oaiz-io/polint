@@ -32,6 +32,29 @@ type Config struct {
 	Patterns     []string
 	IncludeTests bool
 	BuildTags    []string
+	// EmitRTAEdges turns on the `rta_edge` rows. The analysis kernel does not
+	// read them: `AnalysisDb::go_semantic_rta_edges` is `#[cfg(test)]`, and
+	// polint's own RTA runs off `method_set`, `address_taken`,
+	// `instantiated_type` and `dynamic_dispatch`, which `emitSSAPackage`
+	// produces. Only the polint-eval external-callgraph comparison reads these
+	// rows, and `rta.Analyze` runs once per main package, so on a repository
+	// with 8 binaries it is 76% of the run for output nobody consumes.
+	EmitRTAEdges bool
+	// ScopeFiles is the set of repository-relative Go files this scan discovered,
+	// or nil when the caller did not narrow the scan.
+	//
+	// The kernel already applies this exact predicate on receipt: `lower_go_semantic`
+	// routes `package`, `function`, `method`, `init_function` and `callsite` rows
+	// through `push_in_scope`, which drops every row naming a file the scan did not
+	// discover. Emitting those rows only to delete them costs an encode, a pipe and a
+	// decode: on a two-file scan of oaiz/core it is 124k of 161k rows and most of a
+	// 112 MB payload.
+	//
+	// The whole-program families — `method_set`, `address_taken`, `instantiated_type`
+	// and `dynamic_dispatch` — are NEVER filtered. They are the rapid-type set polint's
+	// own RTA runs on, they name no file, and the kernel keeps them unconditionally.
+	// Neither is the package LOAD narrowed, so the rapid-type set is unchanged.
+	ScopeFiles map[string]bool
 }
 
 type Row map[string]any
@@ -120,6 +143,8 @@ type emitter struct {
 	root string
 	fset *token.FileSet
 	rows []Row
+	// scopeFiles mirrors Config.ScopeFiles. nil means emit every row.
+	scopeFiles map[string]bool
 	// emittedMethodSetKeys coordinates the TWO method_set emitters (emitMethodSets and
 	// emitInstantiatedMethodSets) so AT MOST ONE method_set row is emitted per canonical
 	// stable_key across BOTH. A SAME-PACKAGE alias to a generic instantiation
@@ -232,6 +257,7 @@ func Emit(config Config) ([]Row, error) {
 	e := &emitter{
 		root:                 root,
 		fset:                 fset,
+		scopeFiles:           config.ScopeFiles,
 		emittedMethodSetKeys: make(map[string]bool),
 		emittedFunctionKeys:  make(map[string]bool),
 	}
@@ -248,11 +274,46 @@ func Emit(config Config) ([]Row, error) {
 		e.emitPackage(pkg)
 		e.emitPackageErrors(pkg)
 	}
+	// `prog.MethodValue` inside the instantiation walk BUILDS a wrapper, and a built
+	// wrapper can register new `MakeInterface` types, so the program's runtime type set
+	// grows while this loop runs. The per-package version hid that behind 349 fresh
+	// `RuntimeTypes()` calls. Harvest, emit, then re-harvest until the set stops
+	// growing: the emitter's keep-first guards make a repeat pass idempotent, so only
+	// genuinely new instantiations produce rows.
+	//
+	// This also removes an order dependency the per-package version had. There, an
+	// instantiation that only became reachable while a LATER package was emitted was
+	// never seen by an EARLIER package, so the output depended on where a package sat
+	// in the iteration. The fixed point does not.
+	harvested := make(map[string]bool)
+	instantiations := harvestInstantiations(prog, harvested)
 	for _, pkg := range ssaPkgs {
-		e.emitSSAPackage(pkg)
+		// ssautil can hand back a nil package, and a package whose type info failed
+		// carries a nil Pkg. emitSSAPackage guards both; looking the bucket up first
+		// must guard them too.
+		if pkg == nil || pkg.Pkg == nil {
+			continue
+		}
+		e.emitSSAPackage(pkg, instantiations[pkg.Pkg.Path()])
+	}
+	// Each pass marks the keys it consumed, so a pass only ever sees instantiations no
+	// earlier pass did. The runtime type set is finite, so this terminates.
+	for {
+		instantiations = harvestInstantiations(prog, harvested)
+		if len(instantiations) == 0 {
+			break
+		}
+		for _, pkg := range ssaPkgs {
+			if pkg == nil || pkg.Pkg == nil {
+				continue
+			}
+			e.emitInstantiatedMethodSets(pkg, instantiations[pkg.Pkg.Path()])
+		}
 	}
 	e.addPhase(timer, "emit_rows", workload)
-	e.emitRTAEdges(ssaPkgs)
+	if config.EmitRTAEdges {
+		e.emitRTAEdges(ssaPkgs)
+	}
 	e.addPhase(timer, "rta_analyze", workload)
 	e.add(Row{
 		"kind":              "session_end",
@@ -283,7 +344,61 @@ func (e *emitter) add(row Row) {
 	if _, ok := row["schema"]; !ok {
 		row["schema"] = SchemaVersion
 	}
+	if !e.inScope(row) {
+		return
+	}
 	e.rows = append(e.rows, row)
+}
+
+// fileAnchoredKinds are the row kinds the kernel routes through `push_in_scope`,
+// which drops any row naming a file the scan did not discover. Every other kind the
+// kernel keeps unconditionally, so every other kind must be emitted unconditionally.
+var fileAnchoredKinds = map[string]bool{
+	"package":       true,
+	"function":      true,
+	"method":        true,
+	"init_function": true,
+	"callsite":      true,
+}
+
+// inScope answers whether the kernel would keep this row.
+//
+// It only ever drops a row that NAMES a file outside the scan. A row with no file is
+// always kept: `lower_optional_file_span` returns a location-less fact rather than
+// nothing, so the kernel keeps those, and this filter has to stay a strict subset of
+// what the kernel already discards.
+func (e *emitter) inScope(row Row) bool {
+	if e.scopeFiles == nil {
+		return true
+	}
+	kind, _ := row["kind"].(string)
+	if !fileAnchoredKinds[kind] {
+		return true
+	}
+	if kind == "package" {
+		// `lower_package` keeps the in-scope files and drops the row only when it
+		// named files and kept none.
+		files, ok := row["files"].([]string)
+		if !ok || len(files) == 0 {
+			return true
+		}
+		kept := make([]string, 0, len(files))
+		for _, file := range files {
+			if e.scopeFiles[file] {
+				kept = append(kept, file)
+			}
+		}
+		if len(kept) == 0 {
+			return false
+		}
+		row["files"] = kept
+		return true
+	}
+	file, ok := row["file"].(string)
+	if !ok || file == "" {
+		return true
+	}
+	return e.scopeFiles[file]
 }
 
 func (e *emitter) emitPackage(pkg *packages.Package) {
@@ -320,7 +435,7 @@ func (e *emitter) emitPackageErrors(pkg *packages.Package) {
 	}
 }
 
-func (e *emitter) emitSSAPackage(pkg *ssa.Package) {
+func (e *emitter) emitSSAPackage(pkg *ssa.Package, instantiations []instantiation) {
 	if pkg == nil || pkg.Pkg == nil {
 		return
 	}
@@ -332,7 +447,7 @@ func (e *emitter) emitSSAPackage(pkg *ssa.Package) {
 		e.emitAddressTaken(pkg, fn)
 	}
 	e.emitMethodSets(pkg)
-	e.emitInstantiatedMethodSets(pkg)
+	e.emitInstantiatedMethodSets(pkg, instantiations)
 }
 
 func (e *emitter) emitRTAEdges(pkgs []*ssa.Package) {
@@ -528,7 +643,7 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				row["reason"] = "interface or func-value dynamic dispatch"
 				dynamic = true
 			}
-			stableParts := []string{packageID(pkg), fn.String(), fmt.Sprint(call.Pos())}
+			stableParts := []string{packageID(pkg), fn.String(), e.positionKey(call.Pos())}
 			if syntax := callSyntax(fn, call); syntax != nil {
 				if pos := e.positionSpan(syntax.Pos(), syntax.End()); pos != nil {
 					file := posFile(e.fset, syntax.Pos(), e.root)
@@ -852,30 +967,42 @@ func (e *emitter) emitMethodSets(pkg *ssa.Package) {
 // stable source identity are skipped rather than fabricated (D-15). De-duplicated
 // by the instantiated type identity so a type instantiated in two functions is harvested
 // once.
-func (e *emitter) emitInstantiatedMethodSets(pkg *ssa.Package) {
-	prog := pkg.Prog
+// instantiation is one generic instantiation harvested from the program's runtime
+// type set, paired with the import path of the package that declares it.
+type instantiation struct {
+	key   string
+	named *types.Named
+}
+
+// harvestInstantiations walks `prog.RuntimeTypes()` ONCE and buckets every generic
+// instantiation by its declaring package.
+//
+// `RuntimeTypes` is program-global and expands each type's method set through
+// `typesinternal.ForEachElement`, so it costs O(program). Calling it per package and
+// then keeping only the instantiations that package declares made the emit phase
+// O(packages x program): on a 349-package module it was 35% of the sidecar's CPU to
+// recompute the same program-wide set 349 times and discard ~99.7% of each result.
+//
+// The buckets are keyed by declaring package path, which is the same predicate the
+// per-package loop applied, so each package still sees exactly the instantiations it
+// saw before. Each bucket is sorted by identity because `RuntimeTypes` order is not
+// specified and the emitted rows must be deterministic.
+func harvestInstantiations(prog *ssa.Program, seen map[string]bool) map[string][]instantiation {
 	if prog == nil {
-		return
+		return nil
 	}
-	seen := make(map[string]bool)
-	// RuntimeTypes() order is not specified; sort the harvested identities so the emitted
-	// rows are deterministic regardless of x/tools' internal iteration order.
-	type instantiation struct {
-		key   string
-		named *types.Named
-	}
-	var instantiations []instantiation
+	buckets := make(map[string][]instantiation)
 	for _, runtimeType := range prog.RuntimeTypes() {
 		named, ok := runtimeType.(*types.Named)
 		if !ok {
 			continue
 		}
-		// Only generic INSTANTIATIONS (type args present), declared in THIS package, are
-		// harvested here. A non-generic named type is already covered by emitMethodSets.
+		// Only generic INSTANTIATIONS (type args present) are harvested here. A
+		// non-generic named type is already covered by emitMethodSets.
 		if named.TypeArgs() == nil || named.TypeArgs().Len() == 0 {
 			continue
 		}
-		if named.Obj() == nil || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != pkg.Pkg.Path() {
+		if named.Obj() == nil || named.Obj().Pkg() == nil {
 			continue
 		}
 		key := named.String()
@@ -883,9 +1010,20 @@ func (e *emitter) emitInstantiatedMethodSets(pkg *ssa.Package) {
 			continue
 		}
 		seen[key] = true
-		instantiations = append(instantiations, instantiation{key: key, named: named})
+		path := named.Obj().Pkg().Path()
+		buckets[path] = append(buckets[path], instantiation{key: key, named: named})
 	}
-	sort.Slice(instantiations, func(i, j int) bool { return instantiations[i].key < instantiations[j].key })
+	for _, bucket := range buckets {
+		sort.Slice(bucket, func(i, j int) bool { return bucket[i].key < bucket[j].key })
+	}
+	return buckets
+}
+
+func (e *emitter) emitInstantiatedMethodSets(pkg *ssa.Package, instantiations []instantiation) {
+	prog := pkg.Prog
+	if prog == nil {
+		return
+	}
 
 	for _, inst := range instantiations {
 		methodSet := prog.MethodSets.MethodSet(types.NewPointer(inst.named))
@@ -1051,6 +1189,25 @@ func (e *emitter) positionSpan(start token.Pos, end token.Pos) *Span {
 		EndLine:     endPos.Line,
 		EndColumn:   endPos.Column,
 	}
+}
+
+// positionKey identifies a source position by file and by the byte offset INSIDE
+// that file.
+//
+// `token.Pos` is an offset into the whole FileSet, so its value depends on the order
+// `packages.Load` added files to the shared FileSet. That load is concurrent, so the
+// order changes between runs: two runs of the same binary over the same tree produced
+// stable keys that differ for ~1.5% of callsites. A key that is not stable defeats its
+// own purpose — the semantic output digest changes on every run, so every layer keyed
+// on it misses even when nothing in the repository changed.
+//
+// `Position.Offset` is relative to its own file and does not move.
+func (e *emitter) positionKey(pos token.Pos) string {
+	if !pos.IsValid() {
+		return "0"
+	}
+	position := e.fset.Position(pos)
+	return e.relative(position.Filename) + ":" + strconv.Itoa(position.Offset)
 }
 
 func posFile(fset *token.FileSet, pos token.Pos, root string) string {

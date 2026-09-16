@@ -111,6 +111,16 @@ include_tests = false
                 include_tests: false,
                 offline: false,
                 semantic_timeout_ms: None,
+                emit_rta_edges: false,
+                // `package_patterns` is configured, so the symbol sidecar keeps
+                // the configured patterns, rooted at each module root.
+                symbol_rooted_patterns: vec![
+                    "./cmd/service/cmd/...".to_string(),
+                    "./cmd/service/pkg/...".to_string(),
+                    "./libs/platform/cmd/...".to_string(),
+                    "./libs/platform/pkg/...".to_string(),
+                ],
+                scope_files: Vec::new(),
                 files_without_module_root: Vec::new(),
             }
         );

@@ -27,6 +27,11 @@ type Config struct {
 	Patterns     []string
 	IncludeTests bool
 	BuildTags    []string
+	// RootedPatterns says Patterns are already relative to Root. The caller
+	// derives one directory per in-scope file, and a directory belongs to one
+	// module root, so the module-root cross product in rootedPackagePatterns
+	// would turn each entry into paths that do not exist.
+	RootedPatterns bool
 }
 
 type Output struct {
@@ -180,7 +185,9 @@ func Emit(config Config) (Output, error) {
 	if err != nil {
 		return Output{}, err
 	}
-	patterns = rootedPackagePatterns(moduleRoots, patterns)
+	if !config.RootedPatterns {
+		patterns = rootedPackagePatterns(moduleRoots, patterns)
+	}
 	env, cleanup, err := goPackageEnv(root, moduleRoots)
 	if err != nil {
 		return Output{}, err

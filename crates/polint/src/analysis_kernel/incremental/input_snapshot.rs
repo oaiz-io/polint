@@ -193,6 +193,11 @@ fn go_lifecycle_components(
             vec![config.offline.to_string()],
         ),
         values_component(
+            "go.rta_edges",
+            DigestKind::GoLifecycle,
+            vec![config.emit_rta_edges.to_string()],
+        ),
+        values_component(
             "go.package_patterns",
             DigestKind::GoLifecycle,
             config.package_patterns.clone(),
