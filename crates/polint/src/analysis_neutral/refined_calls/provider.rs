@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::analysis_api::{
     CacheStats, Digest, DigestKind, InputComponent, InputSnapshot, ProviderExecution,
-    ProviderFailureReason, ProviderFailureStage,
+    ProviderFailureReason, ProviderFailureStage, stable_key_from_key_parts,
 };
 use crate::analysis_api::{
     FactFamily, FactRef, ProviderManifest, stable_key_from_parts, stable_key_text_from_parts,
@@ -23,7 +23,7 @@ use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::analysis_neutral::solver::facts::DerivedEdgeFact;
 use crate::internal_core::{
-    Diagnostic, DiagnosticRange, FileId, FunctionId, Language, Span, StableKeyId,
+    Diagnostic, DiagnosticRange, FileId, FunctionId, KeyPart, Language, Span, StableKeyId,
     StableKeyInterner, SymbolId,
 };
 
@@ -545,13 +545,16 @@ fn stable_refined_call_key_from_solver_edge(
     site: &CallSiteFact,
     edge: &DerivedEdgeFact,
 ) -> StableKeyId {
-    stable_key_from_parts(
+    stable_key_from_key_parts(
         interner,
         FactFamily::RefinedCallEdge,
-        &[
-            ("tier", format!("{:?}", RefinedCallTier::PointsToAssisted)),
-            ("solver_edge", interner.resolve(edge.stable_key).to_string()),
-            ("site", interner.resolve(site.stable_key).to_string()),
+        [
+            (
+                "tier",
+                KeyPart::Text(&format!("{:?}", RefinedCallTier::PointsToAssisted)),
+            ),
+            ("solver_edge", KeyPart::Key(edge.stable_key)),
+            ("site", KeyPart::Key(site.stable_key)),
         ],
     )
 }

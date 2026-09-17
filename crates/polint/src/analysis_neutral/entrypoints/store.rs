@@ -26,8 +26,9 @@ impl EntrypointOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         // Sort entrypoints by (stable_key, id)
         self.entrypoints.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         // Reassign sequential IDs after sorting
         for (index, entrypoint) in self.entrypoints.iter_mut().enumerate() {
@@ -36,16 +37,10 @@ impl EntrypointOutput {
 
         // Sort trust_boundaries by (entrypoint_stable_key, stable_key, id)
         self.trust_boundaries.sort_by(|left, right| {
-            (
-                interner.resolve(left.entrypoint_stable_key),
-                interner.resolve(left.stable_key),
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.entrypoint_stable_key),
-                    interner.resolve(right.stable_key),
-                    right.id,
-                ))
+            interner
+                .compare_canonical(left.entrypoint_stable_key, right.entrypoint_stable_key)
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, boundary) in self.trust_boundaries.iter_mut().enumerate() {
             boundary.id = TrustBoundaryId(index as u64);
@@ -53,16 +48,11 @@ impl EntrypointOutput {
 
         // Sort dispatch_edges by (from_source, stable_key, id)
         self.dispatch_edges.sort_by(|left, right| {
-            (
-                left.from_source.as_str(),
-                interner.resolve(left.stable_key),
-                left.id,
-            )
-                .cmp(&(
-                    right.from_source.as_str(),
-                    interner.resolve(right.stable_key),
-                    right.id,
-                ))
+            left.from_source
+                .as_str()
+                .cmp(right.from_source.as_str())
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, edge) in self.dispatch_edges.iter_mut().enumerate() {
             edge.id = DispatchEdgeId(index as u64);
@@ -70,8 +60,9 @@ impl EntrypointOutput {
 
         // Sort unresolved by (stable_key, id)
         self.unresolved.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, fact) in self.unresolved.iter_mut().enumerate() {
             fact.id = UnresolvedFrameworkId(index as u64);

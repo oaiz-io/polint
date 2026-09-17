@@ -91,11 +91,13 @@ pub struct TsDirectBindingOutput {
 
 impl TsDirectBindingOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.bindings.sort_by_cached_key(|binding| {
-            (
-                interner.resolve(binding.stable_key),
-                interner.resolve(binding.callsite_stable_key),
-            )
+        self.bindings.sort_by(|binding, other| {
+            interner
+                .compare_canonical(binding.stable_key, other.stable_key)
+                .then_with(|| {
+                    interner
+                        .compare_canonical(binding.callsite_stable_key, other.callsite_stable_key)
+                })
         });
         for (index, binding) in self.bindings.iter_mut().enumerate() {
             binding.id = TsDirectBindingId(index as u64);

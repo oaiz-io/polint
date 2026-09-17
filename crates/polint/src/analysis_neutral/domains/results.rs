@@ -198,9 +198,7 @@ impl DomainResults {
     ) -> impl Iterator<Item = &FunctionResult> {
         let mut functions = self.functions.values().collect::<Vec<_>>();
         functions.sort_by(|left, right| {
-            interner
-                .resolve(left.body_stable_key)
-                .cmp(&interner.resolve(right.body_stable_key))
+            interner.compare_canonical(left.body_stable_key, right.body_stable_key)
         });
         functions.into_iter()
     }
@@ -214,11 +212,7 @@ impl DomainResults {
         interner: &crate::internal_core::StableKeyInterner,
     ) -> impl Iterator<Item = &TopEvent> {
         let mut events = self.top_events.values().collect::<Vec<_>>();
-        events.sort_by(|left, right| {
-            interner
-                .resolve(left.stable_key)
-                .cmp(&interner.resolve(right.stable_key))
-        });
+        events.sort_by(|left, right| interner.compare_canonical(left.stable_key, right.stable_key));
         events.into_iter()
     }
 
@@ -227,11 +221,7 @@ impl DomainResults {
         interner: &crate::internal_core::StableKeyInterner,
     ) -> impl Iterator<Item = &BlockState> {
         let mut blocks = self.block_states.values().collect::<Vec<_>>();
-        blocks.sort_by(|left, right| {
-            interner
-                .resolve(left.stable_key)
-                .cmp(&interner.resolve(right.stable_key))
-        });
+        blocks.sort_by(|left, right| interner.compare_canonical(left.stable_key, right.stable_key));
         blocks.into_iter()
     }
 
@@ -240,11 +230,8 @@ impl DomainResults {
         interner: &crate::internal_core::StableKeyInterner,
     ) -> impl Iterator<Item = &OperationState> {
         let mut operations = self.operation_states.values().collect::<Vec<_>>();
-        operations.sort_by(|left, right| {
-            interner
-                .resolve(left.stable_key)
-                .cmp(&interner.resolve(right.stable_key))
-        });
+        operations
+            .sort_by(|left, right| interner.compare_canonical(left.stable_key, right.stable_key));
         operations.into_iter()
     }
 
@@ -293,11 +280,7 @@ impl DomainResults {
                 &operation.after,
             );
         }
-        rows.sort_by(|left, right| {
-            interner
-                .resolve(left.stable_key)
-                .cmp(&interner.resolve(right.stable_key))
-        });
+        rows.sort_by(|left, right| interner.compare_canonical(left.stable_key, right.stable_key));
         rows.into_iter()
     }
 

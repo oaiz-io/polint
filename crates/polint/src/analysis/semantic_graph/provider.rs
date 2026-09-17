@@ -94,17 +94,27 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
 
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
+    // Private substep attribution: this provider is the largest single stage on
+    // JS/TS corpora, and the stage log only reports its total.
+    let mut started = std::time::Instant::now();
+    let step = |step: &'static str, started: &mut std::time::Instant| {
+        tracing::debug!(target: "polint::kernel::stage", provider = SEMANTIC_GRAPH_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        *started = std::time::Instant::now();
+    };
 
     // Step: collect the private TS analysis side inputs once. This keeps
     // direct bindings, object-model rows, and token-source flow projection on
     // the same parse/semantic pass per TS file.
     let ts_direct_bindings = collect_ts_direct_binding_collection(db);
+    step("ts_direct_bindings", &mut started);
 
     // Step: refresh private TS object-model rows. This keeps the projection's
     // consumed object/property facts deterministic and digest-visible without
     // promoting a public object-model provider surface.
     let object_model = ts_direct_bindings.object_model_output();
-    if let Err(error) = db.replace_ts_object_model_facts(object_model) {
+    let replaced = db.replace_ts_object_model_facts(object_model);
+    step("object_model", &mut started);
+    if let Err(error) = replaced {
         return SemanticGraphProviderRunOutput {
             diagnostics: vec![provider_error_diagnostic(error.to_string())],
             cache_stats,
@@ -120,14 +130,18 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
     // stable-key order the digest is computed over.
     let ts_direct_binding_output_digest =
         ts_direct_binding_output_digest(ts_direct_bindings.output(), interner);
-    let base_output = build_semantic_graph_with_ts_direct_binding_collection(
+    step("ts_direct_binding_digest", &mut started);
+    let built = build_semantic_graph_with_ts_direct_binding_collection(
         db,
         &ts_direct_bindings,
         project_go_semantic_facts,
-    )
-    .normalized(interner);
+    );
+    step("build", &mut started);
+    let base_output = built.normalized(interner);
+    step("normalize", &mut started);
     let adaptation_models =
         collect_adaptation_model_input(interner, loaded, &base_output, adaptation_budget);
+    step("adaptation_models", &mut started);
     let output = if adaptation_models.store.accepted().is_empty() {
         base_output
     } else {
@@ -162,11 +176,14 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
         &go_semantic_output_digest,
         &output,
     );
+    step("output_digest", &mut started);
 
     // Step: store (assigns dense IDs + referentially validates inside
     // from_output). On store error the db keeps its prior state and the facts the
     // digest certifies were not persisted, so return output_digest: None.
-    match db.replace_normalized_semantic_graph_facts(output) {
+    let stored = db.replace_normalized_semantic_graph_facts(output);
+    step("store", &mut started);
+    match stored {
         Ok(()) => {
             db.replace_adaptation_model_facts(
                 adaptation_models.store.accepted().to_vec(),

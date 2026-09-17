@@ -1,0 +1,304 @@
+{
+ "wall_s": 147.1899265719694,
+ "exit": 0,
+ "cold": false,
+ "mode": "deep",
+ "repo": "research/evaluation-harness/repos/jelly",
+ "binary": ".perf/bin/final-polint-tests",
+ "point": {
+  "repo_id": "jelly",
+  "repo_file_count": 265,
+  "repo_source_bytes": 1111010,
+  "diff_files": 0,
+  "diff_hunk_lines": 0,
+  "cold_wall_clock_ms": 146583,
+  "warm_wall_clock_ms": 146583,
+  "peak_rss_bytes": 2430353408,
+  "peak_rss_delta_bytes": 2416721920,
+  "size": {
+   "cache_bytes": 97939129,
+   "store_bytes": 0
+  },
+  "budget": {
+   "budget_exceeded": 0,
+   "tokens_exhausted": 0,
+   "iteration_capped": 4561
+  }
+ },
+ "stages": [
+  {
+   "provider": "polint.source",
+   "elapsed_ms": 0,
+   "rss_mb": 20,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 19,
+   "facts": 265,
+   "keys": 265,
+   "key_mb": 0,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.go.syntax",
+   "elapsed_ms": 0,
+   "rss_mb": 20,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 20,
+   "facts": 265,
+   "keys": 265,
+   "key_mb": 0,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.ts.syntax",
+   "elapsed_ms": 31,
+   "rss_mb": 28,
+   "rss_delta_mb": 7,
+   "peak_rss_mb": 29,
+   "facts": 8604,
+   "keys": 8604,
+   "key_mb": 1,
+   "digest": "c24c59f3f04b72e3"
+  },
+  {
+   "provider": "polint.module_graph",
+   "elapsed_ms": 36,
+   "rss_mb": 34,
+   "rss_delta_mb": 5,
+   "peak_rss_mb": 33,
+   "facts": 12247,
+   "keys": 12247,
+   "key_mb": 2,
+   "digest": "398781ee46374f78"
+  },
+  {
+   "provider": "polint.symbol_graph",
+   "elapsed_ms": 2706,
+   "rss_mb": 196,
+   "rss_delta_mb": 162,
+   "peak_rss_mb": 278,
+   "facts": 99987,
+   "keys": 104069,
+   "key_mb": 36,
+   "digest": "97800d47dd7b1cd1"
+  },
+  {
+   "provider": "polint.module_topology",
+   "elapsed_ms": 23,
+   "rss_mb": 196,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 278,
+   "facts": 100763,
+   "keys": 104845,
+   "key_mb": 36,
+   "digest": "9d3067322296a0c0"
+  },
+  {
+   "provider": "polint.semantic_mir",
+   "elapsed_ms": 2535,
+   "rss_mb": 379,
+   "rss_delta_mb": 182,
+   "peak_rss_mb": 382,
+   "facts": 173148,
+   "keys": 251759,
+   "key_mb": 109,
+   "digest": "371b796aaf1df586"
+  },
+  {
+   "provider": "polint.cfg",
+   "elapsed_ms": 5152,
+   "rss_mb": 439,
+   "rss_delta_mb": 60,
+   "peak_rss_mb": 439,
+   "facts": 392013,
+   "keys": 470624,
+   "key_mb": 223,
+   "digest": "5d9863fd9800409e"
+  },
+  {
+   "provider": "polint.calls",
+   "elapsed_ms": 1370,
+   "rss_mb": 510,
+   "rss_delta_mb": 70,
+   "peak_rss_mb": 523,
+   "facts": 409093,
+   "keys": 490051,
+   "key_mb": 255,
+   "digest": "65f2006ade140e16"
+  },
+  {
+   "provider": "polint.go.semantic",
+   "elapsed_ms": 0,
+   "rss_mb": 510,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 523,
+   "facts": 409093,
+   "keys": 490051,
+   "key_mb": 255,
+   "digest": "7455c38adc39b80c"
+  },
+  {
+   "provider": "polint.identity",
+   "elapsed_ms": 138,
+   "rss_mb": 511,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 523,
+   "facts": 420360,
+   "keys": 501318,
+   "key_mb": 256,
+   "digest": "9b8a166e1498b290"
+  },
+  {
+   "provider": "polint.abstract_domains",
+   "elapsed_ms": 3398,
+   "rss_mb": 1024,
+   "rss_delta_mb": 513,
+   "peak_rss_mb": 1129,
+   "facts": 565568,
+   "keys": 646525,
+   "key_mb": 367,
+   "digest": "df199281a5ebf813"
+  },
+  {
+   "provider": "polint.direct_summaries",
+   "elapsed_ms": 344,
+   "rss_mb": 1026,
+   "rss_delta_mb": 1,
+   "peak_rss_mb": 1129,
+   "facts": 578975,
+   "keys": 659932,
+   "key_mb": 370,
+   "digest": "9eb18fc2c27ff3b4"
+  },
+  {
+   "provider": "polint.entrypoints",
+   "elapsed_ms": 5,
+   "rss_mb": 1026,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 1129,
+   "facts": 579018,
+   "keys": 659993,
+   "key_mb": 370,
+   "digest": "5f4ec04bdca9f312"
+  },
+  {
+   "provider": "polint.reachability",
+   "elapsed_ms": 6,
+   "rss_mb": 1026,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 1129,
+   "facts": 579620,
+   "keys": 660595,
+   "key_mb": 370,
+   "digest": "bf66fe98ea49f182"
+  },
+  {
+   "provider": "polint.extensions",
+   "elapsed_ms": 0,
+   "rss_mb": 1026,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 1129,
+   "facts": 579620,
+   "keys": 660595,
+   "key_mb": 370,
+   "digest": "b64586144146b5e1"
+  },
+  {
+   "provider": "polint.type_value_alias",
+   "elapsed_ms": 5826,
+   "rss_mb": 1482,
+   "rss_delta_mb": 455,
+   "peak_rss_mb": 1691,
+   "facts": 777674,
+   "keys": 850391,
+   "key_mb": 441,
+   "digest": "cb41cde6cf9fde7e"
+  },
+  {
+   "provider": "polint.semantic_graph",
+   "elapsed_ms": 108855,
+   "rss_mb": 1571,
+   "rss_delta_mb": 89,
+   "peak_rss_mb": 1691,
+   "facts": 777675,
+   "keys": 1013870,
+   "key_mb": 603,
+   "digest": "16a4b16c436b1021"
+  },
+  {
+   "provider": "polint.solver",
+   "elapsed_ms": 464,
+   "rss_mb": 1575,
+   "rss_delta_mb": 4,
+   "peak_rss_mb": 1691,
+   "facts": 782575,
+   "keys": 1061658,
+   "key_mb": 624,
+   "digest": "bc64d28dfd401274"
+  },
+  {
+   "provider": "polint.refined_calls",
+   "elapsed_ms": 1739,
+   "rss_mb": 1576,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 1691,
+   "facts": 793385,
+   "keys": 1072468,
+   "key_mb": 649,
+   "digest": "ed713bb690f5104c"
+  },
+  {
+   "provider": "polint.data_flow",
+   "elapsed_ms": 4082,
+   "rss_mb": 1710,
+   "rss_delta_mb": 133,
+   "peak_rss_mb": 1780,
+   "facts": 908417,
+   "keys": 1187500,
+   "key_mb": 799,
+   "digest": "3943b5edc6a3ec72"
+  },
+  {
+   "provider": "polint.evidence",
+   "elapsed_ms": 8942,
+   "rss_mb": 2156,
+   "rss_delta_mb": 446,
+   "peak_rss_mb": 2182,
+   "facts": 1087785,
+   "keys": 1366868,
+   "key_mb": 811,
+   "digest": "7c418ed5e1fd284d"
+  },
+  {
+   "provider": "polint.metrics",
+   "elapsed_ms": 52,
+   "rss_mb": 2156,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 2182,
+   "facts": 1092676,
+   "keys": 1371759,
+   "key_mb": 812,
+   "digest": "3fa485dd08f5dc45"
+  }
+ ],
+ "diagnostics": {
+  "count": 7,
+  "digest": "9fbdc64cfb1f6df9"
+ },
+ "load_before": [
+  3.8349609375,
+  4.56640625,
+  17.892578125
+ ],
+ "load_after": [
+  3.84814453125,
+  4.3134765625,
+  15.86669921875
+ ],
+ "competing_builds": [],
+ "stamps_before": [],
+ "stamps_after_clear": [],
+ "stamps_final": [],
+ "stderr": "2026-09-10T00:45:38.511762Z  INFO polint::kernel::stage: stage done provider=\"polint.source\" elapsed_ms=0 rss_mb=20 rss_delta_mb=0 peak_rss_mb=19 facts=265 keys=265 key_mb=0 digest=\"-\"\n2026-09-10T00:45:38.512923Z  INFO polint::kernel::stage: stage done provider=\"polint.go.syntax\" elapsed_ms=0 rss_mb=20 rss_delta_mb=0 peak_rss_mb=20 facts=265 keys=265 key_mb=0 digest=\"-\"\n2026-09-10T00:45:38.544381Z  INFO polint::kernel::stage: stage done provider=\"polint.ts.syntax\" elapsed_ms=31 rss_mb=28 rss_delta_mb=7 peak_rss_mb=29 facts=8604 keys=8604 key_mb=1 digest=\"c24c59f3f04b72e3\"\n2026-09-10T00:45:38.581175Z  INFO polint::kernel::stage: stage done provider=\"polint.module_graph\" elapsed_ms=36 rss_mb=34 rss_delta_mb=5 peak_rss_mb=33 facts=12247 keys=12247 key_mb=2 digest=\"398781ee46374f78\"\n2026-09-10T00:45:41.287559Z  INFO polint::kernel::stage: stage done provider=\"polint.symbol_graph\" elapsed_ms=2706 rss_mb=196 rss_delta_mb=162 peak_rss_mb=278 facts=99987 keys=104069 key_mb=36 digest=\"97800d47dd7b1cd1\"\n2026-09-10T00:45:41.310978Z  INFO polint::kernel::stage: stage done provider=\"polint.module_topology\" elapsed_ms=23 rss_mb=196 rss_delta_mb=0 peak_rss_mb=278 facts=100763 keys=104845 key_mb=36 digest=\"9d3067322296a0c0\"\n2026-09-10T00:45:43.847399Z  INFO polint::kernel::stage: stage done provider=\"polint.semantic_mir\" elapsed_ms=2535 rss_mb=379 rss_delta_mb=182 peak_rss_mb=382 facts=173148 keys=251759 key_mb=109 digest=\"371b796aaf1df586\"\n2026-09-10T00:45:49.001720Z  INFO polint::kernel::stage: stage done provider=\"polint.cfg\" elapsed_ms=5152 rss_mb=439 rss_delta_mb=60 peak_rss_mb=439 facts=392013 keys=470624 key_mb=223 digest=\"5d9863fd9800409e\"\n2026-09-10T00:45:50.375301Z  INFO polint::kernel::stage: stage done provider=\"polint.calls\" elapsed_ms=1370 rss_mb=510 rss_delta_mb=70 peak_rss_mb=523 facts=409093 keys=490051 key_mb=255 digest=\"65f2006ade140e16\"\n2026-09-10T00:45:50.377223Z  INFO polint::kernel::stage: stage done provider=\"polint.go.semantic\" elapsed_ms=0 rss_mb=510 rss_delta_mb=0 peak_rss_mb=523 facts=409093 keys=490051 key_mb=255 digest=\"7455c38adc39b80c\"\n2026-09-10T00:45:50.516672Z  INFO polint::kernel::stage: stage done provider=\"polint.identity\" elapsed_ms=138 rss_mb=511 rss_delta_mb=0 peak_rss_mb=523 facts=420360 keys=501318 key_mb=256 digest=\"9b8a166e1498b290\"\n2026-09-10T00:45:53.917150Z  INFO polint::kernel::stage: stage done provider=\"polint.abstract_domains\" elapsed_ms=3398 rss_mb=1024 rss_delta_mb=513 peak_rss_mb=1129 facts=565568 keys=646525 key_mb=367 digest=\"df199281a5ebf813\"\n2026-09-10T00:45:54.263557Z  INFO polint::kernel::stage: stage done provider=\"polint.direct_summaries\" elapsed_ms=344 rss_mb=1026 rss_delta_mb=1 peak_rss_mb=1129 facts=578975 keys=659932 key_mb=370 digest=\"9eb18fc2c27ff3b4\"\n2026-09-10T00:45:54.270834Z  INFO polint::kernel::stage: stage done provider=\"polint.entrypoints\" elapsed_ms=5 rss_mb=1026 rss_delta_mb=0 peak_rss_mb=1129 facts=579018 keys=659993 key_mb=370 digest=\"5f4ec04bdca9f312\"\n2026-09-10T00:45:54.279486Z  INFO polint::kernel::stage: stage done provider=\"polint.reachability\" elapsed_ms=6 rss_mb=1026 rss_delta_mb=0 peak_rss_mb=1129 facts=579620 keys=660595 key_mb=370 digest=\"bf66fe98ea49f182\"\n2026-09-10T00:45:54.282117Z  INFO polint::kernel::stage: stage done provider=\"polint.extensions\" elapsed_ms=0 rss_mb=1026 rss_delta_mb=0 peak_rss_mb=1129 facts=579620 keys=660595 key_mb=370 digest=\"b64586144146b5e1\"\n2026-09-10T00:46:00.111352Z  INFO polint::kernel::stage: stage done provider=\"polint.type_value_alias\" elapsed_ms=5826 rss_mb=1482 rss_delta_mb=455 peak_rss_mb=1691 facts=777674 keys=850391 key_mb=441 digest=\"cb41cde6cf9fde7e\"\n2026-09-10T00:47:48.970440Z  INFO polint::kernel::stage: stage done provider=\"polint.semantic_graph\" elapsed_ms=108855 rss_mb=1571 rss_delta_mb=89 peak_rss_mb=1691 facts=777675 keys=1013870 key_mb=603 digest=\"16a4b16c436b1021\"\n2026-09-10T00:47:49.438051Z  INFO polint::kernel::stage: stage done provider=\"polint.solver\" elapsed_ms=464 rss_mb=1575 rss_delta_mb=4 peak_rss_mb=1691 facts=782575 keys=1061658 key_mb=624 digest=\"bc64d28dfd401274\"\n2026-09-10T00:47:51.180646Z  INFO polint::kernel::stage: stage done provider=\"polint.refined_calls\" elapsed_ms=1739 rss_mb=1576 rss_delta_mb=0 peak_rss_mb=1691 facts=793385 keys=1072468 key_mb=649 digest=\"ed713bb690f5104c\"\n2026-09-10T00:47:55.266057Z  INFO polint::kernel::stage: stage done provider=\"polint.data_flow\" elapsed_ms=4082 rss_mb=1710 rss_delta_mb=133 peak_rss_mb=1780 facts=908417 keys=1187500 key_mb=799 digest=\"3943b5edc6a3ec72\"\n2026-09-10T00:48:04.212631Z  INFO polint::kernel::stage: stage done provider=\"polint.evidence\" elapsed_ms=8942 rss_mb=2156 rss_delta_mb=446 peak_rss_mb=2182 facts=1087785 keys=1366868 key_mb=811 digest=\"7c418ed5e1fd284d\"\n2026-09-10T00:48:04.269033Z  INFO polint::kernel::stage: stage done provider=\"polint.metrics\" elapsed_ms=52 rss_mb=2156 rss_delta_mb=0 peak_rss_mb=2182 facts=1092676 keys=1371759 key_mb=812 digest=\"3fa485dd08f5dc45\"\n2026-09-10T00:48:05.087081Z  INFO polint::kernel::stage: run diagnostics diagnostics=7 diagnostics_digest=\"9fbdc64cfb1f6df9\"\n",
+ "rejected_attempts": [],
+ "kind": "warm3"
+}

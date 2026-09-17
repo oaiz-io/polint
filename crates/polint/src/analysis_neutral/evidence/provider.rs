@@ -16,7 +16,7 @@ use super::store::EvidenceOutput;
 use crate::analysis_api::ProviderManifest;
 use crate::analysis_api::{
     CacheStats, Digest, DigestBuilder, DigestKind, InputComponent, InputSnapshot,
-    ProviderExecution, ProviderFailureReason, ProviderFailureStage,
+    ProviderExecution, ProviderFailureReason, ProviderFailureStage, stable_key_from_key_parts,
 };
 use crate::analysis_api::{FactFamily, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
@@ -26,7 +26,7 @@ use crate::analysis_neutral::data_flow::facts::{
     DataFlowPrecision, DataFlowProvenance, DataFlowStatus, DataFlowValidation,
 };
 use crate::analysis_neutral::ids::{EvidenceEdgeId, EvidenceNodeId};
-use crate::internal_core::Diagnostic;
+use crate::internal_core::{Diagnostic, KeyPart};
 
 pub const EVIDENCE_PROVIDER_ID: &str = "polint.evidence";
 
@@ -160,13 +160,10 @@ fn evidence_node_from_data_flow(
         confidence: EvidenceConfidence::High,
         compact_label: Some(format!("{:?}", node.kind)),
         source_fact_stable_keys: vec![interner.resolve(node.stable_key)],
-        stable_key: stable_key_from_parts(
+        stable_key: stable_key_from_key_parts(
             interner,
             FactFamily::EvidenceNode,
-            &[(
-                "data_flow_node",
-                interner.resolve(node.stable_key).to_string(),
-            )],
+            [("data_flow_node", KeyPart::Key(node.stable_key))],
         ),
     }
 }
@@ -197,13 +194,10 @@ fn evidence_edge_from_data_flow(
         source_fact_stable_keys: std::iter::once(interner.resolve(edge.stable_key))
             .chain(edge.input_stable_keys.iter().cloned())
             .collect(),
-        stable_key: stable_key_from_parts(
+        stable_key: stable_key_from_key_parts(
             interner,
             FactFamily::EvidenceEdge,
-            &[(
-                "data_flow_edge",
-                interner.resolve(edge.stable_key).to_string(),
-            )],
+            [("data_flow_edge", KeyPart::Key(edge.stable_key))],
         ),
     }
 }
@@ -258,15 +252,12 @@ fn derive_control_dependence_evidence(db: &impl AnalysisHost, output: &mut Evide
                 interner.resolve(dependence.stable_key),
                 interner.resolve(controlling_edge.stable_key),
             ],
-            stable_key: stable_key_from_parts(
+            stable_key: stable_key_from_key_parts(
                 interner,
                 FactFamily::EvidenceNode,
-                &[
-                    (
-                        "control_dependence",
-                        interner.resolve(dependence.stable_key).to_string(),
-                    ),
-                    ("role", "controller".to_string()),
+                [
+                    ("control_dependence", KeyPart::Key(dependence.stable_key)),
+                    ("role", KeyPart::Text("controller")),
                 ],
             ),
         });
@@ -292,15 +283,12 @@ fn derive_control_dependence_evidence(db: &impl AnalysisHost, output: &mut Evide
             confidence: EvidenceConfidence::High,
             compact_label: Some("controlled_block".to_string()),
             source_fact_stable_keys: vec![interner.resolve(dependence.stable_key)],
-            stable_key: stable_key_from_parts(
+            stable_key: stable_key_from_key_parts(
                 interner,
                 FactFamily::EvidenceNode,
-                &[
-                    (
-                        "control_dependence",
-                        interner.resolve(dependence.stable_key).to_string(),
-                    ),
-                    ("role", "controlled".to_string()),
+                [
+                    ("control_dependence", KeyPart::Key(dependence.stable_key)),
+                    ("role", KeyPart::Text("controlled")),
                 ],
             ),
         });
@@ -323,13 +311,10 @@ fn derive_control_dependence_evidence(db: &impl AnalysisHost, output: &mut Evide
                 interner.resolve(dependence.stable_key),
                 interner.resolve(controlling_edge.stable_key),
             ],
-            stable_key: stable_key_from_parts(
+            stable_key: stable_key_from_key_parts(
                 interner,
                 FactFamily::EvidenceEdge,
-                &[(
-                    "control_dependence",
-                    interner.resolve(dependence.stable_key).to_string(),
-                )],
+                [("control_dependence", KeyPart::Key(dependence.stable_key))],
             ),
         });
     }

@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::internal_core::{StableKeyId, StableKeyInterner};
+use crate::internal_core::{
+    KeyPart, StableKeyId, StableKeyInterner, push_decimal, push_length_prefixed,
+    push_length_prefixed_path,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FactFamily {
@@ -479,6 +482,24 @@ pub fn stable_key_from_parts<V: AsRef<str>>(
     interner.intern(text)
 }
 
+/// Interns the canonical key for `family` and `parts`, where a part may name
+/// another key instead of carrying its text.
+///
+/// The bytes are exactly what [`stable_key_from_parts`] would produce with each
+/// [`KeyPart::Key`] replaced by that key's resolved text, so both reach the same
+/// id. Composite identities embed their parents, so passing the parent by id is
+/// what lets the interner store the shared structure once instead of expanding
+/// it into every descendant.
+pub(crate) fn stable_key_from_key_parts<const N: usize>(
+    interner: &StableKeyInterner,
+    family: FactFamily,
+    parts: [(&str, KeyPart<'_>); N],
+) -> StableKeyId {
+    let mut parts = parts;
+    parts.sort_by(|left, right| left.0.cmp(right.0));
+    interner.intern_key_parts(family.label(), &parts)
+}
+
 /// Canonical stable-key text for `family` and `parts`, **without interning it**.
 ///
 /// Most callers want the text: to embed in a larger composed key, to feed a
@@ -520,41 +541,6 @@ pub fn write_stable_key_text(buffer: &mut String, family: FactFamily, parts: &mu
         buffer.push('=');
         push_length_prefixed_path(buffer, value);
     }
-}
-
-fn push_length_prefixed(buffer: &mut String, value: &str) {
-    push_decimal(buffer, value.len());
-    buffer.push(':');
-    buffer.push_str(value);
-}
-
-/// Like [`push_length_prefixed`], folding `\` to `/`. The fold is byte-for-byte,
-/// so the length prefix is the same either way.
-fn push_length_prefixed_path(buffer: &mut String, value: &str) {
-    push_decimal(buffer, value.len());
-    buffer.push(':');
-    let mut rest = value;
-    while let Some(index) = rest.find('\\') {
-        buffer.push_str(&rest[..index]);
-        buffer.push('/');
-        rest = &rest[index + 1..];
-    }
-    buffer.push_str(rest);
-}
-
-fn push_decimal(buffer: &mut String, value: usize) {
-    let mut digits = [0_u8; 20];
-    let mut index = digits.len();
-    let mut value = value;
-    loop {
-        index -= 1;
-        digits[index] = b'0' + u8::try_from(value % 10).expect("a decimal digit fits in a byte");
-        value /= 10;
-        if value == 0 {
-            break;
-        }
-    }
-    buffer.push_str(std::str::from_utf8(&digits[index..]).expect("decimal digits are ASCII"));
 }
 
 #[cfg(test)]
@@ -625,6 +611,88 @@ mod tests {
         let first = interner.resolve(first);
         assert!(first.contains("6:Import"));
         assert!(first.contains("4:path=11:src/main.go"));
+    }
+
+    /// The compatibility boundary for structural sharing: a key built with a
+    /// child reference must be the same key, byte for byte and id for id, as the
+    /// one built from that child's resolved text.
+    #[test]
+    fn key_parts_and_text_parts_produce_one_identity_per_family() {
+        let families = [
+            FactFamily::AccessPath,
+            FactFamily::EvidenceNode,
+            FactFamily::CfgEdge,
+            FactFamily::DataFlowEdge,
+            FactFamily::Type,
+            FactFamily::SolverDerivedEdge,
+        ];
+        let values: [&[(&str, &str)]; 6] = [
+            &[],
+            &[("place", "")],
+            &[("b", "second"), ("a", "first")],
+            &[("path", "src\\deep\\mod.ts"), ("path", "b")],
+            &[("name", "naïve"), ("zero", "0")],
+            &[("weird", "=|:"), ("nul", "\u{0}")],
+        ];
+
+        for family in families {
+            let interner = StableKeyInterner::default();
+            let child = stable_key_from_parts(
+                &interner,
+                FactFamily::Place,
+                &[("path", "src\\a.ts"), ("local", "value")],
+            );
+            let child_text = interner.resolve(child).to_string();
+            for extra in values {
+                let mut key_parts = vec![("child", KeyPart::Key(child))];
+                let mut text_parts = vec![("child", child_text.as_str())];
+                for (label, value) in extra {
+                    key_parts.push((*label, KeyPart::Text(value)));
+                    text_parts.push((*label, *value));
+                }
+                let mut sorted = key_parts.clone();
+                sorted.sort_by(|left, right| left.0.cmp(right.0));
+                let composite = interner.intern_key_parts(family.label(), &sorted);
+                let expanded = stable_key_from_parts(&interner, family, &text_parts);
+
+                assert_eq!(
+                    composite, expanded,
+                    "{:?} with {extra:?} must reach one id",
+                    family
+                );
+                assert_eq!(
+                    interner.resolve(composite),
+                    interner.resolve(expanded),
+                    "{:?} with {extra:?} must resolve identically",
+                    family
+                );
+            }
+        }
+    }
+
+    /// `stable_key_from_key_parts` owns the label sort, exactly as the text path
+    /// does, so a caller's argument order cannot change a fact's identity.
+    #[test]
+    fn key_parts_sort_by_label_like_the_text_path() {
+        let interner = StableKeyInterner::default();
+        let child = interner.intern("8:Function|4:name=1:f");
+
+        let forward = stable_key_from_key_parts(
+            &interner,
+            FactFamily::Type,
+            [("a", KeyPart::Text("1")), ("b", KeyPart::Key(child))],
+        );
+        let reversed = stable_key_from_key_parts(
+            &interner,
+            FactFamily::Type,
+            [("b", KeyPart::Key(child)), ("a", KeyPart::Text("1"))],
+        );
+
+        assert_eq!(forward, reversed);
+        assert_eq!(
+            interner.resolve(forward).as_ref(),
+            "4:Type|1:a=1:1|1:b=21:8:Function|4:name=1:f"
+        );
     }
 
     #[test]

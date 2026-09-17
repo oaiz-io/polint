@@ -421,16 +421,11 @@ impl ExtensionRefMaps {
         // Local IDs are ordinals over text-sorted stable keys so relation payloads
         // stay deterministic even when interning order differs from lexical order.
         facts.sort_by(|left, right| {
-            (
-                left.extension_id.as_str(),
-                left.provider_id.as_str(),
-                interner.resolve(left.stable_key),
-            )
-                .cmp(&(
-                    right.extension_id.as_str(),
-                    right.provider_id.as_str(),
-                    interner.resolve(right.stable_key),
-                ))
+            left.extension_id
+                .as_str()
+                .cmp(right.extension_id.as_str())
+                .then_with(|| left.provider_id.as_str().cmp(right.provider_id.as_str()))
+                .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
         });
 
         for fact in facts {

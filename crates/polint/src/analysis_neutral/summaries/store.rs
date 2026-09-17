@@ -18,12 +18,14 @@ impl SummaryOutput {
 
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.summaries.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.events.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, fact) in self.summaries.iter_mut().enumerate() {
             fact.id = SummaryId(index as u64);
@@ -107,8 +109,9 @@ impl SummaryStore {
         if !events.is_empty() {
             self.output.events.extend(events.iter().cloned());
             self.output.events.sort_by(|left, right| {
-                (interner.resolve(left.stable_key), left.id)
-                    .cmp(&(interner.resolve(right.stable_key), right.id))
+                interner
+                    .compare_canonical(left.stable_key, right.stable_key)
+                    .then_with(|| left.id.cmp(&right.id))
             });
             for (index, fact) in self.output.events.iter_mut().enumerate() {
                 fact.id = SummaryEventId(index as u64);

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::analysis_neutral::AnalysisHost;
 
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::ids::{
     DerivedEdgeId, ObjectTokenId, PointsToConstraintId, PtVarId, SemanticNodeId,
 };
@@ -20,7 +20,7 @@ use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::analysis_neutral::solver::budget::{BudgetStatus, SolverBudget};
 use crate::analysis_neutral::solver::facts::DerivedEdgeFact;
 use crate::analysis_neutral::solver::provenance::{ContributingFact, DerivedEdgeProvenance};
-use crate::internal_core::StableKeyId;
+use crate::internal_core::{KeyPart, StableKeyId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TsPointsToCallsite {
@@ -183,13 +183,16 @@ pub fn solve_ts_points_to(
                 },
                 0,
             );
-            let stable_key = stable_key_from_parts(
+            let stable_key = stable_key_from_key_parts(
                 interner,
                 FactFamily::SolverDerivedEdge,
-                &[
-                    ("source", interner.resolve(*caller_stable_key).to_string()),
-                    ("target", interner.resolve(*target_stable_key).to_string()),
-                    ("provenance", provenance.stable_key_fragment(interner)),
+                [
+                    ("source", KeyPart::Key(*caller_stable_key)),
+                    ("target", KeyPart::Key(*target_stable_key)),
+                    (
+                        "provenance",
+                        KeyPart::Text(&provenance.stable_key_fragment(interner)),
+                    ),
                 ],
             );
             edges.entry(stable_key).or_insert(DerivedEdgeFact {
@@ -327,12 +330,12 @@ fn insert_projected_constraint(
     relation: &str,
     kind: PointsToConstraintKind,
 ) {
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::PointsToConstraint,
-        &[
-            ("source", interner.resolve(source_stable_key).to_string()),
-            ("relation", relation.to_string()),
+        [
+            ("source", KeyPart::Key(source_stable_key)),
+            ("relation", KeyPart::Text(relation)),
         ],
     );
     projected

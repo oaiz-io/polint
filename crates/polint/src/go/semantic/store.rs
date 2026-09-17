@@ -66,13 +66,13 @@ pub struct GoSemanticFactsOutput {
 impl GoSemanticFactsOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.packages
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         for (index, fact) in self.packages.iter_mut().enumerate() {
             fact.id = crate::go::semantic::facts::GoSemanticPackageId(index as u64);
         }
 
         self.functions
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         for (index, fact) in self.functions.iter_mut().enumerate() {
             fact.id = crate::go::semantic::facts::GoSemanticFunctionId(index as u64);
         }
@@ -91,7 +91,7 @@ impl GoSemanticFactsOutput {
         // declaration identity and are intentionally NOT deduped (a real duplicate there
         // is a genuine conflict the validator must still reject).
         self.callsites
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.callsites
             .dedup_by(|left, right| left.stable_key == right.stable_key);
         for (index, fact) in self.callsites.iter_mut().enumerate() {
@@ -99,13 +99,13 @@ impl GoSemanticFactsOutput {
         }
 
         self.method_sets
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         for (index, fact) in self.method_sets.iter_mut().enumerate() {
             fact.id = crate::go::semantic::facts::GoSemanticMethodSetId(index as u64);
         }
 
         self.address_taken
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.address_taken
             .dedup_by(|left, right| left.stable_key == right.stable_key);
         for (index, fact) in self.address_taken.iter_mut().enumerate() {
@@ -113,7 +113,7 @@ impl GoSemanticFactsOutput {
         }
 
         self.instantiated_types
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.instantiated_types
             .dedup_by(|left, right| left.stable_key == right.stable_key);
         for (index, fact) in self.instantiated_types.iter_mut().enumerate() {
@@ -121,7 +121,7 @@ impl GoSemanticFactsOutput {
         }
 
         self.dynamic_dispatch
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.dynamic_dispatch
             .dedup_by(|left, right| left.stable_key == right.stable_key);
         for (index, fact) in self.dynamic_dispatch.iter_mut().enumerate() {
@@ -129,7 +129,7 @@ impl GoSemanticFactsOutput {
         }
 
         self.rta_edges
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         self.rta_edges
             .dedup_by(|left, right| left.stable_key == right.stable_key);
         for (index, fact) in self.rta_edges.iter_mut().enumerate() {
@@ -137,7 +137,7 @@ impl GoSemanticFactsOutput {
         }
 
         self.package_errors
-            .sort_by_cached_key(|row| interner.resolve(row.stable_key));
+            .sort_by(|row, other| interner.compare_canonical(row.stable_key, other.stable_key));
         for (index, fact) in self.package_errors.iter_mut().enumerate() {
             fact.id = crate::go::semantic::facts::GoSemanticPackageErrorId(index as u64);
         }
@@ -241,7 +241,7 @@ fn collapse_duplicate_stable_keys<T: StableKeyed + Clone + PartialEq>(
     conflicting: &mut bool,
     interner: &StableKeyInterner,
 ) -> usize {
-    rows.sort_by_cached_key(|row| interner.resolve(row.stable_key()));
+    rows.sort_by(|row, other| interner.compare_canonical(row.stable_key(), other.stable_key()));
     let before = rows.len();
     let mut kept: Vec<T> = Vec::with_capacity(before);
     for row in rows.drain(..) {

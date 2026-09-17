@@ -197,12 +197,14 @@ pub fn recognize_ts_entrypoints(db: &impl AnalysisHost) -> TsRecognizerOutput {
     );
 
     // Sort output by stable key
-    entrypoints.sort_by_key(|entrypoint| interner.resolve(entrypoint.stable_key));
+    entrypoints.sort_by(|entrypoint, other| {
+        interner.compare_canonical(entrypoint.stable_key, other.stable_key)
+    });
     let mut seen_entrypoints = BTreeSet::new();
     entrypoints.retain(|entrypoint| {
         seen_entrypoints.insert(entrypoint_semantic_identity(interner, entrypoint))
     });
-    unresolved.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    unresolved.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 
     TsRecognizerOutput {
         entrypoints,

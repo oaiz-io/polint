@@ -7,14 +7,14 @@ use super::local::budget_fact;
 use super::store::{DataFlowOutput, next_data_flow_edge_id, next_data_flow_node_id};
 use std::sync::Arc;
 
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::ids::DataFlowNodeId;
 use crate::analysis_neutral::summaries::facts::{
     FlowKind, FlowRoot, SummaryDomainKind, SummaryEventFact, SummaryFact, SummaryFlowEdge,
     SummaryPrecision, SummaryStatus,
 };
-use crate::internal_core::Language;
+use crate::internal_core::{KeyPart, Language};
 
 /// Key -> id indexes for the summary projection.
 ///
@@ -311,13 +311,13 @@ fn summary_node(
     kind: DataFlowNodeKind,
     role: &str,
 ) -> DataFlowNodeId {
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::DataFlowNode,
-        &[
-            ("kind", format!("{kind:?}")),
-            ("summary", interner.resolve(fact.stable_key).to_string()),
-            ("role", role.to_string()),
+        [
+            ("kind", KeyPart::Text(&format!("{kind:?}"))),
+            ("summary", KeyPart::Key(fact.stable_key)),
+            ("role", KeyPart::Text(role)),
         ],
     );
     if let Some(existing) = index.nodes.get(&stable_key) {
@@ -353,16 +353,13 @@ fn event_node(
     kind: DataFlowNodeKind,
     role: &str,
 ) -> DataFlowNodeId {
-    let stable_key = stable_key_from_parts(
+    let stable_key = stable_key_from_key_parts(
         interner,
         FactFamily::DataFlowNode,
-        &[
-            ("kind", format!("{kind:?}")),
-            (
-                "summary_event",
-                interner.resolve(event.stable_key).to_string(),
-            ),
-            ("role", role.to_string()),
+        [
+            ("kind", KeyPart::Text(&format!("{kind:?}"))),
+            ("summary_event", KeyPart::Key(event.stable_key)),
+            ("role", KeyPart::Text(role)),
         ],
     );
     if let Some(existing) = index.nodes.get(&stable_key) {

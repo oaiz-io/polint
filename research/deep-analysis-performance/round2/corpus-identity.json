@@ -1,0 +1,39 @@
+{
+  "jelly-callgraph-micro": {
+    "path": "research/evaluation-harness/repos/jelly",
+    "commit": "b799ed4f0d68c670fe398830aaa51dd5c628cf74",
+    "license": "BSD-3-Clause",
+    "tracked_files_clean": true,
+    "untracked": [
+      "?? .polint/"
+    ]
+  },
+  "go-x-tools-rta-callgraph": {
+    "path": "research/evaluation-harness/repos/golang-tools",
+    "commit": "7743a285e3d261ca235408e013ec5c14cb5170e4",
+    "license": "BSD-3-Clause",
+    "tracked_files_clean": true,
+    "untracked": [
+      "?? .polint/"
+    ]
+  },
+  "excalidraw-excalidraw-scale": {
+    "path": "research/evaluation-harness/repos/excalidraw-excalidraw",
+    "commit": "0dbd2a39319d41fda37b2945dea0dcbd58d6a564",
+    "license": "MIT",
+    "tracked_files_clean": true,
+    "untracked": [
+      "?? .polint/"
+    ]
+  },
+  "gohugoio-hugo-scale": {
+    "path": "research/evaluation-harness/repos/gohugoio-hugo",
+    "commit": "3f35721fb2c75a1f7cc5a7a14400b66e73d4b06e",
+    "license": "Apache-2.0",
+    "tracked_files_clean": true,
+    "untracked": [
+      "?? .polint.toml",
+      "?? .polint/"
+    ]
+  }
+}
