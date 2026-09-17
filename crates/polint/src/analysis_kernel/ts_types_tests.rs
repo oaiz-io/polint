@@ -427,3 +427,85 @@ fn median(values: &mut [f64]) -> f64 {
     values.sort_by(|left, right| left.partial_cmp(right).expect("finite timings"));
     values[values.len() / 2]
 }
+
+/// Measurement harness: what one sidecar invocation costs cold and warm.
+///
+/// The whole-pipeline harness above runs with the cache disabled so both of its
+/// arms stay comparable, which leaves the cached path unmeasured. This drives
+/// the client directly against one cache directory, so the first pass is the
+/// cold sidecar and the rest are the stored NDJSON being replayed.
+///
+/// ```sh
+/// POLINT_TS_TYPES_MEASURE_REPO=/path/to/repo \
+///   cargo test -p polint --lib --all-features --release \
+///   analysis_kernel::ts_types_tests::measure_sidecar_cold_and_warm \
+///   -- --exact --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "measurement harness: set POLINT_TS_TYPES_MEASURE_REPO"]
+fn measure_sidecar_cold_and_warm() {
+    let Some(repo) = std::env::var_os("POLINT_TS_TYPES_MEASURE_REPO").map(PathBuf::from) else {
+        eprintln!("SKIP measure_sidecar_cold_and_warm: set POLINT_TS_TYPES_MEASURE_REPO");
+        return;
+    };
+    let mut files = Vec::new();
+    collect_ts_files(&repo, &repo, &mut files);
+    files.sort();
+    let config = crate::ts::types::lifecycle::TsTypesConfig::from_settings_files(
+        &repo,
+        &std::collections::BTreeMap::new(),
+        &files,
+    )
+    .expect("lifecycle resolves");
+    eprintln!(
+        "discovered {} TS/JS files across {} project(s)",
+        files.len(),
+        config.projects.len()
+    );
+
+    let cache = tempfile::tempdir().expect("sidecar cache dir");
+    let client = crate::ts::types::client::TsTypesClient::new(repo.clone(), &config);
+    for pass in 0..3 {
+        let started = std::time::Instant::now();
+        let run = client
+            .run_cached(&config, cache.path(), "measure-upstream")
+            .expect("sidecar run");
+        eprintln!(
+            "pass {pass} ({}) wall_ms={:.0} rows={} sidecar_self_reported_ms={}",
+            if pass == 0 { "cold" } else { "warm" },
+            started.elapsed().as_secs_f64() * 1000.0,
+            run.output.rows.len(),
+            run.output.totals.elapsed_ms
+        );
+    }
+}
+
+/// Repository-relative TS/JS paths, skipping the directories a scan never
+/// discovers.
+fn collect_ts_files(root: &Path, directory: &Path, files: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() {
+            if matches!(
+                name.as_ref(),
+                "node_modules" | ".git" | "lib" | "dist" | "tmp"
+            ) {
+                continue;
+            }
+            collect_ts_files(root, &path, files);
+            continue;
+        }
+        let is_source = matches!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("ts" | "tsx" | "mts" | "cts" | "js" | "jsx" | "mjs" | "cjs")
+        ) && !name.ends_with(".d.ts");
+        if is_source && let Ok(relative) = path.strip_prefix(root) {
+            files.push(relative.to_string_lossy().replace('\\', "/"));
+        }
+    }
+}

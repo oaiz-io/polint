@@ -188,11 +188,41 @@ count and would matter on a larger one, but this measurement does not show it
 paying off and does not claim it does. Tier attribution was identical across
 both runs.
 
-**Warm cost: unmeasured.** This harness constructs the kernel with a disabled
-cache so both arms run cold and stay comparable. The raw sidecar NDJSON is
-cached on disk by `sidecar_digest + typescript_version + upstream_digest +
-lifecycle`, so a warm run is expected to skip the 14.4 s sidecar round trip
-entirely, but that path was not timed here and no number is claimed for it.
+The pipeline harness constructs the kernel with a disabled cache so both arms
+run cold and stay comparable, which leaves the cached path out of those numbers.
+It is measured separately below.
+
+### Sidecar, cold and warm
+
+`TsTypesClient::run_cached` driven directly against one cache directory, so the
+first pass is the sidecar and the rest are the stored NDJSON being replayed:
+
+```sh
+POLINT_TS_TYPES_MEASURE_REPO=research/evaluation-harness/repos/jelly \
+cargo test -p polint --lib --all-features --locked --release \
+  analysis_kernel::ts_types_tests::measure_sidecar_cold_and_warm \
+  -- --exact --ignored --nocapture
+```
+
+264 discovered TS/JS files across 2 projects:
+
+| Pass | Wall time | Rows |
+|---|---|---|
+| 0 (cold) | 14,291 ms | 25,607 |
+| 1 (warm) | **42 ms** | 25,607 |
+| 2 (warm) | **30 ms** | 25,607 |
+
+**340× on the invocation**, with identical row counts. The cache key is
+`sidecar_digest + typescript_version + upstream_digest + lifecycle`, and the
+lifecycle folds the discovered-file set, so a scan whose scope changed is a
+different key and pays the cold cost again.
+
+One caveat this measurement exposes: the `ts_types.*.elapsed_ms` counters a warm
+run reports are the **cold** run's timings, because the stored artifact is the
+raw NDJSON including its phase rows. `sidecar_self_reported_ms` stayed 14,077 on
+both warm passes while the wall clock was 42 ms and 30 ms. The Go sidecar's
+cached path has the same property; it is recorded here rather than changed,
+because the phase rows describe the sidecar's work and not this run's.
 
 ## 3. Accuracy against the Jelly oracle
 
