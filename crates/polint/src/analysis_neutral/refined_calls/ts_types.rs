@@ -348,30 +348,26 @@ fn edge_kind_for_site(site: &CallSiteFact) -> CallEdgeKind {
 /// the join tries exact equality first and falls back to containment anchored
 /// on the declaration's own name.
 struct TsSiteIndex {
-    sites_by_file: BTreeMap<FileId, Vec<CallSiteId>>,
-    functions_by_file: BTreeMap<FileId, Vec<FunctionId>>,
+    sites_by_file: BTreeMap<FileId, Vec<usize>>,
+    functions_by_file: BTreeMap<FileId, Vec<usize>>,
 }
 
 impl TsSiteIndex {
     fn new(db: &impl AnalysisHost) -> Self {
-        let mut sites_by_file: BTreeMap<FileId, Vec<CallSiteId>> = BTreeMap::new();
-        for site in db
-            .call_sites()
-            .iter()
-            .filter(|site| site.language.is_ts_family())
-        {
-            sites_by_file.entry(site.file).or_default().push(site.id);
+        let mut sites_by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
+        for (position, site) in db.call_sites().iter().enumerate() {
+            if site.language.is_ts_family() {
+                sites_by_file.entry(site.file).or_default().push(position);
+            }
         }
-        let mut functions_by_file: BTreeMap<FileId, Vec<FunctionId>> = BTreeMap::new();
-        for function in db
-            .functions()
-            .iter()
-            .filter(|function| function.language.is_ts_family())
-        {
-            functions_by_file
-                .entry(function.file)
-                .or_default()
-                .push(function.id);
+        let mut functions_by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
+        for (position, function) in db.functions().iter().enumerate() {
+            if function.language.is_ts_family() {
+                functions_by_file
+                    .entry(function.file)
+                    .or_default()
+                    .push(position);
+            }
         }
         Self {
             sites_by_file,
@@ -386,11 +382,12 @@ impl TsSiteIndex {
     ) -> Option<&'a CallSiteFact> {
         let file = site.file?;
         let span = site.span.as_ref()?;
-        let ids = self.sites_by_file.get(&file)?;
-        let candidates = db
-            .call_sites()
+        let all = db.call_sites();
+        let candidates = self
+            .sites_by_file
+            .get(&file)?
             .iter()
-            .filter(|candidate| ids.contains(&candidate.id))
+            .map(|position| &all[*position])
             .collect::<Vec<_>>();
         if let Some(exact) = candidates
             .iter()
@@ -443,11 +440,12 @@ impl TsSiteIndex {
     ) -> Option<FunctionId> {
         let file = callee.file?;
         let span = callee.span.as_ref()?;
-        let ids = self.functions_by_file.get(&file)?;
-        let candidates = db
-            .functions()
+        let all = db.functions();
+        let candidates = self
+            .functions_by_file
+            .get(&file)?
             .iter()
-            .filter(|candidate| ids.contains(&candidate.id))
+            .map(|position| &all[*position])
             .collect::<Vec<_>>();
         if let Some(exact) = candidates
             .iter()

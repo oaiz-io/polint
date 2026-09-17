@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use crate::internal_core::StableKeyInterner;
 use crate::ts::error::AnalysisError;
@@ -114,15 +113,16 @@ fn validate_dense(family: &str, ids: impl Iterator<Item = u64>) -> Result<(), An
 
 /// Rejects a path that leaves the repository.
 ///
-/// Sidecar paths are repository-relative by contract. An absolute or
+/// Sidecar paths are repository-relative by contract. A rooted or
 /// parent-escaping path is either a bug or an attempt to describe a file the
-/// scan does not own, and neither should reach a fact.
+/// scan does not own, and neither should reach a fact. The shape check is
+/// platform-independent: `/etc/passwd` must be refused on Windows too, where
+/// `Path::is_absolute` calls it merely drive-relative.
 pub(crate) fn validate_relative_path(path: Option<&str>) -> Result<(), AnalysisError> {
     let Some(path) = path else {
         return Ok(());
     };
-    let candidate = Path::new(path);
-    if candidate.is_absolute() || path == ".." || path.starts_with("../") || path.contains("/../") {
+    if crate::internal_core::escapes_repository(path) {
         return Err(invalid_fact(format!(
             "TS type sidecar file path `{path}` escapes repository"
         )));
@@ -213,8 +213,9 @@ mod tests {
     }
 
     #[test]
-    fn an_absolute_path_is_rejected() {
+    fn a_rooted_or_escaping_path_is_rejected_on_every_platform() {
         assert!(validate_relative_path(Some("/etc/passwd")).is_err());
+        assert!(validate_relative_path(Some("C:/Windows")).is_err());
         assert!(validate_relative_path(Some("src/../../etc/passwd")).is_err());
         assert!(validate_relative_path(Some("src/app.ts")).is_ok());
         assert!(validate_relative_path(None).is_ok());
