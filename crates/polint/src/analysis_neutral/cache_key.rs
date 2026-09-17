@@ -64,6 +64,19 @@ pub fn v13_cache_dependency_ledger() -> &'static [V13CacheDependency] {
             upstream_output_digests: &[],
         },
         V13CacheDependency {
+            provider_id: "polint.ts.types",
+            manifest_inputs: &[
+                "source_files",
+                "functions",
+                "call_sites",
+                "ts.type_sidecar",
+                "ts.type_projects",
+                "ts.typescript_path",
+                "ts.type_timeout_ms",
+            ],
+            upstream_output_digests: &["polint.ts.syntax"],
+        },
+        V13CacheDependency {
             provider_id: "polint.solver",
             manifest_inputs: &[
                 "source_files",
@@ -115,6 +128,10 @@ pub fn v13_cache_dependency_ledger() -> &'static [V13CacheDependency] {
                 "semantic_constraints",
                 "go_semantic_functions",
                 "go_semantic_callsites",
+                "ts_type_callsites",
+                "ts_type_callees",
+                "ts_type_receivers",
+                "ts_type_file_densities",
                 "solver_derived_edges",
             ],
             upstream_output_digests: &[
@@ -186,6 +203,7 @@ mod semantic_mir_layer_key {
             vec![
                 "polint.semantic_graph",
                 "polint.go.semantic",
+                "polint.ts.types",
                 "polint.solver",
                 "polint.refined_calls",
             ]

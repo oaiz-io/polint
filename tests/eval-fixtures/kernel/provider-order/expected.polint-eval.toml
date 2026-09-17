@@ -36,43 +36,46 @@ invariant = { name = "provider_order.8", value = "polint.calls", mode = "exact" 
 invariant = { name = "provider_order.9", value = "polint.go.semantic", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.10", value = "polint.identity", mode = "exact" }
+invariant = { name = "provider_order.10", value = "polint.ts.types", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.11", value = "polint.abstract_domains", mode = "exact" }
+invariant = { name = "provider_order.11", value = "polint.identity", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.12", value = "polint.direct_summaries", mode = "exact" }
+invariant = { name = "provider_order.12", value = "polint.abstract_domains", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.13", value = "polint.entrypoints", mode = "exact" }
+invariant = { name = "provider_order.13", value = "polint.direct_summaries", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.14", value = "polint.reachability", mode = "exact" }
+invariant = { name = "provider_order.14", value = "polint.entrypoints", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.15", value = "polint.extensions", mode = "exact" }
+invariant = { name = "provider_order.15", value = "polint.reachability", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.16", value = "polint.type_value_alias", mode = "exact" }
+invariant = { name = "provider_order.16", value = "polint.extensions", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.17", value = "polint.semantic_graph", mode = "exact" }
+invariant = { name = "provider_order.17", value = "polint.type_value_alias", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.18", value = "polint.solver", mode = "exact" }
+invariant = { name = "provider_order.18", value = "polint.semantic_graph", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.19", value = "polint.refined_calls", mode = "exact" }
+invariant = { name = "provider_order.19", value = "polint.solver", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.20", value = "polint.data_flow", mode = "exact" }
+invariant = { name = "provider_order.20", value = "polint.refined_calls", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.21", value = "polint.evidence", mode = "exact" }
+invariant = { name = "provider_order.21", value = "polint.data_flow", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.22", value = "polint.metrics", mode = "exact" }
+invariant = { name = "provider_order.22", value = "polint.evidence", mode = "exact" }
+
+[[expected]]
+invariant = { name = "provider_order.23", value = "polint.metrics", mode = "exact" }
 
 [[expected]]
 invariant = { name = "provider_output.polint.abstract_domains.schema_version", value = "abstract-domain-facts-1:1", mode = "exact" }

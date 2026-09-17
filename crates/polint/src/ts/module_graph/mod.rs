@@ -1588,7 +1588,12 @@ fn collect_ts_path_aliases(root: &Path, db: &dyn FactDatabase) -> BTreeMap<PathB
     aliases
 }
 
-fn nearest_tsconfig_path(root: &Path, file_path: &Path) -> Option<PathBuf> {
+/// First `tsconfig.json` at or above `file_path`, bounded by `root`.
+///
+/// Import resolution and the type sidecar must agree on where a TypeScript
+/// project starts, so both ask this one walk rather than each keeping its own
+/// notion of a project boundary.
+pub(crate) fn nearest_tsconfig_path(root: &Path, file_path: &Path) -> Option<PathBuf> {
     let root = normalize_path(root)?;
     let mut current = normalize_path(file_path.parent()?)?;
     loop {

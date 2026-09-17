@@ -271,6 +271,7 @@ pub(super) fn refined_call_tier_label(tier: RefinedCallTier) -> &'static str {
     match tier {
         RefinedCallTier::DirectOnly => "direct_only",
         RefinedCallTier::DirectPlusFramework => "direct_plus_framework",
+        RefinedCallTier::TypeDirected => "type_directed",
         RefinedCallTier::TypeValueFunctionToken => "type_value_function_token",
         RefinedCallTier::SummaryAssisted => "summary_assisted",
         RefinedCallTier::PointsToAssisted => "points_to_assisted",

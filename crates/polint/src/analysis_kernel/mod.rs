@@ -19,6 +19,8 @@ mod outcome;
 mod provider;
 pub(crate) mod resource;
 mod store;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod ts_types_tests;
 pub(crate) mod validation;
 
 pub(crate) use metadata::{
@@ -1573,6 +1575,7 @@ mod tests {
                 "polint.cfg",
                 "polint.calls",
                 "polint.go.semantic",
+                "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
                 "polint.direct_summaries",
@@ -2177,6 +2180,7 @@ mod tests {
             "polint.cfg",
             "polint.calls",
             "polint.go.semantic",
+            "polint.ts.types",
             "polint.identity",
             "polint.abstract_domains",
             "polint.direct_summaries",
@@ -2348,6 +2352,7 @@ function cleanup(value: string) {{ return value.trim(); }}
             "polint.cfg",
             "polint.calls",
             "polint.go.semantic",
+            "polint.ts.types",
             "polint.identity",
             "polint.abstract_domains",
             "polint.direct_summaries",
@@ -2965,6 +2970,7 @@ function setup() {
                 "polint.cfg",
                 "polint.calls",
                 "polint.go.semantic",
+                "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
                 "polint.direct_summaries",

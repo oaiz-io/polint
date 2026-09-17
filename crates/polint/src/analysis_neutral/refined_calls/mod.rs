@@ -9,4 +9,5 @@ pub mod framework;
 pub mod go;
 pub mod summaries;
 pub mod ts_js;
+pub mod ts_types;
 pub mod validate;
