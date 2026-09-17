@@ -46,6 +46,9 @@ sidecar is distinguished from one that legitimately found nothing.
 | `node_version` | string | `process.version` |
 | `typescript_path` | string | resolved module directory, for diagnostics |
 
+The caller resolves the compiler and passes it in, because its version is part
+of the cache key and has to be known before this process starts.
+
 `session_end` carries the session totals with the same field names as `phase`.
 
 `phase`
@@ -85,8 +88,15 @@ in scope.
 | `name` | string | declared or inferred name; empty for anonymous |
 | `file` | string | repo-relative path |
 | `span` | span | declaration span |
-| `kind` | string | `function`, `method`, `constructor`, `arrow`, `getter`, `setter`, `class` |
+| `callable_kind` | string | `function`, `method`, `constructor`, `arrow`, `getter`, `setter`, `class` |
+| `name_span` | span | span of the declaration's own name, or `null` for an anonymous callable |
 | `stable_key` | string | length-prefixed from `callable` |
+
+`name_span` exists because the two parsers disagree about where a declaration
+starts: TypeScript counts an `export` modifier as part of the declaration and
+Oxc does not, so `export function f` starts at `export` for one and at
+`function` for the other. Both spans contain the name, so the name anchors the
+join when the spans differ.
 
 ### `callsite`
 
@@ -113,6 +123,7 @@ Zero or more per call site. A site the checker resolved to several signatures
 | `callsite_stable_key` | string | joins to the `callsite` row |
 | `callable` | string | in-scope `callable` identity, or empty when external |
 | `external` | string | moniker for a declaration outside scope: `node_modules:<package>/<subpath>#<name>` or `lib:<lib-file>#<name>` |
+| `dispatch` | string | why this declaration is a candidate: `declared`, `declared_signature`, `implementation`, `union_member` |
 | `file` | string | repo-relative path of the declaration, empty when external |
 | `span` | span | declaration span, absent when external |
 | `stable_key` | string | length-prefixed from callsite key + callee identity |
@@ -120,6 +131,24 @@ Zero or more per call site. A site the checker resolved to several signatures
 The external moniker is why declarations outside scope never cross the wire as
 full rows: a call into `node_modules` or `lib.dom.d.ts` is reported as a named
 external target, and no `callable` row is emitted for it.
+
+`dispatch` is the tier's honesty contract in one field:
+
+- `declared` — what `getResolvedSignature` answered, and it has a body. Exact.
+- `declared_signature` — what `getResolvedSignature` answered, and it cannot
+  run: an interface member, an overload signature, an abstract method, a
+  function type. It crosses the wire so a call site with no runnable target
+  stays distinguishable from one the sidecar never saw, and the Rust side turns
+  it into no edge.
+- `implementation` — a rapid-type candidate. The declared target only describes
+  the call, and this is a method of a class the scan instantiates whose instance
+  type satisfies the receiver's declared type. This is the same discriminant the
+  Go tier's RTA uses: a class nobody constructs cannot receive the call.
+- `union_member` — one constituent of a union receiver, resolved through
+  `getPropertyOfType` on that constituent.
+
+An unrecognized `dispatch` value lowers to `declared_signature`, so a row kind a
+future sidecar emits contributes no edge rather than an unranked one.
 
 ### `receiver`
 
@@ -158,6 +187,15 @@ thresholds; the sidecar reports only the counts.
 | `category` | string | `setup_missing`, `project_error`, `unsupported` |
 | `message` | string | human-readable, no absolute paths outside the repo root |
 | `file` | string | optional repo-relative path |
+
+One `unsupported` diagnostic is load-bearing: a project whose declared inputs
+include none of the scanned files is skipped *before* its program is built, and
+says so. Building a TypeScript program is the expensive part of a run, and a
+project that cannot contribute a kept row should not pay for one — a narrow scan
+of a monorepo must not type-check every package. The cost of the rule is that a
+file which would have entered the program only as a transitive import of a
+listed input loses its typed edges, which is why the skip is reported rather
+than silent.
 
 ## Spans
 

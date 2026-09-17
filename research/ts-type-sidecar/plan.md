@@ -188,7 +188,22 @@ produces zero edges without a diagnostic.
 | Span join to native call sites fails and edges are dropped silently | join by `FileId` + byte span with a caller tie-break, mirroring Go; unmatched rows counted and reported as a provider counter | unmatched fraction high enough that the tier cannot be measured |
 | TypeScript 7 changes the API under us | version gate refuses >= 7 rather than guessing | revisit when 7.1 ships a stable API |
 
-## 10. Decisions taken
+## 10. Where the implementation deviated from this plan
+
+Recorded because the plan was written first and reviewed as a design, so the
+differences are the interesting part.
+
+| Plan said | Shipped | Why |
+|---|---|---|
+| Sidecar source of truth in `tools/`, embedded copy under `crates/` | One copy, `crates/polint/src/ts-sidecar/polint-ts-types/index.js` | The Go tier's two copies have no sync test between them and `go.work` already references a path that no longer exists. One copy cannot drift |
+| Extraction commit moves `run_bounded` | It also moves the embedded source cache, parameterized by a sidecar family | The TS sidecar needs the verified private cache too, and reaching into `crate::go` for it is exactly what the layering test forbids |
+| Provider emits a setup diagnostic when the tier cannot run | Quiet unless `.polint.toml` names the tier; the provider row still reports zero rows either way | A JS repository with no TypeScript install is not misconfigured. This mirrors the Go tier, which only reports missing module roots when module roots were configured |
+| Receiver type per call site drives the tier | Receiver type **plus** a rapid-type expansion over instantiated classes | Measured: `getResolvedSignature` answers an interface-typed call with the interface's own method signature, which has no body. Without the expansion the tier resolves nothing for exactly the dispatch it exists to resolve |
+| `refined_calls` gains `polint.ts.types` as a dependency | It gains the fact inputs but **not** a hard dependency | Listing it in `hard_dependencies` made a failed sidecar block the whole refined-call provider, which is the opposite of a fallback |
+| Reuse `module_graph` nearest-tsconfig machinery | `nearest_tsconfig_path` promoted to `pub(crate)` and called directly | Copying the walk would be a second notion of where a project starts |
+| L4 capability probes for the typed tier | Not added; dedicated end-to-end tests instead | A `tsconfig.json` in the probe repository would make the certification gate answer differently on hosts with and without a TypeScript install |
+
+## 11. Decisions taken
 
 1. Node + TypeScript compiler API now; `typescript-go` only after a stable
    programmatic API exists (Q20).

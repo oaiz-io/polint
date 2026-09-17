@@ -785,6 +785,28 @@ function emitProject(options) {
     return;
   }
 
+  // Building a program is the expensive part, and a project that does not list
+  // any of the scan's files among its own inputs cannot produce a row this scan
+  // keeps. Skipping it before `createProgram` is what stops a narrow scan of a
+  // monorepo from type-checking every package.
+  //
+  // A file can still reach a program as a transitive import of a listed input,
+  // and skipping here gives up that file's typed edges. That is why the skip is
+  // a reported diagnostic rather than a silent one: the project's own inputs
+  // are the set it owns, and a file outside them is a file the nearest-tsconfig
+  // walk assigned to this project only for want of a closer one.
+  if (scope !== null && !ownsAnyScopedFile(root, parsed.fileNames, scope)) {
+    emitter.write({
+      kind: 'diagnostic',
+      category: 'unsupported',
+      file: projectPath,
+      message:
+        'project skipped: none of the scanned files is one of its inputs, so it can ' +
+        'contribute no type-directed call edges',
+    });
+    return;
+  }
+
   const program = ts.createProgram({
     rootNames: parsed.fileNames,
     options: parsed.options,
@@ -854,6 +876,23 @@ function emitProject(options) {
     rows_emitted: emitter.rowsEmitted,
     peak_heap_bytes: heapBytes(),
   });
+}
+
+/**
+ * Whether any file the scan discovered is one of this project's own inputs.
+ *
+ * @param {string} root
+ * @param {string[]} fileNames
+ * @param {Set<string>} scope
+ * @returns {boolean}
+ */
+function ownsAnyScopedFile(root, fileNames, scope) {
+  for (const fileName of fileNames) {
+    if (scope.has(relativePath(root, fileName))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -1113,11 +1152,11 @@ function emitCallsite(options) {
   const enclosingIdentity =
     enclosing === undefined ? '' : project.registerCallable(enclosing, sourceFile);
 
-  const dispatch = dispatchExpression(ts, node);
+  const receiverExpression = dispatchExpression(ts, node);
   let receiverType;
-  if (dispatch !== undefined) {
+  if (receiverExpression !== undefined) {
     try {
-      receiverType = checker.getTypeAtLocation(dispatch);
+      receiverType = checker.getTypeAtLocation(receiverExpression);
     } catch (error) {
       receiverType = undefined;
     }

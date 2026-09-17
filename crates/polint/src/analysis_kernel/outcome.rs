@@ -700,7 +700,12 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
 /// the public surface gates against by name, and they are reported only when
 /// they failed or were blocked — the one case a consumer must be able to trace,
 /// and the one the blocker evidence already exposes.
-pub(crate) const PUBLICLY_NAMED_PROVIDERS: [&str; 8] = [
+///
+/// `polint.ts.types` is deliberately absent. It reports counters whenever it
+/// has anything to say, including when it skipped, so it appears in the report
+/// of every run it was relevant to; naming it here would also list it in every
+/// Go-only run, where it did nothing.
+pub(crate) const PUBLICLY_NAMED_PROVIDERS: [&str; 7] = [
     "polint.go.semantic",
     "polint.go.syntax",
     "polint.identity",
@@ -708,7 +713,6 @@ pub(crate) const PUBLICLY_NAMED_PROVIDERS: [&str; 8] = [
     "polint.module_graph",
     "polint.symbol_graph",
     "polint.ts.syntax",
-    "polint.ts.types",
 ];
 
 /// Projects sealed provider outcomes and their telemetry into report rows.

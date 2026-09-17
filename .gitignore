@@ -32,6 +32,9 @@ _scaffold_smoke_*/
 # Third-party research checkouts; keep source snapshots local, not vendored.
 research/*/repos/
 
+# TypeScript installed for the type sidecar's tests; a tool dependency, not source.
+node_modules/
+
 # Benchmark reports written by `make eval-gate`; generated artifacts, not source.
 .context/
 

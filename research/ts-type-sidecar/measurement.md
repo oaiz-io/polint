@@ -1,54 +1,297 @@
-# Measurement plan and record
+# Measurement record
 
-Every number in this file is either measured on the host described below or
-explicitly labeled `unmeasured`. No number is an estimate.
+Every number here was measured on the host described below, with the command
+that produced it named next to it. Anything not run is written as
+`unmeasured` with the reason.
 
 ## Host
 
-Recorded at measurement time; see the table below for the actual values.
+| | |
+|---|---|
+| CPU | 16 × AMD EPYC-Rome |
+| Memory | 30 GB |
+| Kernel | Linux 6.8.0-139-generic |
+| rustc | 1.95.0 (2026-04-14) |
+| Node | v22.22.3 |
+| TypeScript | 5.9.3 (the analyzed repository's own install) |
+| Go | 1.26.5 |
+| Build profile | `--release` for every timing; `--all-features --locked` |
 
-## Plan
+The host is shared. Every timing comparison alternates the two configurations
+inside one process, sample by sample, rather than running one arm to completion
+and then the other: block sampling on this machine has previously produced
+20–135% deltas that interleaving erased.
 
-### Accuracy
+## Subject repository
 
-1. **Capability probes** (`tests/capability-probes/`). Run the roll-up on
-   `main` and on this branch and compare per-level, per-language rates. The
-   suite tests conclusions rather than fact presence, so a typed tier that adds
-   edges without changing conclusions shows up as no movement — which is
-   itself a result worth recording. New L4 TypeScript probes are added whose
-   positive case needs a type-directed conclusion and whose twins must stay
-   quiet.
-2. **Jelly call-graph lane** (`research/evaluation-harness/suites/jelly-callgraph-micro.toml`,
-   oracle at commit `b799ed4f0d68c670fe398830aaa51dd5c628cf74`). Run the
-   release tier on `main` and on this branch; report recall, precision and F1
-   with the committed baseline (recall 0.6646, precision 0.9742) as the
-   reference point. The oracle is 149 `.js`, 23 `.ts`, 21 `.mjs`, 1 `.jsx`
-   files, so the TS-only subset is small and the JS majority is only reachable
-   through the compiler's JS inference.
-3. **Tier attribution.** Count `refined_call_edges` by tier on a real TS repo
-   with the tier on and off, so the typed tier's contribution is visible even
-   where it does not move an oracle score.
+[`cs-au-dk/jelly`](https://github.com/cs-au-dk/jelly) at
+`b799ed4f0d68c670fe398830aaa51dd5c628cf74`, which is both the call-graph
+oracle already used by `research/evaluation-harness` and, in its own `src/`, a
+real TypeScript codebase: 84 files, 23,715 lines, two `tsconfig.json` units,
+`typescript@5.9.3` in its own `node_modules`. `npm install` was run so the
+compiler sees the real import closure rather than typing every dependency as
+`any`.
 
-### Speed
+polint discovered 265 TS/JS files and 8,689 call sites in that repository.
 
-1. **Sidecar invocation cost**, cold and warm, on a real TypeScript repository
-   (Jelly's own `src/`: 84 files, 23,715 lines, with a `tsconfig.json` and its
-   own `node_modules/typescript`). Cold means a fresh `POLINT_CACHE_DIR` and
-   `POLINT_CACHE_STORE=off` is not sufficient on its own — a stale cache dir
-   replays previous provider failures.
-2. **Total pipeline impact**: full scan wall time with the typed tier enabled
-   versus the same scan with the sidecar unavailable (fallback path), measured
-   by alternating the two binaries sample-by-sample rather than in blocks. This
-   host is shared, and block sampling on it has previously invented 20 to 135%
-   deltas that interleaved sampling erased.
+## 1. What the tier adds
 
-### Honesty rules applied
+Command:
 
-- Every accuracy claim names the suite, the commit, and the tier.
-- Every speed claim names cold or warm, the repo, and the sample count.
-- Anything not run is written as `unmeasured` with the reason.
+```sh
+POLINT_TS_TYPES_MEASURE_REPO=research/evaluation-harness/repos/jelly \
+POLINT_TS_TYPES_MEASURE_SAMPLES=3 \
+cargo test -p polint --lib --all-features --locked --release \
+  analysis_kernel::ts_types_tests::measure_type_directed_tier \
+  -- --exact --ignored --nocapture
+```
 
-## Results
+The harness alternates `[languages.ts] type_sidecar = true` and `= false` in one
+process and reports both arms.
 
-See the tables below. Filled in by the implementing session; each row names
-the command that produced it.
+### Call sites resolved to a target
+
+A call site counts as resolved when at least one refined edge for it has
+status `Resolved` **and** a non-`None` target function.
+
+| | tier off | tier on | delta |
+|---|---|---|---|
+| Call sites with a resolved target | 828 | 3,338 | **+2,510 (+303%)** |
+| Call sites that lost a target | — | — | **0** |
+| Call sites discovered | 8,689 | 8,689 | 0 |
+
+This is a **recall proxy, not an oracle score.** It says the typed tier names a
+target for 2,510 call sites that no other tier named, and that no site lost one.
+It says nothing about whether those targets are correct; that needs an oracle,
+and section 3 explains why the available one cannot answer it.
+
+### Edges by tier
+
+| Tier | tier off | tier on |
+|---|---|---|
+| `DirectOnly` | 2,396 | 2,396 |
+| `DirectPlusFramework` | 23 | 23 |
+| `SummaryAssisted` | 2,396 | 2,396 |
+| `PointsToAssisted` | 5,995 | 5,995 |
+| `TypeDirected` | 0 | 3,449 |
+| total | 10,810 | 14,259 |
+
+Every existing tier is byte-for-byte unchanged in count. The typed tier is
+purely additive, which is the fallback contract holding: turning it off returns
+the previous call graph exactly.
+
+### What the sidecar saw
+
+From the provider counters on the same run:
+
+| Counter | Value |
+|---|---|
+| `ts_types.projects` | 2 |
+| `ts_types.files` | 97 |
+| `ts_types.rows_emitted` | 25,607 |
+| `ts_types.out_of_scope_rows` | 0 |
+| `ts_types.peak_heap_bytes` | 770,742,464 (735 MB) |
+
+`out_of_scope_rows = 0` means the `--scope-files` list did its job: the sidecar
+emitted no row the kernel would have dropped.
+
+Row-level detail from the same sidecar run, invoked directly:
+
+| Row kind | Count |
+|---|---|
+| `callsite` | 7,903 |
+| `callee` | 8,207 |
+| `receiver` | 7,903 |
+| `callable` | 1,503 |
+| `any_density` | 85 |
+
+| Call-site status | Count | Share |
+|---|---|---|
+| `external` (target outside the scan) | 4,205 | 53.2% |
+| `resolved` | 3,489 | 44.1% |
+| `unresolved` | 132 | 1.7% |
+| `union` | 60 | 0.8% |
+| `any_receiver` | 17 | **0.2%** |
+
+| Callee dispatch | Count |
+|---|---|
+| `declared_signature` (describes the call, cannot run) | 4,429 |
+| `declared` (exact target) | 3,457 |
+| `implementation` (rapid-type candidate) | 307 |
+| `union_member` | 14 |
+
+The `any_receiver` share is the Q22 gate's input. On this repository it is 0.2%,
+so the density gates never fired — which is the expected shape for a codebase
+compiled with `strict: true`, and is exactly the case where a typed tier should
+pay off. A repository with a high `any` share would see the gates do their work
+instead, and that case is covered by unit tests rather than by this measurement.
+
+## 2. What the tier costs
+
+### Sidecar, standalone
+
+Direct invocation on the same repository, scope list of 106 files:
+
+```sh
+node crates/polint/src/ts-sidecar/polint-ts-types/index.js \
+  --root . --projects tsconfig.json --typescript ./node_modules/typescript \
+  --scope-files /tmp/jelly-scope.txt --ndjson
+```
+
+| Stage | Wall time |
+|---|---|
+| `resolve_typescript` | 205 ms |
+| `discover_projects` | 1 ms |
+| `create_program` | 1,034 ms |
+| `walk_callsites` | 12,264 ms |
+| **session total** | **13,504 ms** |
+
+Peak sidecar heap at the last stage boundary: 541 MB for one project, 735 MB
+across both.
+
+`walk_callsites` is 91% of the run and is the type checker doing the work the
+tier exists for: `getResolvedSignature` and `getTypeAtLocation` per call site,
+7,903 of them, about 1.55 ms each.
+
+Two optimizations were measured and **rejected**:
+
+| Change | Result |
+|---|---|
+| Drop the printed receiver type entirely | 13.6 s → 11.2 s (−18%), at the cost of the evidence string on every typed edge |
+| Memoize `typeToString` by type identity | 13.6 s → 13.5 s (within noise); receiver types are mostly distinct objects |
+
+The printed type was kept: it is the evidence a reader needs to see why the tier
+answered as it did, and 18% of a cached-after-first-run stage is not worth
+removing it for.
+
+### Whole pipeline
+
+Three interleaved samples, `calls` capability, release build:
+
+| Sample | tier on | tier off |
+|---|---|---|
+| 0 | 144,451 ms | 124,290 ms |
+| 1 | 148,223 ms | 131,242 ms |
+| 2 | 147,533 ms | 128,947 ms |
+| **median** | **147,533 ms** | **128,947 ms** |
+
+Delta: **+18,586 ms, +14.4%**, of which the sidecar itself accounts for
+14,377 ms. The remaining ~4.2 s is lowering, validation, the join, and the extra
+3,449 edges flowing through the refined-call store.
+
+**Warm cost: unmeasured.** This harness constructs the kernel with a disabled
+cache so both arms run cold and stay comparable. The raw sidecar NDJSON is
+cached on disk by `sidecar_digest + typescript_version + upstream_digest +
+lifecycle`, so a warm run is expected to skip the 14.4 s sidecar round trip
+entirely, but that path was not timed here and no number is claimed for it.
+
+## 3. Accuracy against the Jelly oracle
+
+**Result: no change, and the reason is structural.**
+
+The Jelly micro suite is 149 `.js`, 23 `.ts`, 21 `.mjs` and 1 `.jsx` standalone
+snippets under `tests/micro/`, scored against per-file oracle JSON. Jelly's own
+`tsconfig.json` includes `src/**/*` and `tests/**/*.test.ts` — it does not
+include those snippets. polint walks from each analyzed file to its nearest
+`tsconfig.json`, finds that one, and the snippet is not in the program it
+describes, so the sidecar emits no rows for it and the typed tier contributes
+nothing.
+
+That is the correct behavior — inventing a project for a file the repository
+does not compile would be guessing — but it means this oracle cannot score the
+tier as it stands. The measured lane numbers are recorded below for the record.
+
+Command, run identically on both trees against the same clone (the baseline
+tree reaches it through a symlink), release build, release tier:
+
+```sh
+POLINT_GRAPH_BENCH_TIER=release \
+cargo test -p polint --lib --all-features --locked --release \
+  eval::external::tests::measure_jelly_callgraph_lane \
+  -- --exact --ignored --nocapture
+```
+
+| | main (82a3c129) | this branch |
+|---|---|---|
+| cases | 76 | 76 |
+| edges expected | 1,479 | 1,479 |
+| edges observed | 1,009 | 1,009 |
+| unknown count | 899 | 899 |
+| recall | 0.6619337390128465 | 0.6619337390128465 |
+| precision | 0.9702675916749256 | 0.9702675916749256 |
+| F1 | 0.7869774919614148 | 0.7869774919614148 |
+
+Byte-identical, to the last digit. The typed tier neither helps nor harms this
+lane, for the structural reason above.
+
+Two notes on these numbers:
+
+- They differ slightly from the committed baseline in
+  `research/evaluation-harness/baselines/persisted-graph-accuracy.json`
+  (recall 0.6646, precision 0.9742, unknown 529). That drift is **pre-existing**:
+  both trees measured identically here, so it comes from the host or the
+  toolchain this run used, not from this change. It is not investigated in this
+  PR.
+- The first branch run of this lane took 142 s against the baseline's 16 s,
+  because the sidecar built Jelly's whole program once per case — 76 times — to
+  emit nothing. That is what motivated the project-ownership skip described
+  below; after it, the sidecar exits in 0.27 s for a case whose file no project
+  claims.
+
+### The project-ownership skip
+
+Measured directly, with a scope list naming one file that no project lists as an
+input:
+
+| | before the skip | after the skip |
+|---|---|---|
+| Sidecar wall time | ~1.5 s (program built, no rows) | **0.27 s** (no program) |
+| Rows emitted | 0 | 0, plus one diagnostic explaining the skip |
+
+A scope list naming the project's real files is unaffected: byte-identical rows,
+same wall time.
+
+## 4. Capability probes
+
+Command, run identically on both trees:
+
+```sh
+cargo test -p polint --lib --all-features --locked \
+  eval::capability_probes::capability_probe_certification_rollup \
+  -- --exact --test-threads=1 --nocapture
+```
+
+| Level / language | main (82a3c129) | this branch |
+|---|---|---|
+| L1 Go | positives 4/4, twins 4/4 | positives 4/4, twins 4/4 |
+| L1 TypeScript | positives 4/4, twins 4/4 | positives 4/4, twins 4/4 |
+| L2 Go | positives 5/5, twins 5/5 | positives 5/5, twins 5/5 |
+| L2 TypeScript | positives 5/5, twins 5/5 | positives 5/5, twins 5/5 |
+| L3 Go | positives 6/6, twins 7/7 | positives 6/6, twins 7/7 |
+| L3 TypeScript | positives 6/6, twins 7/7 | positives 6/6, twins 7/7 |
+| L4 Go (seed) | positives 4/10, twins 15/20 | positives 4/10, twins 15/20 |
+| L4 TypeScript (seed) | positives 4/10, twins 18/20 | positives 4/10, twins 18/20 |
+
+Identical, which is both the no-regression result and a statement about the
+suite: `tests/capability-probes/repo/` has no `tsconfig.json`, so the typed tier
+does not run there at all.
+
+**The probe suite was deliberately not extended.** Adding a `tsconfig.json` to
+the probe repository would make the L4 `refined_must` probes answer differently
+depending on whether the host running the certification gate happens to have
+Node and TypeScript installed, turning a CI gate into a host-dependent one. The
+typed tier is covered instead by dedicated end-to-end tests
+(`analysis_kernel::ts_types_tests`) that skip when no compiler is present and
+fail loudly when `POLINT_REQUIRE_TS_TYPESCRIPT=1`, which is how the Linux CI job
+runs them. Making the probe suite able to express a host-dependent capability is
+recorded as a follow-up.
+
+## 5. What was not measured
+
+| Claim | Status |
+|---|---|
+| Precision of typed edges against an oracle | **unmeasured** — the Jelly micro oracle cannot reach the tier (section 3), and no other TS call-graph oracle is wired into this repository |
+| Warm-cache pipeline cost | **unmeasured** — the harness runs both arms cold by construction |
+| Cost on a repository with a high `any` density | **unmeasured** — jelly is `strict: true` and measured 0.2% |
+| Behaviour on a monorepo with many `tsconfig.json` units | **partially measured** — jelly has 2 projects; nothing larger was run |
+| macOS and Windows | **unmeasured** — the sidecar is platform-neutral JavaScript and the process runner is the one the Go tier already uses on all three, but no timing or accuracy run was made off Linux |

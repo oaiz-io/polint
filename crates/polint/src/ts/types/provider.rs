@@ -241,7 +241,7 @@ fn derive_ts_types_with_runner(
         "ts_types.out_of_scope_rows".to_string(),
         lower_report.out_of_scope_rows as u64,
     );
-    let mut diagnostics = project_error_diagnostics(&lowered);
+    let mut diagnostics = project_error_diagnostics(&lowered, &config);
     diagnostics.extend(uncovered_files_diagnostic(&config));
 
     let digest_inputs = DigestInputs {
@@ -606,7 +606,20 @@ fn span_part(span: &Span) -> String {
     )
 }
 
-fn project_error_diagnostics(output: &TsTypesFactsOutput) -> Vec<Diagnostic> {
+/// Surfaces what the sidecar said about the repository's projects.
+///
+/// Only when the repository asked for the tier. A project that excludes the
+/// scanned files, or a `tsconfig.json` that does not parse, is worth telling
+/// someone who configured type-directed analysis and is pure noise for someone
+/// who never mentioned it. The rows stay in the store either way, so the
+/// information is not lost — only the diagnostic is withheld.
+fn project_error_diagnostics(
+    output: &TsTypesFactsOutput,
+    config: &TsTypesConfig,
+) -> Vec<Diagnostic> {
+    if !config.explicitly_requested {
+        return Vec::new();
+    }
     output
         .project_errors
         .iter()
