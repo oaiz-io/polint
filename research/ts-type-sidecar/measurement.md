@@ -235,8 +235,10 @@ Two notes on these numbers:
 - The first branch run of this lane took 142 s against the baseline's 16 s,
   because the sidecar built Jelly's whole program once per case — 76 times — to
   emit nothing. That is what motivated the project-ownership skip described
-  below; after it, the sidecar exits in 0.27 s for a case whose file no project
-  claims.
+  below. After it the same lane takes **36 s**, with byte-identical accuracy.
+  The residual 20 s over the baseline is 76 Node process spawns at ~0.27 s each,
+  which is a property of running 76 separate scans of one repository rather than
+  of scanning a repository once.
 
 ### The project-ownership skip
 
@@ -245,8 +247,10 @@ input:
 
 | | before the skip | after the skip |
 |---|---|---|
-| Sidecar wall time | ~1.5 s (program built, no rows) | **0.27 s** (no program) |
-| Rows emitted | 0 | 0, plus one diagnostic explaining the skip |
+| Sidecar wall time, one unclaimed file | ~1.5 s (program built, no rows) | **0.27 s** (no program) |
+| Whole Jelly lane, 76 cases | 142.06 s | **36.40 s** |
+| Jelly lane recall / precision / F1 | 0.6619 / 0.9703 / 0.7870 | identical |
+| Rows emitted for an unclaimed file | 0 | 0, plus one diagnostic explaining the skip |
 
 A scope list naming the project's real files is unaffected: byte-identical rows,
 same wall time.
