@@ -170,14 +170,23 @@ Three interleaved samples, `calls` capability, release build:
 
 | Sample | tier on | tier off |
 |---|---|---|
-| 0 | 144,451 ms | 124,290 ms |
-| 1 | 148,223 ms | 131,242 ms |
-| 2 | 147,533 ms | 128,947 ms |
-| **median** | **147,533 ms** | **128,947 ms** |
+| 0 | 148,708 ms | 128,368 ms |
+| 1 | 144,429 ms | 134,900 ms |
+| 2 | 146,455 ms | 129,127 ms |
+| **median** | **146,455 ms** | **129,127 ms** |
 
-Delta: **+18,586 ms, +14.4%**, of which the sidecar itself accounts for
-14,377 ms. The remaining ~4.2 s is lowering, validation, the join, and the extra
+Delta: **+17,328 ms, +13.4%**, of which the sidecar itself accounts for
+14,920 ms. The remaining ~2.4 s is lowering, validation, the join, and the extra
 3,449 edges flowing through the refined-call store.
+
+An earlier run of the same harness, before the span join was indexed by file,
+measured median 147,533 ms on / 128,947 ms off (+14.4%). The two runs differ by
+less than the spread between samples in either of them, so **indexing the join
+did not produce a measurable wall-clock win** on this repository — it removed a
+scan of every native call site per sidecar row, which is quadratic in call-site
+count and would matter on a larger one, but this measurement does not show it
+paying off and does not claim it does. Tier attribution was identical across
+both runs.
 
 **Warm cost: unmeasured.** This harness constructs the kernel with a disabled
 cache so both arms run cold and stay comparable. The raw sidecar NDJSON is
