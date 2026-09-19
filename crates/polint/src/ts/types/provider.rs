@@ -457,8 +457,21 @@ fn store_output(
             );
             let mut diagnostics = parts.diagnostics;
             diagnostics.extend(dropped_rows_diagnostics(&report));
+            // Reported as counters and not only as a warning, because a
+            // systematic emitter regression is a number that moved, and a
+            // reader comparing two runs needs the zero as much as the non-zero.
+            let counts = BTreeMap::from([
+                (
+                    "ts_types.dropped_rows".to_string(),
+                    report.dropped_rows as u64,
+                ),
+                (
+                    "ts_types.dangling_callees".to_string(),
+                    report.dangling_callees as u64,
+                ),
+            ]);
             TsTypesProviderRunOutput {
-                counts: BTreeMap::new(),
+                counts,
                 diagnostics,
                 cache_stats: parts.cache_stats,
                 output_digest: Some(output_digest),

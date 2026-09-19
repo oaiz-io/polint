@@ -308,6 +308,29 @@ mod tests {
     }
 
     #[test]
+    fn dropped_rows_are_counted_in_the_run_report_and_not_only_warned_about() {
+        let temp = temp_repo_with_tsconfig();
+        let mut db = db_with_ts_file();
+        let row = "{\"schema\":\"polint-ts-types-1\",\"kind\":\"callsite\",\
+                   \"project\":\"tsconfig.json\",\"callsite\":\"src/app.ts:24\",\
+                   \"file\":\"src/app.ts\",\"call_kind\":\"call\",\"status\":\"resolved\",\
+                   \"stable_key\":\"site\"}";
+
+        let output = derive_ts_types_with_runner_for_test(
+            &mut db,
+            temp.path(),
+            &BTreeMap::new(),
+            "config",
+            &MANIFEST,
+            Digest::absent(crate::analysis_api::DigestKind::ProviderOutput, "ts"),
+            |_| Ok(successful_run(&format!("{row}\n{row}"))),
+        );
+
+        assert_eq!(output.counts.get("ts_types.dropped_rows"), Some(&1));
+        assert_eq!(output.counts.get("ts_types.dangling_callees"), Some(&0));
+    }
+
+    #[test]
     fn the_output_digest_changes_when_a_row_changes() {
         let temp = temp_repo_with_tsconfig();
         let row = |status: &str| {

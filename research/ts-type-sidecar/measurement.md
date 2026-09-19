@@ -36,10 +36,16 @@ polint discovered 265 TS/JS files and 8,689 call sites in that repository.
 
 ## 1. What the tier adds
 
+> Sections 1 and 2 were measured before the call-site identity fix and are kept
+> as the record of that run. Section 5 re-measures the same repository with the
+> shipped sidecar and says what moved.
+
 Command:
 
 ```sh
-POLINT_TS_TYPES_MEASURE_REPO=research/evaluation-harness/repos/jelly \
+# An absolute path: `cargo test` runs with the package directory as its
+# working directory, not the workspace root.
+POLINT_TS_TYPES_MEASURE_REPO=$PWD/research/evaluation-harness/repos/jelly \
 POLINT_TS_TYPES_MEASURE_SAMPLES=3 \
 cargo test -p polint --lib --all-features --locked --release \
   analysis_kernel::ts_types_tests::measure_type_directed_tier \
@@ -198,7 +204,7 @@ It is measured separately below.
 first pass is the sidecar and the rest are the stored NDJSON being replayed:
 
 ```sh
-POLINT_TS_TYPES_MEASURE_REPO=research/evaluation-harness/repos/jelly \
+POLINT_TS_TYPES_MEASURE_REPO=$PWD/research/evaluation-harness/repos/jelly \
 cargo test -p polint --lib --all-features --locked --release \
   analysis_kernel::ts_types_tests::measure_sidecar_cold_and_warm \
   -- --exact --ignored --nocapture
@@ -329,12 +335,87 @@ fail loudly when `POLINT_REQUIRE_TS_TYPESCRIPT=1`, which is how the Linux CI job
 runs them. Making the probe suite able to express a host-dependent capability is
 recorded as a follow-up.
 
-## 5. What was not measured
+## 5. Re-measured after the call-site identity fix
+
+Sections 1 and 2 were measured against a sidecar whose call-site identity was
+`<file>:<start-byte>`. Nested calls share a start offset — `a.b().c()` and its
+inner `a.b()` both begin at `a`, and so do `f()()` and `f()` — so that identity
+collapsed them into one row, and the store dropped the loser as a duplicate
+while the survivor kept both calls' callee rows. The identity now carries both
+ends. Everything below re-measures the same repository with the fix in.
+
+### Row integrity, sidecar invoked directly
+
+Same invocation on both sidecars, scope list of 264 files, root project only:
+
+| | `<file>:<start>` | `<file>:<start>:<end>` |
+|---|---|---|
+| Rows emitted | 25,602 | 25,602 |
+| `callsite` / `callee` / `receiver` rows | 7,903 / 8,207 / 7,903 | 7,903 / 8,207 / 7,903 |
+| **Rows carrying a duplicate stable key** | **801** (359 `callsite`, 359 `receiver`, 83 `callee`) | **0** |
+| Call-site status distribution | unchanged | unchanged |
+| Callee dispatch distribution | unchanged | unchanged |
+| Sidecar wall time | 15,959 ms | 15,724 / 16,120 / 15,782 ms |
+
+The 801 duplicates were dropped by the store on every scan of this repository
+and reported as `"801 TS type row(s) dropped (missing or duplicate identity)"`.
+They are gone, at no measurable cost.
+
+Determinism, same command three times: the row payload is byte-identical across
+runs (`md5` over every non-timing row), as it is on the small fixtures.
+
+### Whole pipeline, re-run
+
+Three interleaved samples, `calls` capability, release build, same host:
+
+| Sample | tier on | tier off |
+|---|---|---|
+| 0 | 145,535 ms | 132,575 ms |
+| 1 | 156,712 ms | 145,759 ms |
+| 2 | 157,097 ms | 140,914 ms |
+| **median** | **156,712 ms** | **140,914 ms** |
+
+Delta **+15,798 ms, +11.2%**. The host was under different load than during the
+run in section 2, so this is not comparable to that run's absolute numbers; both
+arms of *this* run are.
+
+| | tier off | tier on |
+|---|---|---|
+| Call sites with a resolved target | 828 | **3,338** |
+| Call sites that lost a target | — | **0** |
+| `TypeDirected` edges | 0 | **3,450** |
+| `DirectOnly` / `Framework` / `Summary` / `PointsTo` | 2,396 / 23 / 2,396 / 5,995 | unchanged |
+| `ts_types.dropped_rows` | — | **0** |
+| `ts_types.out_of_scope_rows` | — | 0 |
+| `ts_types.rows_emitted` | — | 25,607 |
+
+**The recall proxy did not move**, and that is the expected shape: a collapsed
+pair produced two edges off one site, and the fix produces the same two edges
+off the two sites they belong to. What changed is which call each edge hangs
+off — a precision property this repository has no oracle to score — plus one
+extra edge, from a pair whose two calls resolved to the same declaration and
+whose callee rows therefore also collided.
+
+### Cached path, re-run
+
+| Pass | Wall time | Rows |
+|---|---|---|
+| 0 (cold) | 19,208 ms | 25,607 |
+| 1 (warm) | **56 ms** | 25,607 |
+| 2 (warm) | **33 ms** | 25,607 |
+
+The cache key now also folds the text of each project's `tsconfig.json` and of
+everything it extends or references, so an edit to `strict`, `paths` or
+`include` invalidates the entry. Before that it did not: those files are not
+TypeScript sources, so no source digest covered them and the stored NDJSON was
+replayed against changed compiler options.
+
+## 6. What was not measured
 
 | Claim | Status |
 |---|---|
 | Precision of typed edges against an oracle | **unmeasured** — the Jelly micro oracle cannot reach the tier (section 3), and no other TS call-graph oracle is wired into this repository |
 | Warm-cache pipeline cost | **unmeasured** — the harness runs both arms cold by construction |
 | Cost on a repository with a high `any` density | **unmeasured** — jelly is `strict: true` and measured 0.2% |
-| Behaviour on a monorepo with many `tsconfig.json` units | **partially measured** — jelly has 2 projects; nothing larger was run |
+| Behaviour on a monorepo with many `tsconfig.json` units | **partially measured** — jelly has 2 projects and they do not overlap; overlapping projects and solution-style `references` are covered by fixtures and end-to-end tests only |
 | macOS and Windows | **unmeasured** — the sidecar is platform-neutral JavaScript and the process runner is the one the Go tier already uses on all three, but no timing or accuracy run was made off Linux |
