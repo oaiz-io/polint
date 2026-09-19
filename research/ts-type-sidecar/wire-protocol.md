@@ -204,6 +204,27 @@ file which would have entered the program only as a transitive import of a
 listed input loses its typed edges, which is why the skip is reported rather
 than silent.
 
+A second `unsupported` diagnostic covers a project that declares no inputs *and*
+references nothing: there is nothing left to follow, so the tier says so instead
+of producing an empty run with no explanation.
+
+## Projects, references and overlap
+
+A config that declares no input files of its own and lists `references` is a
+solution config — the shape `npm create vite`, Angular and every
+project-references monorepo put at the repository root, and the shape the
+nearest-`tsconfig.json` walk finds first. The sidecar follows its references,
+because otherwise those repositories get no typed edges at all.
+
+Identities are keyed on file and offset, never on the project that reported
+them, and projects overlap: a file listed by both `tsconfig.json` and
+`tsconfig.build.json` is compiled by both, and two references can reach the same
+project. Each in-scope file is therefore reported by the first project that
+compiles it and skipped by the rest, so one identity never crosses the wire
+twice. A project still *collects* every in-scope file it compiles, because the
+dispatch expansion needs its whole class and instantiation picture; only
+emission is deduplicated.
+
 ## Spans
 
 ```
