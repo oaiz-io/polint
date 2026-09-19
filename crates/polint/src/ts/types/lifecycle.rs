@@ -40,6 +40,15 @@ pub(crate) struct TsTypesConfig {
     /// Discovered TS/JS files with no tsconfig above them, sorted. Reported so
     /// a partially covered repository is visible rather than silently thinner.
     pub(crate) files_without_project: Vec<String>,
+    /// `<project>=<digest>` for every project, folding the config's own text
+    /// and the text of everything it extends or references.
+    ///
+    /// The sidecar's answers are a function of the compiler options these
+    /// files resolve to, and no TypeScript source digest covers them: an edit
+    /// to `strict`, `paths` or `include` changes every type answer while
+    /// leaving every `.ts` file untouched. Without this the stored sidecar
+    /// output would be replayed after such an edit.
+    pub(crate) project_digests: Vec<String>,
     /// Whether `.polint.toml` names this tier at all.
     ///
     /// A repository that never asked for type-directed analysis and has no
@@ -118,6 +127,16 @@ impl TsTypesConfig {
             (configured_projects, Vec::new())
         };
 
+        let project_digests = projects
+            .iter()
+            .map(|project| {
+                format!(
+                    "{project}={}",
+                    crate::ts::module_graph::tsconfig_chain_digest(root, project)
+                )
+            })
+            .collect();
+
         Ok(Self {
             enabled,
             projects,
@@ -125,9 +144,15 @@ impl TsTypesConfig {
             timeout_ms,
             scope_files,
             files_without_project,
-            explicitly_requested: ["type_sidecar", "type_projects", "typescript_path"]
-                .iter()
-                .any(|key| settings.contains_key(*key)),
+            project_digests,
+            explicitly_requested: [
+                "type_sidecar",
+                "type_projects",
+                "typescript_path",
+                "type_timeout_ms",
+            ]
+            .iter()
+            .any(|key| settings.contains_key(*key)),
         })
     }
 
@@ -367,13 +392,60 @@ mod tests {
             .expect("defaults");
         assert!(!quiet.explicitly_requested);
 
-        let asked = TsTypesConfig::from_settings_files(
-            Path::new("/repo"),
-            &settings(&[("type_sidecar", Value::Boolean(true))]),
-            &[],
+        for key in [
+            "type_sidecar",
+            "type_projects",
+            "typescript_path",
+            "type_timeout_ms",
+        ] {
+            let value = match key {
+                "type_sidecar" => Value::Boolean(true),
+                "type_projects" => Value::Array(Vec::new()),
+                "type_timeout_ms" => Value::Integer(1_000),
+                _ => Value::String("node_modules/typescript".to_string()),
+            };
+            let asked = TsTypesConfig::from_settings_files(
+                Path::new("/repo"),
+                &settings(&[(key, value)]),
+                &[],
+            )
+            .expect("explicit request");
+            assert!(asked.explicitly_requested, "`{key}` names the tier");
+        }
+    }
+
+    #[test]
+    fn a_project_digest_covers_the_config_text_and_what_it_extends() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        std::fs::write(root.join("tsconfig.base.json"), "{\"compilerOptions\":{}}")
+            .expect("write base");
+        std::fs::write(
+            root.join("tsconfig.json"),
+            "{\"extends\":\"./tsconfig.base.json\",\"include\":[\"src\"]}",
         )
-        .expect("explicit request");
-        assert!(asked.explicitly_requested);
+        .expect("write tsconfig");
+        std::fs::create_dir_all(root.join("src")).expect("create src");
+        std::fs::write(root.join("src/app.ts"), "export {};").expect("write app");
+
+        let digests = |root: &Path| {
+            TsTypesConfig::from_settings_files(root, &BTreeMap::new(), &["src/app.ts".to_string()])
+                .expect("lifecycle")
+                .project_digests
+        };
+
+        let before = digests(root);
+        std::fs::write(
+            root.join("tsconfig.base.json"),
+            "{\"compilerOptions\":{\"strict\":true}}",
+        )
+        .expect("rewrite base");
+        let after = digests(root);
+
+        assert_ne!(
+            before, after,
+            "an edit to an extended config must change the project digest"
+        );
     }
 
     #[test]

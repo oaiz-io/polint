@@ -104,6 +104,15 @@ pub(crate) fn ts_types_lifecycle_digest(config: &TsTypesConfig) -> String {
             .iter()
             .map(|project| format!("project={project}")),
     );
+    // The compiler options a project resolves to decide every type answer and
+    // live in files no source digest covers, so the config text travels with
+    // the project path.
+    parts.extend(
+        config
+            .project_digests
+            .iter()
+            .map(|digest| format!("project_digest={digest}")),
+    );
     parts.sort();
     let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
     crate::ts::hash::stable_hash(&refs)
@@ -121,6 +130,7 @@ mod tests {
             timeout_ms: None,
             scope_files: vec!["src/app.ts".to_string()],
             files_without_project: Vec::new(),
+            project_digests: vec!["tsconfig.json=digest".to_string()],
             explicitly_requested: false,
         }
     }
@@ -180,6 +190,20 @@ mod tests {
         let first = config();
         let mut second = config();
         second.timeout_ms = Some(30_000);
+
+        assert_ne!(
+            ts_types_lifecycle_digest(&first),
+            ts_types_lifecycle_digest(&second)
+        );
+    }
+
+    #[test]
+    fn lifecycle_digest_changes_when_a_project_config_changes() {
+        // Editing `compilerOptions` moves no TypeScript source, so nothing
+        // else in the key would notice.
+        let first = config();
+        let mut second = config();
+        second.project_digests = vec!["tsconfig.json=other".to_string()];
 
         assert_ne!(
             ts_types_lifecycle_digest(&first),

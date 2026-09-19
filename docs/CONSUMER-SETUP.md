@@ -122,7 +122,8 @@ blocked and nothing fails — the points-to tier answers those calls as before.
   3. a global `npm` install
 - **A `tsconfig.json`** at or above the analyzed files. polint walks from each
   discovered TS/JS file to the nearest one, the same walk import resolution
-  uses; there is no separate project flag.
+  uses; there is no separate project flag. A solution-style config — no inputs
+  of its own, only `references` — is followed to the projects it references.
 
 Preferring the repository's own compiler is deliberate: it is the compiler the
 repository type-checks with, so the types polint sees are the types the
@@ -187,9 +188,15 @@ RUST_LOG=polint::kernel::stage=debug polint check --format json
 
 Stages are `resolve_typescript`, `discover_projects`, `create_program` and
 `walk_callsites`, and the same counters appear in `summary.providers` of
-`--format json`. The sidecar's raw output is cached on disk, keyed by the
-sidecar script, the TypeScript version, the upstream syntax digest, the
-lifecycle settings and the discovered-file set.
+`--format json`, alongside `ts_types.dropped_rows` and
+`ts_types.dangling_callees` — rows the store could not key or join, which are a
+regression signal rather than a repository property.
+
+The sidecar's raw output is cached on disk, keyed by the sidecar script, the
+TypeScript version, the upstream syntax digest, the lifecycle settings, the
+discovered-file set and the text of each project's `tsconfig.json` together with
+everything it extends or references. Editing `strict`, `paths` or `include`
+therefore invalidates the entry, even though it moves no TypeScript source.
 
 ## Inspect and test local rules
 

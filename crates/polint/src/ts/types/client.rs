@@ -267,6 +267,7 @@ mod tests {
             timeout_ms: None,
             scope_files: vec!["src/app.ts".to_string(), "src/other.ts".to_string()],
             files_without_project: Vec::new(),
+            project_digests: vec!["tsconfig.json=digest".to_string()],
             explicitly_requested: false,
         }
     }
