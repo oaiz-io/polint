@@ -1088,6 +1088,125 @@ mod tests {
     }
 
     #[test]
+    fn two_calls_that_begin_at_the_same_offset_keep_their_own_targets() {
+        // `greeter.chain().greet(name)` and its inner `greeter.chain()` start
+        // at the same byte. Joining on the start alone would hand the outer
+        // call the inner call's target, which is a fabricated call-graph edge
+        // rather than a missing one.
+        let mut db = LocalAnalysisDb::new();
+        let file = db.add_file(
+            "src/app.ts".into(),
+            "src/app.ts".to_string(),
+            "greeter.chain().greet(name);".to_string(),
+        );
+        let caller = db.push_function(FunctionFact::new(
+            FunctionId::from_raw(0),
+            file,
+            "run".to_string(),
+            span(file, 0, 28),
+            Language::TypeScript,
+            false,
+            true,
+            1,
+            Vec::new(),
+        ));
+        let greet = db.push_function(FunctionFact::new(
+            FunctionId::from_raw(0),
+            file,
+            "Loud.greet".to_string(),
+            span(file, 100, 160),
+            Language::TypeScript,
+            false,
+            false,
+            1,
+            Vec::new(),
+        ));
+        let chain = db.push_function(FunctionFact::new(
+            FunctionId::from_raw(0),
+            file,
+            "Loud.chain".to_string(),
+            span(file, 200, 260),
+            Language::TypeScript,
+            false,
+            false,
+            1,
+            Vec::new(),
+        ));
+        let native = |id: u64, end: u32, key: &str, interner: &StableKeyInterner| CallSiteFact {
+            id: CallSiteId(id),
+            language: Language::TypeScript,
+            file,
+            caller,
+            owner_symbol: None,
+            body: MirBodyId(0),
+            operation: MirOpId(id),
+            span: span(file, 0, end),
+            kind: CallSyntaxKind::Method,
+            callee: CallCallee::Member {
+                base: crate::analysis_neutral::ids::PlaceId(0),
+                property: "greet".to_string(),
+            },
+            receiver: None,
+            arguments: Vec::new(),
+            result: None,
+            status: CallTargetStatus::Unresolved,
+            precision: CallPrecision::Unknown,
+            in_throw: false,
+            stable_key: interner.intern(key),
+        };
+        let interner = db.stable_key_interner();
+        db.replace_call_facts(CallOutput {
+            sites: vec![
+                native(0, 27, "call:outer", &interner),
+                native(1, 15, "call:inner", &interner),
+            ],
+            targets: Vec::new(),
+            unresolved: Vec::new(),
+        })
+        .expect("valid call facts");
+
+        let typed_site = |key: &str, end: u32| TsTypeCallsiteInput {
+            stable_key: interner.intern(key),
+            file: Some(file),
+            span: Some(span(file, 0, end)),
+            status: TsTypeSiteStatus::Resolved,
+            receiver_printed: Some("Loud".to_string()),
+        };
+        let typed_callee = |key: &str, site: &str, start: u32, end: u32| TsTypeCalleeInput {
+            stable_key: interner.intern(key),
+            callsite_stable_key: interner.intern(site),
+            dispatch: TsTypeDispatchKind::Declared,
+            name: "greet".to_string(),
+            external: None,
+            file: Some(file),
+            span: Some(span(file, start, end)),
+            name_span: Some(span(file, start, start + 5)),
+        };
+
+        let (output, report) = derive_ts_type_refinements(
+            &db,
+            &[typed_site("ts:outer", 27), typed_site("ts:inner", 15)],
+            &[
+                typed_callee("callee:greet", "ts:outer", 100, 160),
+                typed_callee("callee:chain", "ts:inner", 200, 260),
+            ],
+            &[],
+        );
+
+        assert_eq!(report.matched_callsites, 2);
+        let targets = output
+            .edges
+            .iter()
+            .map(|edge| (edge.site, edge.target_function))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            targets,
+            BTreeSet::from([(CallSiteId(0), Some(greet)), (CallSiteId(1), Some(chain))]),
+            "each call must keep only its own target"
+        );
+    }
+
+    #[test]
     fn only_the_typescript_family_is_covered() {
         assert!(covers_language(Language::TypeScript));
         assert!(covers_language(Language::JavaScript));

@@ -58,6 +58,11 @@ fn skip_without_typescript(test: &str) -> Option<PathBuf> {
 }
 
 /// A repository whose interface-typed call cannot be resolved by name alone.
+///
+/// Two decoys carry the called name and must not be answers, so a resolver
+/// that matched on the member name alone would fail here: `NeverBuilt`
+/// implements the interface but nothing constructs it, and `WrongShape` is
+/// constructed but its `greet` does not satisfy the interface.
 fn write_dispatch_repo(root: &Path) {
     std::fs::write(
         root.join("tsconfig.json"),
@@ -70,19 +75,25 @@ fn write_dispatch_repo(root: &Path) {
         root.join("src/shapes.ts"),
         "export interface Greeter {\n  greet(name: string): string;\n}\n\n\
          export class Loud implements Greeter {\n  greet(name: string): string {\n    \
-         return `HELLO ${name}`;\n  }\n}\n\n\
+         return `HELLO ${name}`;\n  }\n  louder(): Loud {\n    return this;\n  }\n}\n\n\
          export class Quiet implements Greeter {\n  greet(name: string): string {\n    \
-         return `hi ${name}`;\n  }\n}\n",
+         return `hi ${name}`;\n  }\n}\n\n\
+         export class NeverBuilt implements Greeter {\n  greet(name: string): string {\n    \
+         return `never ${name}`;\n  }\n}\n\n\
+         export class WrongShape {\n  greet(): void {}\n}\n",
     )
     .expect("write shapes");
     std::fs::write(
         root.join("src/main.ts"),
-        "import { Greeter, Loud, Quiet } from './shapes';\n\n\
+        "import { Greeter, Loud, Quiet, WrongShape } from './shapes';\n\n\
          function run(greeter: Greeter, name: string): string {\n  \
          return greeter.greet(name);\n}\n\n\
          export function dispatch(loud: boolean): string {\n  \
          const greeter: Greeter = loud ? new Loud() : new Quiet();\n  \
+         new WrongShape().greet();\n  \
          return run(greeter, 'world');\n}\n\n\
+         export function chained(): string {\n  \
+         return new Loud().louder().greet('chain');\n}\n\n\
          export function sloppy(anything: any): unknown {\n  \
          return anything.whatever();\n}\n",
     )
@@ -171,6 +182,117 @@ fn interface_dispatch_resolves_to_every_instantiated_implementation() {
         targets.contains("Quiet.greet"),
         "interface dispatch missed Quiet.greet; resolved targets: {targets:?}"
     );
+
+    // The interface-typed site itself must not reach either decoy: one is
+    // never constructed, the other does not satisfy the receiver's type. A
+    // resolver matching on the member name alone would name both.
+    let interface_site = output
+        .db
+        .ts_type_callsites()
+        .iter()
+        .find(|site| {
+            site.relative_file.as_deref() == Some("src/main.ts")
+                && site.status == crate::ts::types::facts::TsTypeCallStatus::Union
+        })
+        .expect("the interface-typed call is a union of implementations");
+    let interface_targets = typed
+        .iter()
+        .filter(|edge| {
+            interface_site
+                .span
+                .as_ref()
+                .is_some_and(|span| edge_covers(edge, span, &output.db))
+        })
+        .filter_map(|edge| edge.target_function)
+        .filter_map(|id| functions.get(&id).cloned())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        !interface_targets.contains("NeverBuilt.greet"),
+        "a class nobody constructs cannot receive the call: {interface_targets:?}"
+    );
+    assert!(
+        !interface_targets.contains("WrongShape.greet"),
+        "a class the receiver type does not admit cannot receive the call: {interface_targets:?}"
+    );
+}
+
+/// A chained call and the call inside it begin at the same byte.
+///
+/// `new Loud().louder().greet('chain')` and its inner `new Loud().louder()`
+/// share a start offset, so an identity keyed on the start alone would hand
+/// the outer call the inner call's target — an edge the program does not have.
+#[test]
+fn a_chained_call_does_not_inherit_the_inner_call_s_target() {
+    let Some(typescript) =
+        skip_without_typescript("a_chained_call_does_not_inherit_the_inner_call_s_target")
+    else {
+        return;
+    };
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_dispatch_repo(temp.path());
+
+    let output = run_dispatch_repo(temp.path(), &typescript);
+
+    let functions = output
+        .db
+        .functions()
+        .iter()
+        .map(|function| (function.id, function.name.clone()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let source = std::fs::read_to_string(temp.path().join("src/main.ts")).expect("read main");
+    let outer_start = source
+        .find("new Loud().louder().greet('chain')")
+        .expect("the chained call is in the fixture") as u32;
+
+    let sites = output
+        .db
+        .ts_type_callsites()
+        .iter()
+        .filter(|site| {
+            site.relative_file.as_deref() == Some("src/main.ts")
+                && site
+                    .span
+                    .as_ref()
+                    .is_some_and(|span| span.start_byte == outer_start)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        sites.len(),
+        3,
+        "the chain is three calls that start at the same byte: {:?}",
+        sites
+            .iter()
+            .map(|site| site.callsite.clone())
+            .collect::<Vec<_>>()
+    );
+
+    let outer = sites
+        .iter()
+        .max_by_key(|site| site.span.as_ref().map(|span| span.end_byte).unwrap_or(0))
+        .expect("the widest span is the outermost call");
+    let outer_targets = output
+        .db
+        .refined_call_edges()
+        .iter()
+        .filter(|edge| edge.tier == RefinedCallTier::TypeDirected)
+        .filter(|edge| {
+            outer
+                .span
+                .as_ref()
+                .is_some_and(|span| edge_covers(edge, span, &output.db))
+        })
+        .filter_map(|edge| edge.target_function)
+        .filter_map(|id| functions.get(&id).cloned())
+        .collect::<std::collections::BTreeSet<_>>();
+
+    assert!(
+        outer_targets.contains("Loud.greet"),
+        "the chained call resolves to the method it names: {outer_targets:?}"
+    );
+    assert!(
+        !outer_targets.contains("Loud.louder"),
+        "the inner call's target must not appear on the outer call: {outer_targets:?}"
+    );
 }
 
 #[test]
@@ -213,6 +335,11 @@ fn an_any_receiver_never_produces_a_confident_typed_edge() {
     );
 }
 
+/// Whether `edge` hangs off the native call site the sidecar span describes.
+///
+/// Both ends are compared: `new Loud().louder().greet('x')` is three calls that
+/// begin at the same byte, and a start-only comparison would attribute every
+/// one of their edges to all three.
 fn edge_covers(
     edge: &crate::analysis_neutral::refined_calls::facts::RefinedCallEdgeFact,
     span: &crate::internal_core::Span,
@@ -221,7 +348,11 @@ fn edge_covers(
     db.call_sites()
         .iter()
         .find(|site| site.id == edge.site)
-        .is_some_and(|site| site.span.start_byte == span.start_byte && site.file == span.file)
+        .is_some_and(|site| {
+            site.file == span.file
+                && site.span.start_byte == span.start_byte
+                && site.span.end_byte == span.end_byte
+        })
 }
 
 #[test]

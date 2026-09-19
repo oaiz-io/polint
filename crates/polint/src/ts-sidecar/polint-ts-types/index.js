@@ -1144,8 +1144,12 @@ function emitCallsite(options) {
   const {ts, checker, project, emitter, sourceFile, node} = options;
   const relative = relativePath(project.root, sourceFile.fileName);
   const start = node.getStart(sourceFile);
-  const startByte = project.mapperFor(sourceFile)(start);
-  const callsiteIdentity = `${relative}:${startByte}`;
+  const callsiteSpan = project.span(sourceFile, start, node.end);
+  // Nested calls share a start offset: `a.b().c()` and `a.b()` both begin at
+  // `a`, and so do `f()()` and `f()`. An identity keyed on the start alone
+  // collapses them, which drops one call site and attaches the other call's
+  // targets to the survivor, so the end offset is part of the identity.
+  const callsiteIdentity = `${relative}:${callsiteSpan.start_byte}:${callsiteSpan.end_byte}`;
   const callsiteKey = stableKey(['callsite', callsiteIdentity]);
 
   const enclosing = enclosingCallable(ts, node, sourceFile);
@@ -1305,7 +1309,7 @@ function emitCallsite(options) {
     callsite: callsiteIdentity,
     enclosing: enclosingIdentity,
     file: relative,
-    span: project.span(sourceFile, start, node.end),
+    span: callsiteSpan,
     call_kind: callKind(ts, node),
     status,
     reason,
