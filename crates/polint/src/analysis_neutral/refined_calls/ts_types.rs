@@ -360,13 +360,13 @@ impl TsSiteIndex {
     fn new(db: &impl AnalysisHost) -> Self {
         let mut sites_by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
         for (position, site) in db.call_sites().iter().enumerate() {
-            if site.language.is_ts_family() {
+            if covers_language(site.language) {
                 sites_by_file.entry(site.file).or_default().push(position);
             }
         }
         let mut functions_by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
         for (position, function) in db.functions().iter().enumerate() {
-            if function.language.is_ts_family() {
+            if covers_language(function.language) {
                 functions_by_file
                     .entry(function.file)
                     .or_default()
@@ -515,14 +515,20 @@ fn same_byte_span(left: &Span, right: &Span) -> bool {
         && left.end_byte == right.end_byte
 }
 
-/// Languages the tier can answer for. Kept explicit so a future frontend does
-/// not inherit typed edges by accident.
+/// Languages the tier can answer for.
+///
+/// The join asks this rather than testing the language inline, so a frontend
+/// added later inherits typed edges only by being named here.
 pub fn covers_language(language: Language) -> bool {
     language.is_ts_family()
 }
 
 /// Distinct call sites the typed tier produced at least one runnable target
-/// for, used by the evaluation harness to attribute tier contribution.
+/// for.
+///
+/// Reported by the measurement harness next to the whole-pipeline recall
+/// proxy, which counts a site resolved by any tier: the difference between the
+/// two is what this tier contributed on its own.
 pub fn typed_tier_site_count(output: &RefinedCallOutput) -> usize {
     output
         .edges

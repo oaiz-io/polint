@@ -512,6 +512,14 @@ fn report_tier_contribution(label: &str, output: &crate::analysis_kernel::Kernel
     eprintln!("call sites {}", output.db.call_sites().len());
     eprintln!("refined edges {}", output.db.refined_call_edges().len());
     eprintln!("ts type callsites {}", output.db.ts_type_callsites().len());
+    eprintln!(
+        "call sites the typed tier alone resolved {}",
+        crate::analysis_neutral::refined_calls::ts_types::typed_tier_site_count(
+            &crate::analysis_neutral::refined_calls::store::RefinedCallOutput {
+                edges: output.db.refined_call_edges().to_vec(),
+            }
+        )
+    );
     for (tier, count) in by_tier {
         eprintln!("tier {tier} = {count}");
     }
