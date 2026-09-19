@@ -12,7 +12,6 @@ pub mod binding;
 mod callable_flow;
 pub mod error;
 mod frontend;
-#[cfg(test)]
 mod hash;
 pub mod ids;
 pub mod inventory;
@@ -40,6 +39,7 @@ pub mod symbol_graph;
 pub mod syntax_store;
 #[cfg(feature = "lang-typescript")]
 pub mod token_flow;
+pub(crate) mod types;
 
 use std::cell::RefCell;
 use std::sync::Arc;

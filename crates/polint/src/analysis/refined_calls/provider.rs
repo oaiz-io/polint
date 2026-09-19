@@ -5,6 +5,10 @@ use crate::analysis_api::{Digest, InputSnapshot, ProviderManifest};
 use crate::core::AnalysisDb;
 
 pub(crate) use crate::analysis_neutral::refined_calls::provider::RefinedCallsProviderOutput;
+use crate::analysis_neutral::refined_calls::provider::{
+    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDispatchKind, TsTypeFileDensityInput,
+    TsTypeSiteStatus,
+};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn derive_refined_calls_with_cache_stats(
@@ -42,6 +46,7 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
             },
         )
         .collect::<Vec<_>>();
+    let (ts_type_callsites, ts_type_callees, ts_type_file_densities) = ts_type_inputs(db);
     crate::analysis_neutral::refined_calls::provider::derive_refined_calls_with_cache_stats(
         db,
         input_snapshot,
@@ -54,7 +59,99 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
         solver_output_digest,
         &go_semantic_functions,
         &go_semantic_callsites,
+        &ts_type_callsites,
+        &ts_type_callees,
+        &ts_type_file_densities,
     )
+}
+
+/// Projects the TS type-sidecar store into the neutral refinement's inputs.
+///
+/// The neutral refinement must not know about the TypeScript frontend, so the
+/// composition root flattens the two rows it needs to join — a callee and the
+/// callable it names — into one input carrying the declaration's name and name
+/// span.
+fn ts_type_inputs(
+    db: &AnalysisDb,
+) -> (
+    Vec<TsTypeCallsiteInput>,
+    Vec<TsTypeCalleeInput>,
+    Vec<TsTypeFileDensityInput>,
+) {
+    use crate::ts::types::facts::{TsTypeCallStatus, TsTypeDispatch};
+
+    let printed_by_site = db
+        .ts_type_receivers()
+        .iter()
+        .map(|receiver| (receiver.callsite_stable_key, receiver.printed.as_str()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let callsites = db
+        .ts_type_callsites()
+        .iter()
+        .map(|callsite| TsTypeCallsiteInput {
+            stable_key: callsite.stable_key,
+            file: callsite.file,
+            span: callsite.span.clone(),
+            receiver_printed: printed_by_site
+                .get(&callsite.stable_key)
+                .copied()
+                .filter(|printed| !printed.is_empty())
+                .map(str::to_string),
+            status: match callsite.status {
+                TsTypeCallStatus::Resolved => TsTypeSiteStatus::Resolved,
+                TsTypeCallStatus::Union => TsTypeSiteStatus::Union,
+                TsTypeCallStatus::External => TsTypeSiteStatus::External,
+                TsTypeCallStatus::AnyReceiver => TsTypeSiteStatus::AnyReceiver,
+                TsTypeCallStatus::Unresolved => TsTypeSiteStatus::Unresolved,
+            },
+        })
+        .collect::<Vec<_>>();
+
+    let callables_by_identity = db
+        .ts_type_callables()
+        .iter()
+        .map(|callable| (callable.callable.as_str(), callable))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let callees = db
+        .ts_type_callees()
+        .iter()
+        .map(|callee| {
+            let declaration = callee
+                .callable
+                .as_deref()
+                .and_then(|identity| callables_by_identity.get(identity).copied());
+            TsTypeCalleeInput {
+                stable_key: callee.stable_key,
+                callsite_stable_key: callee.callsite_stable_key,
+                dispatch: match callee.dispatch {
+                    TsTypeDispatch::Declared => TsTypeDispatchKind::Declared,
+                    TsTypeDispatch::DeclaredSignature => TsTypeDispatchKind::DeclaredSignature,
+                    TsTypeDispatch::Implementation => TsTypeDispatchKind::Implementation,
+                    TsTypeDispatch::UnionMember => TsTypeDispatchKind::UnionMember,
+                },
+                name: declaration
+                    .map(|callable| callable.name.clone())
+                    .unwrap_or_default(),
+                external: callee.external.clone(),
+                file: callee.file,
+                span: callee.span.clone(),
+                name_span: declaration.and_then(|callable| callable.name_span.clone()),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let densities = db
+        .ts_type_file_densities()
+        .iter()
+        .map(|density| TsTypeFileDensityInput {
+            file: density.file,
+            any_percent: density.any_percent(),
+        })
+        .collect::<Vec<_>>();
+
+    (callsites, callees, densities)
 }
 
 #[cfg(test)]

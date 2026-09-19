@@ -50,6 +50,67 @@ mod tests {
         }
     }
 
+    /// Measurement harness for the Jelly call-graph lane on its own.
+    ///
+    /// The gate above needs both oracle clones and compares against the
+    /// committed baseline. This one runs only Jelly and prints what it
+    /// measured, so the same code can be run on two trees and their numbers
+    /// compared directly.
+    ///
+    /// ```sh
+    /// cargo test -p polint --lib --all-features --release \
+    ///   eval::external::tests::measure_jelly_callgraph_lane \
+    ///   -- --exact --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "measurement harness: needs the Jelly clone"]
+    fn measure_jelly_callgraph_lane() {
+        let root = repo_root();
+        let manifest_path =
+            root.join("research/evaluation-harness/suites/jelly-callgraph-micro.toml");
+        let repo = root.join("research/evaluation-harness/repos/jelly");
+        if !repo.exists() {
+            eprintln!(
+                "SKIP measure_jelly_callgraph_lane: missing {}",
+                repo.display()
+            );
+            return;
+        }
+        let mut suite = JellyCallgraphAdapter
+            .load_manifest(&std::fs::read_to_string(&manifest_path).unwrap())
+            .unwrap();
+        suite.checkout.path = repo.to_string_lossy().to_string();
+        suite.checkout.local_clone_policy = LocalClonePolicy::AllowAbsolute;
+
+        let output_dir = tempfile::tempdir().unwrap();
+        let artifacts = run_external_suite_for_test(
+            &JellyCallgraphAdapter,
+            &suite,
+            graph_bench_tier(),
+            EvaluationMode::PolintBaseline,
+            output_dir.path(),
+        )
+        .unwrap();
+        let run = read_run(&artifacts.json_path);
+
+        eprintln!("jelly lane cases            {}", run.cases.len());
+        eprintln!(
+            "jelly lane edges_expected   {}",
+            run.metrics.graph_edges_expected
+        );
+        eprintln!(
+            "jelly lane edges_observed   {}",
+            run.metrics.graph_edges_observed
+        );
+        eprintln!("jelly lane unknown_count    {}", run.metrics.unknown_count);
+        eprintln!("jelly lane recall           {:?}", run.metrics.recall);
+        eprintln!("jelly lane precision        {:?}", run.metrics.precision);
+        eprintln!(
+            "jelly lane f1               {:?}",
+            f1_from_precision_recall(run.metrics.precision, run.metrics.recall)
+        );
+    }
+
     #[test]
     fn external_graph_baseline_reports_can_be_generated() {
         let root = repo_root();

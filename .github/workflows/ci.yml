@@ -164,11 +164,24 @@ jobs:
             crates/polint/src/go-sidecar/polint-go-frontend/go.sum
             crates/polint/src/go-sidecar/polint-go-symbols/go.sum
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The TypeScript type sidecar runs the compiler the analyzed repository
+      # provides. Installing one here is what makes its tests execute rather
+      # than skip.
+      - name: install TypeScript for the type sidecar
+        run: npm install --no-save --no-audit --no-fund typescript@5
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo test
+        env:
+          POLINT_TS_TYPESCRIPT: ${{ github.workspace }}/node_modules/typescript
+          POLINT_REQUIRE_TS_TYPESCRIPT: "1"
         run: cargo test ${{ matrix.test-args }}
 
 

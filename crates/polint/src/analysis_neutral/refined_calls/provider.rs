@@ -47,6 +47,11 @@ pub struct GoSemanticCallsiteInput {
     pub span: Option<Span>,
 }
 
+pub use crate::analysis_neutral::refined_calls::ts_types::{
+    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDispatchKind, TsTypeFileDensityInput,
+    TsTypeJoinReport, TsTypeSiteStatus,
+};
+
 pub const REFINED_CALLS_PROVIDER_ID: &str = "polint.refined_calls";
 
 #[derive(Debug, Clone, Default)]
@@ -70,6 +75,9 @@ pub fn derive_refined_calls_with_cache_stats(
     solver_output_digest: Digest,
     go_semantic_functions: &[GoSemanticFunctionInput],
     go_semantic_callsites: &[GoSemanticCallsiteInput],
+    ts_type_callsites: &[TsTypeCallsiteInput],
+    ts_type_callees: &[TsTypeCalleeInput],
+    ts_type_file_densities: &[TsTypeFileDensityInput],
 ) -> RefinedCallsProviderOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
@@ -118,6 +126,29 @@ pub fn derive_refined_calls_with_cache_stats(
     output
         .edges
         .extend(crate::analysis_neutral::refined_calls::ts_js::derive_ts_js_refinements(db).edges);
+    // The typed tier runs alongside the points-to tier rather than replacing
+    // it: both describe the same call sites, and a consumer picks by tier. The
+    // heap tier is the fallback whenever the sidecar produced nothing.
+    let (ts_typed, ts_typed_join) =
+        crate::analysis_neutral::refined_calls::ts_types::derive_ts_type_refinements(
+            db,
+            ts_type_callsites,
+            ts_type_callees,
+            ts_type_file_densities,
+        );
+    if ts_typed_join != TsTypeJoinReport::default() {
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            provider = REFINED_CALLS_PROVIDER_ID,
+            matched_callsites = ts_typed_join.matched_callsites,
+            unmatched_callsites = ts_typed_join.unmatched_callsites,
+            matched_callees = ts_typed_join.matched_callees,
+            unmatched_callees = ts_typed_join.unmatched_callees,
+            deferred_callsites = ts_typed_join.deferred_callsites,
+            "ts type tier join"
+        );
+    }
+    output.edges.extend(ts_typed.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::summaries::derive_summary_assisted_refinements(db)
             .edges,
@@ -910,6 +941,9 @@ mod tests {
             upstream.clone(),
             upstream.clone(),
             upstream,
+            &[],
+            &[],
+            &[],
             &[],
             &[],
         )

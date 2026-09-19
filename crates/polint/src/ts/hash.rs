@@ -1,4 +1,4 @@
-//! Deterministic FNV-1a style hash used by Go cache digests.
+//! Deterministic FNV-1a style hash used by TS/JS cache digests.
 
 pub(crate) fn stable_hash(parts: &[&str]) -> String {
     let mut hash = 0xcbf29ce484222325_u64;

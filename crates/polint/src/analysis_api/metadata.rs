@@ -101,6 +101,8 @@ pub enum FactFamily {
     GoSemantic,
     /// Registry key for the TS object-model store.
     TsObjectModel,
+    /// Registry key for the TypeScript type-sidecar store.
+    TsTypes,
     /// Registry key for the identity store.
     Identity,
     /// Registry key for the reachability store.
@@ -202,6 +204,7 @@ impl FactFamily {
             Self::UnsupportedSemantic => "UnsupportedSemantic",
             Self::GoSemantic => "GoSemantic",
             Self::TsObjectModel => "TsObjectModel",
+            Self::TsTypes => "TsTypes",
             Self::Identity => "Identity",
             Self::Reachability => "Reachability",
             Self::SemanticGraph => "SemanticGraph",
