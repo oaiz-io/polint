@@ -381,13 +381,20 @@ arms of *this* run are.
 
 | | tier off | tier on |
 |---|---|---|
-| Call sites with a resolved target | 828 | **3,338** |
+| Call sites with a resolved target (any tier) | 828 | **3,338** |
+| Call sites the typed tier alone resolved | 0 | **3,158** |
 | Call sites that lost a target | — | **0** |
 | `TypeDirected` edges | 0 | **3,450** |
 | `DirectOnly` / `Framework` / `Summary` / `PointsTo` | 2,396 / 23 / 2,396 / 5,995 | unchanged |
 | `ts_types.dropped_rows` | — | **0** |
+| `ts_types.dangling_callees` | — | **0** |
 | `ts_types.out_of_scope_rows` | — | 0 |
 | `ts_types.rows_emitted` | — | 25,607 |
+
+Two site counts, because they answer different questions. 3,338 is the recall
+proxy every tier contributes to; 3,158 is what the typed tier named a runnable
+target for on its own, of the 7,904 call sites the sidecar reported. The 2,510
+it *gained* are the sites no other tier named.
 
 **The recall proxy did not move**, and that is the expected shape: a collapsed
 pair produced two edges off one site, and the fix produces the same two edges
