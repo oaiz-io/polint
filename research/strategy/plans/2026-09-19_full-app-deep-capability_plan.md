@@ -2,7 +2,7 @@
 
 Date: 2026-09-19
 Planner: Claude Fable 5.1 (delegated)
-Input contract: [../04-full-app-deep-capability.md](../04-full-app-deep-capability.md) at `07a338ce`. Every workstream, gate, and resolved question in that document is binding here; nothing is relitigated. Where this plan says "the research doc", it means that file at that commit.
+Input contract: [../04-full-app-deep-capability.md](../04-full-app-deep-capability.md) as revised after the adversarial review of round 1 (the commit that carries this plan revision). Every workstream, gate, and resolved question in that document is binding here; nothing is relitigated. Where this plan says "the research doc", it means that file at that commit.
 Worktree: `/workspace/polint-research-fullapp`, branch `research/full-app-deep-capability`. Every `file:line` anchor below was re-read in this worktree at `07a338ce` before being written down; section 0 records the ones that drifted from the research doc.
 Document type: implementation plan. Plan only. No code was changed for this document.
 
@@ -49,6 +49,18 @@ The research doc was written against `686461be`; the two commits since then touc
 | provider dispatch and `Provider::run` | `analysis_kernel/provider.rs:991-1005` | `:991-1005`; `SemanticMirProvider` `:281`; `AbstractDomainsProvider` `:441`, run gate `:450-458` | new anchors for this plan |
 | determinism gate | `polint-eval/src/harness/determinism_gate.rs` | fixtures at `tests/eval-fixtures/determinism/{go_reachable,go_rta,ts_object_model,ts_reachable,ts_tokens}` | new anchor |
 | policy-query dominance consumer | not in research doc | `policy_queries.rs:1383-1418` builds an edge relation and answers by reachability over it | new anchor; confirms W4's tree-only emission is already consumed as a graph |
+| `ProviderCtx::dependency_digest` | research doc section 6 (revised) | `analysis_kernel/provider.rs:69-74`; returns `Digest::absent(ProviderOutput, id)` for a provider with no recorded output | the reason provider digests are cache keys, not fact digests (round 1 finding 1) |
+| digest recipes that fold upstream digests | research doc Appendix A "digest recipes" | `summaries/provider.rs:39-42`; `types/provider.rs:196`, `:218-222`; `refined_calls/provider.rs:611-616`, `:627-632`; `entrypoints/provider.rs:92-94`; `domains/provider.rs:158-160`; `calls/provider.rs:115-116`; `data_flow/provider.rs:417-422`; `evidence/provider.rs:611-616`; call sites `analysis_kernel/provider.rs:428`, `:463-470`, `:513-521`, `:550-555`, `:585-592`, `:620-624`, `:683-694`, `:724-735`, `:761-763`, `:789-794`, `:819-826`, `:851-859` | verified per provider; drives every "expected digest move" list below |
+| closure parity assert and test | research doc section 8 W3 (revised) | `analysis_kernel/mod.rs:603-607` (`debug_assert_eq!` against `providers_enabled_by_boolean_gates`); `provider.rs:1031-1068` (the boolean gates); `provider.rs:1999-2025` (`capability_closure_matches_boolean_pipeline_gates`, 128 subsets); `provider.rs:2027-2052` (`v13_cache_dependency_ledger_matches_provider_manifest_inputs`) | W3 must name and replace these |
+| `domain_events` input rows | research doc section 8 W3 (revised) | `provider.rs:1583-1584` (`direct_summaries`), `:1688-1689` (`type_value_alias`); sole producer `:1561` | both rows leave `type_value_alias` (round 1 finding 2) |
+| post-dominance universe | research doc section 8 W4 (revised) | `cfg/derived.rs:82-83` (forward, entry-reachable), `:133-154` (reverse, all blocks plus virtual exit), `:309-321` (`reachable_blocks`), `:346-356` (universe-seeded fixpoint), `:404-425` (`collect_reversed_predecessors`), `:438-462` (`immediate_relation`), `:493-509` (`selected_exit_blocks`) | W4's tree must take the universe as a parameter |
+| layering rule for `analysis_neutral` | not in research doc | `crates/polint/tests/module_layering.rs:71-75` forbids `go`, `ts`, `frontend`, `cli`; no rule constrains `analysis_kernel`; `frontend_api` forbids `analysis_kernel`, `go`, `ts`, `cli` (`:64-68`) | W6's unit discovery must enter through `frontend_api` |
+| TS project discovery | research doc section 8 W6 | `ts/module_graph/mod.rs:1591` `nearest_tsconfig_path` (private; `tsconfig.json` only); `:281-292` `find_ts_project_root` (matches `tsconfig.json` or `package.json`; feeds module nodes at `:264`); TS `TopologyPackageFact` rows are `JsPackage` per `package.json` (`:352-372`); TS `SourceSetFact` rows are one per file (`:414-432`) | the plan's earlier anchor `:286` named the wrong function |
+| tree-RSS sampler | research doc section 7 (revised) | `.scale-envelope/rssrun.py:22-58` (tree walk via `/proc/<pid>/task/<pid>/children`, `VmRSS` sum), `:75-107` (JSON summary with `peak_rss_bytes`, `wall_s`, `RLIMIT_AS` guard) | replaces `/usr/bin/time -v` for memory |
+| polint-process peak | research doc section 7 (revised) | `measure.rs:27-32` (`getrusage(RUSAGE_SELF).ru_maxrss`), reported as `peak_rss_mb` on stage rows (`analysis_kernel/mod.rs:334`) | the figure G2 binds |
+| test-only fact dump | research doc section 7 G1c | `analysis_kernel/debug.rs:29-68` `metadata_debug_json_for_test` (per-family rows with resolved stable keys) | the seed of the fact-row oracle |
+| `CallSiteOrderKey` | not in research doc | `mir_body_compose.rs:180-193` sorts resolved key text to assign `CallSiteId` | must be in W5's conversion list (round 1 note 15) |
+| `merge_language_outputs` normalisation | not in research doc | `mir_body_compose.rs:27` re-normalises; per-language offsets are count-based (`:31-42`) | the actual reason W1 may drop the lowerer's trailing `normalized` (round 1 note 16) |
 
 Two things in this tree that the research doc did not record and that change the plan's shape:
 
@@ -63,7 +75,10 @@ After W0 to W9: a forced `calls` scan of the full 4,752-file Go backend (the "fu
 
 ### 1.2 Invariants carried into every workstream
 
-- **I1, the digest oracle.** Every provider's `digest=` value in the `polint::kernel::stage` rows and the `polint check` diagnostics digest are byte-identical before and after a change, except where a workstream's "may move" list says otherwise. Tool: `.scale-envelope/digests.py <before.stderr> <after.stderr>` prints `N/N provider output digests identical`; any `DIFFER` or `MISSING` row is a failing build for the workstream unless listed. The "must not move" column of the research doc's stage-row table (section 8) is copied into each workstream's test plan below.
+- **I1, the identity oracle, in two tiers.** The protected quantity is the fact rows: for every fact family, the sorted list of (canonical stable-key text, payload digest), plus the `polint check` diagnostics digest and the ai-friendly stdout. A provider's `digest=` is a cache key: it is computed from the provider's rows and from the output digests of the upstream providers its recipe names, fetched through `ProviderCtx::dependency_digest` (`analysis_kernel/provider.rs:69-74`), which returns a fixed `absent` value for a provider that did not run (section 0, "digest recipes"). So:
+  - **I1a, provider digests.** For a workstream that changes neither the set of registered providers nor the set that runs for a given request (W0, W1, W2, W4, W5, W7 on a warm run, W8 on a cold run), every `digest=` in the stage rows is byte-identical before and after. Tool: `.scale-envelope/digests.py <before.stderr> <after.stderr>` prints `N/N provider output digests identical` with N the count of providers that had a row in the before capture (21 on a Go `calls` cell, 23 on a `dataflow` cell; `data_flow` and `evidence` run only for `dataflow`, `provider.rs:1065-1067`, and a `digest=` is printed only for a provider that ran, `analysis_kernel/mod.rs:324-341`). Any `DIFFER` or `MISSING` row is a failing build. I1a is sufficient for these workstreams because a moved row moves its own provider's digest.
+  - **I1b, fact rows.** For a workstream that changes which providers run (W3) or which providers exist (W6), the digests of every provider whose recipe names a changed provider move by construction, and I1a cannot be the oracle. The oracle is the fact-row dump: `polint-eval`'s harness gains `fact_rows_dump` (slot 1, with the W9 scripts), which writes one file per fact family containing the sorted (canonical key text, `payload_digest` hex) pairs of every metadata row, built from the same per-family walk `metadata_debug_json_for_test` does today (`analysis_kernel/debug.rs:29-68`) but over `FactMetaStore::family_rows` for every family; it is run with the before and after binaries on the same checkout and diffed byte for byte. The workstream's test plan lists exactly which families may differ (W3: `domain_observations` and `domain_events` absent on a `calls` request; W6: none) and exactly which provider digests are expected to move; any other family or digest moving is a failing build. The diagnostics digest and stdout must be identical in both tiers.
+  - The "must not move" column of the research doc's stage-row table (section 8) is copied into each workstream's test plan below, and each workstream states its tier.
 - **I2, frozen public surface.** `crates/polint/src/sdk/facts.rs`, `crates/polint/src/sdk/policy.rs`, the `evidence_v1` envelope, `docs/facts/`, every `docs/schemas/*.json`, and the ai-friendly report shape do not change. `crates/polint/tests/public_surface_leak.rs` and `consumer_api_compat.rs` gate this and must stay green in every commit. (Resolved Q2.)
 - **I3, internal traits change freely.** `AnalysisHost`, `AnalysisDb`, `FactDatabase`, `FactMetaStore`, the provider manifests, and every `analysis_*` module are `pub(crate)` and change without a decision record (Resolved Q2). The store schema and the layer-cache manifest schema are one-way doors and carry a schema-label bump when they change (W7).
 - **I4, no dual paths.** The PR that lands a replacement deletes the path it replaces (report 03 rule 2). This plan names the deletion in each workstream's commit shape.
@@ -96,7 +111,7 @@ W9                                    envelope half after W6; probe-script and r
 Box-capacity rules on the 16-core, 30 GB host:
 
 - At most one release build at a time (`CARGO_BUILD_JOBS=4` while a probe or another build runs). A cold `cargo build --release -p polint` and a full-backend probe together exceed the box's comfortable memory when the probe is on the pre-W5 pipeline (14 to 18 GB tree peak); probes on the full backend are serialised behind every build.
-- W1, W2 and W4 can be developed in parallel worktrees because they touch disjoint files (W1: lowerers, `ifds`, `refined_calls`, `calls`, `core/db.rs` overrides; W2: six digest functions and `domains/provider.rs` side tables; W4: `cfg/derived.rs` and `cfg/provider.rs`). Their probes must not overlap on the 885-file or full-backend scopes; the 45-file scope and excalidraw can run concurrently with a build.
+- W1 and W4 can be developed in parallel worktrees because they touch disjoint files (W1: lowerers, `ifds`, `refined_calls/provider.rs:300-454`, `calls/extract.rs`, `core/db.rs` overrides; W4: `cfg/derived.rs` and `cfg/provider.rs`). W2 is not file-disjoint from W1: one of its six digest functions is `refined_calls_output_digest` (`refined_calls/provider.rs:596-665`, `parts.sort()` at `:657`), in the same file W1 edits at `:333-454`. The two regions do not overlap, so W2's commit 1 (the pure extraction from the evidence provider) may proceed in parallel, but W2's commit 2 (the six sites) is written on top of W1's merged commit 4 and its oracle run is taken against that base. Probes must not overlap on the 885-file or full-backend scopes; the 45-file scope and excalidraw can run concurrently with a build.
 - The G1 oracle needs a "before" stderr per scope captured once from the branch base and reused by every workstream; capture it before starting W1.
 - W5 and W6 are serial with everything else: both touch `internal_core`, `analysis_api/metadata.rs` and every provider, so no other branch can be merged underneath them without a rebase.
 
@@ -132,8 +147,8 @@ Box-capacity rules on the 16-core, 30 GB host:
 # publish once from cargo home A, then restore from a brand-new empty cargo home B
 A=$(mktemp -d); B=$(mktemp -d)
 CARGO_HOME=$A polint check --profile core --fail-on none <paths>      # may compile (store miss) or restore
-CARGO_HOME=$B /usr/bin/time -v polint check --profile core --fail-on none <paths> 2> /tmp/g0.time
-grep -E "Elapsed|Maximum resident" /tmp/g0.time
+CARGO_HOME=$B /usr/bin/time -v polint check --profile core --fail-on none <paths> 2> "$POLINT_GATE_OUT/g0.time"
+grep -E "Elapsed" "$POLINT_GATE_OUT/g0.time"      # wall clock only; G0 has no memory threshold
 # expected: elapsed under 10 s; ps tree during the run shows polint and the rule host only
 ```
 
@@ -169,7 +184,7 @@ struct LoweringIndex<'db> {
   - `push_body` (`:621`): replace the two `.iter().find(...)` scans with `package_by_file.get(&file.id)` and `module_node_by_file.get(&file.id)`. The old scans picked the first package and first module node for the file in database order; the index is built by iterating in database order and inserting only when absent (`entry().or_insert`), which reproduces "first".
   - `go_closure_capture_names` (`:732`): unchanged code, now reaching the indexed `references_for_file` through the override; `definition_for_symbol` likewise.
   - `lower_control_flow` (`:102`): replace the two per-body `filter` scans (`:118`, `:123`) with one pre-pass that groups `operations` and `control_effects` by `MirBodyId` into `BTreeMap<MirBodyId, Vec<&T>>` (operations are pushed in body order, so a `Vec<Range<usize>>` is also possible; the map is simpler and the order within a body is the push order either way). The `body_operations` and `body_effects` locals keep their types so the rest of the function is untouched.
-  - Delete the trailing `.normalized(interner)` at `:99`; `SemanticStore::from_output` normalises at `analysis_neutral/store.rs:38`. Digest identity: `semantic_mir_output_digest` sorts its parts (`analysis/provider.rs:190`), so the row order fed to it does not matter, and the store's own normalisation is what every downstream consumer sees. Verify with G1 before merging; if any digest moves, keep the call and record why.
+  - Delete the trailing `.normalized(interner)` at `:99`; `SemanticStore::from_output` normalises at `analysis_neutral/store.rs:38`. Digest identity does not follow from the digest sorting its parts (`analysis/provider.rs:190`), because the parts embed raw dense ids (`file={:?} function={:?}` at `:116`, `statements={:?} terminator={:?}` at `:128`, and the operation-kind fragments at `:246-286`), and id assignment is order-sensitive. It follows from the merge: `merge_language_outputs` re-normalises the merged output (`mir_body_compose.rs:27`), its per-language id offsets are counts and therefore order-independent (`:31-42`), and `remap_call_site_ids` sorts by an explicit `CallSiteOrderKey` before assigning ids (`:193`). Verify with I1a before merging; if any digest moves, keep the call and record why.
 
 `crates/polint/src/ts/mir/lower.rs`
 - Same `LoweringIndex` (shared as `analysis_neutral::lowering_index::LoweringIndex` so both lowerers use one definition), applied to `matching_function` (`:4541`), `matching_module_function` (`:4556`, becomes a per-file `Option<&FunctionFact>` computed once), `enclosing_function` (`:4568`, per-file `Vec<&FunctionFact>` sorted by span start, then linear scan of that file's functions for the smallest containing; a binary search is not needed for correctness and per-file counts are small), the per-body filters at `:132-141`, the closure capture path at `:764`, and the trailing `normalized` at `:116`.
@@ -192,7 +207,7 @@ struct LoweringIndex<'db> {
 **Test strategy.**
 - Gating unit tests: `go::mir::lower` and `ts::mir::lower` test modules (existing lowering fixtures at `go/mir/lower.rs:2612+`, `:2868+`); `analysis_neutral::calls::extract` tests including `extract_call_sites_is_deterministic_for_different_operation_orders` (`:966`); `analysis_neutral::refined_calls` tests; `analysis_neutral::ifds` tests; `analysis_neutral::domains::solver::deterministic_shuffled_rows_produce_byte_identical_result_digests` (`:794`).
 - New unit tests: for each replaced scan, a fixture where the bucket has two candidates and the old first-match rule and the new lookup agree (two functions with the same name in one file at different spans; two symbols with the same name in one file; two call sites with the same span from different callers).
-- Invariant I1: `digests.py` reports 23/23 identical on excalidraw, the 45-file scope, and the 885-file scope; the `polint check --format json` diagnostics digest is identical on `examples/*` (golden corpus, `crates/polint/tests/golden.rs`).
+- Invariant I1a: `digests.py` reports N/N identical (N from the before capture: 23 on the excalidraw and 45-file `dataflow` cells, 21 on the 45-file and 885-file `calls` cells); the `polint check --format json` diagnostics digest is identical on `examples/*` (golden corpus, `crates/polint/tests/golden.rs`).
 - Must not move: every `digest=`; `facts`; `keys`; `key_mb` on every stage row.
 - Full suite: `cargo test -p polint --lib --all-features --locked` with the scale corpus moved aside (`.scale-envelope/EXPERIMENTS.md`, "Note on running the suite locally").
 
@@ -201,11 +216,11 @@ struct LoweringIndex<'db> {
 ```sh
 probe s885-before calls <885-file scope>     # captured once from the branch base
 probe s885-after  calls <885-file scope>
-python3 .scale-envelope/digests.py /tmp/s885-before.stderr /tmp/s885-after.stderr   # 23/23 identical
-python3 .scale-envelope/stages.py /tmp/s885-after.stderr                              # semantic_mir, refined_calls, abstract_domains rows drop
+python3 .scale-envelope/digests.py "$POLINT_GATE_OUT/s885-before.stderr" "$POLINT_GATE_OUT/s885-after.stderr"   # 21/21 identical on a calls cell
+python3 .scale-envelope/stages.py "$POLINT_GATE_OUT/s885-after.stderr"                              # semantic_mir, refined_calls, abstract_domains rows drop
 ```
 
-G1b (cost split): temporary `tracing::debug!(target: "polint::probe", step = ...)` rows around `lower_file`, `finish_with_types`, `lower_control_flow` and `normalized` inside `lower_go_mir`, on the 885 and 1,588-file scopes, removed before merge. Expected: `lower_control_flow` and `matching_function` are the two largest shares before W1 and are no longer visible after.
+G1b (cost split): temporary `tracing::debug!(target: "polint::probe", step = ...)` rows around `lower_file`, `finish_with_types`, `lower_control_flow` and `normalized` inside `lower_go_mir`, on the 885 and 1,588-file scopes (the latter with `POLINT_GATE_TIMEOUT=900`, since it measures 300.6 s today), removed before merge. Expected: the four superlinear terms of the research doc's section 3.2 table (`lower_control_flow`, `matching_function`, `push_body`, closure captures) together account for most of the stage before W1 and are not visible after; their relative order is recorded and section 3.8 of the research doc is corrected if it disagrees.
 
 Expected movement (research doc section 8): `polint.semantic_mir` `elapsed_ms` large drop; `polint.refined_calls` `elapsed_ms` large drop; `polint.abstract_domains` `elapsed_ms` drop via `Icfg::build`. On the full backend `semantic_mir` completes (G3's first attempt; the 60 s threshold is not expected until W6).
 
@@ -234,22 +249,24 @@ Expected movement (research doc section 8): `polint.semantic_mir` `elapsed_ms` l
 
 **Test strategy.**
 - Gating: `analysis_neutral::evidence` tests (must still pass after the move); the new generic property test instantiated once per provider; the per-provider `*_output_digest` unit tests where they exist.
-- Invariant I1: 23/23 on excalidraw, 45-file, 885-file. Must not move: `digest=`; `rss_mb`. Expected: `peak_rss_mb - rss_mb` on the six stage rows shrinks toward zero.
+- Invariant I1a: N/N on excalidraw (`dataflow`), the 45-file scope (`calls` and `dataflow`) and the 885-file scope (`calls`). The `dataflow` cells are required: two of the six sites belong to `data_flow` (`data_flow/provider.rs:466`) and the streaming helper is shared with `evidence`, and neither provider runs on a `calls` request (`provider.rs:1065-1067`), so a `calls`-only matrix would leave W2's riskiest edits unverified. Must not move: `digest=`; `rss_mb`. Expected: `peak_rss_mb - rss_mb` on the six stage rows shrinks toward zero.
 - Note the research doc's warning (section 3.3): the semantic MIR digest is a header plus sorted rows; the header parts (`provider_id=`, `config=`, `upstream_syntax=`) must sort before or after each family exactly as `parts.sort()` placed them; the property test is what proves it.
 
 **Verification probe (G1, stage-row gap).**
 
 ```sh
 probe s45-after calls <45-file scope>
-python3 .scale-envelope/digests.py /tmp/s45-before.stderr /tmp/s45-after.stderr
-python3 .scale-envelope/stages.py /tmp/s45-after.stderr | awk '$1 ~ /abstract_domains|semantic_mir/'   # peak column approaches rss column
+probe s45-df-after dataflow <45-file scope>                      # data_flow and evidence rows exist only here
+python3 .scale-envelope/digests.py "$POLINT_GATE_OUT/s45-before.stderr" "$POLINT_GATE_OUT/s45-after.stderr"          # 21/21
+python3 .scale-envelope/digests.py "$POLINT_GATE_OUT/s45-df-before.stderr" "$POLINT_GATE_OUT/s45-df-after.stderr"    # 23/23
+python3 .scale-envelope/stages.py "$POLINT_GATE_OUT/s45-after.stderr" | awk '$1 ~ /abstract_domains|semantic_mir/'   # peak column approaches rss column
 ```
 
 Expected on the 45-file scope: `polint.abstract_domains` peak falls from 5,024 MB toward its retained 1,736 MB (benchmark report A.3).
 
-**Dependency and risk.** Depends on nothing; parallel with W1 and W4. Top failure mode: a header label that is a prefix of a family label, or a family label that is a prefix of another (the property test rejects both); or a provider whose rows do not start with the family prefix in the same place the old `format!` put it. Detection: the property test at compile time of the test suite, and the digest oracle.
+**Dependency and risk.** Commit 1 depends on nothing; commit 2 is written on W1's merged commit 4 because both edit `refined_calls/provider.rs` (section 2). Top failure mode: a header label that is a prefix of a family label, or a family label that is a prefix of another (the property test rejects both); or a provider whose rows do not start with the family prefix in the same place the old `format!` put it. Detection: the property test at compile time of the test suite, and the digest oracle.
 
-**Commit shape.** Two commits: (1) `refactor(digest): extract the streamed family digest from the evidence provider` (pure move, evidence digest unchanged); (2) `perf(digest): stream the six remaining sorted provider digests and drop the domains key side tables`.
+**Commit shape.** Two commits: (1) `refactor(digest): extract the streamed family digest from the evidence provider` (pure move, evidence digest unchanged; may land before W1); (2) `perf(digest): stream the six remaining sorted provider digests and drop the domains key side tables` (rebased on W1's commit 4; oracle captured against that base).
 
 ### W3. Demand at fact-family granularity, and an honest domain solver
 
@@ -262,9 +279,10 @@ Expected on the 45-file scope: `polint.abstract_domains` peak falls from 5,024 M
 
 `crates/polint/src/analysis_kernel/provider.rs`
 - `polint.direct_summaries` manifest (`:1568-1598`): `output_inputs` lists `summary_control` against the full input set including `domain_observations` and `domain_events`, and `summary_call`, `summary_memory`, `summary_tito`, `summary_events` against the input set minus those two.
-- `polint.type_value_alias` manifest (`:1669-1716`): remove `domain_observations` from `inputs` (declared, never read: no reference under `analysis_neutral/types/`, research doc section 3.4). This is a manifest-only change with a digest that must not move.
+- `polint.type_value_alias` manifest (`:1669-1716`): remove both `domain_observations` and `domain_events` from `inputs` (`:1688-1689`; declared, never read: no reference to either family under `analysis_neutral/types/`, research doc section 3.4). `polint.abstract_domains` is the only producer of both families (`:1561`), so leaving either row would keep it on the `calls` path through `type_value_alias`, which `refined_calls` requires for `type_facts`, `value_facts`, `allocation_tokens`, `points_to_sets` and `alias_answers` (`:1825-1829`, produced only at `:1701-1710`). No other manifest declares a domain family except `direct_summaries` (`:1583-1584`), which keeps both against `summary_control` only. In the same commit, `analysis_neutral/cache_key.rs` is checked for a v13 ledger entry naming `polint.type_value_alias` as `provider_id` (today the ledger lists `semantic_graph`, `go.semantic`, `solver` and `refined_calls` at `:13`, `:53`, `:67`, `:97`, and names `type_value_alias` only as an upstream digest), because `v13_cache_dependency_ledger_matches_provider_manifest_inputs` (`provider.rs:2027-2052`) asserts ledger inputs equal manifest inputs for every listed provider. This is a manifest-only change: on a `calls` request the closure result is unchanged by this commit alone (domains are still pulled by `direct_summaries` until commit 2), so every digest must not move.
 - `seed_providers_for_capability` (`:1070`) becomes `seed_families_for_capability(capability) -> &'static [&'static str]`: `calls` and `control_flow` seed `refined_call_edges`, `call_reachability`, `summary_call`, `summary_events`, `solver_derived_edges`; `control_flow` additionally seeds `domain_observations`, `domain_events`, `cfg_dominators`, `cfg_postdominators` (the guard policies read them, `policy_queries.rs:1383-1418`); `dataflow` adds `data_flow_*` and `evidence_*`; the rest as today.
-- `providers_enabled_by_capability_closure` (`:1094`) closes over families: a demanded family enables its producer; the producer's `output_inputs` row for that family demands those input families; repeat to fixpoint. A provider is enabled when at least one of its outputs is demanded. `BASELINE_PROVIDER_SEEDS` (`:1013`) stays as provider seeds.
+- `providers_enabled_by_capability_closure` (`:1094`) closes over families: a demanded family enables its producer; the producer's `output_inputs` row for that family demands those input families; repeat to fixpoint. A provider is enabled when at least one of its outputs is demanded. `BASELINE_PROVIDER_SEEDS` (`:1013`) stays as provider seeds. Resulting `calls`-only set: today's 21 minus `polint.abstract_domains`, that is 20; `control_flow` and `dataflow` sets unchanged.
+- `providers_enabled_by_boolean_gates` (`:1031-1068`) is deleted together with the `debug_assert_eq!` that compares the closure against it on every run (`analysis_kernel/mod.rs:603-607`), and the exhaustive parity test `capability_closure_matches_boolean_pipeline_gates` (`provider.rs:1999-2025`) is replaced by `demand_plan_matches_expected_provider_sets`, which enumerates the same 128 capability subsets against an explicit table written by hand from the family rule (baseline 6; any of `calls | control_flow | dataflow` adds the 14 deep providers other than domains; `control_flow` or `dataflow` adds `polint.abstract_domains`; `dataflow` adds `data_flow` and `evidence`) and keeps the existing `scheduled_order_for` filter assertion. This is a stated behaviour change carried by the behaviour commit (commit 2 below), not an expectation edit made to pass a test: the boolean gates are the old expectation and are deleted, not edited.
 - `AbstractDomainsProvider::run` (`:448-497`): the `compact_domain_materialization` decision (`:450-458`) moves out of the provider: the closure records, per enabled provider, which of its outputs were demanded, and `ProviderCtx` exposes `demanded_outputs(&self) -> &BTreeSet<&'static str>`; the provider picks `SummaryInputs` materialisation when only `domain_events` plus what `summary_control` needs are demanded. The two `derive_*` entry points in `domains/provider.rs` stay.
 - `scheduled_order_for` (`:1133`) is unchanged (topological order over the enabled set).
 
@@ -310,25 +328,31 @@ pub struct SolverPolicy { pub budget: SolverBudget, pub reduction_rounds: u32, p
 **Test strategy.**
 - Gating: `analysis_kernel::provider` tests (`provider_manifests_have_required_metadata` `:1974` extended to assert every output appears in `output_inputs` and every listed input is in `inputs`); `analysis_kernel` capability-closure tests; `analysis_neutral::domains::solver` tests including the shuffled-rows digest test (`:794`); `analysis_neutral::summaries` tests; `crates/polint/tests/capability_matrix.rs`.
 - New tests: (a) closure over a synthetic manifest set where one provider's second output needs an extra input, asserting the extra input's producer is enabled only when that family is demanded; (b) `calls`-only plan does not enable `polint.abstract_domains`; `control_flow` plan does; `dataflow` plan does; (c) solver fixture with one function that never converges and one that does, asserting only the first is `BudgetExceeded` under the per-function cap; (d) summary-family identity test: `summary_call`, `summary_memory`, `summary_tito`, `summary_events` digests equal with and without `domain_observations` present (the research doc's section 10 mitigation).
-- Invariant I1: on a `calls` request the `polint.refined_calls` `digest=` must not move (Resolved Q4); `polint.abstract_domains` and `polint.direct_summaries` rows are absent, so their digests are not compared; on a `control_flow` request all digests are compared and the domains digest may move only because of the per-function budget events (list the exact reason in the PR); on a `dataflow` request, interprocedural mode is kept so the domains digest must not move.
+- Invariant I1, by commit. Commit 1 (manifest structure only): I1a, every digest identical on every cell. Commit 2 (domains leave the `calls` path): I1b on the `calls` cells: the fact-row dump is byte-identical for every family except `domain_observations` and `domain_events`, which are absent; the diagnostics digest and stdout are identical; and the provider digests that move are exactly `polint.direct_summaries` (folds `abstract_domains=`, `summaries/provider.rs:42`, now `absent`), `polint.type_value_alias` (`types/provider.rs:221-222`), `polint.semantic_graph` (`dependency_digest("polint.abstract_domains")` at `provider.rs:726`), `polint.solver` (folds `semantic_graph` and `type_value_alias`, `:761-762`) and `polint.refined_calls` (`refined_calls/provider.rs:629-632`); `digests.py` must report `DIFFER` for those five and identical for the other fifteen rows, and `polint.direct_summaries` does have a row on a `calls` request (its `summary_call` and `summary_events` are `refined_calls` inputs, `:1823-1824`). On the `control_flow` and `dataflow` cells every digest is identical in commit 2 because the enabled set is unchanged. Commit 3 (per-function solver, `control_flow` path): I1a on the `calls` cells (domains do not run); on the `control_flow` cell the `polint.abstract_domains` digest may move only through the new per-function budget events, and every digest downstream of it moves by construction (the same five providers plus `entrypoints`, `reachability`, `data_flow` and `evidence` where they fold it, section 0 "digest recipes"); I1b on that cell must show every family identical except `domain_events` (new per-function rows) and `domain_observations` (functions the per-function cap now cuts differently); the PR lists the observed row deltas. On the `dataflow` cell the interprocedural mode is kept, so I1a applies.
 - The determinism gate fixtures (`tests/eval-fixtures/determinism/*`) request capabilities that pull domains; they stay green.
 
 **Verification probe (G5).**
 
 ```sh
 probe s885-calls calls <885-file scope>
-grep -c 'provider="polint.abstract_domains"' /tmp/s885-calls.stderr      # 0
-grep 'provider="polint.refined_calls"' /tmp/s885-calls.stderr | grep -o 'digest=[^ ]*'   # equal to before
+grep -c 'provider="polint.abstract_domains"' "$POLINT_GATE_OUT/s885-calls.stderr"      # 0
+python3 .scale-envelope/digests.py "$POLINT_GATE_OUT/s885-before.stderr" "$POLINT_GATE_OUT/s885-calls.stderr"
+#   expected: 15/21 identical; MISSING polint.abstract_domains; DIFFER exactly direct_summaries,
+#   type_value_alias, semantic_graph, solver, refined_calls; any other DIFFER is a failure
+fact_rows_dump --before <before-binary> --after <after-binary> --cap calls <885-file scope>   # W9 harness entry
+#   expected: every family identical except domain_observations and domain_events (absent after)
+diff "$POLINT_GATE_OUT/s885-before.stdout" "$POLINT_GATE_OUT/s885-calls.stdout"           # identical
 probe s885-cf control_flow <885-file scope>
-grep -c 'provider="polint.abstract_domains"' /tmp/s885-cf.stderr         # 1
-polint unknowns --cap control_flow <885-file scope> | grep -c budget      # reports the per-function cuts
+grep -c 'provider="polint.abstract_domains"' "$POLINT_GATE_OUT/s885-cf.stderr"         # 1
+python3 .scale-envelope/digests.py "$POLINT_GATE_OUT/s885-cf-before.stderr" "$POLINT_GATE_OUT/s885-cf.stderr"   # 21/21 after commit 2
+polint unknowns --cap control_flow <885-file scope> | grep -c budget      # reports the per-function cuts after commit 3
 ```
 
-Expected: on `calls`, total `facts` falls by the domain family size (280,617 at 885 files, benchmark report A.4); `polint.refined_calls` digest unchanged.
+Expected: on `calls`, total `facts` falls by the domain family size (280,617 at 885 files, benchmark report A.4); every non-domain family byte-identical at the row level; exactly the five named provider digests move.
 
 **Dependency and risk.** Closure half depends on nothing and can land with W1; solver half after W1 so the per-function solver's cost is measured against an indexed `Icfg::build`. Top failure mode: a family-level input declared too narrowly, so a provider reads a store the closure did not populate (a silent empty read rather than a crash, because the stores default to empty). Detection: test (d) above generalised: for every provider, run the fixture with each non-declared input family's store cleared and assert the output digest is unchanged; and the `dependency_blocked` outcome path in `ProviderOutcomeTracker` must stay consistent with `output_inputs`.
 
-**Commit shape.** Three commits: (1) `feat(kernel): declare per-output input families in provider manifests` (structure only; closure unchanged; digests unchanged); (2) `feat(kernel): seed and close the provider set over fact families` (behaviour: domains leave the `calls` path); (3) `feat(domains): intraprocedural default with per-function and per-run iteration caps, reported` (behaviour on the `control_flow` path only).
+**Commit shape.** Three commits: (1) `feat(kernel): declare per-output input families in provider manifests; drop the unread domain inputs from type_value_alias` (structure only; closure result unchanged; every digest unchanged; ledger mirrored); (2) `feat(kernel): seed and close the provider set over fact families; delete the boolean pipeline gates and their parity assert` (behaviour: domains leave the `calls` path; the five downstream digests move as listed; I1b oracle); (3) `feat(domains): intraprocedural default with per-function and per-run iteration caps, reported` (behaviour on the `control_flow` path only).
 
 ### W4. Dominators from the reverse-postorder algorithm, tree only
 
@@ -348,14 +372,20 @@ struct DomTree {
     /// idom[i] for order[i]; None for the root and for unreachable blocks.
     idom: Vec<Option<u32>>,
 }
-fn dom_tree(graph: &CfgGraph<'_>, root: BasicBlockId, direction: Direction, selected_exits: &BTreeSet<BasicBlockId>) -> DomTree;
+/// `universe` is the block set the relation is defined over; blocks outside it get no facts.
+/// Forward: the entry-reachable set. Reverse: every block of the function plus the virtual exit.
+fn dom_tree(graph: &CfgGraph<'_>, root: BasicBlockId, direction: Direction, universe: &BTreeSet<BasicBlockId>, selected_exits: &BTreeSet<BasicBlockId>) -> DomTree;
+/// Blocks in `universe` that the walk from `root` never reaches: today's fixpoint leaves their set at
+/// the whole universe (`derived.rs:346-356` seeds with `universe.clone()`), so under `Full` they are
+/// emitted as dominated by every universe member. Reproduced explicitly, never derived from `idom`.
+fn vacuous_blocks(tree: &DomTree, universe: &BTreeSet<BasicBlockId>) -> Vec<BasicBlockId>;
 impl DomTree {
     fn immediate(&self, block: BasicBlockId) -> Option<BasicBlockId>;
     fn ancestors(&self, block: BasicBlockId) -> impl Iterator<Item = BasicBlockId> + '_; // walk to root, reflexive
     fn dominates(&self, a: BasicBlockId, b: BasicBlockId) -> bool;
 }
 ```
-  - `dom_tree` computes reverse postorder over the reachable set (forward: from the entry over `successor_blocks`; reverse: from the virtual exit over reversed edges as `collect_reversed_predecessors` (`:404`) does today, including `selected_exits`), then iterates `for b in order[1..]: new_idom = intersect over processed predecessors` until no change, with the two-finger `intersect` on rpo positions (https://www.cs.tufts.edu/~nr/cs257/archive/keith-cooper/dom14.pdf, the `doms` array formulation).
+  - Universe semantics, matching today's two directions exactly. Forward (`derive_dominators`, `:66-118`): `universe = reachable_blocks(&graph)` (`:82-83`, `:309-321`), root = entry; a block outside the universe (forward-unreachable) gets no dominator facts today and none after. Reverse (`derive_postdominators`, `:120-200`): `universe = every block of the function ∪ {virtual_exit}` (`:133-146`), root = `virtual_exit_for(function)` (`:511`), edges reversed with the selected exits feeding the virtual exit (`collect_reversed_predecessors`, `:404-425`; `selected_exit_blocks`, `:493-509`); forward-unreachable blocks are in this universe and do get post-dominator facts today. `dom_tree` computes reverse postorder over the blocks of `universe` reachable from `root` in the walked direction, then iterates `for b in order[1..]: new_idom = intersect over processed predecessors` until no change, with the two-finger `intersect` on rpo positions (https://www.cs.tufts.edu/~nr/cs257/archive/keith-cooper/dom14.pdf, the `doms` array formulation). Universe members the walk never reaches are the exit-unreachable blocks (an infinite loop with no return, a block whose only successors cycle back): today's set-intersection fixpoint never updates them (their reverse-reachable neighbour set is empty or all-vacuous), so their relation stays at the seeded `universe`, and under `Full` materialisation every `(block, member)` pair with `member != virtual_exit` is emitted (`:156-175`), with `immediate` set by `immediate_relation` (`:438-462`), which for such a block picks the first strict candidate in `BTreeSet` order whose own relation contains every other candidate. These rows are not a tree and cannot be read from `idom`; `vacuous_blocks` names them and the emission reproduces them literally (the pairs from `universe`, the immediate flag from a `#[cfg(test)]`-free port of the `immediate_relation` rule restricted to those blocks). They are also what today's `ImmediateOnly` emission produces for those blocks, so the default-bound output is reproduced too. Whether the vacuous rows should exist is a separate, reported semantic change and is out of W4's scope.
   - `derive_dominators` (`:66`) and `derive_postdominators` (`:120`): emit `immediate == true` facts from `idom` always; when `materialization == Full`, additionally emit every `(dominated, ancestor)` pair from `ancestors()`, sorted as today (`facts.sort_by_cached_key(...)` at the end of each function stays). The reflexive pair (a block dominates itself) is emitted today because the relation initialises with the start in its own set and every block ends up containing itself; keep it so the pair set is identical under `POLINT_CFG_MAX_DOMINANCE_PAIRS=0`.
   - `derive_control_dependence` (`:203`): use `DomTree::immediate` for the `immediate` map and `DomTree::dominates` for the membership test at `:223-225`; the emitted facts are unchanged.
   - Keep the fact stable-key recipe (`:96-104`) byte for byte.
@@ -368,21 +398,21 @@ impl DomTree {
 
 **Test strategy.**
 - Gating: `analysis_neutral::cfg::derived` tests (existing fixtures for immediate dominators, the `first_return` post-dominance case at `:723`); `cfg::validate` (`validate_cfg` checks dominator rows at `:232-260`); `policy_queries` guard tests (`guard_dominates_operation`, `guard_does_not_dominate`, `docs/facts/control-flow.md:94-98`); `analysis_kernel` tests asserting non-empty dominator families (`analysis_kernel/mod.rs:2214-2264`); the determinism gate.
-- New tests: (a) a differential test that computes the old set-intersection relation (kept under `#[cfg(test)]` as `legacy_dominator_relation`) and the new tree closure on every CFG fixture and on randomly generated reducible and irreducible graphs (seeded, small), asserting identical `(dominated, dominator)` sets and identical immediate maps for both directions; (b) an unreachable-block fixture asserting unreachable blocks get no facts, as today; (c) the `selected_exits` virtual-exit case.
-- Invariant I1: with `POLINT_CFG_MAX_DOMINANCE_PAIRS=0` every digest must not move on excalidraw, 45-file and 885-file (full closure emitted, identical pair set). With the default bound, the `polint.cfg` digest and downstream digests must not move either, because tree-only emission is what the bound already produced; the emitted tree-edge set must be identical. `polint check` diagnostics digest unchanged in both modes.
-- Must not move: everything; the only permitted movement is `elapsed_ms` on the `cfg` step rows.
+- New tests: (a) a differential test that computes the old set-intersection relation (kept under `#[cfg(test)]` as `legacy_dominator_relation`) and the new tree closure plus vacuous rows on every CFG fixture and on randomly generated reducible and irreducible graphs (seeded, small, including graphs with exit-unreachable blocks), asserting identical `(dominated, dominator)` sets and identical immediate maps for both directions and both materialisations; (b) a forward-unreachable-block fixture asserting those blocks get no dominator facts (as today) and do get post-dominator facts (as today, because the reverse universe is every block); (c) an exit-unreachable fixture (`for {}` with no return) asserting the vacuous post-dominator rows and their immediate flags equal the legacy relation's; (d) the `selected_exits` virtual-exit case with multiple returns.
+- Invariant I1a: with `POLINT_CFG_MAX_DOMINANCE_PAIRS=0` every digest must not move on excalidraw, 45-file and 885-file (full closure emitted, identical pair set, vacuous rows included). With the default bound, the `polint.cfg` digest and downstream digests must not move either, because tree-only emission is what the bound already produced; the emitted tree-edge set must be identical. `polint check` diagnostics digest unchanged in both modes.
+- Must not move: every digest in both modes, every pair set, every immediate flag; the only permitted movement is `elapsed_ms` on the `cfg` step rows.
 
 **Verification probe (G4).**
 
 ```sh
 probe full-cfg calls <core>                                  # after W1 so semantic_mir completes
-grep 'provider="polint.cfg"' /tmp/full-cfg.stderr | grep -E 'step|stage done'
+grep 'provider="polint.cfg"' "$POLINT_GATE_OUT/full-cfg.stderr" | grep -E 'step|stage done'
 # expected: dominators and postdominators steps each under 5 s; stage under 30 s (research doc G4)
 POLINT_CFG_MAX_DOMINANCE_PAIRS=0 probe s885-full-relation calls <885-file scope>
-python3 .scale-envelope/digests.py /tmp/s885-before-full-relation.stderr /tmp/s885-full-relation.stderr   # 23/23
+python3 .scale-envelope/digests.py "$POLINT_GATE_OUT/s885-before-full-relation.stderr" "$POLINT_GATE_OUT/s885-full-relation.stderr"   # 21/21
 ```
 
-**Dependency and risk.** Depends on nothing; parallel with W1 and W2. Top failure mode: a difference between the legacy relation and the tree closure on irreducible graphs or graphs with the virtual exit and selected exits (post-dominance with multiple returns). Detection: the differential test with seeded random graphs and the `POLINT_CFG_MAX_DOMINANCE_PAIRS=0` oracle on excalidraw, which has 4,193 functions.
+**Dependency and risk.** Depends on nothing; parallel with W1. Top failure mode: a difference between the legacy relation and the tree closure on irreducible graphs, on graphs with the virtual exit and selected exits (post-dominance with multiple returns), or on the exit-unreachable blocks whose vacuous rows must be reproduced rather than derived. Detection: the differential test with seeded random graphs and the `POLINT_CFG_MAX_DOMINANCE_PAIRS=0` oracle on excalidraw, which has 4,193 functions.
 
 **Commit shape.** Two commits: (1) `perf(cfg): compute dominator trees with the reverse-postorder idom iteration; keep the legacy relation under cfg(test) for the differential` (behaviour-preserving, includes the differential test); (2) `perf(cfg): derive the bounded closure from the tree and skip the relation when the budget trips` (deletes the legacy relation's production use; the test copy stays until W6 deletes `CfgFactStore`).
 
@@ -457,8 +487,8 @@ pub(crate) enum KeyPart<'a> { Text(&'a str), Key(StableKeyId), Decimal(u64) }
 
 `crates/polint/src/analysis_neutral/stable_key.rs`
 - `semantic_stable_key(family, parts) -> StableFactKey` (`:16`) is replaced by `semantic_key_parts(family, parts) -> Vec<(&'static str, KeyPart)>` plus `intern_semantic_key(interner, family, parts) -> StableKeyId`; all 34 call sites are converted. Call sites that embed a parent key by text (`("body", body_stable_key.to_string())` at `go/mir/lower.rs:2246`, `("owner", owner_stable_key_text.clone())` at `:636`, `("function", context.function_key.clone())` at `places.rs:144`, the dominator recipe at `cfg/derived.rs:96-104`, the observation recipe at `domains/store.rs:499-509`) pass `KeyPart::Key(parent_id)` instead. Call sites with decimal parts pass `KeyPart::Decimal` so no `to_string` allocation occurs.
-- `PlaceStableContext` (`places.rs:27`) carries `file_key: StableKeyId, function_key: StableKeyId, body_key: StableKeyId` instead of `String`s; `PlaceTableBuilder::places: BTreeMap<String, PlaceDraft>` (`:13`) becomes `BTreeMap<StableKeyId, PlaceDraft>` ordered by `canonical_cmp` (a `BTreeMap` with a comparator wrapper, or a `Vec` sorted once at `finish_with_types`), and the `place_ids: BTreeMap<String, PlaceId>` side table in `lower_go_mir` (`:44-47`) becomes `HashMap<StableKeyId, PlaceId>`.
-- Every `sort_by_cached_key(|row| interner.resolve(row.stable_key))` (`ir/body.rs:123-160`, `analysis_neutral/store.rs:192,207,225,263,285,308,420`, `cfg/store.rs`, `cfg/derived.rs`, `cfg/graph.rs:59,165`) becomes `sort_by(|a, b| interner.canonical_cmp(a.stable_key, b.stable_key))`. Same total order, no materialisation.
+- `PlaceStableContext` (`places.rs:27`) carries `file_key: StableKeyId, function_key: StableKeyId, body_key: StableKeyId` instead of `String`s; `PlaceTableBuilder::places: BTreeMap<String, PlaceDraft>` (`:13`) becomes `drafts: Vec<(StableKeyId, PlaceDraft)>` plus `index: HashMap<StableKeyId, usize>`; `insert_typed_with_context` keeps its dedup-and-fill semantics exactly (`places.rs:76-90`: first insert wins for every field, a later insert only fills a `None` type) by probing `index` and either pushing or filling; `finish_with_types` sorts `drafts` once by `canonical_cmp` before assigning `PlaceId(index)` (`:99-119`), which reproduces today's `BTreeMap<String, _>` iteration order (lexicographic key text) without a comparator (Rust's `BTreeMap` has none, and `StableKeyId`'s derived `Ord` is insertion order). The `place_ids: BTreeMap<String, PlaceId>` side table in `lower_go_mir` (`:44-47`) becomes `HashMap<StableKeyId, PlaceId>`.
+- Every `sort_by_cached_key(|row| interner.resolve(row.stable_key))` (`ir/body.rs:123-160`, `analysis_neutral/store.rs:192,207,225,263,285,308,420`, `cfg/store.rs`, `cfg/derived.rs`, `cfg/graph.rs:59,165`) becomes `sort_by(|a, b| interner.canonical_cmp(a.stable_key, b.stable_key))`. Same total order, no materialisation. `mir_body_compose.rs:180-193` is in the same list: `CallSiteOrderKey` materialises `body_stable_key` and `operation_stable_key` as `String`s and sorts descriptors by them to assign every `CallSiteId`, so its two `String` fields become `StableKeyId`s compared through `canonical_cmp` (the derived `Ord` on the struct is replaced by an explicit comparator that consults the interner); W6 deletes the module later, but W5 lands first and the id assignment must stay byte-identical in between.
 
 `crates/polint/src/analysis_kernel/mod.rs`
 - The gauge (`:327-341`) keeps `keys = interner.len()` and `key_mb = interner.text_bytes()`; the semantics change is documented in the row's doc comment (atom bytes rather than composed text).
@@ -472,19 +502,19 @@ pub(crate) enum KeyPart<'a> { Text(&'a str), Key(StableKeyId), Decimal(u64) }
 - Gating: every existing test that constructs or resolves keys (`internal_core::stable_key` tests, `analysis_api::metadata` tests including the conflict tests at `:676-720`, `analysis_neutral::stable_key` tests at `:27-49`, `places` tests at `:239-371`, every provider's `*_stable_key_*` test, the determinism gate, the golden corpus).
 - New tests, one per proof obligation (research doc, W5 list):
   1. Canonical stream equality: for every fact family, on every fixture, on excalidraw, and on the 45 and 885-file scopes, `write_canonical(id)` equals the text the pre-W5 binary produced. Mechanism: a `#[cfg(test)]` dump of `(family, resolved text)` per fact family, run on the branch base and on W5, diffed byte for byte (a test-only CLI flag or the eval harness's fixture observation). The dump file is uncommitted for the consumer scopes and committed for fixtures under `tests/eval-fixtures/`.
-  2. Digest oracle 23/23 plus diagnostics digest on the same corpora.
+  2. Digest oracle N/N (I1a) plus diagnostics digest on the same corpora.
   3. Conflict-set identity: `FactMetaStore::stable_key_conflicts()` count and members identical per corpus (`analysis_kernel/validation.rs:6015` covers the reporting path).
   4. Backslash folding and length prefixes: the `semantic_stable_key_sorts_parts_normalizes_backslashes_and_includes_family` test (`stable_key.rs:27`) ported to `intern_parts`, plus a nested case (child with a backslash inside a parent).
   5. Boundary materialisation count: a gauge assertion on the 45-file scope that `resolved_texts` after a `calls` run is below the number of facts.
   6. Iterative walk: a synthetic 100,000-deep chain interns and resolves without stack growth; `canonical_len` overflow is a checked-arithmetic error, not a wrap.
-- Must not move: every `digest=`; `facts`; `keys`. Must move: `key_mb` down by an order of magnitude.
+- Must not move: every `digest=`; `facts`; G1c canonical key text. Must move: `key_mb` down by an order of magnitude. Reported, not gated: `keys`, whose meaning changes from "distinct interned texts" (`internal_core/stable_key.rs:95-97`) to "identity nodes"; the two counts coincide only if every text that is embedded as a parent value is also interned standalone and no standalone text becomes a leaf atom, which holds for the recipes read here (`go/mir/lower.rs:630-643` interns the owner text at `:642` and embeds it at `:636`) but is not asserted, so the gauge documents the new meaning and the PR records the before and after counts.
 
 **Verification probe (G3, part; G1).**
 
 ```sh
 probe full-mir-w5 calls <core>
-grep 'provider="polint.semantic_mir"' /tmp/full-mir-w5.stderr | grep -oE 'keys=[0-9]+|key_mb=[0-9]+|digest=[^ ]+'
-# expected: keys unchanged versus the post-W1 run; key_mb under 350 (from 3,448); digest unchanged
+grep 'provider="polint.semantic_mir"' "$POLINT_GATE_OUT/full-mir-w5.stderr" | grep -oE 'keys=[0-9]+|key_mb=[0-9]+|digest=[^ ]+'
+# expected: key_mb under 350 (from 3,448); digest unchanged; keys recorded (new meaning: identity nodes)
 ```
 
 **Dependency and risk.** Depends on W1 and W2 landing on main first (measurement fairness; and W2 removes the last `String`-keyed side tables that would otherwise need conversion). Serial with everything: touches `internal_core`, `analysis_api`, every provider. Top failure mode: a canonical text that differs by one byte in one family (a part label order, a missing backslash fold in a nested child, a decimal formatted differently). Detection: obligation 1's byte-level dump diff on every family; obligation 2 is downstream of it and catches what the dump misses only if the family reaches a digest.
@@ -502,7 +532,7 @@ grep 'provider="polint.semantic_mir"' /tmp/full-mir-w5.stderr | grep -oE 'keys=[
 
 **Concrete changes.**
 
-New module `crates/polint/src/analysis_neutral/unit/` (`mod.rs`, `graph.rs`, `schedule.rs`, `merge.rs`):
+New module `crates/polint/src/analysis_neutral/unit/` (`mod.rs`, `graph.rs`, `schedule.rs`, `merge.rs`) for the unit set, the unit graph and the merge, all language-neutral. Unit discovery is not neutral for TS (it needs the `tsconfig` walk in `ts/module_graph`), and `analysis_neutral` may not name `ts` (`crates/polint/tests/module_layering.rs:71-75`, gating in section 5.4), so discovery enters through the frontend contract: `frontend_api::LanguageFrontend` gains `fn unit_roots(&self, unit: &AnalysisUnit<'_>) -> Vec<UnitRoot>` (the trait already exists for this purpose and names no frontend, `frontend_api/mod.rs:28-34`), the Go frontend implements it from package facts, the TS frontend implements it with `nearest_tsconfig_path` (made `pub(crate)` inside `ts`, `ts/module_graph/mod.rs:1591`), and the kernel's provider dispatch, which is not constrained by any layering rule and already dispatches per-language providers (`analysis_kernel/provider.rs:991-1005`), collects the roots from the frontend registry and hands them to `analysis_neutral::unit::build_unit_set(db, roots: &[UnitRoot])` as data. `UnitRoot { language, kind: UnitKind, path: String, files: Vec<FileId>, imports: Vec<String> }` lives in `frontend_api`.
 
 ```rust
 // unit/mod.rs
@@ -527,10 +557,10 @@ pub(crate) struct UnitSet {
     pub(crate) order: Vec<UnitId>,            // topological over `imports`; unordered remainder appended as its own SCC, sorted
     pub(crate) sccs: Vec<Vec<UnitId>>,        // for TS projects with reference cycles; Go SCCs are singletons
 }
-pub(crate) fn build_unit_set(db: &impl AnalysisHost) -> UnitSet;
+pub(crate) fn build_unit_set(db: &impl AnalysisHost, roots: &[UnitRoot]) -> UnitSet;
 ```
   - Go: one unit per `TopologyPackageFact` (`analysis_neutral/module_graph/topology.rs:66`) with `language == Some(Go)`, files from `PackageFact.file` grouped by package path; `imports` from `ImportToPackageFact.{from_package,to_package}` (`:132-144`). A file with no package fact is its own unit of kind `GoPackage` with a synthetic path.
-  - TS/JS: one unit per `tsconfig.json` discovered by `ts::module_graph::nearest_tsconfig_path` (`ts/module_graph/mod.rs:286`, `:1360`); files with no config above them are `TsFile` units. Project references, when parseable from the config, become `imports`; otherwise the projects are ordered by path. (PR #121's `ts/types/lifecycle.rs` does the same walk for the sidecar; when it merges, `build_unit_set` reuses its project list so the two agree.)
+  - TS/JS: the TS frontend's `unit_roots` yields one root per `tsconfig.json` discovered by `nearest_tsconfig_path` (`ts/module_graph/mod.rs:1591`, the private function that walks up to the nearest `tsconfig.json` only; not `find_ts_project_root` at `:281-292`, which also stops at `package.json` and defines module nodes, a different partition) with the files it claims (the same walk `:1355-1362` performs for path aliases); files with no config above them are `TsFile` roots. Project references, when parseable from the config, become `imports`; otherwise the projects are ordered by path. (PR #121's `ts/types/lifecycle.rs` does the same walk for the sidecar; when it merges, the TS `unit_roots` reuses its project list so the two agree.) The existing TS `TopologyPackageFact` rows are `JsPackage` per `package.json` (`:352-372`) and are not the unit.
   - Ordering: Tarjan SCC over `imports` (reuse `analysis_neutral/summaries/scc.rs`), SCCs in topological order, members sorted by `UnitId`; units not reachable through any import edge are appended in `UnitId` order (research doc section 10, "synthetic go.work" risk).
 
 ```rust
@@ -590,7 +620,7 @@ pub trait AnalysisHost: FactDatabase {
 
 Lowering and providers:
 - `go/mir/lower.rs`: `lower_go_mir(db)` becomes `lower_go_unit(db, unit: &Unit, index: &LoweringIndex) -> UnitGraph`; `GoMirLowering` state becomes per unit; `lower_control_flow` runs per body inside the unit; the CFG builder (`cfg/lower.rs`, `cfg/builder.rs`) is invoked per body producing `FunctionCfg` with W4's `DomTree` stored as `idom`/`ipdom`; per-function domains (W3's intraprocedural solver) run per body inside the unit when demanded; direct call extraction (`calls/extract.rs`) runs per unit. `ts/mir/lower.rs` likewise.
-- `analysis/provider.rs` (`derive_semantic_mir_with_cache_stats`) and `cfg/provider.rs` (`derive_cfg_with_cache_stats`) are replaced by one `analysis_neutral/unit/provider.rs::derive_unit_graphs_with_cache_stats(db, snapshot, manifest, demanded_outputs, upstream_digests)` behind a new provider id `polint.unit_graphs` whose manifest outputs the union of today's `semantic_mir`, `cfg`, `abstract_domains` (intraprocedural families) and `calls` outputs; the four old provider ids are removed from `provider_manifests()`, the dispatch table (`analysis_kernel/provider.rs:991-1005`), the layer kinds (`analysis_api/digest/keys.rs:9-21`, add `UnitGraphs`, remove `SemanticMir`, `Cfg`, `AbstractDomains`, `Calls`), and the run-manifest and store-mirror vocabularies. The determinism gate auto-enrolls the new provider (`determinism_gate.rs`, D-22). The interprocedural domains mode (dataflow path) becomes a separate provider `polint.interprocedural_domains` running after the merge, so `dataflow` digests can be compared.
+- `analysis/provider.rs` (`derive_semantic_mir_with_cache_stats`) and `cfg/provider.rs` (`derive_cfg_with_cache_stats`) are replaced by one `analysis_neutral/unit/provider.rs::derive_unit_graphs_with_cache_stats(db, snapshot, manifest, demanded_outputs, upstream_digests)` behind a new provider id `polint.unit_graphs` whose manifest outputs the union of today's `semantic_mir`, `cfg`, `abstract_domains` (intraprocedural families) and `calls` outputs; the four old provider ids are removed from every place that names them, which at `026407b7` is 33 files (`grep -rl` for the four ids over `crates/polint/src`, `crates/polint-eval/src`, `crates/polint/tests`): `analysis/{identity,refined_calls,semantic_graph,solver,summaries}/provider.rs` and `analysis/provider.rs`, `analysis/unknown_taxonomy/collect.rs`, `analysis_kernel/{debug,mod,outcome,provider,resource,validation}.rs`, `analysis_kernel/incremental/{keys,run_report}.rs`, `analysis_neutral/{cache_key,error,mod}.rs`, `analysis_neutral/calls/{direct,store,validate}.rs`, `analysis_neutral/cfg/provider.rs`, `analysis_neutral/demand/{context,trace}.rs`, `analysis_neutral/domains/validate.rs`, `analysis_neutral/semantic_graph/cache_key.rs`, `core/mod.rs`, `core/tests/batch{1,2}.rs`, `polint-eval/src/harness/{fixtures,mod,observed}.rs`, `tests/cli.rs` (a hard-coded provider-id list at `:3313`), plus `analysis_api/digest/keys.rs:9-21` (add `UnitGraphs`, remove `SemanticMir`, `Cfg`, `AbstractDomains`, `Calls`). `analysis_neutral/cache_key.rs` is load-bearing: its v13 ledger entries name the deleted ids among their upstream digests (`semantic_graph` at `:36-49` lists `polint.calls`, `polint.abstract_domains` and `polint.semantic_mir`; `refined_calls` at `:121` lists `polint.calls`) and `v13_cache_dependency_ledger_matches_provider_manifest_inputs` (`provider.rs:2027-2052`) asserts ledger inputs equal manifest inputs, so every manifest edit is mirrored there in the same commit. The determinism gate auto-enrolls the new provider (`determinism_gate.rs`, D-22). The interprocedural domains mode (dataflow path) becomes a separate provider `polint.interprocedural_domains` running after the merge, so `dataflow` digests can be compared.
 - Parallelism: `derive_unit_graphs_with_cache_stats` lowers units with `rayon::par_iter` over `UnitSet::order` chunks when `KernelInput.parallel` is true (`analysis_kernel/mod.rs:531`; job count from `jobs.rs`), collecting `Vec<UnitGraph>` and sorting by `UnitId` before the merge. Each unit's lowering gets a `LoweringIndex` slice for its own files plus the whole-program symbol graph (read-only). The interner (W5) is shared and its writes are the only cross-unit synchronisation; `intern_parts` takes the write lock only on a miss.
 - Deleted in the same PR series: `analysis_neutral/store.rs` (`SemanticStore` and every `normalize_*`), `cfg/store.rs::CfgFactStore` and `CfgOutput::normalized`, `mir_body_compose.rs::merge_language_outputs`, `ir/body.rs::MirOutput::normalized`, the `refresh_semantic_mir_metadata` and `refresh_cfg_metadata` walks in `core/db.rs` (metadata is recorded per unit at build time), and the legacy dominator relation kept under `cfg(test)` by W4.
 
@@ -612,15 +642,15 @@ The provider output digest is the digest over `(UnitId, unit.input_digest, unit_
 **Test strategy.**
 - Gating: every test that touched the deleted accessors (the research doc's count: `cfg/validate.rs` 12 sites, `data_flow/local.rs` 10, `analysis_kernel/debug.rs` 10, `analysis_kernel/validation.rs` 8, `mir_validation.rs` 7, `domains/solver.rs` 7, `policy_queries.rs` 6, `types/*` 17, `summaries/builder.rs` 5, `calls/extract.rs` 5, and the rest) is rewritten against the unit accessors; the golden corpus; the capability matrix; `public_surface_leak.rs`; `consumer_api_compat.rs`; the determinism gate with a new fixture `tests/eval-fixtures/determinism/go_multi_package` (three packages with a diamond import graph and a closure capturing a cross-package symbol) and `ts_multi_project` (two `tsconfig` projects with a reference and one orphan file).
 - New tests: (a) `build_unit_set` on the fixture repositories asserts unit membership, order, and SCC grouping; a Go fixture with a package not reachable by any import lands in the appended tail; (b) lowering a unit twice yields byte-identical `UnitGraph::digest`; (c) lowering the fixture set with `parallel = true` under the N=10 seeded permutation of unit processing order yields byte-identical merged output (extend `determinism_gate.rs` with a unit-order permutation alongside the provider-order permutation); (d) the L2 and L3 capability probes (`crates/polint-eval/src/harness/capability_probes.rs`) pass at the same counts as before (research doc section 10, "per-unit lowering loses a cross-file fact"); (e) closure captures across files within a unit and across units resolve to the same capture names as the whole-program lowerer did (fixture with a closure in package B capturing a symbol defined in package A).
-- Invariant I1 is redefined for W6, and this is the one workstream where provider digests may move: the four old provider ids disappear and `polint.unit_graphs` appears, so the per-provider oracle compares the downstream providers only (`identity`, `direct_summaries`, `entrypoints`, `reachability`, `extensions`, `type_value_alias`, `semantic_graph`, `solver`, `refined_calls`, `data_flow`, `evidence`, `metrics`) and the `polint check` diagnostics digest, all of which must not move. The stable-key text of every MIR, place, CFG and call-site fact must still be byte-identical (W5's obligation 1 dump, re-run), because the key recipes are unchanged and only the storage changed.
-- Must not move: ai-friendly stdout bytes across permutations; downstream digests; diagnostics digest. Must move: `polint.semantic_mir` and `polint.cfg` rows are replaced by one `polint.unit_graphs` row whose `elapsed_ms` is a fraction of their sum and whose `rss_delta_mb` is per unit.
+- Invariant I1 for W6 is tier I1b, and the provider-digest tier is expected to move almost everywhere: every downstream recipe names the four deleted providers (`entrypoints/provider.rs:92-94`; `summaries/provider.rs:39-42`; `types/provider.rs:218-222`; `data_flow/provider.rs:417-422`; `evidence/provider.rs:611-616`; and the `dependency_digest("polint.semantic_mir" | "polint.cfg" | "polint.calls" | "polint.abstract_domains")` sites at `analysis_kernel/provider.rs:428`, `:513-516`, `:585-587`, `:620`, `:683-687`, `:724-734`, `:819-821`, `:851-853`, with `solver` and `refined_calls` folding the movers transitively at `:761-763` and `:789-794`), so `identity`, `direct_summaries`, `entrypoints`, `reachability`, `type_value_alias`, `semantic_graph`, `solver`, `refined_calls`, `data_flow` and `evidence` all move on the first W6 commit that removes the ids. Commit 4 therefore rewrites those recipes to fold `polint.unit_graphs=` (one line per recipe in place of the four), which is a stated cache-key change, and the oracle is: (a) the fact-row dump (I1b) byte-identical for every family, including the MIR, place, CFG and call-site families whose key recipes are unchanged and whose storage moved into unit graphs; (b) the `polint check` diagnostics digest identical; (c) ai-friendly stdout identical; (d) the provider digests of `source`, `go.syntax`, `ts.syntax`, `module_graph`, `symbol_graph`, `module_topology`, `go.semantic`, `extensions` and `metrics`, which fold none of the four, identical (I1a on that subset). After commit 4 the new digests are the baseline for commits 5 to 7, which must hold I1a in full.
+- Must not move: ai-friendly stdout bytes across permutations; the nine unaffected provider digests; diagnostics digest; every fact family at the row level. Must move: `polint.semantic_mir` and `polint.cfg` rows are replaced by one `polint.unit_graphs` row whose `elapsed_ms` is a fraction of their sum and whose `rss_delta_mb` is per unit; the ten downstream digests move once, in commit 4, for the reason stated.
 
 **Verification probe (G3, G4, G6 first attempt, G7, G8).**
 
 ```sh
 probe full-w6 calls <core>
-grep 'provider="polint.unit_graphs"' /tmp/full-w6.stderr        # elapsed_ms under 60 s, rss_delta_mb under 3,000, key_mb under 1,500
-grep -E "Elapsed|Maximum resident" /tmp/full-w6.time             # first G6 attempt: exit 0 is the requirement; 300 s / 12 GB is the target
+grep 'provider="polint.unit_graphs"' "$POLINT_GATE_OUT/full-w6.stderr"        # elapsed_ms under 60 s, rss_delta_mb under 3,000, key_mb under 1,500
+grep '"peak_rss_gb"' "$POLINT_GATE_OUT/full-w6.stderr" | tail -1                # first G6 attempt: exit 0 is the requirement; 300 s / 12 GB tree is the target
 probe full-ts-w6 calls <frontend paths>                          # G8 first attempt
 # G7: the determinism gate plus two full 885-file runs with RAYON_NUM_THREADS=1 and =12, stdout diffed
 ```
@@ -628,10 +658,10 @@ probe full-ts-w6 calls <frontend paths>                          # G8 first atte
 **Dependency and risk.** Depends on W5 (structural ids before unit-local ids), W1, W3. Serial with everything. Top failure mode: a cross-unit fact the whole-program lowerer produced from database order (closure capture names via `references_for_file`, module-level TS functions, `enclosing_function` across a unit boundary) is lost or reordered. Detection: test (e), the L2/L3 probes, and the W5 dump diff re-run on the 885-file scope; any missing key text is a stop. Second failure mode: parallel units change output bytes. Detection: the extended determinism gate and the two-thread-count stdout diff.
 
 **Commit shape.** Seven commits, in this order, each green:
-1. `feat(unit): unit set construction from the package topology and tsconfig discovery, with tests` (structure only; nothing consumes it).
+1. `feat(unit): unit roots from the frontend contract and unit set construction from them, with tests` (structure only; nothing consumes it; `module_layering` stays green because `analysis_neutral` receives roots as data).
 2. `feat(unit): arena-backed UnitGraph and typed dense indexes; lowering into a unit graph for one unit behind a test entry point` (no provider change).
 3. `feat(unit): per-body CFG with stored idom/ipdom inside the unit graph` (uses W4's tree).
-4. `feat(kernel): polint.unit_graphs provider replacing semantic_mir, cfg, calls and intraprocedural abstract_domains; whole-program stores deleted` (the behaviour commit; largest; oracle on downstream digests and diagnostics).
+4. `feat(kernel): polint.unit_graphs provider replacing semantic_mir, cfg, calls and intraprocedural abstract_domains; whole-program stores deleted; downstream digest recipes fold unit_graphs` (the behaviour commit; oracle I1b plus the nine unaffected digests plus diagnostics and stdout). This commit touches the 33 files listed above before any accessor rewrite and so exceeds the 25-file delivery rule by construction; it cannot be halved without a dual registration. The research doc's Q10 asks the owner for a recorded exception (default) or a transitional facade; the plan proceeds under the default and records the file list in the PR description.
 5. `refactor: consumers read MIR and CFG through unit accessors` (the accessor rewrite; may be split by module if it exceeds the size rule).
 6. `perf(unit): lower units in parallel under rayon with UnitId merge order; determinism gate extended with unit-order permutation`.
 7. `chore(unit): delete the legacy dominator relation, mir_body_compose, MirOutput::normalized and the metadata refresh walks`.
@@ -671,7 +701,7 @@ pub(crate) fn decode_unit_shard(bytes: &[u8], unit: UnitId, interner: &StableKey
 - `LayerKind` (`analysis_api/digest/keys.rs:9`): add `UnitGraph`.
 
 `crates/polint/src/analysis_kernel/incremental/keys.rs`
-- `LayerKey` (`:51`) is reused per unit: `provider_id = "polint.unit_graphs"`, `input_digests = [unit.input_digest]`, `dependency_layer_digests = [import units' export digests]` (the gopls key shape, research doc 4.5). The unit's export digest is the digest of its exported symbol rows (names, kinds, spans), computed from the symbol graph per unit, so a dependency's internal edit does not invalidate dependents.
+- `LayerKey` (`:51-64`) is reused per unit: `provider_id = "polint.unit_graphs"`, `input_digests = [unit.input_digest]`, `dependency_layer_digests = [import units' export digests]` (the gopls key shape, research doc 4.5), and `parameter_digest` = digest over everything else that changes the shard's bytes and maps to no other field: the sorted `demanded_outputs` set the provider was run with (a shard lowered for a `calls` request carries no domain families, one for `control_flow` does; W3 made demand a run-time input), the active `max_dominance_pairs()` value (`cfg/budget.rs:37-56` reads `POLINT_CFG_MAX_DOMINANCE_PAIRS` at run time and decides whether the closure or only tree edges exist; today it never entered a key because `polint.cfg` is `InMemoryDerived`, `provider.rs:1470`), the solver budget constants, and the shard schema label. `provider_version`, `schema_version`, `lifecycle_digest`, `config_digest` and `toolchain_digest` are filled as for every other layer. The unit's export digest is the digest of its exported symbol rows (names, kinds, spans), computed from the symbol graph per unit, so a dependency's internal edit does not invalidate dependents.
 
 `crates/polint/src/analysis_kernel/store/`
 - New migration adding `unit_shards (generation_id, unit_path, unit_kind, language, input_digest, export_digest, payload_digest, layer_key_digest, file_count, body_count)` and `unit_imports (generation_id, unit_path, import_path)`; schema version v6. The store remains manifest-and-index only; payloads stay in the layer cache (Resolved Q3).
@@ -685,7 +715,7 @@ pub(crate) fn decode_unit_shard(bytes: &[u8], unit: UnitId, interner: &StableKey
 
 **Test strategy.**
 - Gating: `analysis_kernel::incremental::layer_cache` tests; store migration tests (`analysis_kernel/store/migrations.rs` tests, sentinel and version checks); `analysis_kernel::incremental::invalidation` tests.
-- New tests: (a) encode/decode round trip is byte-identical (`encode(decode(encode(g))) == encode(g)`) on every fixture unit; (b) a decoded unit graph produces the same per-unit digest and the same canonical key texts as a freshly lowered one; (c) corrupted shard (truncated, bad trailer, out-of-range offset) is rejected and recomputed, never panics; (d) the stale-reuse mutation matrix report 03 names (VAL-04): edit a file in unit A, assert A and its dependents miss and every other unit hits; edit a non-exported function body in A, assert dependents still hit (export digest unchanged); change `tsconfig.json`, assert the whole project misses; change the polint version, assert every shard misses; (e) warm output byte-identical to cold on the fixture set and on the 885-file scope (cold, then warm, then `diff` of ai-friendly stdout).
+- New tests: (a) encode/decode round trip is byte-identical (`encode(decode(encode(g))) == encode(g)`) on every fixture unit; (b) a decoded unit graph produces the same per-unit digest and the same canonical key texts as a freshly lowered one; (c) corrupted shard (truncated, bad trailer, out-of-range offset) is rejected and recomputed, never panics; (d) the stale-reuse mutation matrix report 03 names (VAL-04): edit a file in unit A, assert A and its dependents miss and every other unit hits; edit a non-exported function body in A, assert dependents still hit (export digest unchanged); change `tsconfig.json`, assert the whole project misses; change the polint version, assert every shard misses; run `--cap calls` then `--cap control_flow` on the same cache, assert every unit misses on the second run and its shard carries the domain families; run with `POLINT_CFG_MAX_DOMINANCE_PAIRS=0` after a default run, assert every unit misses; (e) warm output byte-identical to cold on the fixture set and on the 885-file scope (cold, then warm, then `diff` of ai-friendly stdout).
 - Invariant I1: every downstream digest and the diagnostics digest identical between cold and warm runs; the `polint.unit_graphs` provider digest identical between cold and warm (it is computed from per-unit digests, which are identical by test (b)).
 - Must not move: first-run rows. Must move: second-run `polint.unit_graphs` `elapsed_ms` near zero for unchanged units.
 
@@ -693,10 +723,10 @@ pub(crate) fn decode_unit_shard(bytes: &[u8], unit: UnitId, interner: &StableKey
 
 ```sh
 probe warm-1 calls <885-file scope>                              # cold: writes shards
-cp -r .polint/cache /tmp/cache-after-cold
-probe warm-2 calls <885-file scope>                              # do not wipe the cache for this one: edit the probe() helper or run polint directly
-grep 'provider="polint.unit_graphs"' /tmp/warm-2.stderr | grep -oE 'elapsed_ms=[0-9]+|unit_shards\.[a-z]+=[0-9]+'
-diff /tmp/warm-1.stdout /tmp/warm-2.stdout && echo warm-identical
+cp -r .polint/cache "$POLINT_GATE_OUT/cache-after-cold"
+KEEP_CACHE=1 probe warm-2 calls <885-file scope>                 # warm: the helper keeps the cache when KEEP_CACHE is set
+grep 'provider="polint.unit_graphs"' "$POLINT_GATE_OUT/warm-2.stderr" | grep -oE 'elapsed_ms=[0-9]+|unit_shards\.[a-z]+=[0-9]+'
+diff "$POLINT_GATE_OUT/warm-1.stdout" "$POLINT_GATE_OUT/warm-2.stdout" && echo warm-identical
 ```
 
 **Dependency and risk.** Depends on W6. Top failure mode: stale reuse (a shard served for inputs that changed) or write cost dominating cold runs. Detection: the mutation matrix (d) for the first; the stage row's `unit_shards.write_ms` counter against the research doc's kill criterion (shard writing above 20 percent of cold wall) for the second.
@@ -756,10 +786,10 @@ pub(crate) struct UnitSummaries {
 
 ```sh
 probe full-w8 calls <core>                                       # G6 at the final threshold: exit 0, wall under 300 s, tree peak under 12 GB
-python3 .scale-envelope/stages.py /tmp/full-w8.stderr             # all selected providers have a row
+python3 .scale-envelope/stages.py "$POLINT_GATE_OUT/full-w8.stderr"             # all selected providers have a row
 # G9: cold, then edit one Go file in a leaf package, then warm
 probe g9-cold calls <core>; <edit one file>; polint unknowns --cap calls <core> ... (cache kept)
-grep -oE 'units\.touched=[0-9]+' /tmp/g9-warm.stderr            # equals the edited unit plus its dependents
+grep -oE 'units\.touched=[0-9]+' "$POLINT_GATE_OUT/g9-warm.stderr"            # equals the edited unit plus its dependents
 ```
 
 **Dependency and risk.** Depends on W7 (summaries persisted per unit) and on the Phase 67 manifest fields (`summary_digest` on the shard manifest, added here). Top failure mode: a cross-unit edge that the whole-program analysis found and the unit-ordered analysis misses (a callee summary read before it was computed because the unit order was wrong, or a TS project reference not captured). Detection: test (a) on the diamond fixture, the L4 probes, and a cold-run digest comparison against the post-W6 run on the 885-file scope, where every downstream digest must be identical.
@@ -778,8 +808,9 @@ grep -oE 'units\.touched=[0-9]+' /tmp/g9-warm.stderr            # equals the edi
 - `POLINT_MEMORY_CEILING_MB` semantics unchanged (`:24`).
 
 `scripts/deep-gate/` (new, committed)
-- `probe.sh`: the section 5.1 function as a script: `probe.sh <tag> <cap> <paths...>`, writes `stdout`, `stderr`, `time` under `$POLINT_GATE_OUT` (default `/tmp/polint-gate`), never under the repository.
-- `gate.sh`: runs the G-matrix cells of section 5.2 that apply to the checkout it is pointed at (`POLINT_GATE_REPO`, `POLINT_GATE_SCOPES` as a list of `label=path` pairs), compares digests with `.scale-envelope/digests.py` against a `before` directory when given, and prints one Markdown table per cell.
+- `probe.sh`: the section 5.1 function as a script: `probe.sh <tag> <cap> <paths...>`, wraps the run in `.scale-envelope/rssrun.py`, writes `stdout`, `stderr` and the sampler's `timeline.json` under `$POLINT_GATE_OUT` (default `/tmp/polint-gate`), never under the repository.
+- `fact_rows_dump`: a `polint-eval` harness entry (`crates/polint-eval/src/harness/`, alongside `observed.rs`) that runs the kernel on a checkout with a given capability and writes one file per fact family with the sorted (canonical stable-key text, `payload_digest` hex) pairs from `FactMetaStore::family_rows`, the per-family walk `analysis_kernel/debug.rs:29-68` already performs for its test report; `gate.sh` runs it with the before and after binaries and diffs per family. It is the I1b oracle and W5's obligation 1 dump; it lands in slot 1 so W3's first commit can use it.
+- `gate.sh`: runs the G-matrix cells of section 5.2 that apply to the checkout it is pointed at (`POLINT_GATE_REPO`, `POLINT_GATE_SCOPES` as a list of `label=path=cap` triples), compares digests with `.scale-envelope/digests.py` and fact rows with `fact_rows_dump` against a `before` directory when given, checks the per-workstream expected-move list (a small allowlist file naming the provider ids and families that may differ), and prints one Markdown table per cell.
 - `report.py`: folds the run directory into the report format of section 6 and writes `research/strategy/plans/gate-reports/<date>_<host-label>.md`; it refuses to include any line from stdout or stderr other than the stage rows, the resource-budget diagnostic count, and the `/usr/bin/time` summary, so no consumer text can leak.
 - `.scale-envelope/digests.py` and `stages.py` are reused, not copied.
 
@@ -810,10 +841,11 @@ POLINT_WALL_BUDGET_MS=60000 scripts/deep-gate/probe.sh g10-wall calls <core>
 
 | Slot | Work | Parallel with | Serialised behind |
 |---|---|---|---|
-| 1 | W0; W9 scripts and report format; capture `before` stderr for excalidraw, 45-file, 885-file (and the timed-out full backend) from the branch base | each other | nothing |
-| 2 | W1 commits 1 to 4 | W2, W4 (separate worktrees, `CARGO_BUILD_JOBS=4` each, one build at a time) | 885-file and full-backend probes run one at a time |
-| 2 | W2 commits 1 to 2 | W1, W4 | as above |
-| 2 | W4 commits 1 to 2 | W1, W2 | as above |
+| 1 | W0; W9 scripts, `fact_rows_dump` harness entry and report format; capture `before` stderr, stdout and fact-row dumps for excalidraw (`dataflow`), 45-file (`calls`, `dataflow`), 885-file (`calls`, `control_flow`) and the timed-out full backend from the branch base | each other | nothing |
+| 2 | W1 commits 1 to 4 | W4; W2 commit 1 (separate worktrees, `CARGO_BUILD_JOBS=4` each, one build at a time) | 885-file and full-backend probes run one at a time |
+| 2 | W2 commit 1 (extraction) | W1, W4 | as above |
+| 2 | W4 commits 1 to 2 | W1, W2 commit 1 | as above |
+| 2b | W2 commit 2 (six sites) | W4 | W1 commit 4 merged (shared file `refined_calls/provider.rs`) |
 | 3 | W3 closure commits 1 to 2 | W2, W4 | W1 commit 1 (indexed references) |
 | 3 | W3 solver commit 3 | nothing | W1 complete |
 | 4 | W5 commits 1 to 5 | nothing | W1, W2, W3, W4 merged |
@@ -828,18 +860,23 @@ Capacity notes: a pre-W5 full-backend `calls` probe reaches 14 to 18 GB tree pea
 
 ### 5.1 Probe helper
 
+Memory is measured two ways and every gate names which one it binds. The tree peak comes from `.scale-envelope/rssrun.py`, the committed sampler that walks `/proc/<pid>/task/<pid>/children` from the probe's pid every 200 ms, sums `VmRSS`, prints `{"peak_rss_bytes", "peak_rss_gb", "wall_s", "exit_code"}` as JSON on stderr, and sets `RLIMIT_AS` so a runaway probe fails with an allocation error instead of an OOM kill (`rssrun.py:22-58`, `:75-107`). The polint-process peak is the `peak_rss_mb` field of the last stage row (`getrusage(RUSAGE_SELF).ru_maxrss`, `measure.rs:27-32`). `/usr/bin/time -v` is not used for memory because its "Maximum resident set size" is `ru_maxrss` of the timed process or of its largest single waited-for child, never a sum, and the Go sidecar is a grandchild of `polint`. The benchmark report's tree peaks were sampled the same way at 150 ms and are comparable.
+
 ```sh
 export GOROOT=/opt/data/home/.local/share/go
 export PATH=$GOROOT/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH
 export RAYON_NUM_THREADS=12 POLINT_JOBS=12 GOMAXPROCS=12 GOFLAGS=-p=12
 export RUST_LOG=polint=debug
 export POLINT_GATE_OUT=${POLINT_GATE_OUT:-/tmp/polint-gate}; mkdir -p "$POLINT_GATE_OUT"
-probe() { # $1 tag, $2 cap, $3... paths; set KEEP_CACHE=1 for warm cells
+probe() { # $1 tag, $2 cap, $3... paths; POLINT_GATE_TIMEOUT (s, default 300); KEEP_CACHE=1 for warm cells
   tag=$1; cap=$2; shift 2
   [ -z "${KEEP_CACHE:-}" ] && rm -rf .polint/cache/analysis .polint/cache/layers
-  /usr/bin/time -v -o "$POLINT_GATE_OUT/$tag.time" timeout 300 \
+  python3 .scale-envelope/rssrun.py --label "$tag" --as-limit-gb 28 \
+    --timeout "${POLINT_GATE_TIMEOUT:-300}" --timeline "$POLINT_GATE_OUT/$tag.timeline.json" -- \
     polint unknowns --cap "$cap" "$@" > "$POLINT_GATE_OUT/$tag.stdout" 2> "$POLINT_GATE_OUT/$tag.stderr"
-  echo "exit=$?"; grep -E "Maximum resident|Elapsed" "$POLINT_GATE_OUT/$tag.time"
+  echo "exit=$?"
+  grep '"peak_rss_gb"' "$POLINT_GATE_OUT/$tag.stderr" | tail -1          # tree peak (sum of VmRSS over the process tree, 200 ms samples) and wall
+  grep "stage done" "$POLINT_GATE_OUT/$tag.stderr" | tail -1 | grep -oE 'peak_rss_mb=[0-9]+'   # polint-process peak (getrusage RUSAGE_SELF)
   python3 .scale-envelope/stages.py "$POLINT_GATE_OUT/$tag.stderr"
 }
 ```
@@ -849,28 +886,31 @@ probe() { # $1 tag, $2 cap, $3... paths; set KEEP_CACHE=1 for warm cells
 | Gate | Closes | Command | Pass condition | Rows that must not move |
 |---|---|---|---|---|
 | G0 | W0 | `CARGO_HOME=$(mktemp -d) polint check --profile core --fail-on none <paths>` after one publish from a different cargo home | under 10 s; no `cargo`/`rustc` child | all |
-| G1 | W1, W2, W4, W5 | `python3 .scale-envelope/digests.py before/<scope>.stderr after/<scope>.stderr` on excalidraw, 45-file, 885-file | `23/23 provider output digests identical`; `polint check --format json` diagnostics digest identical on `examples/*` | every `digest=` |
-| G1b | W1 | temporary `polint::probe` step rows in `lower_go_mir` on 885 and 1,588-file scopes | `lower_control_flow` and `matching_function` shares as section 3.8 of the research doc orders them, else the section is corrected before W1 is designed | n/a |
-| G2 | W1, W2 | `probe s885 calls <885-file scope>` | wall under 60 s; peak under 8 GB | `digest=`, `facts`, `keys` |
-| G3 | W1, W2, W5, W6 | `probe full-mir calls <core>`; read the `polint.unit_graphs` row (pre-W6: `polint.semantic_mir`) | stage under 60 s; `rss_delta_mb` under 3,000; `key_mb` growth under 1,500 | downstream `digest=` |
-| G4 | W4 | same run, `polint.cfg` step rows (pre-W6) or the unit-graphs CFG sub-rows (post-W6) | stage under 30 s; dominators step under 5 s | `digest=` with `POLINT_CFG_MAX_DOMINANCE_PAIRS=0`; tree-edge set otherwise |
-| G5 | W3 | `probe s885-calls calls <885-file scope>`; `probe s885-cf control_flow <885-file scope>` | `polint.abstract_domains` row absent on `calls`, present on `control_flow`; `polint unknowns` shows the budget rows when it runs | `polint.refined_calls` `digest=` |
-| G6 | W1 to W8 | `probe full-calls calls <core>` | exit 0; wall under 300 s; tree peak under 12 GB; every selected provider has a stage row | precision and status distributions in the ai-friendly report |
+| G1 | W1, W2, W4, W5 (I1a) | `python3 .scale-envelope/digests.py before/<cell>.stderr after/<cell>.stderr` on excalidraw (`dataflow`), 45-file (`calls`, `dataflow`), 885-file (`calls`) | `N/N provider output digests identical` with N from the before capture (21 on `calls`, 23 on `dataflow`); no `MISSING`; `polint check --format json` diagnostics digest identical on `examples/*` | every `digest=` |
+| G1b | W1 | temporary `polint::probe` step rows in `lower_go_mir` on the 885 and 1,588-file scopes (`POLINT_GATE_TIMEOUT=900` for the latter) | the four superlinear terms of research doc section 3.2 dominate the stage before W1 and are not visible after; their order is recorded | n/a |
+| G1c | W3, W6 (I1b); W5 obligation 1 | `fact_rows_dump` with the before and after binaries on the G1 cells; `diff` per family; `diff` of stdout | every family byte-identical except those the workstream lists (W3 on `calls`: `domain_observations`, `domain_events` absent; W6: none); diagnostics digest and stdout identical | all fact rows |
+| G2 | W1, W2 | `probe s885 calls <885-file scope>` | wall under 60 s; polint-process `peak_rss_mb` under 7,500 (today 8,143 peak, 7,113 retained, benchmark report A.4; W1 and W2 remove the transient, W5 the floor); tree peak reported, expected near today's 13.7 GB because the whole-program sidecar's roughly 7 GB coincides with the early stages | `digest=`, `facts`, `keys` |
+| G3 | W1, W2, W5, W6 | `probe full-mir calls <core>` (first post-W1 run with `POLINT_GATE_TIMEOUT=1800` to match the benchmark's over-budget baseline); read the `polint.unit_graphs` row (pre-W6: `polint.semantic_mir`) | stage under 60 s; `rss_delta_mb` under 3,000; `key_mb` growth under 1,500 | the nine `digest=` values W6 leaves unaffected; all `digest=` pre-W6 |
+| G4 | W4 | same run, `polint.cfg` step rows (pre-W6) or the unit-graphs CFG sub-rows (post-W6); `POLINT_CFG_MAX_DOMINANCE_PAIRS=0` rerun on the 885-file scope | stage under 30 s; dominators step under 5 s; with the bound disabled the dominator and post-dominator pair sets are identical to the legacy relation's, vacuous exit-unreachable rows included; with the default bound the tree-edge sets are identical | every `digest=` in both modes |
+| G5 | W3 | `probe s885-calls calls <885-file scope>`; `probe s885-cf control_flow <885-file scope>`; `digests.py` and `fact_rows_dump` against the branch-base captures | `polint.abstract_domains` row absent on `calls` (0 rows), present on `control_flow`; on `calls`, `digests.py` reports `MISSING polint.abstract_domains`, `DIFFER` for exactly `direct_summaries`, `type_value_alias`, `semantic_graph`, `solver`, `refined_calls`, identical for the other 15; `fact_rows_dump` identical for every family except the two absent domain families; stdout identical; on `control_flow` after commit 2, 21/21 identical; `polint unknowns` shows the budget rows on `control_flow` after commit 3 | every fact row outside `domain_*`; the 15 unaffected digests; stdout |
+| G6 | W1 to W8 | `probe full-calls calls <core>` | exit 0; wall under 300 s; tree peak (`rssrun.py`) under 12 GB with the polint-process `peak_rss_mb` reported beside it; every selected provider has a stage row | precision and status distributions in the ai-friendly report |
 | G7 | every workstream | `cargo test -p polint --lib eval::determinism_gate --locked`; two 885-file runs at `RAYON_NUM_THREADS=1` and `=12`, cold and warm, stdout diffed | byte-identical ai-friendly stdout | all |
-| G8 | W6 | `probe full-ts calls <frontend paths>` | exit 0; wall under 300 s; peak under 12 GB | downstream `digest=` |
+| G8 | W6 | `probe full-ts calls <frontend paths>` | exit 0; wall under 300 s; tree peak under 12 GB (no Go sidecar on this cell, so tree and process peaks are close) | the nine unaffected `digest=` values; all fact rows |
 | G9 | W7, W8 | cold probe; edit one Go file in a leaf unit; `KEEP_CACHE=1 probe g9-warm calls <core>` | warm under 30 s; `units.touched` equals the edited unit plus dependents; stdout identical to a cold run on the edited tree | first-run rows |
 | G10 | W9 | `POLINT_MEMORY_CEILING_MB=8192 probe g10 calls <core>` | run finishes with one `polint/resource-budget` diagnostic naming the degraded capabilities | rows under a normal ceiling |
 
 ### 5.3 Probe matrix
 
-| Scope | cold | warm | one-file change |
+| Scope and request | cold | warm | one-file change |
 |---|---|---|---|
-| 45 Go files | G1 | G7 | |
-| 885 Go files | G1, G1b, G2, G5 | G7 | G9 |
-| 1,588 Go files | G1b, curve point | | |
-| 4,752 Go files | G3, G4, G6, G10 | G6 warm | G9 |
-| 2,381 TS files | G8 | | |
-| excalidraw (public, 385 TS files) | G1 against `.scale-envelope` X6 | | |
+| 45 Go files, `calls` | G1, G1c | G7 | |
+| 45 Go files, `dataflow` | G1, G1c (the only Go cell where `data_flow` and `evidence` run; required for W2) | | |
+| 885 Go files, `calls` | G1, G1c, G1b, G2, G5 | G7 | G9 |
+| 885 Go files, `control_flow` | G5 | | |
+| 1,588 Go files, `calls` | G1b, curve point (`POLINT_GATE_TIMEOUT=900`) | | |
+| 4,752 Go files, `calls` | G3, G4, G6, G10 | G6 warm | G9 |
+| 2,381 TS files, `calls` | G8 | | |
+| excalidraw (public, 385 TS files), `dataflow` | G1, G1c against `.scale-envelope` X6 (the X-series ran the full `dataflow` plan) | | |
 
 ### 5.4 Suite and lint
 
@@ -885,9 +925,9 @@ Every commit: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targ
 
 polint: <version> at <sha>; host: <cores> cores, <GB> RAM; threads: 12; cache: <cold|warm>
 
-| Scope (file count) | cap | exit | wall s | tree peak MB | providers with rows | digest oracle |
-|---|---|---:|---:|---:|---:|---|
-| 45 | calls | 0 | ... | ... | 21 | 23/23 |
+| Scope (file count) | cap | exit | wall s | tree peak MB (rssrun.py) | polint peak MB (stage row) | providers with rows | digest oracle | fact-row oracle |
+|---|---|---:|---:|---:|---:|---:|---|---|
+| 45 | calls | 0 | ... | ... | ... | 21 | 21/21 | identical |
 
 ## Stage rows (<scope>)
 | provider | ms | rss MB | delta MB | peak MB | facts | keys | key MB |
