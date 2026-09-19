@@ -376,6 +376,14 @@ mod tests {
 
         assert_eq!(output.execution, ProviderExecution::Succeeded);
         assert!(output.diagnostics.is_empty());
+        // A provider that reports a counter is named in the public run report.
+        // A Go-only repository must not be told about a TypeScript tier that
+        // had nothing to do.
+        assert!(
+            output.counts.is_empty(),
+            "a tier that did not run must report no counters: {:?}",
+            output.counts
+        );
     }
 
     #[test]

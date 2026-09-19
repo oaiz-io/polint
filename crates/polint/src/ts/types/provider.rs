@@ -116,6 +116,7 @@ fn derive_ts_types_with_runner(
                 cache_stats,
                 diagnostics: Vec::new(),
                 execution: ProviderExecution::Succeeded,
+                sidecar_ran: false,
             },
         );
     }
@@ -141,6 +142,7 @@ fn derive_ts_types_with_runner(
                         stage: ProviderFailureStage::Setup,
                         reason: ProviderFailureReason::SetupMissing,
                     },
+                    sidecar_ran: false,
                 },
             );
         }
@@ -161,6 +163,7 @@ fn derive_ts_types_with_runner(
                 cache_stats,
                 diagnostics: Vec::new(),
                 execution: ProviderExecution::Succeeded,
+                sidecar_ran: false,
             },
         );
     }
@@ -230,6 +233,7 @@ fn derive_ts_types_with_runner(
                     cache_stats,
                     diagnostics: vec![diagnostic],
                     execution: ProviderExecution::Failed { stage, reason },
+                    sidecar_ran: false,
                 },
             );
         }
@@ -261,6 +265,7 @@ fn derive_ts_types_with_runner(
             cache_stats,
             diagnostics,
             execution: ProviderExecution::Succeeded,
+            sidecar_ran: true,
         },
     );
     for (key, value) in counts {
@@ -323,6 +328,7 @@ fn setup_gap(
             } else {
                 ProviderExecution::Succeeded
             },
+            sidecar_ran: false,
         },
     );
     output
@@ -430,6 +436,13 @@ struct StoreOutputParts {
     diagnostics: Vec<Diagnostic>,
     digest_inputs: DigestInputs,
     execution: ProviderExecution,
+    /// Whether the sidecar ran and produced rows this store could drop.
+    ///
+    /// A provider that reports a counter is named in the public run report, so
+    /// a tier that never ran must report none: a Go-only repository listing a
+    /// TypeScript provider in `summary.providers` is noise about work that did
+    /// not happen.
+    sidecar_ran: bool,
 }
 
 fn store_output(
@@ -460,16 +473,20 @@ fn store_output(
             // Reported as counters and not only as a warning, because a
             // systematic emitter regression is a number that moved, and a
             // reader comparing two runs needs the zero as much as the non-zero.
-            let counts = BTreeMap::from([
-                (
-                    "ts_types.dropped_rows".to_string(),
-                    report.dropped_rows as u64,
-                ),
-                (
-                    "ts_types.dangling_callees".to_string(),
-                    report.dangling_callees as u64,
-                ),
-            ]);
+            let counts = if parts.sidecar_ran {
+                BTreeMap::from([
+                    (
+                        "ts_types.dropped_rows".to_string(),
+                        report.dropped_rows as u64,
+                    ),
+                    (
+                        "ts_types.dangling_callees".to_string(),
+                        report.dangling_callees as u64,
+                    ),
+                ])
+            } else {
+                BTreeMap::new()
+            };
             TsTypesProviderRunOutput {
                 counts,
                 diagnostics,
