@@ -225,7 +225,11 @@ fn typed_edge(
         tier: RefinedCallTier::TypeDirected,
         status: CallTargetStatus::Resolved,
         reason: None,
-        provenance: CallProvenance::Model,
+        // A type checker's answer is a frontend fact, not a model: the Go
+        // semantic tier records its compiler-derived edges the same way, and
+        // `Model` is reserved for framework and extension recognizers, which
+        // may never claim exact precision.
+        provenance: CallProvenance::Native,
         precision: precision_for(callee.dispatch, degraded),
         validation: RefinedCallValidation::ReferentiallyValidated,
         confidence: confidence_for(callee.dispatch, degraded),
@@ -273,7 +277,7 @@ fn untyped_site_edge(
         tier: RefinedCallTier::TypeDirected,
         status: CallTargetStatus::Unresolved,
         reason: Some(UnresolvedCallReason::UnknownCallee),
-        provenance: CallProvenance::Model,
+        provenance: CallProvenance::Native,
         precision: CallPrecision::Unknown,
         validation: RefinedCallValidation::ReferentiallyValidated,
         confidence: RefinedCallConfidence::Low,
@@ -539,7 +543,7 @@ mod tests {
     use crate::analysis_neutral::calls::facts::{CallCallee, CallPrecision, CallSiteFact};
     use crate::analysis_neutral::calls::store::CallOutput;
     use crate::analysis_neutral::ids::{MirBodyId, MirOpId};
-    use crate::internal_core::{FileId, Span};
+    use crate::internal_core::{FileId, Span, StableKeyInterner};
 
     struct Fixture {
         db: LocalAnalysisDb,
@@ -1034,6 +1038,53 @@ mod tests {
         let (output, _) = derive_ts_type_refinements(&fixture.db, &sites, &callees, &[]);
 
         assert_eq!(typed_tier_site_count(&output), 1);
+    }
+
+    #[test]
+    fn an_exactly_resolved_edge_survives_refined_call_validation() {
+        // A typed edge claims exact precision, and the refined-call validator
+        // refuses exact precision from a modelled provenance. Debug builds run
+        // that validator, and a violation there does not only add a
+        // `polint/internal` diagnostic: it marks `polint.refined_calls`
+        // validation-rejected and blocks every rule that requested calls.
+        let mut fixture = fixture();
+        let sites = vec![site(
+            &fixture.db,
+            fixture.file,
+            TsTypeSiteStatus::Resolved,
+            0,
+            19,
+        )];
+        let callees = vec![callee(
+            &fixture.db,
+            fixture.file,
+            "callee:one",
+            TsTypeDispatchKind::Declared,
+            100,
+            160,
+        )];
+
+        let (output, _) = derive_ts_type_refinements(&fixture.db, &sites, &callees, &[]);
+        assert_eq!(output.edges[0].precision, CallPrecision::Exact);
+        fixture
+            .db
+            .replace_refined_call_facts(output)
+            .expect("typed edges install");
+
+        let mut diagnostics = Vec::new();
+        crate::analysis_neutral::refined_calls::validate::validate_refined_calls(
+            &fixture.db,
+            &mut diagnostics,
+        );
+
+        assert!(
+            diagnostics.is_empty(),
+            "typed edges must pass refined-call validation: {:?}",
+            diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
