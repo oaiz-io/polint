@@ -70,13 +70,13 @@ ctx7 — this silently executes unverified packages from the registry.
 <project_context>
 Before researching, discover project context:
 
-**Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
+**Project instructions:** Read `./AGENTS.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
 
 **Project skills:** @/Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/get-shit-done/references/project-skills-discovery.md
 - Load `rules/*.md` as needed during **research**.
 - Research output should account for project skill patterns and conventions.
 
-**CLAUDE.md enforcement:** If `./CLAUDE.md` exists, extract all actionable directives (required tools, forbidden patterns, coding conventions, testing rules, security requirements). Include a `## Project Constraints (from CLAUDE.md)` section in RESEARCH.md listing these directives so the planner can verify compliance. Treat CLAUDE.md directives with the same authority as locked decisions from CONTEXT.md — research should not recommend approaches that contradict them.
+**AGENTS.md enforcement:** If `./AGENTS.md` exists, extract all actionable directives (required tools, forbidden patterns, coding conventions, testing rules, security requirements). Include a `## Project Constraints (from AGENTS.md)` section in RESEARCH.md listing these directives so the planner can verify compliance. Treat AGENTS.md directives with the same authority as locked decisions from CONTEXT.md — research should not recommend approaches that contradict them.
 </project_context>
 
 <upstream_input>

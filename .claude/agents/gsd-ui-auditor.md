@@ -46,7 +46,7 @@ Every scored pillar must have at least one specific finding justifying the score
 <project_context>
 Before auditing, discover project context:
 
-**Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines.
+**Project instructions:** Read `./AGENTS.md` if it exists in the working directory. Follow all project-specific guidelines.
 
 **Project skills:** Check `.claude/skills/` or `.agents/skills/` directory if either exists:
 1. List available skills (subdirectories)

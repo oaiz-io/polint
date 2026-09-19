@@ -350,7 +350,7 @@ Package spike findings into a persistent project skill.
 - Groups findings by feature area
 - Generates `./.claude/skills/spike-findings-[project]/` with references and sources
 - Writes summary to `.planning/spikes/WRAP-UP-SUMMARY.md`
-- Adds auto-load routing line to project CLAUDE.md
+- Adds auto-load routing line to project AGENTS.md
 
 Usage: `/gsd:spike --wrap-up`
 
@@ -361,7 +361,7 @@ Package sketch design findings into a persistent project skill.
 - Groups findings by design area
 - Generates `./.claude/skills/sketch-findings-[project]/` with design decisions, CSS patterns, HTML structures
 - Writes summary to `.planning/sketches/WRAP-UP-SUMMARY.md`
-- Adds auto-load routing line to project CLAUDE.md
+- Adds auto-load routing line to project AGENTS.md
 
 Usage: `/gsd:sketch --wrap-up`
 

@@ -583,7 +583,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
        You are running as a PARALLEL executor agent in a git worktree. Worktree path safety (cwd-drift, absolute-path guards) is in `worktree-path-safety.md` (loaded below).
        Run `git commit` normally — hooks run by default. Do NOT pass `--no-verify`
        unless the orchestrator surfaces `workflow.worktree_skip_hooks=true` in this
-       prompt; silent bypass violates project CLAUDE.md guidance (#2924).
+       prompt; silent bypass violates project AGENTS.md guidance (#2924).
 
        IMPORTANT: Do NOT modify STATE.md or ROADMAP.md. execute-plan.md
        auto-detects worktree mode (`.git` is a file, not a directory) and skips
@@ -618,14 +618,14 @@ increases monotonically across waves. `{status}` is `complete` (success),
        - ${phase_dir}/*-RESEARCH.md (Technical research — pitfalls and patterns to follow)
        - ${prior_wave_summaries} (SUMMARY.md files from earlier waves in this phase — what was already built)
        ` : ''}
-       - ./CLAUDE.md (Project instructions, if exists — follow project-specific guidelines and coding conventions)
+       - ./AGENTS.md (Project instructions, if exists — follow project-specific guidelines and coding conventions)
        - .claude/skills/ or .agents/skills/ (Project skills, if either exists — list skills, read SKILL.md for each, follow relevant rules during implementation)
        </files_to_read>
 
        ${AGENT_SKILLS}
 
        <mcp_tools>
-       If CLAUDE.md or project instructions reference MCP tools (e.g. jCodeMunch, context7,
+       If AGENTS.md or project instructions reference MCP tools (e.g. jCodeMunch, context7,
        or other MCP servers), prefer those tools over Grep/Glob for code navigation when available.
        MCP tools often save significant tokens by providing structured code indexes.
        Check tool availability first — if MCP tools are not accessible, fall back to Grep/Glob.

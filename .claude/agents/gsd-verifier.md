@@ -47,7 +47,7 @@ This agent implements the **Escalation Gate** pattern (surfaces unresolvable gap
 <project_context>
 Before verifying, discover project context:
 
-**Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
+**Project instructions:** Read `./AGENTS.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
 
 **Project skills:** @/Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/get-shit-done/references/project-skills-discovery.md
 - Load `rules/*.md` as needed during **verification**.

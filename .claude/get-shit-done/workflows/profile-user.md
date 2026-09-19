@@ -336,7 +336,7 @@ Use AskUserQuestion with multiSelect:
 - question: "Which artifacts should I generate?"
 - options (ALL pre-selected by default):
   - "/gsd-dev-preferences command file" -- "Load your preferences in any session"
-  - "CLAUDE.md profile section" -- "Add profile to this project's CLAUDE.md"
+  - "AGENTS.md profile section" -- "Add profile to this project's AGENTS.md"
   - "Global CLAUDE.md" -- "Add profile to /Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/CLAUDE.md for all projects"
 
 **If no artifacts selected:** Display "No artifacts generated. Your profile is saved at /Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/get-shit-done/USER-PROFILE.md" and jump to step 10.
@@ -355,13 +355,13 @@ gsd-sdk query generate-dev-preferences --analysis "$ANALYSIS_PATH" --json
 
 Display: "✓ Generated /gsd-dev-preferences at /Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/skills/gsd-dev-preferences/SKILL.md"
 
-**For CLAUDE.md profile section (if selected):**
+**For AGENTS.md profile section (if selected):**
 
 ```bash
 gsd-sdk query generate-claude-profile --analysis "$ANALYSIS_PATH" --json
 ```
 
-Display: "✓ Added profile section to CLAUDE.md"
+Display: "✓ Added profile section to AGENTS.md"
 
 **For Global CLAUDE.md (if selected):**
 
@@ -413,7 +413,7 @@ Then list paths for each generated artifact:
 ```
 Artifacts:
   ✓ /gsd-dev-preferences   /Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/skills/gsd-dev-preferences/SKILL.md
-  ✓ CLAUDE.md section       ./CLAUDE.md
+  ✓ AGENTS.md section       ./AGENTS.md
   ✓ Global CLAUDE.md        /Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/CLAUDE.md
 ```
 

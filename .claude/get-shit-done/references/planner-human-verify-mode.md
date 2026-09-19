@@ -6,7 +6,7 @@
 
 ### `end-of-phase` (default — issue #3309)
 
-Do **not** emit any `<task type="checkpoint:human-verify">` tasks. Every mid-flight halt costs a full executor cold-start (CLAUDE.md, MEMORY.md, STATE.md, plan re-read on respawn) because subagent context is discarded across the pause; a plan with N human-verify checkpoints pays the cold-start cost N+1 times — measured at "tens of thousands of tokens" per round-trip on real projects. This is the default for that reason.
+Do **not** emit any `<task type="checkpoint:human-verify">` tasks. Every mid-flight halt costs a full executor cold-start (AGENTS.md, MEMORY.md, STATE.md, plan re-read on respawn) because subagent context is discarded across the pause; a plan with N human-verify checkpoints pays the cold-start cost N+1 times — measured at "tens of thousands of tokens" per round-trip on real projects. This is the default for that reason.
 
 Instead, fold each would-be verification step into the relevant `auto` task using a `<verify><human-check>` sub-block:
 

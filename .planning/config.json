@@ -37,6 +37,7 @@
   "project_code": null,
   "phase_naming": "sequential",
   "agent_skills": {},
+  "claude_md_path": "./AGENTS.md",
   "resolve_model_ids": "omit",
   "mode": "yolo",
   "granularity": "fine"

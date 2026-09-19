@@ -169,7 +169,7 @@ If previous SUMMARY has unresolved "Issues Encountered" or "Next Phase Readiness
 Deviations are normal — handle via rules below.
 
 1. Read @context files from prompt
-2. **MCP tools:** If CLAUDE.md or project instructions reference MCP tools (e.g. jCodeMunch for code navigation), prefer them over Grep/Glob when available. Fall back to Grep/Glob if MCP tools are not accessible.
+2. **MCP tools:** If AGENTS.md or project instructions reference MCP tools (e.g. jCodeMunch for code navigation), prefer them over Grep/Glob when available. Fall back to Grep/Glob if MCP tools are not accessible.
 3. Per task:
    - **MANDATORY read_first gate:** If the task has a `<read_first>` field, you MUST read every listed file BEFORE making any edits. This is not optional. Do not skip files because you "already know" what's in them — read them. The read_first files establish ground truth for the task.
    - `type="auto"`: if `tdd="true"` → TDD execution. Implement with deviation rules + auth gates. Verify done criteria. Commit (see task_commit). Track hash for Summary.
@@ -257,7 +257,7 @@ Your commits may trigger pre-commit hooks. Auto-fix hooks handle themselves tran
 **If running as a parallel executor agent (spawned by execute-phase):**
 Run commits normally — let pre-commit hooks run. Do NOT use `--no-verify` by default
 (#2924). Hooks should run so issues surface at the introducing commit, and silent
-bypass violates project CLAUDE.md guidance. If a project explicitly opts out via
+bypass violates project AGENTS.md guidance. If a project explicitly opts out via
 `workflow.worktree_skip_hooks=true`, the orchestrator will surface that flag in the
 prompt; absent that signal, hooks run normally. If a hook fails, follow the
 sequential-mode handling below.

@@ -5,8 +5,8 @@
  *   - write-profile: USER-PROFILE.md from analysis JSON
  *   - profile-questionnaire: fallback when no sessions available
  *   - generate-dev-preferences: dev-preferences.md command artifact
- *   - generate-claude-profile: Developer Profile section in CLAUDE.md
- *   - generate-claude-md: full CLAUDE.md with managed sections
+ *   - generate-claude-profile: Developer Profile section in AGENTS.md
+ *   - generate-claude-md: full AGENTS.md with managed sections
  */
 
 const fs = require('fs');
@@ -281,7 +281,7 @@ function extractMarkdownSection(content, sectionName) {
   return result.length > 0 ? result.join('\n').trim() : null;
 }
 
-// ─── CLAUDE.md Section Generators ─────────────────────────────────────────────
+// ─── AGENTS.md Section Generators ─────────────────────────────────────────────
 
 function generateProjectSection(cwd) {
   const projectPath = path.join(cwd, '.planning', 'PROJECT.md');
@@ -386,7 +386,7 @@ function generateWorkflowSection() {
 
 /**
  * Discover project skills from standard directories and extract frontmatter
- * (name + description) for each. Returns a table summary for CLAUDE.md so
+ * (name + description) for each. Returns a table summary for AGENTS.md so
  * agents know which skills are available at session startup (Layer 1 discovery).
  */
 function generateSkillsSection(cwd) {
@@ -900,8 +900,8 @@ function cmdGenerateClaudeProfile(cwd, options, raw) {
   } else if (options.output) {
     targetPath = path.isAbsolute(options.output) ? options.output : path.join(cwd, options.output);
   } else {
-    // Read claude_md_path from config, default to ./CLAUDE.md
-    let configClaudeMdPath = './CLAUDE.md';
+    // Read claude_md_path from config, default to ./AGENTS.md
+    let configClaudeMdPath = './AGENTS.md';
     try {
       const config = loadConfig(cwd);
       if (config.claude_md_path) configClaudeMdPath = config.claude_md_path;
@@ -979,18 +979,11 @@ function cmdGenerateClaudeMd(cwd, options, raw) {
   }
 
   let assemblyConfig = {};
-  let configClaudeMdPath = './CLAUDE.md';
+  let configClaudeMdPath = './AGENTS.md';
   try {
     const config = loadConfig(cwd);
     if (config.claude_md_path) configClaudeMdPath = config.claude_md_path;
     if (config.claude_md_assembly) assemblyConfig = config.claude_md_assembly;
-    // #3163: When runtime is codex, override the output target to AGENTS.md
-    // regardless of claude_md_path, so Codex projects never write to CLAUDE.md.
-    // GSD_RUNTIME env var takes precedence over config.runtime, mirroring detectRuntime().
-    const effectiveRuntime = process.env.GSD_RUNTIME || config.runtime || null;
-    if (!options.output && effectiveRuntime === 'codex') {
-      configClaudeMdPath = './AGENTS.md';
-    }
   } catch { /* use default */ }
 
   let outputPath = options.output;

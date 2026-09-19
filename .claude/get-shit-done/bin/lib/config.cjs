@@ -207,7 +207,7 @@ function buildNewProjectConfig(userChoices) {
     project_code: null,
     phase_naming: 'sequential',
     agent_skills: {},
-    claude_md_path: './CLAUDE.md',
+    claude_md_path: './AGENTS.md',
   };
 
   // Three-level deep merge: hardcoded <- userDefaults <- choices

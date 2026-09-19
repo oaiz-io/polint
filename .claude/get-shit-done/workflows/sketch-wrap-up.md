@@ -217,7 +217,7 @@ Write `.planning/sketches/WRAP-UP-SUMMARY.md` for project history:
 </step>
 
 <step name="update_claude_md">
-## Update Project CLAUDE.md
+## Update Project AGENTS.md
 
 Add an auto-load routing line:
 
@@ -246,7 +246,7 @@ gsd-sdk query commit "docs(sketch-wrap-up): package [N] sketch findings into pro
 **Design areas:** {list}
 **Skill:** `./.claude/skills/sketch-findings-[project]/`
 **Summary:** `.planning/sketches/WRAP-UP-SUMMARY.md`
-**CLAUDE.md:** routing line added
+**AGENTS.md:** routing line added
 
 The sketch-findings skill will auto-load when building the UI.
 ```
@@ -279,7 +279,7 @@ The sketch-findings skill will auto-load when building the UI.
 - [ ] Winning theme.css copied into skill sources
 - [ ] Reference files contain design decisions, CSS patterns, HTML structures, anti-patterns
 - [ ] `.planning/sketches/WRAP-UP-SUMMARY.md` written for project history
-- [ ] Project CLAUDE.md has auto-load routing line
+- [ ] Project AGENTS.md has auto-load routing line
 - [ ] Summary presented
 - [ ] Next-step options presented (including frontier sketch exploration via `/gsd:sketch`)
 </success_criteria>
