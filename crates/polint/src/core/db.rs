@@ -1487,28 +1487,6 @@ impl AnalysisDb {
 
     #[allow(
         dead_code,
-        reason = "Retained for AnalysisDb until dual accessors are removed."
-    )]
-    pub(crate) fn merge_summary_facts_without_metadata(
-        &mut self,
-        summaries: &[SummaryFact],
-        events: &[SummaryEventFact],
-    ) {
-        let interner = self.stable_key_interner();
-        self.summary_store_mut()
-            .merge_updates(summaries, events, &interner);
-    }
-
-    #[allow(
-        dead_code,
-        reason = "Retained for AnalysisDb until dual accessors are removed."
-    )]
-    pub(crate) fn refresh_summary_metadata_after_bulk_update(&mut self) {
-        self.refresh_summary_metadata();
-    }
-
-    #[allow(
-        dead_code,
         reason = "Extension fact replacement is wired into the kernel provider in the next plan."
     )]
     pub(crate) fn replace_extension_facts(&mut self, output: ExtensionOutput) {
@@ -6047,6 +6025,26 @@ impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
 
     fn replace_summary_facts(&mut self, output: SummaryOutput) {
         AnalysisDb::replace_summary_facts(self, output);
+    }
+
+    /// Route the SCC closure's bulk refresh to `AnalysisDb`'s digest recipe.
+    ///
+    /// `close_summaries_by_scc` is generic over `impl AnalysisHost`, so inherent
+    /// methods are out of scope inside it: it calls this trait method, and
+    /// without this override the trait default ran, which re-records every
+    /// summary and event row as the verbatim text `summary:<SummaryId>` /
+    /// `summary-event:<SummaryEventId>`. That is what the five summary families'
+    /// `FactMeta::payload_digest` column held on every scan whose closure
+    /// updated anything: not a digest of the fact's parts, unmoved by any parts
+    /// change and moved by any id reassignment. The default stays for
+    /// `LocalAnalysisDb` and the language-local fact databases, which have no
+    /// recipe of their own.
+    ///
+    /// No provider output digest folds `FactMeta::payload_digest`, so this moves
+    /// no `digest=` anywhere; it moves the second column of those five families'
+    /// fact rows, and nothing else.
+    fn refresh_summary_metadata_after_bulk_update(&mut self) {
+        self.refresh_summary_metadata();
     }
 
     fn replace_call_facts(&mut self, output: CallOutput) -> Result<(), AnalysisError> {
