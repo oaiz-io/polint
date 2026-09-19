@@ -8,7 +8,7 @@ Measured input: the full-application benchmark and deep-capability stress run of
 
 Note on numbering: `04-evaluation-as-a-weapon.md` already carries the `04` prefix in this series. This document was commissioned under the name `04-full-app-deep-capability.md` and keeps it; the README index should list both.
 
-How to read this document: section 3 is the evidence and can be verified line by line against Appendix A; section 4 is the survey; sections 5 and 6 are the decision; sections 7 and 8 are what to build and how to know it worked; section 11 says what was not checked. A reader who wants only the decision should read the TL;DR, section 6, and the Open Questions.
+How to read this document: section 3 is the evidence and can be verified line by line against Appendix A; section 4 is the survey; sections 5 and 6 are the decision; sections 7 and 8 are what to build and how to know it worked; section 11 says what was not checked. A reader who wants only the decision should read the TL;DR, section 6, the Resolved Questions, and the one Open Question.
 
 Cross-reference to the build plan. Report 03 sequences six stages and names the items this document refines:
 
@@ -18,7 +18,7 @@ Cross-reference to the build plan. Report 03 sequences six stages and names the 
 | Stage 0, exit criterion "excalidraw full pipeline under 6 GB and 300 s" | already met by `.scale-envelope` X6 (5.47 GB, 235 s); this document sets the next envelope on the consumer backend (section 7) |
 | Stage 1, IFDS tabulation | unchanged in content; should be built on the unit ICFG after W6 (section 4.6) |
 | Stage 1, TS type sidecar | landed as PR #121; positioned in section 9 |
-| Stage 2, Phase 67 summary manifests and invalidation frontier; Phase 68 internal query engine | W7 and W8; Q1 and Q3 decide the store shape |
+| Stage 2, Phase 67 summary manifests and invalidation frontier; Phase 68 internal query engine | W7 and W8, in scope for this track (Q1); storage shape resolved (Q3) |
 | Stage 2, exit criterion "peak RSS proportional to the working set" | G9 and the W6 unit model; option B's query engine is the Stage 2 scheduling layer, not the representation |
 | Stage 3, envelope on `grafana/grafana` on a 16 GB host | out of scope here; the consumer backend at 4,752 files is the gate this document sets, and grafana is the next corpus once G6 passes |
 | Stage 3, parallel per-SCC summary closure | W8, after unit shards exist |
@@ -39,6 +39,7 @@ Cross-reference to the build plan. Report 03 sequences six stages and names the 
 - Recommendation (section 6): option D, a scoped-deep plus persisted-graph architecture built on a dense-identity graph core. Concretely: replace text identity with a structural identity (family, parent id, ordinal) that materialises canonical text only at the public boundary; make MIR lowering, CFG and local domains per-function and parallel with arena storage; persist per-package graph shards keyed by the existing content digests; join across shards on demand for the interprocedural stages. This is a re-architecture of the Rust graph stages, not a rewrite into another language, because they are already Rust and the non-Rust part is the fast part.
 - Acceptance gate (section 7): a forced `calls` scan of the full 4,752-file backend completes under 300 s wall at 12 threads with peak tree RSS under 12 GB, with byte-identical `polint check` output across cold, warm and shuffled provider order, verified by the probe commands given. Intermediate gates are stated per workstream so progress is measurable before the final gate can be attempted.
 - Secondary, independent, small: the rule-host store key hashes the `CARGO_HOME` path string even though the cargo config files under it are already hashed by content (`crates/polint/src/cache/rules_store.rs:797-806` versus `:827-834`, helper at `:1098-1110`). Dropping the path line turns a 193 s rule-pack compile into a 5 s store restore on every fresh-container CI run (benchmark report, section 4.2). It is workstream W0 in section 8.
+- The nine questions the first draft left open were researched afterwards (Resolved Questions): eight are resolved with evidence, and one owner decision remains, how the acceptance-gate runner is provisioned, because it turns on spend and a private-repository token in a public repository's workflows rather than on anything the code can decide.
 - The TypeScript type sidecar that landed as PR #121 is orthogonal: it adds a typed resolution tier feeding `polint.refined_calls` and costs 13.4 percent of pipeline wall on a 265-file repository (`research/ts-type-sidecar/measurement.md` on that branch). It does not touch `semantic_mir`, `cfg` or `abstract_domains`, so it neither causes nor fixes the wall; section 9 positions it.
 
 ## 1. Method and starting position
@@ -267,7 +268,7 @@ Infer keeps per-procedure summaries as blobs in an SQLite database in WAL mode, 
 
 Souffle compiles Datalog to a relational algebra machine and then to C++ with OpenMP, stores relations in "efficient parallel variations of B-trees and Tries", and selects indexes by a Dilworth-based minimal cover (https://souffle-lang.github.io/pdf/cav16.pdf); the data-structure choice is per relation, B-tree by default, brie for dense low-arity relations, union-find for equivalence relations (https://souffle-lang.github.io/relations). Doop on LogicBlox stored "domain values as integers" and found explicit relations "outperform BDDs by an order of magnitude" (https://yanniss.github.io/doop-oopsla09prelim.pdf). The CAV 2016 numbers for OpenJDK points-to are 35 s and 8.5 GB in Souffle against 30 min in bddbddb and over 6 h in SQLite (https://souffle-lang.github.io/pdf/cav16.pdf).
 
-**Transferable.** Three ideas, all of which W5 to W8 adopt: identity is an integer and the key is a structured term, never a composed string (Glean, Doop); facts carry an owner unit so incremental re-scan is "hide these units, append a layer" (Glean's 7 percent overhead is the budget to beat); per-relation indexes chosen from access patterns rather than one generic map (Souffle). Infer's schedule replay is the model for W6's deterministic merge order. The cost against polint's model is the `AnalysisHost` accessor shape (Q2) and the `FactMetaStore`, which today is the only index and is keyed by the text identity.
+**Transferable.** Three ideas, all of which W5 to W8 adopt: identity is an integer and the key is a structured term, never a composed string (Glean, Doop); facts carry an owner unit so incremental re-scan is "hide these units, append a layer" (Glean's 7 percent overhead is the budget to beat); per-relation indexes chosen from access patterns rather than one generic map (Souffle). Infer's schedule replay is the model for W6's deterministic merge order. The cost against polint's model is the `AnalysisHost` accessor shape (crate-private, so free to change: Q2) and the `FactMetaStore`, which today is the only index and is keyed by the text identity.
 
 ### 4.3 In-memory graph layout: Joern's move from OverflowDB to flatgraph
 
@@ -335,7 +336,7 @@ Tip and Palsberg state that "algorithms such as RTA that use a single set for th
 
 **What the sources say.** SQLite performs "50,000 or more INSERT statements per second" but "only a few dozen transactions per second", so inserts must be batched in one transaction (https://www.sqlite.org/faq.html#q19); WAL mode is "significantly faster in most scenarios" but "does not work well for very large transactions. For transactions larger than about 100 megabytes, traditional rollback journal modes will likely be faster" (https://www.sqlite.org/wal.html); rusqlite's `prepare_cached` reuses statement handles (https://docs.rs/rusqlite/latest/rusqlite/struct.Connection.html#method.prepare_cached). DuckDB is an embedded columnar engine with out-of-core joins and aggregates, but "if multiple blocking operators appear in the same query, DuckDB may still throw an out-of-memory exception" (https://duckdb.org/docs/current/guides/performance/how_to_tune_workloads.html). redb is a pure-Rust copy-on-write B+tree store with a single writer and concurrent readers (https://docs.rs/redb/latest/redb/). Arrow's columnar layout provides O(1) random access and relocation "without pointer swizzling", and dictionary encoding as an integer index array plus a dictionary (https://arrow.apache.org/docs/format/Columnar.html).
 
-**Transferable.** For W7's shards the evidence favours an explicit columnar blob per unit (dictionary-encoded ids, one file, no per-row SQL) with SQLite for manifests and cross-unit indexes; this is Q3's default and the reason option C's row-per-fact store is not recommended for millions of rows per run. The 100 MB transaction note bounds how a fact-row store would have to be chunked if Q3 chose otherwise.
+**Transferable.** For W7's shards the evidence favours an explicit columnar blob per unit (dictionary-encoded ids, one file, no per-row SQL) with SQLite for manifests and cross-unit indexes; this is Q3's answer and the reason option C's row-per-fact store is not recommended for millions of rows per run. The 100 MB transaction note bounds how a fact-row store would have to be chunked if Q3 chose otherwise.
 
 ### 4.13 Synthesis: cause to reference
 
@@ -475,6 +476,8 @@ What the consumer can do before any of this lands, restated from the benchmark r
 
 What is explicitly not recommended: a query engine as the first move (B), the store as the in-run representation (C), a rewrite of either sidecar, and any change to the public fact views or the `evidence_v1` envelope.
 
+Decisions taken by research after the first draft (Resolved Questions): W7 and W8 are in scope for this track but are not prerequisites for the cold gate (Q1); the analysis traits are crate-private and change freely, with the SDK views and `evidence_v1` frozen (Q2); a unit shard is one binary columnar blob in the layer cache with SQLite for manifests and the cross-unit index, layout locked by the SUM-03 benchmark (Q3); domains leave the `calls` path because no `calls` consumer reads the one summary row they influence (Q4); the domain solver gets per-function caps with a per-run total (Q5); the TS unit is the `tsconfig` project, or the file when no project claims it (Q7); the wall gates bind on the benchmark host and the memory gate is sized for the 16 GB runner class (Q9). Provisioning the gate runner is the one decision left to the owner (Q6).
+
 ## 7. Acceptance targets and the probes that verify them
 
 Every gate below is a command plus a threshold. The environment is the one the benchmark report used (16 cores, 30 GB, `RAYON_NUM_THREADS=12 POLINT_JOBS=12 GOMAXPROCS=12`, Go toolchain on `PATH`, `POLINT_CACHE_STORE` unset). Peak RSS is the whole process tree, sampled; the benchmark's `runner.py` is not committed, so the probes use `/usr/bin/time -v` on the parent and `POLINT_MEMORY_CEILING_MB` as the in-process net, and state that the sidecar's peak is reported separately by its own phase rows. The scratch checkout and the `[languages.go]` block are the ones the benchmark report's section 5.3 describes; the consumer repository is never named in any committed artifact.
@@ -522,7 +525,7 @@ Digest comparison uses `.scale-envelope/digests.py`, which extracts the `provide
 | G9 warm re-scan after one changed file | W7, W8 | `probe` twice, editing one Go file between runs, cache kept | second run under 30 s; only the changed unit and its dependents recomputed, asserted by shard manifest (hypothesis until W7 exists) |
 | G10 memory envelope reporting | W9 | `POLINT_MEMORY_CEILING_MB=8192 probe full-calls calls <core>` | run finishes with a `polint/resource-budget` diagnostic rather than a kill; the capabilities that degraded are listed |
 
-The thresholds for G2, G3, G4 and G6 are defended as follows. The upstream pipeline through `module_topology` is 13.6 s on the full backend (benchmark report, section 5.3); the sidecar is overlapped; the linear parts of lowering are bounded by parsing, which is 5.8 s for the same files. A linear, parallel `semantic_mir` should therefore land within a small multiple of the syntax stage, and 60 s is a ten-times safety margin. The `cfg` gate follows from the dominator algorithm change being near-linear. The 300 s / 12 GB end-to-end gate is the benchmark report's own budget and the 16 GB CI runner class named in report 02's hygiene table, with headroom for the sidecar's 7 GB heap, which runs in a separate process and is not counted in polint's RSS but is counted in the tree.
+The thresholds for G2, G3, G4 and G6 are defended as follows. The upstream pipeline through `module_topology` is 13.6 s on the full backend (benchmark report, section 5.3); the sidecar is overlapped; the linear parts of lowering are bounded by parsing, which is 5.8 s for the same files. A linear, parallel `semantic_mir` should therefore land within a small multiple of the syntax stage, and 60 s is a ten-times safety margin. The `cfg` gate follows from the dominator algorithm change being near-linear. The 300 s / 12 GB end-to-end gate is the benchmark report's own budget and the 16 GB CI runner class named in report 02's hygiene table, with headroom for the sidecar's 7 GB heap, which runs in a separate process and is not counted in polint's RSS but is counted in the tree. For reference, GitHub's standard hosted Linux runners are 4 vCPU and 16 GB for public repositories and 2 vCPU and 8 GB for private ones, and larger runners are offered at 8 vCPU / 32 GB and 16 vCPU / 64 GB (https://docs.github.com/en/actions/reference/runners/github-hosted-runners, https://docs.github.com/en/actions/reference/runners/larger-runners); the memory gate is the one that ports across those classes, and the wall gates bind on the benchmark host until W9's job exists (Q9).
 
 ## 8. Roadmap: dependency-ordered workstreams
 
@@ -566,7 +569,7 @@ Hash maps are lookup-only, as the repository's rule already states for the X6 ch
 
 ### W3. Demand at fact-family granularity, and an honest domain solver
 
-- Build: the capability closure (`analysis_kernel/provider.rs:1094-1130`) seeds and closes over families, not providers, so that `calls` pulls `summary_call` and whatever `summary_call` reads, and not `domain_observations` unless the summaries builder reads them for that family; verify by reading `summaries/builder.rs` and `summaries/closure.rs` which families consume observations, and split `direct_summaries` outputs into separately demandable families if needed. In the same workstream, make `IdeDomainSolver` per-function by default (intraprocedural, which is what the L3 domains are documented as in report 02 section 3.2) with the interprocedural call-string mode behind the summaries request, and replace the fixed `max_iterations: 10_000` (`domains/solver.rs:84`) with a per-function budget that reports which functions were cut. Rules that request `control_flow` for guard policies continue to get domains.
+- Build: the capability closure (`analysis_kernel/provider.rs:1094-1130`) seeds and closes over families, not providers, so that `calls` pulls `summary_call` and whatever `summary_call` reads, and not `domain_observations`. The reading is done (Q4): observations reach only `build_control_effects`, where they set `DoesNotReturn` (`summaries/builder.rs:420-431`), and `refined_calls` consumes `CallEffects` summaries only (`refined_calls/summaries.rs:19-20`), so the family split is `summary_control` (needs domains) versus the other four (do not), declared per output family in the manifest rather than per provider. In the same workstream, make `IdeDomainSolver` per-function by default (intraprocedural, which is what the L3 domains are documented as in report 02 section 3.2) with the interprocedural call-string mode behind the summaries request, and replace the fixed `max_iterations: 10_000` (`domains/solver.rs:84`) with a per-function iteration cap plus a per-run total, the convention the summaries closure and the points-to solver already use (Q5), reporting which functions were cut. Rules that request `control_flow` for guard policies continue to get domains.
 - Why: the largest fact family on every measured run is output from a solver that had already given up; and `calls` should cost a call graph.
 - Probe: G5; fact counts on the 45-file and 885-file scopes; the budget row in `polint unknowns`.
 - Depends on: nothing for the closure change; W1 for the per-function solver to be measured fairly.
@@ -609,7 +612,7 @@ W6's determinism rules:
 
 ### W7. Persisted unit shards
 
-- Build: a unit's graph serialises to one shard file under `.polint/cache/layers` keyed by the unit's input digests (the layer cache's `LayerKey` and `InputSnapshot` machinery, `analysis_kernel/incremental/keys.rs`, `layer_cache.rs`); a cold run writes shards, a warm run loads unchanged shards and re-lowers only changed units; Phase 66's "validated fact and graph ingest" and Phase 67's summary manifests attach here, with SQLite used for manifests and cross-unit indexes and the shard payloads as columnar blobs. The 64 MB manifest and payload ceilings in `layer_cache.rs:31-32` are revisited for unit shards.
+- Build: a unit's graph serialises to one shard file under `.polint/cache/layers` keyed by the unit's input digests (the layer cache's `LayerKey` and `InputSnapshot` machinery, `analysis_kernel/incremental/keys.rs`, `layer_cache.rs`); a cold run writes shards, a warm run loads unchanged shards and re-lowers only changed units; Phase 66's "validated fact and graph ingest" and Phase 67's summary manifests attach here, with SQLite used for manifests and cross-unit indexes and the shard payloads as one binary columnar blob per unit (Q3). The layer cache's `serde_json::to_vec` payload encoding (`layer_cache.rs:218`, `:385`) is replaced for shard payloads, and the 64 MB manifest and payload ceilings (`:31-32`) are revisited; blob-in-cache versus adjacent content-addressed file is decided by the SUM-03 benchmark before the layout is locked. W7 and W8 are in scope for this track (Q1) but G6 and G8 do not depend on them.
 - Why: warm review; and the precondition for cross-unit joins that do not need every unit in memory.
 - Probe: G9; the stale-reuse mutation fixtures report 03 names (VAL-04).
 - Depends on: W6.
@@ -623,7 +626,7 @@ W6's determinism rules:
 
 ### W9. Envelope enforcement and the consumer gate
 
-- Build: extend `ResourceEnvelope` (`analysis_kernel/resource.rs`) with a wall-clock budget and a per-unit memory check; add a manual `workflow_dispatch` job (no schedule) that runs the G6 and G8 probes against a private scratch checkout on a self-hosted runner and uploads the stage rows as artifacts; the committed artifact carries counts and timings only.
+- Build: extend `ResourceEnvelope` (`analysis_kernel/resource.rs`) with a wall-clock budget and a per-unit memory check; add a manual `workflow_dispatch` job (no schedule) that runs the G6 and G8 probes against a private scratch checkout and uploads the stage rows as artifacts; the committed artifact carries counts and timings only. The job is written to run unchanged on a larger hosted runner or a self-hosted one; which is provisioned is Q6, and until then the probes run locally and their results are committed as a report (Q6's default).
 - Why: report 03 Stage 3's "envelope enforced with reported degradation"; and the acceptance gate needs a place to run.
 - Probe: G10; G6 and G8 as the job's pass condition.
 - Depends on: W6 for the per-unit check; nothing for the workflow itself.
@@ -693,6 +696,7 @@ Validated in this session:
 - The summaries builder's use of domain observations was checked (section 3.4), which turns W3 from a hypothesis into a mechanical change.
 - The public contract boundary was checked against `docs/facts/` and the SDK sources (section 5 preamble), so the "no SDK break" claim for options A and D rests on the documented API, not on assumption.
 - External claims in section 4 were fetched from the primary URL given; each unverifiable claim is marked in place.
+- For the resolved questions: the crate's public surface was read from `lib.rs` and `docs/API-VISIBILITY-PLAN.md` (Q2); every non-test consumer of domain observations and control summaries was located by grep and read (Q4); every provider's `cache_policy` and the layer cache's payload encoding were read (Q1, Q3); the budget conventions of the summaries closure, the points-to solver and the data-flow search were read (Q5); the TS lifecycle on the sidecar branch was read (Q7); GitHub's runner specifications were fetched from the reference pages (Q9).
 
 Not validated, and stated as such:
 
@@ -700,6 +704,7 @@ Not validated, and stated as such:
 - `polint.type_value_alias`, `polint.semantic_graph`, `polint.symbol_graph` on TS, and the Rust-side lowering of sidecar rows inside `polint.go.semantic` were not traced line by line; section 3.9 records their measured cost and the causes they visibly share.
 - The claim that `summary_call` is unchanged when domains are absent is a reading of the builder, not a digest comparison; Q4 keeps the oracle as arbiter.
 - The 12 GB and 300 s gate thresholds are defended by ratio arguments from measured stages, not by a model of the re-architected pipeline; the intermediate gates exist so that the final gate is approached with measurements.
+- The SUM-03 layout benchmark (Q3) and the share of consumer TS files outside any `tsconfig` project (Q7) were not run or measured.
 - Whether the Go package DAG is the right unit for every consumer layout (for example generated code outside the module roots, or `go.work` synthesis) was not examined; the benchmark report notes polint writes a synthetic `go.work` for the consumer's seven modules.
 
 ## References
@@ -746,6 +751,12 @@ For future verification, every code location this document relies on, grouped by
 | contract | `docs/facts/capability-plans.md`; `docs/facts/calls.md:11-13`; `docs/facts/evidence.md:55`; `docs/facts/control-flow.md:120-122`; `sdk/facts.rs:490-566`; `sdk/policy.rs:1029-1063` | what is public |
 | W0 | `cache/rules_store.rs:797-806`, `:827-834`, `:1098-1110`, `:1190-1197` | path digest of cargo home; config content hashing; helper; shareability |
 | envelope | `analysis_kernel/resource.rs:1-90` | memory ceiling at provider boundaries |
+| Q1 | `analysis_kernel/provider.rs:1328`, `:1347`, `:1369-1930`; `cache/analysis_cache_adapter.rs:154-155` | only syntax providers persist; every deep provider is `InMemoryDerived` |
+| Q2 | `lib.rs:9-12`, `:19-47`; `docs/API-VISIBILITY-PLAN.md` | analysis modules are `pub(crate)`; only `runner`, `sdk`, `rule` are public |
+| Q3 | `analysis_kernel/incremental/layer_cache.rs:31-32`, `:218`, `:385`; `.planning/REQUIREMENTS.md:73`, `:100-106` | JSON payloads, 64 MB ceilings; PERF-02, SUM-01 to SUM-07 |
+| Q4 | `summaries/builder.rs:420-431`; `refined_calls/summaries.rs:19-20`, `:167`; `data_flow/summary_edges.rs:433`, `:548` | observations set `DoesNotReturn` only; refined calls read `CallEffects` only; other mentions are tests |
+| Q5 | `summaries/closure.rs:51`, `:116-125`; `solver/budget.rs:23-50`; `ifds/mod.rs:31-43` | per-SCC, per-sub-domain and per-query budget conventions |
+| Q7 | `ts/types/lifecycle.rs:32`, `:40`, `:144-165` (on `origin/feat/ts-type-sidecar`); `summaries/scc.rs:3-32` | nearest-tsconfig partition with an uncovered-file list; Tarjan SCC scheduler |
 | cache keys | `analysis_kernel/incremental/keys.rs:51-62`; `analysis_api/digest/keys.rs:9-21`; `incremental/layer_cache.rs:31-32` | layer key fields; layer kinds; payload ceiling |
 
 ## Appendix B. Numbers quoted from the benchmark report
@@ -768,49 +779,79 @@ For future verification, every code location this document relies on, grouped by
 | frontend | `semantic_mir` 203 s for 2,381 files; `symbol_graph` 37.3 s; all deep capabilities time out | 5.4, A.6 |
 | busy cores | at most 8.12 of 16 | 2 |
 
-## Open Questions
+## Resolved Questions (researched)
+
+The nine questions the first commit left open were researched against the code at `686461be`, the sibling strategy reports, the v2.0 requirements, and external primary sources. Eight are resolved here; each carries the option chosen, the evidence, what it costs to reverse, and a confidence label. One remains under Open Questions because it turns on spend and security posture, not on evidence.
 
 Q1. Is a warm re-scan (W7, W8) in scope for this track, or is the cold full-application gate (G6, G8) the whole commission?
 Context: W1 to W6 deliver the cold gate; W7 and W8 are what report 03 calls the Stage 2 keystone and they are where the persisted-store decisions live. Sequencing them here commits the store format.
 Options: (a) cold gate only, W7 and W8 stay in Stage 2 as written; (b) include W7 and W8 so that the unit shard is designed once; (c) include W7 only.
-Default if unanswered: (b), because W6's unit graph is the shard format either way and designing it twice is the more expensive path.
+Answer: (b) — because nothing deep is persisted today and the unit graph W6 builds is the shard's in-memory form, so designing it once is the only path that does not do the work twice. The default is confirmed.
+Evidence: every deep provider from `polint.module_graph` to `polint.metrics` declares `CachePolicy::InMemoryDerived` (`analysis_kernel/provider.rs:1369-1930`); only the two syntax providers use the file fact cache (`:1328`, `:1347`) and the layer cache is wired to `GoSyntax` and `TsSyntax` layers alone (`cache/analysis_cache_adapter.rs:154-155`). So "warm" means nothing for the deep stack until a shard exists. Report 03 names Phase 67 "the keystone" and report 05 names summary-persisted, frontier-driven analysis "the single feature that strengthens" the weakest moat (`research/strategy/05-moat-economics.md:14`, `:61-63`); its requirements SUM-01 to SUM-07 and REV-01 to REV-03 are all unchecked (`.planning/REQUIREMENTS.md:100-114`). W7 and W8 are not prerequisites for G6 or G8, which W1 to W6 must pass on their own, so including them adds scope without delaying the cold gate.
+Reversal cost: low. If W7 and W8 are later moved back to Stage 2, nothing in W1 to W6 changes; only the shard serialisation in W7 would wait.
+Confidence: high.
 
 Q2. Which internal traits may change without a decision record?
 Context: `AnalysisHost` (`analysis_neutral/host.rs`) exposes `&[Fact]` accessors that every provider and the SDK views use; W6 replaces them with unit-aware iterators. `docs/facts/` says raw provider structures are not public, but rule-host binaries compiled against `polint 0.3.x` link the crate.
 Options: (a) treat `AnalysisHost` and `AnalysisDb` internals as private and change them freely, bumping the crate minor; (b) require a written decision per report 03 rule 5 for each trait change; (c) freeze the accessors and adapt behind them.
-Default if unanswered: (a), with the SDK views (`sdk/facts.rs`, `sdk/policy.rs`) and `evidence_v1` frozen.
+Answer: (a) — because the traits are already crate-private and cannot be named by any downstream crate, so there is no contract to break. The default is confirmed and its "bump the crate minor" clause is dropped: no public item changes.
+Evidence: `crates/polint/src/lib.rs:9-12` exports only `runner`, `sdk` and the `rule` macro; `analysis`, `analysis_api`, `analysis_kernel`, `analysis_neutral`, `core`, `internal_core` and `ir` are `pub(crate) mod` (`lib.rs:19-47`). `docs/API-VISIBILITY-PLAN.md` records this as the baseline shape and notes that `unreachable_pub` fires for `pub` items inside those modules precisely because "no downstream crate can name them through `lib.rs`". Rule-host binaries link the crate but reach it through `polint::sdk` and the `#[polint::rule]` macro only, and the rule pack pins its own `polint` version (`.polint/rules/Cargo.toml`, benchmark report section 2), so a host is rebuilt against whatever version it names. Report 03 rule 5 applies to "on-disk schemas, public SDK types, wire protocols"; `AnalysisHost` is none of those. The SDK views (`sdk/facts.rs:490-566`, `sdk/policy.rs`) and `evidence_v1` stay frozen, as the default said.
+Reversal cost: none; a decision record can be added at any time if a trait ever becomes public.
+Confidence: high.
 
 Q3. Shard storage: columnar blobs in the layer cache, SQLite tables, or both?
 Context: the store is schema v5 with two provider mirrors and holds no facts today; Phase 66 planned validated row ingest; the layer cache already persists payloads by digest with a 64 MB ceiling.
 Options: (a) unit shards as blobs in the layer cache, SQLite for manifests and cross-unit indexes only; (b) all facts as SQLite rows (option C); (c) a columnar file format per unit with an index in SQLite.
-Default if unanswered: (a), measured against (c) on write cost before W7 lands.
+Answer: (a) with (c)'s encoding — one compact binary columnar blob per unit in the layer cache, SQLite for manifests and the cross-unit index — because that is what the repository's own SUM-03 rule requires to be benchmarked and what every scaled reference does. The default's "measured against (c)" is kept: the SUM-03 benchmark decides blob-in-cache versus adjacent file, not this document.
+Evidence: the layer cache serialises every payload with `serde_json::to_vec` (`analysis_kernel/incremental/layer_cache.rs:218`, `:385`) under a 64 MB payload ceiling (`:31-32`); a JSON row per fact at 2.9 million facts (benchmark report, section 5.6) would exceed both the ceiling and the memory the shard exists to save, so the encoding must change even under (a). The local-store research already decided SQLite is the canonical store for manifests, identities and graph queries (`research/local-semantic-store/FINAL-REPORT.md`, "Recommendation"), and SUM-03 says "SQLite BLOBs, adjacent content-addressed files, or a hybrid must be benchmarked for DB size, WAL growth, crash behavior, restore behavior, and read latency" before the layout is locked (`.planning/REQUIREMENTS.md:102`); PERF-02 requires bounded, sorted ingest batches (`:73`). Externally, Infer keeps per-procedure summaries as blobs in an SQLite database and Glean stores facts as compact terms in RocksDB rather than rows (section 4.2), Joern abandoned transparent paging for an explicit columnar layout (section 4.3), and SQLite's own guidance bounds a row-per-fact design at about 100 MB per transaction (section 4.12). Option (b) is option C of section 5 and was rejected there on write cost and batch shape.
+Reversal cost: medium. The blob encoding sits behind the layer cache's payload boundary and can be swapped by bumping `LAYER_CACHE_MANIFEST_SCHEMA`; moving to row-per-fact later would rewrite the consumers, which is why it is not the choice.
+Confidence: medium-high; the SUM-03 benchmark is the remaining check.
 
 Q4. May `calls` stop running `abstract_domains` even if that changes which `summary_call` rows exist?
 Context: the summaries builder passes observations only to `build_control_effects`, which feeds `summary_control` (`summaries/builder.rs:133-147`, `:347`); `summary_call` does not read them, and `type_value_alias` declares but never reads them. Removing domains from the `calls` path therefore should not change any refined call edge, but the manifest declarations say otherwise and the digest oracle is the arbiter.
 Options: (a) yes, and report the precision change in the ai-friendly output; (b) no, keep domains on the path but make them per-function and cheap; (c) split `summary_call` into a domains-free and a domains-refined family and let demand choose.
-Default if unanswered: (a), with (c) as the fallback if the oracle shows any refined-call digest change.
+Answer: (a) — because the only thing observations change is the `DoesNotReturn` exit kind of `summary_control`, and no consumer on the `calls` path reads `summary_control`. The default is confirmed; the fallback to (c) is withdrawn because the evidence no longer supports a refined-call digest change.
+Evidence: inside `build_control_effects` the observations are consulted once, to mark a function `DoesNotReturn` when every exit block's entry is observed `unreachable` (`summaries/builder.rs:420-431`). `refined_calls` reads summary facts filtered to `SummaryDomainKind::CallEffects` (`refined_calls/summaries.rs:19-20`); its only mention of `ControlEffects` is a test asserting that a control summary creates no edge (`:167`). `data_flow`'s only `ControlEffects` mention is inside its test module (`data_flow/summary_edges.rs:548`; tests begin at `:433`), and `policy_queries.rs`, `reachability` and `evidence` contain no reference to `ControlEffects` or `DoesNotReturn`. A `calls` run without domains therefore produces byte-identical `summary_call`, `refined_call_edges` and diagnostics; the one row that changes is `summary_control`'s exit set, which `control_flow` and `dataflow` requests still receive because W3's family closure keeps domains on those paths. The digest oracle (G1, G5) remains the acceptance check.
+Reversal cost: low. If the oracle ever shows a `refined_calls` digest change, (c) is a one-manifest split.
+Confidence: high.
 
 Q5. Budget semantics for the domain solver.
 Context: today one global counter of 10,000 iterations marks every function `BudgetExceeded` once tripped; W3 proposes per-function budgets.
 Options: (a) per-function iteration cap with a per-run total; (b) per-function only; (c) keep global but raise it and report.
-Default if unanswered: (a).
-
-Q6. Where does the acceptance gate run?
-Context: the consumer repository is private; the gate needs a self-hosted or manually triggered runner with the checkout; no scheduled CI is permitted.
-Options: (a) manual `workflow_dispatch` on a self-hosted runner with the scratch checkout, artifacts limited to counts and timings; (b) local-only, recorded in a committed report with the probe commands; (c) both.
-Default if unanswered: (c).
+Answer: (a) — because it is the convention every other bounded stage in the engine already follows. The default is confirmed.
+Evidence: the summaries closure budgets per SCC and counts `budget_exceeded_sccs` for the run (`summaries/closure.rs:51`, `:116-125`, `:278-326`); the points-to and Go RTA solvers carry per-sub-domain budget bags that latch `BudgetExceeded` "honestly (D-13) rather than looping unbounded" (`solver/budget.rs:23-50`); data-flow search budgets are per query (`ifds/mod.rs:31-43`). A per-function cap stops one large function from starving every other function, which is what the single global counter does today (`domains/solver.rs:146-157`, `:662-690`), and a per-run total keeps the stage inside the resource envelope. Option (c) buys more facts that section 3.4 shows nobody reads.
+Reversal cost: none beyond a constant and a diagnostic label.
+Confidence: high.
 
 Q7. Is the TS type sidecar's `tsconfig` project the TS unit for W6, or is the unit the file?
 Context: Go's unit is the package and is acyclic by construction; TS projects can contain module cycles and files may belong to no project.
 Options: (a) project as unit with intra-project SCCs handled by the closure; (b) file as unit with cross-file joins everywhere; (c) project when present, file otherwise.
-Default if unanswered: (c).
+Answer: (c) — because the sidecar lifecycle already discovers exactly this partition and reports the remainder. The default is confirmed.
+Evidence: on `origin/feat/ts-type-sidecar`, `ts/types/lifecycle.rs` walks every discovered TS/JS file to its nearest `tsconfig.json` (`:144-165`, reusing `ts::module_graph::nearest_tsconfig_path`), keeps the sorted, deduplicated project list (`:32`) and the list of files "with no tsconfig above them" (`:40`), and the sidecar skips a project the scan's files do not belong to with a diagnostic (`research/ts-type-sidecar/measurement.md`, "project-ownership skip"). The design record assigns ownership of tsconfig discovery to `ts/module_graph` and has the sidecar consume "scoped project units" (`research/ts-type-sidecar/plan.md`, decision 4 and Q23). Intra-project cycles are handled by the existing Tarjan SCC scheduler (`analysis_neutral/summaries/scc.rs:3-32`). Externally, gopls uses the package and go/analysis facts flow in import order (section 4.5), and SCIP indexes per document but merges by concatenation (section 4.1), which is the file-unit fallback. The risk row in section 10 already bounds the fallback at 10 percent of a repository's TS files.
+Reversal cost: low. A file unit is a degenerate project unit; moving files between the two changes shard keys, not the graph model.
+Confidence: medium-high; the share of unclaimed files on the consumer frontend is unmeasured.
 
 Q8. Does the numbering collision with `04-evaluation-as-a-weapon.md` get resolved by renaming this document or by an index note?
 Context: the series README lists reports 01 to 06; this document was commissioned as `04-full-app-deep-capability.md`.
 Options: (a) keep the name and add an index entry; (b) rename to `07-full-app-deep-capability.md`; (c) rename the evaluation report.
-Default if unanswered: (a).
+Answer: (a) — because the owner fixed the filename in the commission, and the index row plus the convention below removes the ambiguity. The default is confirmed.
+Evidence: the series was created in one commit (`952b46de`, PR #105) and 21 cross-references in `research/strategy/` and `research/README.md` say "report 04" meaning the evaluation report; none refers to this document by number. The README row for this document exists (`research/strategy/README.md:26`). Convention adopted: this document is referred to by its slug, `full-app-deep-capability`, never as "report 04"; the evaluation report keeps "report 04".
+Reversal cost: trivial; one `git mv` and one README edit if the owner prefers (b).
+Confidence: high.
 
 Q9. On which host are the G-gate thresholds binding?
 Context: the thresholds were derived on the benchmark host (16 cores, 30 GB); a 16 GB CI runner class is the target report 02 names; the probe commands pin 12 threads.
 Options: (a) the benchmark host is the reference and CI is informational; (b) a 16 GB, 8-thread runner is the reference and the thresholds are re-derived there before W1 starts; (c) both, with the stricter binding.
-Default if unanswered: (a) until W9's manual job exists, then (c).
+Answer: (a) for the wall-clock gates, with the memory gate written so that it is host-independent — because the wall gates cannot be re-derived on a host that does not exist yet, while 12 GB was chosen for the 16 GB runner class and holds on any host. The default's "then (c)" is kept for the day W9's job runs.
+Evidence: GitHub's standard hosted Linux runners are 4 vCPU and 16 GB for public repositories and 2 vCPU and 8 GB for private repositories (https://docs.github.com/en/actions/reference/runners/github-hosted-runners); larger runners are offered at 8 vCPU / 32 GB and 16 vCPU / 64 GB among other sizes (https://docs.github.com/en/actions/reference/runners/larger-runners). The consumer repository is private, so its standard runner cannot hold a 12 GB tree peak at all; the wall gate at 12 threads has no meaning on 2 or 4 vCPUs; and the benchmark host is the only machine on which every number in section 1.2 was measured. Re-deriving before W1 (option b) would delay the first workstream on a runner choice that Q6 has not made. The memory gate is the one that ports: a 12 GB tree peak fits the 16 GB standard public runner and the 32 GB larger runner with headroom for the sidecar.
+Reversal cost: low; thresholds are numbers in section 7 and are re-derived once per host, which the probe matrix already records per cell.
+Confidence: medium; the wall gates on any CI host are unmeasured until W9.
+
+## Open Questions
+
+One question survives the research pass. It is a spend and security-posture decision, not a fact this document can establish.
+
+Q6. How is the acceptance gate provisioned?
+Context: the consumer repository is private; polint is a public repository whose workflows run on standard hosted runners (`.github/workflows/ci.yml`, `bench-run.yml`, `eval-gate.yml`, all `runs-on: ubuntu-latest`; the last two are manual `workflow_dispatch` with no schedule and clone only public corpora). Running G6 and G8 from a workflow needs either a read token for the private repository stored as a secret of the public repository plus a larger hosted runner (8 vCPU / 32 GB at minimum, on the organisation's plan), or a self-hosted runner the owner operates. The technical recommendation is (c): local measurement recorded in a committed report now, the workflow when a runner exists. Whether the token and the runner spend are acceptable is not something this repository's evidence can decide.
+Options: (a) a manual `workflow_dispatch` job on a larger hosted runner with a private-repository read token as a secret of the public repository, artifacts limited to counts and timings; (b) a self-hosted runner operated by the owner, same job; (c) local-only, recorded in a committed report with the probe commands, until (a) or (b) is provisioned.
+Default if unanswered: (c); W9's workflow is written so that it runs unchanged under (a) or (b) once the owner provisions one.
