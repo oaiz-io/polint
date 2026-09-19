@@ -108,13 +108,15 @@ def read_family(directory: str, family: str, sed: str | None) -> list[str]:
     with open(path, encoding="utf-8") as handle:
         text = handle.read()
     if sed is not None:
-        text = subprocess.run(
-            ["sed", "-f", sed],
-            input=text,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout
+        finished = subprocess.run(
+            ["sed", "-f", sed], input=text, capture_output=True, text=True, check=False
+        )
+        if finished.returncode != 0:
+            raise ValueError(
+                f"{os.path.basename(sed)} failed on {family}: "
+                f"{finished.stderr.strip() or finished.returncode}"
+            )
+        text = finished.stdout
     return [line for line in text.splitlines() if line]
 
 
@@ -347,8 +349,11 @@ def main() -> int:
     if not families:
         return reject("neither directory holds a family file")
 
-    before_rows = {family: read_family(args.before, family, args.sed) for family in families}
-    after_rows = {family: read_family(args.after, family, args.sed) for family in families}
+    try:
+        before_rows = {family: read_family(args.before, family, args.sed) for family in families}
+        after_rows = {family: read_family(args.after, family, args.sed) for family in families}
+    except (OSError, ValueError) as error:
+        return reject(str(error))
     compare_column2 = not (id_only(before_rows) or id_only(after_rows))
 
     print(f"schema: {SCHEMA}  families: {len(families)}")

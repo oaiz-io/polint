@@ -244,6 +244,31 @@ class Allowlist(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
 
+    def test_a_normalisation_script_that_fails_is_rejected(self):
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        root = Path(scratch.name)
+        rows = {"Function": ["Function|file=a.go|name=f\tdeadbeef00000000"]}
+        write_dump(root / "before", rows)
+        write_dump(root / "after", rows)
+        bad = root / "bad.sed"
+        bad.write_text("s/unterminated\n", encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(FACTROWS),
+                str(root / "before"),
+                str(root / "after"),
+                "--sed",
+                str(bad),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        # A broken normalisation must not read as "the families are identical".
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("bad.sed failed", result.stderr)
+
     def test_a_malformed_allowlist_is_rejected(self):
         rows = {"Function": []}
         result = self.run_factrows(rows, rows, "family SummaryControl whatever\n")
