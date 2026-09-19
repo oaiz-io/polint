@@ -335,6 +335,14 @@ function readScopeFiles(scopeFilesPath) {
  */
 function externalMoniker(fileName, name) {
   const normalized = fileName.split(path.sep).join('/');
+  // The standard library is named as the library it is, before the package it
+  // happens to be installed under: the compiler is normally the repository's
+  // own `node_modules/typescript`, so checking the package first would report
+  // every `Array.prototype.map` call as a call into that package.
+  const base = path.basename(normalized);
+  if (/^lib\..*\.d\.ts$/.test(base) || base === 'lib.d.ts') {
+    return `lib:${base}#${name}`;
+  }
   const marker = '/node_modules/';
   const lastIndex = normalized.lastIndexOf(marker);
   if (lastIndex >= 0) {
@@ -345,10 +353,6 @@ function externalMoniker(fileName, name) {
       : segments[0];
     const subpath = tail.slice(packageName.length).replace(/^\//, '');
     return `node_modules:${packageName}${subpath === '' ? '' : `/${subpath}`}#${name}`;
-  }
-  const base = path.basename(normalized);
-  if (/^lib\..*\.d\.ts$/.test(base) || base === 'lib.d.ts') {
-    return `lib:${base}#${name}`;
   }
   return `external:${base}#${name}`;
 }
