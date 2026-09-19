@@ -1,0 +1,14 @@
+# W3 commit 0: route the SCC closure's metadata refresh to the digest recipe.
+#
+# The closure re-records the five summary families through the `AnalysisHost`
+# trait default, which writes `summary:<SummaryId>` text into the payload column.
+# Routing it to `AnalysisDb`'s FNV recipe rewrites that column on every summary
+# row and touches nothing else: no provider output digest folds
+# `FactMeta::payload_digest`, so I1a is unchanged and no digest is listed here.
+#
+# Oracle: the slot-1a dump (before) against the slot-1b dump (after).
+family SummaryControl  summary-column2
+family SummaryCall     summary-column2
+family SummaryMemory   summary-column2
+family SummaryTito     summary-column2
+family SummaryEvent    summary-column2

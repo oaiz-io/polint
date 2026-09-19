@@ -33,6 +33,22 @@ Exit codes:
   3  no sidecar process and no `polint.go.semantic` stage row: the provider
      never ran, so the cell is not measurable here
   4  the timeline or the arguments cannot be read
+
+Exit 3 is reachable only on a cell whose request does not select
+`polint.go.semantic` at all -- a shallow `--cap`. A TS-only cell is *not* one of
+them, contrary to the plan's rationale for this exit: the Go providers are
+selected on a deep request whatever the file set is, so a TS-only run still
+prints a `polint.go.semantic` stage row (with `elapsed_ms=0`, having found no Go
+files) and no sidecar process, which lands on exit 2. Either way no gate feeds a
+TS-only cell to this script, so the verdict is not wrong for any gate; the
+rationale was.
+
+The window is read off 200 ms samples, so it is only meaningful on a cell where
+the sidecar is resident for longer than that. On the gate cells it binds (the
+885-file scope and the full backend) the sidecar runs for 25 to 27 s. Pointed at
+a fixture-scale cell, where it finishes in tens of milliseconds, this exits 2 on
+a run that was perfectly healthy: that is the sampler's resolution, not a
+classification failure, and it is why no gate feeds a small cell here.
 """
 from __future__ import annotations
 

@@ -110,6 +110,108 @@ pub enum FactFamily {
 }
 
 impl FactFamily {
+    /// Every variant, in declaration order.
+    ///
+    /// The enum has no iterator; `fact_rows_dump` (the I1b oracle) walks this to
+    /// dump one file per family, so a variant added without a row here would be
+    /// invisible to the oracle. `fact_family_all_covers_every_variant` fails when
+    /// the two drift apart.
+    pub const ALL: &'static [FactFamily] = &[
+        Self::SourceFile,
+        Self::Package,
+        Self::Function,
+        Self::Import,
+        Self::BranchObligation,
+        Self::Test,
+        Self::Coverage,
+        Self::TsComponent,
+        Self::TsClass,
+        Self::StringLiteral,
+        Self::JsxAttribute,
+        Self::ResolvedImport,
+        Self::ModuleNode,
+        Self::ModuleEdge,
+        Self::WorkspaceRoot,
+        Self::TopologyPackage,
+        Self::SourceSet,
+        Self::DependencyRequirement,
+        Self::ResolvedDependencyEdge,
+        Self::ImportToPackage,
+        Self::RepoTopologyOverlay,
+        Self::Scope,
+        Self::SemanticImport,
+        Self::Export,
+        Self::Alias,
+        Self::Resolution,
+        Self::GeneratedSymbol,
+        Self::StableExport,
+        Self::Symbol,
+        Self::Definition,
+        Self::Reference,
+        Self::FileMetric,
+        Self::FunctionMetric,
+        Self::ComplexityMetric,
+        Self::Place,
+        Self::MirBody,
+        Self::MirOperation,
+        Self::CfgFunction,
+        Self::CfgNode,
+        Self::BasicBlock,
+        Self::CfgEdge,
+        Self::CfgReachability,
+        Self::CfgDominator,
+        Self::CfgPostDominator,
+        Self::CfgControlDependence,
+        Self::UnsupportedControlFlow,
+        Self::CallSite,
+        Self::CallTarget,
+        Self::UnresolvedCall,
+        Self::RefinedCallEdge,
+        Self::DataFlowNode,
+        Self::DataFlowEdge,
+        Self::DataFlowModel,
+        Self::DataFlowBudget,
+        Self::EvidenceNode,
+        Self::EvidenceEdge,
+        Self::EvidenceBundle,
+        Self::EvidencePath,
+        Self::EvidenceSlice,
+        Self::EvidenceUnknown,
+        Self::EvidenceOmittedRegion,
+        Self::EvidenceReplayKey,
+        Self::DomainObservation,
+        Self::DomainEvent,
+        Self::SummaryControl,
+        Self::SummaryCall,
+        Self::SummaryMemory,
+        Self::SummaryTito,
+        Self::SummaryEvent,
+        Self::ExtensionFact,
+        Self::Entrypoint,
+        Self::TrustBoundary,
+        Self::DispatchEdge,
+        Self::UnresolvedFramework,
+        Self::Type,
+        Self::NarrowedType,
+        Self::Value,
+        Self::AllocationToken,
+        Self::AccessPath,
+        Self::PointsToConstraint,
+        Self::PointsToSet,
+        Self::AliasAnswer,
+        Self::AdaptationModel,
+        Self::SolverDerivedEdge,
+        Self::TypeValueAliasEvent,
+        Self::MirStatement,
+        Self::MirTerminator,
+        Self::UnsupportedSemantic,
+        Self::GoSemantic,
+        Self::TsObjectModel,
+        Self::Identity,
+        Self::Reachability,
+        Self::SemanticGraph,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Self::SourceFile => "SourceFile",
@@ -458,10 +560,24 @@ impl FactMetaStore {
 
     /// Iterates metadata rows for one fact family without scanning unrelated families.
     pub fn family_rows(&self, family: FactFamily) -> impl Iterator<Item = &FactMeta> {
+        self.family_rows_with_run_id(family)
+            .map(|(_, metadata)| metadata)
+    }
+
+    /// [`family_rows`](Self::family_rows) with each row's run id.
+    ///
+    /// The run id is the producing fact's own dense id (a `SummaryId` for the
+    /// summary families, `core/db.rs`'s `refresh_summary_metadata`), which is the
+    /// only exact join back to the fact behind a metadata row. `fact_rows_dump`
+    /// needs it to render the plaintext parts and attributes columns of I1b.
+    pub fn family_rows_with_run_id(
+        &self,
+        family: FactFamily,
+    ) -> impl Iterator<Item = (u64, &FactMeta)> {
         self.rows
             .get(&family)
             .into_iter()
-            .flat_map(|rows| rows.rows().map(|(_, metadata)| metadata))
+            .flat_map(|rows| rows.rows())
     }
 }
 
@@ -561,6 +677,68 @@ fn push_decimal(buffer: &mut String, value: usize) {
 mod tests {
     use super::*;
     use crate::internal_core::stable_key_for_test;
+
+    /// `FactFamily::ALL` must list every variant exactly once.
+    ///
+    /// The enum has no derived iterator and no stable `variant_count`, so the
+    /// count comes from the declaration itself: the test reads this file and
+    /// counts the bare variant lines of the `enum FactFamily` body. A variant
+    /// added without a row in `ALL` would otherwise be dumped by no oracle at
+    /// all, since `fact_rows_dump` walks `ALL` and nothing else.
+    #[test]
+    fn fact_family_all_covers_every_variant() {
+        let source = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/analysis_api/metadata.rs"),
+        )
+        .expect("read this source file");
+        let body = source
+            .split_once("pub enum FactFamily {")
+            .expect("the enum declaration")
+            .1
+            .split_once("\n}")
+            .expect("the enum body ends at a column-zero brace")
+            .0;
+        let declared: Vec<&str> = body
+            .lines()
+            .map(str::trim)
+            .filter(|line| {
+                line.ends_with(',')
+                    && line[..line.len() - 1]
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric())
+                    && line.starts_with(|character: char| character.is_ascii_uppercase())
+            })
+            .collect();
+
+        assert_eq!(
+            FactFamily::ALL.len(),
+            declared.len(),
+            "FactFamily::ALL has {} entries for {} declared variants",
+            FactFamily::ALL.len(),
+            declared.len()
+        );
+        let labels: BTreeMap<&str, usize> =
+            FactFamily::ALL
+                .iter()
+                .enumerate()
+                .fold(BTreeMap::new(), |mut acc, (index, family)| {
+                    acc.insert(family.label(), index);
+                    acc
+                });
+        assert_eq!(
+            labels.len(),
+            FactFamily::ALL.len(),
+            "FactFamily::ALL lists a variant twice"
+        );
+        for (index, name) in declared.iter().enumerate() {
+            let variant = &name[..name.len() - 1];
+            assert_eq!(
+                FactFamily::ALL[index].label(),
+                variant,
+                "FactFamily::ALL is not in declaration order at index {index}"
+            );
+        }
+    }
 
     #[test]
     fn fact_ref_keeps_run_local_id_separate_from_stable_key() {
