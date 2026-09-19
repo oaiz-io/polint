@@ -195,9 +195,9 @@ Write `.planning/spikes/WRAP-UP-SUMMARY.md` for project history:
 </step>
 
 <step name="update_claude_md">
-## Update Project CLAUDE.md
+## Update Project AGENTS.md
 
-Add an auto-load routing line to the project's CLAUDE.md (create the file if it doesn't exist):
+Add an auto-load routing line to the project's AGENTS.md (create the file if it doesn't exist):
 
 ```
 - **Spike findings for [project]** (implementation patterns, constraints, gotchas) → `Skill("spike-findings-[project-dir-name]")`
@@ -261,7 +261,7 @@ gsd-sdk query commit "docs(spike-wrap-up): package [N] spike findings into proje
 **Skill:** `./.claude/skills/spike-findings-[project]/`
 **Conventions:** `.planning/spikes/CONVENTIONS.md`
 **Summary:** `.planning/spikes/WRAP-UP-SUMMARY.md`
-**CLAUDE.md:** routing line added
+**AGENTS.md:** routing line added
 
 The spike-findings skill will auto-load in future build conversations.
 ```
@@ -300,7 +300,7 @@ After the summary, present next-step options:
 - [ ] Reference files are implementation blueprints with Requirements, How to Build It, What to Avoid, Constraints
 - [ ] `.planning/spikes/CONVENTIONS.md` created or updated with recurring stack/structure/pattern choices
 - [ ] `.planning/spikes/WRAP-UP-SUMMARY.md` written for project history
-- [ ] Project CLAUDE.md has auto-load routing line
+- [ ] Project AGENTS.md has auto-load routing line
 - [ ] Summary presented
 - [ ] Next-step options presented (including frontier spike exploration via `/gsd:spike`)
 </success_criteria>

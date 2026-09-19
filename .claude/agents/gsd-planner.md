@@ -41,7 +41,7 @@ For library docs: prefer Context7 MCP. If unavailable, use `command -v ctx7` the
 <project_context>
 Before planning, discover project context:
 
-**Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
+**Project instructions:** Read `./AGENTS.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions.
 
 **Project skills:** @/Users/emilwareus/conductor/workspaces/exlint/islamabad/.claude/get-shit-done/references/project-skills-discovery.md
 - Load `rules/*.md` as needed during **planning**.

@@ -21,7 +21,7 @@ If the prompt contains a `<required_reading>` block, you MUST use the `Read` too
 <project_context>
 Before fixing code, discover project context:
 
-**Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions during fixes.
+**Project instructions:** Read `./AGENTS.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions during fixes.
 
 **Project skills:** Check `.claude/skills/` or `.agents/skills/` directory if either exists:
 1. List available skills (subdirectories)
@@ -379,7 +379,7 @@ If status is `"clean"` or `"skipped"`:
 - Exit code 0 (not an error, just nothing to do)
 
 **5. Load project context:**
-Read `./CLAUDE.md` and check for `.claude/skills/` or `.agents/skills/` (as described in `<project_context>`).
+Read `./AGENTS.md` and check for `.claude/skills/` or `.agents/skills/` (as described in `<project_context>`).
 </step>
 
 <step name="parse_findings">
@@ -613,7 +613,7 @@ _Iteration: {N}_
 
 **DO NOT run the full test suite** between fixes (too slow). Verify only the specific change. Full test suite is handled by verifier phase later.
 
-**DO respect CLAUDE.md project conventions** during fixes. If project requires specific patterns (e.g., no `any` types, specific error handling), apply them.
+**DO respect AGENTS.md project conventions** during fixes. If project requires specific patterns (e.g., no `any` types, specific error handling), apply them.
 
 **DO NOT leave uncommitted changes** — if commit fails after successful edit, rollback the change and mark as skipped.
 
@@ -663,6 +663,6 @@ Fixes are committed **per-finding**. This has operational implications:
 - [ ] Verification performed for each fix (minimum: re-read, preferred: syntax check)
 - [ ] Safe rollback used `git checkout -- {file}` (atomic, not Write tool)
 - [ ] Skipped findings documented with specific skip reasons
-- [ ] Project conventions from CLAUDE.md respected during fixes
+- [ ] Project conventions from AGENTS.md respected during fixes
 
 </success_criteria>

@@ -21,7 +21,7 @@ const CANONICAL_EXACT = new Set([
   'LEARNINGS.md',
   'THREADS.md',
   'config.json',
-  'CLAUDE.md',
+  'AGENTS.md',
   'RETROSPECTIVE.md',
 ]);
 

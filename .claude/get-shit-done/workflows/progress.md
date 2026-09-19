@@ -90,9 +90,9 @@ Use this instead of manually reading/parsing ROADMAP.md.
 
 <step name="report">
 > ⚠️ Context authority: PROJECT.md, STATE.md, and ROADMAP.md are the authoritative sources
-> for project name, milestone, current phase, and next-step routing. CLAUDE.md ## Project
+> for project name, milestone, current phase, and next-step routing. AGENTS.md ## Project
 > blocks are a secondary config aid that may be significantly stale — do NOT use the
-> CLAUDE.md project description as a source for any progress report field.
+> AGENTS.md project description as a source for any progress report field.
 
 **Generate progress bar from `gsd-sdk query progress` / `progress.json`, then present rich status report:**
 

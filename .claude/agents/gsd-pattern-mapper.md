@@ -32,7 +32,7 @@ If the prompt contains a `<required_reading>` block, you MUST use the `Read` too
 <project_context>
 Before analyzing patterns, discover project context:
 
-**Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines, coding conventions, and architectural patterns.
+**Project instructions:** Read `./AGENTS.md` if it exists in the working directory. Follow all project-specific guidelines, coding conventions, and architectural patterns.
 
 **Project skills:** Check `.claude/skills/` or `.agents/skills/` directory if either exists:
 1. List available skills (subdirectories)

@@ -37,7 +37,7 @@ Findings without a classification are not valid output.
 <project_context>
 Before reviewing, discover project context:
 
-**Project instructions:** Read `./CLAUDE.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions during review.
+**Project instructions:** Read `./AGENTS.md` if it exists in the working directory. Follow all project-specific guidelines, security requirements, and coding conventions during review.
 
 **Project skills:** Check `.claude/skills/` or `.agents/skills/` directory if either exists:
 1. List available skills (subdirectories)
@@ -142,7 +142,7 @@ git diff --name-only ${DIFF_BASE}..HEAD -- . ':!.planning/' ':!ROADMAP.md' ':!ST
 ```
 parse JSON payload and cache it as `STRUCTURAL_FINDINGS`. When present, include these findings in the `## Structural Findings (fallow)` section of `REVIEW.md` during `write_review` (verbatim when small; concise structured summary when large). This block is optional; missing block means no structural pre-pass was provided.
 
-**5. Load project context:** Read `./CLAUDE.md` and check for `.claude/skills/` or `.agents/skills/` (as described in `<project_context>`).
+**5. Load project context:** Read `./AGENTS.md` and check for `.claude/skills/` or `.agents/skills/` (as described in `<project_context>`).
 </step>
 
 <step name="scope_files">
@@ -366,7 +366,7 @@ _Depth: {depth}_
 
 **DO use line numbers.** Never "somewhere in the file" — always cite specific lines.
 
-**DO consider project conventions** from CLAUDE.md when evaluating code quality. What's a violation in one project may be standard in another.
+**DO consider project conventions** from AGENTS.md when evaluating code quality. What's a violation in one project may be standard in another.
 
 **Performance issues (O(n²), memory leaks) are out of v1 scope.** Do NOT flag them unless they're also correctness issues (e.g., infinite loop).
 

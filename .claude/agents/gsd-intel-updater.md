@@ -89,7 +89,7 @@ EXCLUDE from counts and analysis:
 - `node_modules/`, `dist/`, `build/`, `.git/`
 
 **Count accuracy:** When reporting component counts in stack.json or arch.md, always derive
-counts by running Glob on the layout-resolved canonical locations above, not from memory or CLAUDE.md.
+counts by running Glob on the layout-resolved canonical locations above, not from memory or AGENTS.md.
 Example (standard layout): `Glob("agents/*.md")`. Example (kilo): `Glob(".kilo/agents/*.md")`.
 
 ## Forbidden Files
