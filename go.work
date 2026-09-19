@@ -1,7 +1,6 @@
 go 1.25.0
 
 use (
-	./tools/polint-go-symbols
-	./crates/polint-go/go-sidecar/polint-go-frontend
-	./crates/polint-go/go-sidecar/polint-go-symbols
+	./crates/polint/src/go-sidecar/polint-go-frontend
+	./crates/polint/src/go-sidecar/polint-go-symbols
 )
