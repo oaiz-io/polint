@@ -626,7 +626,7 @@ W6's determinism rules:
 
 ### W9. Envelope enforcement and the consumer gate
 
-- Build: extend `ResourceEnvelope` (`analysis_kernel/resource.rs`) with a wall-clock budget and a per-unit memory check; add a manual `workflow_dispatch` job (no schedule) that runs the G6 and G8 probes against a private scratch checkout and uploads the stage rows as artifacts; the committed artifact carries counts and timings only. The job is written to run unchanged on a larger hosted runner or a self-hosted one; which is provisioned is Q6, and until then the probes run locally and their results are committed as a report (Q6's default).
+- Build: extend `ResourceEnvelope` (`analysis_kernel/resource.rs`) with a wall-clock budget and a per-unit memory check; ship the G6 and G8 probes as local commands the owner runs on a machine of his choice, and record each run's results (counts and timings only) as a committed report. No hosted, self-hosted, or scheduled CI of any kind runs the gate (owner decision, Resolved Q6).
 - Why: report 03 Stage 3's "envelope enforced with reported degradation"; and the acceptance gate needs a place to run.
 - Probe: G10; G6 and G8 as the job's pass condition.
 - Depends on: W6 for the per-unit check; nothing for the workflow itself.
@@ -847,11 +847,9 @@ Evidence: GitHub's standard hosted Linux runners are 4 vCPU and 16 GB for public
 Reversal cost: low; thresholds are numbers in section 7 and are re-derived once per host, which the probe matrix already records per cell.
 Confidence: medium; the wall gates on any CI host are unmeasured until W9.
 
+Q6. How is the acceptance gate provisioned?
+Owner decision (2026-09-19): local-only, full stop. The gate runs when and on whichever machine the owner chooses. It is never executed on GitHub-hosted infrastructure, in CI, on a self-hosted runner, or on any schedule. The deliverable is the probe commands plus a committed report format (counts and timings only, per the hygiene rules). This supersedes the researched default's "until a runner is provisioned" clause: no runner will be provisioned.
+
 ## Open Questions
 
-One question survives the research pass. It is a spend and security-posture decision, not a fact this document can establish.
-
-Q6. How is the acceptance gate provisioned?
-Context: the consumer repository is private; polint is a public repository whose workflows run on standard hosted runners (`.github/workflows/ci.yml`, `bench-run.yml`, `eval-gate.yml`, all `runs-on: ubuntu-latest`; the last two are manual `workflow_dispatch` with no schedule and clone only public corpora). Running G6 and G8 from a workflow needs either a read token for the private repository stored as a secret of the public repository plus a larger hosted runner (8 vCPU / 32 GB at minimum, on the organisation's plan), or a self-hosted runner the owner operates. The technical recommendation is (c): local measurement recorded in a committed report now, the workflow when a runner exists. Whether the token and the runner spend are acceptable is not something this repository's evidence can decide.
-Options: (a) a manual `workflow_dispatch` job on a larger hosted runner with a private-repository read token as a secret of the public repository, artifacts limited to counts and timings; (b) a self-hosted runner operated by the owner, same job; (c) local-only, recorded in a committed report with the probe commands, until (a) or (b) is provisioned.
-Default if unanswered: (c); W9's workflow is written so that it runs unchanged under (a) or (b) once the owner provisions one.
+None. Every question is answered; the acceptance-gate provision is an owner decision, recorded under Resolved Questions (Q6).
