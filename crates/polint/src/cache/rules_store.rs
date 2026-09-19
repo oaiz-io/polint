@@ -794,17 +794,6 @@ pub(crate) fn build_fingerprint(
     for (name, value) in &environment.cargo_overrides {
         digest.line(&format!("cargo_override_{name}"), value);
     }
-    digest.line(
-        "cargo_home",
-        &environment
-            .cargo_home
-            .as_deref()
-            .map(path_digest)
-            .transpose()
-            .ok()?
-            .unwrap_or_else(|| UNSET.to_string()),
-    );
-
     // The files cargo and rustup discover from the directory polint spawns cargo
     // in, and then the rule package's own. Both lockfiles matter: the one beside
     // the manifest cargo actually uses pins every registry and git dependency by
@@ -1092,31 +1081,6 @@ fn optional_file_digest(path: &Path) -> Option<String> {
 /// The sha256 of a file's bytes.
 fn file_digest(path: &Path) -> std::io::Result<String> {
     Ok(file_identity(path)?.1)
-}
-
-/// A path folded to a digest without placing path-shaped text in the store key.
-fn path_digest(path: &Path) -> std::io::Result<String> {
-    let mut hasher = Sha256::new();
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        hasher.update(path.as_os_str().as_bytes());
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::ffi::OsStrExt;
-        for unit in path.as_os_str().encode_wide() {
-            hasher.update(unit.to_le_bytes());
-        }
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        let text = path.to_str().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "non-UTF-8 cargo home")
-        })?;
-        hasher.update(text.as_bytes());
-    }
-    Ok(hex(&hasher.finalize()))
 }
 
 /// A file's length and the sha256 of its bytes, read in one streaming pass so a
@@ -1730,7 +1694,7 @@ mod tests {
     }
 
     #[test]
-    fn cargo_configs_and_cargo_home_are_part_of_the_key() {
+    fn cargo_configs_are_part_of_the_key_and_cargo_home_path_is_not() {
         let temp = temp_dir("cargo-config-fingerprint");
         let root = temp.path().join("repo");
         let package = rule_package(&root);
@@ -1748,21 +1712,59 @@ mod tests {
             "a config above the repository changes Cargo's build"
         );
 
-        write(
-            &temp.path().join("cargo-home/config.toml"),
-            "[target.x86_64-unknown-linux-gnu]\nlinker = \"clang\"\n",
-        );
-        let user_config = build_fingerprint(&root, &package, &environment).expect("a fingerprint");
-        assert_ne!(
-            ancestor, user_config,
-            "Cargo home configuration is part of the build identity"
-        );
+        // A cargo home is read for its configuration, and both names cargo still
+        // honors there are read, so a registry mirror configured under either one
+        // moves the key rather than hiding behind a path that no longer does.
+        for name in CARGO_CONFIG_NAMES {
+            let before = build_fingerprint(&root, &package, &environment).expect("a fingerprint");
+            write(
+                &temp.path().join("cargo-home").join(name),
+                "[source.crates-io]\nreplace-with = \"mirror\"\n",
+            );
+            assert_ne!(
+                before,
+                build_fingerprint(&root, &package, &environment).expect("a fingerprint"),
+                "a Cargo home config named {name} is part of the build identity"
+            );
+        }
 
-        environment.cargo_home = Some(temp.path().join("other-cargo-home"));
-        assert_ne!(
-            build_fingerprint(&root, &package, &environment),
-            Some(user_config),
-            "Cargo home location affects relative config and registry paths"
+        // The location carries nothing the contents do not: two cargo homes that
+        // hold no configuration at all are the same build from both paths.
+        let mut empty_home = release_environment();
+        empty_home.cargo_home = Some(temp.path().join("empty-cargo-home"));
+        let from_one = build_fingerprint(&root, &package, &empty_home).expect("a fingerprint");
+        empty_home.cargo_home = Some(temp.path().join("another-empty-cargo-home"));
+        assert_eq!(
+            build_fingerprint(&root, &package, &empty_home),
+            Some(from_one),
+            "an empty Cargo home is the same input wherever it sits"
+        );
+    }
+
+    /// Two containers mount their cargo home at different paths and configure it
+    /// identically; the compiled rule host is the same, so the key must be too.
+    #[test]
+    fn two_cargo_homes_with_the_same_configuration_share_one_key() {
+        let temp = temp_dir("cargo-home-path");
+        let root = temp.path().join("repo");
+        let package = rule_package(&root);
+        let configuration = "[target.x86_64-unknown-linux-gnu]\nlinker = \"clang\"\n";
+
+        let mut environment = release_environment();
+        let mut fingerprints = Vec::new();
+        for home in ["home-a", "deeply/nested/home-b"] {
+            let home = temp.path().join(home);
+            for name in CARGO_CONFIG_NAMES {
+                write(&home.join(name), configuration);
+            }
+            environment.cargo_home = Some(home);
+            fingerprints
+                .push(build_fingerprint(&root, &package, &environment).expect("a fingerprint"));
+        }
+
+        assert_eq!(
+            fingerprints[0], fingerprints[1],
+            "identical cargo configuration is one key from every cargo home path"
         );
     }
 

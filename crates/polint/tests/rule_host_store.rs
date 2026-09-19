@@ -336,3 +336,73 @@ fn a_rule_host_compiled_once_is_shared_with_every_other_checkout() {
     // Leave it as it was found: every other test compiles for itself.
     let _ = fs::remove_file(shared_rules_target_dir().join("polint-store-stamp.json"));
 }
+
+/// A host published from one cargo home is restored from another one.
+///
+/// The key hashes cargo configuration by content, never the directory it was
+/// read from, so a fresh container whose cargo home sits somewhere else restores
+/// the binary instead of paying for the compile a second time. Both homes here
+/// are empty, which is the same configuration from two paths; `cargo` in the
+/// second run refuses to compile, so the restore is asserted from the absence of
+/// any invocation rather than inferred from a run that happened to succeed.
+#[test]
+fn a_rule_host_is_shared_between_cargo_homes_at_different_paths() {
+    let workspace = fixture_workspace();
+    let root = workspace.path();
+    let store = tempfile::tempdir().expect("create a store directory");
+    let scratch = tempfile::tempdir().expect("create a scratch directory");
+    let (cargo, invocations) = cargo_that_refuses_to_compile(scratch.path());
+    let publishing_home = tempfile::tempdir().expect("create the publishing cargo home");
+    let restoring_home = tempfile::tempdir().expect("create the restoring cargo home");
+    assert_ne!(
+        publishing_home.path(),
+        restoring_home.path(),
+        "the two cargo homes must differ for this test to say anything"
+    );
+
+    let published = stdout_string(
+        polint_cmd()
+            .current_dir(root)
+            .env("POLINT_CACHE_STORE", store.path())
+            .env("CARGO_HOME", publishing_home.path())
+            .args(["check", "--format", "json", "--fail-on", "none"])
+            .assert()
+            .success(),
+    );
+    let entries = store_entries(store.path());
+    assert_eq!(
+        entries.len(),
+        1,
+        "one build publishes one entry: {entries:?}"
+    );
+
+    let fresh_target = tempfile::tempdir().expect("create an empty target directory");
+    let restored = stdout_string(
+        polint_cmd()
+            .current_dir(root)
+            .env("POLINT_CACHE_STORE", store.path())
+            .env("POLINT_RULES_TARGET_DIR", fresh_target.path())
+            .env("POLINT_CARGO", &cargo)
+            .env("CARGO_HOME", restoring_home.path())
+            .args(["check", "--format", "json", "--fail-on", "none"])
+            .assert()
+            .success(),
+    );
+    assert!(
+        !invocations.exists(),
+        "a cargo home at another path is still a store hit: {}",
+        fs::read_to_string(&invocations).unwrap_or_default()
+    );
+    assert_eq!(
+        restored, published,
+        "the cargo home a host was compiled under never changes what it reports"
+    );
+    assert_eq!(
+        store_entries(store.path()),
+        entries,
+        "a restore republishes nothing under a second key"
+    );
+
+    // As above: the first build stamped the target directory the suite shares.
+    let _ = fs::remove_file(shared_rules_target_dir().join("polint-store-stamp.json"));
+}
