@@ -29,6 +29,19 @@ const FLUSH_ROWS = 256;
 
 /** @typedef {Record<string, unknown>} Row */
 
+/**
+ * What one invocation has already put on the wire.
+ *
+ * Projects overlap: a file listed by both `tsconfig.json` and
+ * `tsconfig.build.json` is compiled by both, and a solution config reaches the
+ * same project through two references. Row identities are keyed on file and
+ * offset, not on the project that reported them, so a session-wide record of
+ * what has been emitted is what keeps one identity from crossing the wire
+ * twice.
+ *
+ * @typedef {{visitedProjects: Set<string>, emittedFiles: Set<string>, emittedCallables: Set<string>}} Session
+ */
+
 function usage() {
   process.stderr.write(
     'usage: node index.js --root <path> --projects <comma-list> ' +
@@ -470,7 +483,7 @@ function dispatchExpression(ts, node) {
 
 class ProjectEmitter {
   /**
-   * @param {{ts: any, emitter: Emitter, root: string, scope: Set<string> | null, project: string}} options
+   * @param {{ts: any, emitter: Emitter, root: string, scope: Set<string> | null, project: string, emittedCallables: Set<string>}} options
    */
   constructor(options) {
     this.ts = options.ts;
@@ -478,6 +491,16 @@ class ProjectEmitter {
     this.root = options.root;
     this.scope = options.scope;
     this.project = options.project;
+    /**
+     * Callable identities already on the wire, shared across every project in
+     * this session. Projects overlap — a file listed by both `tsconfig.json`
+     * and `tsconfig.build.json` is compiled by both — and identities are keyed
+     * on file and offset, so emitting per project would put the same key on
+     * the wire twice and the reader would count a healthy repository's rows as
+     * dropped duplicates.
+     * @type {Set<string>}
+     */
+    this.emittedCallables = options.emittedCallables;
     /** @type {Map<string, Row>} */
     this.callables = new Map();
     /** @type {Map<string, (position: number) => number>} */
@@ -556,7 +579,7 @@ class ProjectEmitter {
    */
   registerCallable(node, sourceFile) {
     const identity = this.callableIdentity(node, sourceFile);
-    if (this.callables.has(identity)) {
+    if (this.callables.has(identity) || this.emittedCallables.has(identity)) {
       return identity;
     }
     const ts = this.ts;
@@ -581,8 +604,9 @@ class ProjectEmitter {
   }
 
   flushCallables() {
-    for (const row of this.callables.values()) {
+    for (const [identity, row] of this.callables) {
       this.emitter.writeCounted(row);
+      this.emittedCallables.add(identity);
     }
     this.callables.clear();
   }
@@ -753,11 +777,18 @@ function isOwnedByScan(root, fileName) {
 }
 
 /**
- * @param {{ts: any, emitter: Emitter, root: string, scope: Set<string> | null, projectPath: string, timer: PhaseTimer, totals: {projects: number, files: number}}} options
+ * @param {{ts: any, emitter: Emitter, root: string, scope: Set<string> | null, projectPath: string, timer: PhaseTimer, totals: {projects: number, files: number}, session: Session}} options
  */
 function emitProject(options) {
-  const {ts, emitter, root, scope, projectPath, timer, totals} = options;
+  const {ts, emitter, root, scope, projectPath, timer, totals, session} = options;
   const absoluteConfig = path.resolve(root, projectPath);
+  if (session.visitedProjects.has(absoluteConfig)) {
+    return;
+  }
+  session.visitedProjects.add(absoluteConfig);
+  // Counted here rather than at the call site so a project reached through a
+  // solution config's references counts as the project it is.
+  totals.projects += 1;
   const configFile = ts.readConfigFile(absoluteConfig, ts.sys.readFile);
   if (configFile.error !== undefined) {
     emitter.write({
@@ -786,6 +817,36 @@ function emitProject(options) {
     });
   }
   if (!parsed.fileNames || parsed.fileNames.length === 0) {
+    // A solution-style config — `"files": []` with `"references"` — declares no
+    // inputs of its own and delegates every file to the projects it references.
+    // It is what `npm create vite`, Angular and every project-references
+    // monorepo put at the repository root, and it is what the nearest-tsconfig
+    // walk finds, so not following the references would leave those
+    // repositories with no typed edges and nothing to read about why.
+    const referenced = referencedProjects(root, absoluteConfig, parsed);
+    if (referenced.length === 0) {
+      emitter.write({
+        kind: 'diagnostic',
+        category: 'unsupported',
+        file: projectPath,
+        message:
+          'project declares no input files and references no other project, so it can ' +
+          'contribute no type-directed call edges',
+      });
+      return;
+    }
+    for (const reference of referenced) {
+      emitProject({
+        ts,
+        emitter,
+        root,
+        scope,
+        projectPath: reference,
+        timer,
+        totals,
+        session,
+      });
+    }
     return;
   }
 
@@ -827,7 +888,14 @@ function emitProject(options) {
   });
 
   const checker = program.getTypeChecker();
-  const project = new ProjectEmitter({ts, emitter, root, scope, project: projectPath});
+  const project = new ProjectEmitter({
+    ts,
+    emitter,
+    root,
+    scope,
+    project: projectPath,
+    emittedCallables: session.emittedCallables,
+  });
 
   emitter.writeCounted({
     kind: 'project',
@@ -854,10 +922,19 @@ function emitProject(options) {
     inScopeFiles.push({sourceFile, relative});
   }
 
+  // Every in-scope file this project compiles feeds the class and
+  // instantiation sets, because the dispatch expansion needs the project's
+  // whole picture. Only the files no earlier project already reported are
+  // emitted: overlapping projects would otherwise put the same identities on
+  // the wire twice and pay the type checker twice for them.
   for (const entry of inScopeFiles) {
     collectFile({ts, checker, project, sourceFile: entry.sourceFile});
   }
-  for (const entry of inScopeFiles) {
+  const unreportedFiles = inScopeFiles.filter(
+    (entry) => !session.emittedFiles.has(entry.relative)
+  );
+  for (const entry of unreportedFiles) {
+    session.emittedFiles.add(entry.relative);
     totals.files += 1;
     emitFile({
       ts,
@@ -880,6 +957,46 @@ function emitProject(options) {
     rows_emitted: emitter.rowsEmitted,
     peak_heap_bytes: heapBytes(),
   });
+}
+
+/**
+ * Repo-relative paths of the projects a solution-style config references.
+ *
+ * A reference names either a config file or the directory holding one, and the
+ * compiler resolves it to an absolute path. A reference that resolves outside
+ * the repository is dropped: every path this sidecar reports is
+ * repository-relative by contract, and a project the scan does not own can
+ * contribute no row it would keep.
+ *
+ * @param {string} root
+ * @param {string} absoluteConfig
+ * @param {any} parsed
+ * @returns {string[]}
+ */
+function referencedProjects(root, absoluteConfig, parsed) {
+  const references = parsed.projectReferences || [];
+  /** @type {string[]} */
+  const resolved = [];
+  for (const reference of references) {
+    const target = reference.path;
+    if (typeof target !== 'string' || target === '') {
+      continue;
+    }
+    const absolute = path.resolve(path.dirname(absoluteConfig), target);
+    let configPath = absolute;
+    try {
+      if (fs.statSync(absolute).isDirectory()) {
+        configPath = path.join(absolute, 'tsconfig.json');
+      }
+    } catch (error) {
+      continue;
+    }
+    if (!isOwnedByScan(root, configPath)) {
+      continue;
+    }
+    resolved.push(relativePath(root, configPath));
+  }
+  return resolved;
 }
 
 /**
@@ -1456,6 +1573,12 @@ function main() {
   }
 
   const totals = {projects: 0, files: 0};
+  /** @type {Session} */
+  const session = {
+    visitedProjects: new Set(),
+    emittedFiles: new Set(),
+    emittedCallables: new Set(),
+  };
   if (args.projects.length === 0) {
     emitter.write({
       kind: 'diagnostic',
@@ -1475,9 +1598,8 @@ function main() {
   });
 
   for (const projectPath of args.projects) {
-    totals.projects += 1;
     try {
-      emitProject({ts, emitter, root, scope, projectPath, timer, totals});
+      emitProject({ts, emitter, root, scope, projectPath, timer, totals, session});
     } catch (error) {
       // One unusable project must not cost the scan every other project's
       // rows, so the failure is a row and the loop continues.
