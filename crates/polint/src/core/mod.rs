@@ -131,4 +131,6 @@ mod tests {
     include!("tests/batch5.rs");
 
     include!("tests/summary_metadata_route.rs");
+
+    include!("tests/host_lookup_route.rs");
 }

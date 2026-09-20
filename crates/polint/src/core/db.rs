@@ -6023,6 +6023,47 @@ impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
         self.scopes()
     }
 
+    /// Route the trait's symbol and reference lookups to the indexed inherent
+    /// methods.
+    ///
+    /// Every lowerer is generic over `impl AnalysisHost`, so it reached the trait
+    /// defaults in `analysis_neutral/host.rs`, which filter the whole reference
+    /// and definition tables once per call — the closure-capture scan in each
+    /// lowerer calls them once per closure literal. `AnalysisDb` has had the
+    /// indexes all along (`references_by_file`, `definitions_by_symbol`); only
+    /// the inherent methods reached them, and an inherent method is out of scope
+    /// inside a generic function.
+    ///
+    /// Identity: `definitions_by_symbol` is built by walking the definition table
+    /// in order, so the override yields the same rows in the same order as the
+    /// default's filter. `references_by_file` is sorted by `ReferenceId`, which
+    /// the default's table order need not follow; every trait-generic caller
+    /// either folds the rows into a `BTreeSet` (both lowerers' closure captures)
+    /// or accepts exactly one match and rejects two (`calls/direct.rs`'s
+    /// `unique_reference_by_site_name`), so no output depends on the order.
+    /// The defaults stay for `LocalAnalysisDb` and the two `LocalFactDb` test
+    /// databases, which carry no index.
+    fn references_for_file(
+        &self,
+        file: crate::internal_core::FileId,
+    ) -> Vec<&crate::analysis_api::ReferenceFact> {
+        AnalysisDb::references_for_file(self, file).collect()
+    }
+
+    fn definitions_for_symbol(
+        &self,
+        symbol: SymbolId,
+    ) -> Box<dyn Iterator<Item = &crate::analysis_api::DefinitionFact> + '_> {
+        Box::new(AnalysisDb::definitions_for_symbol(self, symbol))
+    }
+
+    fn definition_for_symbol(
+        &self,
+        symbol: SymbolId,
+    ) -> Option<&crate::analysis_api::DefinitionFact> {
+        AnalysisDb::definition_for_symbol(self, symbol)
+    }
+
     fn replace_summary_facts(&mut self, output: SummaryOutput) {
         AnalysisDb::replace_summary_facts(self, output);
     }
