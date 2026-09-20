@@ -8,6 +8,7 @@ use crate::analysis_neutral::ids::{
     CallSiteId, MirBodyId, MirOpId, MirPredicateId, MirStatementId, MirTerminatorId, PlaceId,
     UnsupportedId,
 };
+use crate::analysis_neutral::lowering_index::LoweringIndex;
 use crate::analysis_neutral::mir_body::{
     MirBlock, MirBlockId, MirBody, MirOutput, MirStatement, MirStatus, MirTerminator,
     MirTerminatorKind, SuspendKind,
@@ -29,6 +30,7 @@ pub fn lower_go_mir(db: &impl AnalysisHost) -> MirOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut lowering = GoMirLowering::default();
+    let index = LoweringIndex::build(db);
     let mut files = db
         .files()
         .iter()
@@ -37,7 +39,7 @@ pub fn lower_go_mir(db: &impl AnalysisHost) -> MirOutput {
     files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
     for file in files {
-        lowering.lower_file(interner, db, file);
+        lowering.lower_file(interner, db, &index, file);
     }
 
     let (places, place_types) = lowering.places.clone().finish_with_types(interner);
@@ -96,7 +98,6 @@ pub fn lower_go_mir(db: &impl AnalysisHost) -> MirOutput {
         operations,
         unsupported,
     }
-    .normalized(interner)
 }
 
 fn lower_control_flow(
@@ -112,16 +113,34 @@ fn lower_control_flow(
     let mut statements = Vec::new();
     let mut terminators = Vec::new();
 
+    // One pass over each whole-program input instead of one filter per body.
+    // Operations are the largest MIR family, so the old `operations.iter()
+    // .filter(op.body == body.id)` inside the body loop was the heaviest of the
+    // lowerer's quadratic terms (research doc section 3.2).
+    let mut operations_by_body = BTreeMap::<MirBodyId, Vec<&MirOperation>>::new();
+    for operation in operations {
+        operations_by_body
+            .entry(operation.body)
+            .or_default()
+            .push(operation);
+    }
+    let mut effects_by_body = BTreeMap::<MirBodyId, Vec<&ControlEffect>>::new();
+    for effect in control_effects {
+        effects_by_body.entry(effect.body).or_default().push(effect);
+    }
+
     for body in bodies {
-        let body_operations = operations
+        let body_operations = operations_by_body
+            .get(&body.id)
+            .map_or(&[][..], Vec::as_slice)
             .iter()
-            .filter(|operation| operation.body == body.id)
-            .map(|operation| (operation.id, operation))
+            .map(|operation| (operation.id, *operation))
             .collect::<BTreeMap<_, _>>();
-        let body_effects = control_effects
+        let body_effects = effects_by_body
+            .get(&body.id)
+            .map_or(&[][..], Vec::as_slice)
             .iter()
-            .filter(|effect| effect.body == body.id)
-            .map(|effect| (effect.id, effect))
+            .map(|effect| (effect.id, *effect))
             .collect::<BTreeMap<_, _>>();
         let step_ids = body_operations
             .keys()
@@ -495,6 +514,7 @@ impl GoMirLowering {
         &mut self,
         interner: &crate::internal_core::StableKeyInterner,
         db: &impl AnalysisHost,
+        index: &LoweringIndex<'_>,
         file: &SourceFile,
     ) {
         let mut parser = Parser::new();
@@ -537,10 +557,10 @@ impl GoMirLowering {
                 continue;
             };
             let span = node_span(file, node);
-            let Some(function) = matching_function(db, file.id, &name, &span) else {
+            let Some(function) = matching_function(index, file.id, &name, &span) else {
                 continue;
             };
-            let body = self.push_body(interner, db, file, function, span);
+            let body = self.push_body(interner, index, file, function, span);
             let mut literals = Vec::new();
             visit_named_descendants(body_node, &mut |node| {
                 if node.kind() == "func_literal" {
@@ -552,7 +572,7 @@ impl GoMirLowering {
                 .iter()
                 .map(|node| {
                     let closure_body =
-                        self.push_body(interner, db, file, function, node_span(file, *node));
+                        self.push_body(interner, index, file, function, node_span(file, *node));
                     (
                         (node.start_byte() as u32, node.end_byte() as u32),
                         closure_body,
@@ -621,7 +641,7 @@ impl GoMirLowering {
     fn push_body(
         &mut self,
         interner: &crate::internal_core::StableKeyInterner,
-        db: &impl AnalysisHost,
+        index: &LoweringIndex<'_>,
         file: &SourceFile,
         function: &FunctionFact,
         span: Span,
@@ -646,18 +666,8 @@ impl GoMirLowering {
             language: Language::Go,
             file: file.id,
             function: function.id,
-            package: db
-                .packages()
-                .iter()
-                .find(|package| package.file == file.id && package.language == Language::Go)
-                .map(|package| package.id),
-            module: db
-                .module_nodes()
-                .iter()
-                .find(|module| {
-                    module.file == Some(file.id) && module.language == Some(Language::Go)
-                })
-                .map(|module| module.id),
+            package: index.package_for_file(file.id, Language::Go),
+            module: index.module_node_for_file(file.id, Language::Go),
             owner_stable_key,
             span,
             stable_key,
@@ -2315,17 +2325,16 @@ fn unsupported_domains_for(construct: &str) -> Vec<UnsupportedDomain> {
 }
 
 fn matching_function<'db>(
-    db: &'db impl AnalysisHost,
+    index: &LoweringIndex<'db>,
     file: FileId,
     name: &str,
     span: &Span,
 ) -> Option<&'db FunctionFact> {
-    db.functions().iter().find(|function| {
-        function.file == file
-            && function.language == Language::Go
-            && function.name == name
-            && span_contains(span, &function.span)
-    })
+    index
+        .functions_named(file, Language::Go, name)
+        .iter()
+        .copied()
+        .find(|function| span_contains(span, &function.span))
 }
 
 fn span_contains(outer: &Span, inner: &Span) -> bool {
@@ -3216,5 +3225,92 @@ func flow(ch chan int, token string, count int) bool {
                 ..
             }
         )));
+    }
+}
+
+#[cfg(test)]
+mod lowering_index_joins {
+    //! W1 commit 2: the joins `LoweringIndex` replaced, on buckets with more than
+    //! one candidate. Each scan they replaced had first-match semantics over the
+    //! whole fact table; a bucket in table order plus the same predicate has to
+    //! give the same answer.
+    use super::*;
+    use crate::analysis_neutral::LocalAnalysisDb;
+    use std::path::PathBuf;
+
+    fn lower(source: &str) -> (LocalAnalysisDb, MirOutput) {
+        let mut db = LocalAnalysisDb::new();
+        db.add_file(
+            PathBuf::from("dup.go"),
+            "dup.go".to_string(),
+            source.to_string(),
+        );
+        let cache = crate::analysis_api::DisabledAnalysisCache;
+        let diagnostics = crate::go::analyze_with_options(&mut db, &cache, "", "", false);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let output = lower_go_mir(&db);
+        (db, output)
+    }
+
+    /// Two functions with the same name in one file at different spans. The scan
+    /// took the first whose span the declaration contains; the bucket lookup has
+    /// to take the same one, which means the second body must not attach to the
+    /// first function.
+    #[test]
+    fn two_same_named_functions_in_one_file_keep_their_own_owners() {
+        let (db, output) =
+            lower("package auth\n\nfunc run() int { return 1 }\n\nfunc run() int { return 2 }\n");
+
+        let index = LoweringIndex::build(&db);
+        assert_eq!(
+            index
+                .functions_named(db.files()[0].id, Language::Go, "run")
+                .len(),
+            2,
+            "the fixture must produce a bucket with two candidates"
+        );
+
+        let mut bodies = output
+            .bodies
+            .iter()
+            .map(|body| (body.span.start_byte, body.function))
+            .collect::<Vec<_>>();
+        bodies.sort();
+        assert_eq!(bodies.len(), 2);
+        assert_ne!(
+            bodies[0].1, bodies[1].1,
+            "each body keeps its own FunctionFact; a widened bucket would collapse them"
+        );
+        for (start, function) in bodies {
+            let fact = db
+                .functions()
+                .iter()
+                .find(|fact| fact.id == function)
+                .expect("the owner is a real function fact");
+            assert_eq!(fact.span.start_byte, start);
+        }
+    }
+
+    /// `push_body` read the package and the module node with a `find` over the
+    /// whole table; the index has to answer the same for a file that has one.
+    #[test]
+    fn package_and_module_reach_every_body_including_closures() {
+        let (db, output) = lower(
+            "package auth\n\nfunc outer() func() int {\n    return func() int { return 1 }\n}\n",
+        );
+
+        let expected_package = db
+            .packages()
+            .iter()
+            .find(|package| package.file == db.files()[0].id && package.language == Language::Go)
+            .map(|package| package.id);
+        assert!(expected_package.is_some(), "the fixture declares a package");
+        assert!(
+            output.bodies.len() >= 2,
+            "the closure literal is lowered as its own body"
+        );
+        for body in &output.bodies {
+            assert_eq!(body.package, expected_package);
+        }
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -88,13 +88,22 @@ impl Icfg {
         call_sites: &[CallSiteFact],
         refined_calls: &[RefinedCallEdgeFact],
     ) -> Self {
+        // One pass over the CFG nodes instead of a scan per call site (research
+        // doc section 3.2, the `Icfg::build` row: O(sites x nodes), paid in
+        // `abstract_domains` and again in data flow). `or_insert` keeps the first
+        // node per operation, which is what the `find` returned.
+        let mut node_by_operation = HashMap::with_capacity(cfg_nodes.len());
+        for node in cfg_nodes {
+            if let Some(operation) = node.operation {
+                node_by_operation.entry(operation).or_insert(node.id);
+            }
+        }
         let call_nodes = call_sites
             .iter()
             .filter_map(|site| {
-                cfg_nodes
-                    .iter()
-                    .find(|node| node.operation == Some(site.operation))
-                    .map(|node| (site.id, node.id))
+                node_by_operation
+                    .get(&site.operation)
+                    .map(|node| (site.id, *node))
             })
             .collect::<BTreeMap<_, _>>();
         let call_site_by_node = call_nodes
@@ -526,6 +535,59 @@ mod tests {
     };
     use crate::analysis_neutral::refined_calls::store::RefinedCallOutput;
     use crate::internal_core::{FileId, FunctionId, Language, Span};
+
+    /// W1 commit 3: the per-call-site scan over `cfg_nodes` became one index.
+    /// The scan took the first node carrying the operation, so a second node with
+    /// the same operation must stay invisible to the call-to-return edge.
+    #[test]
+    fn icfg_call_nodes_keep_the_first_cfg_node_per_operation() {
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let sites = vec![call_site(1)];
+        let refined = vec![refined_edge(1)];
+        let functions = vec![
+            cfg_function(&interner, 0, 0, 0, 3),
+            cfg_function(&interner, 1, 1, 4, 5),
+        ];
+        // Two nodes carry `MirOpId(1)`; the scan returned node 1.
+        let nodes = vec![
+            cfg_node(&interner, 1, 0, Some(MirOpId(1))),
+            cfg_node(&interner, 3, 0, Some(MirOpId(1))),
+            cfg_node(&interner, 2, 0, None),
+        ];
+        let edges = vec![cfg_edge(&interner, 1, 2), cfg_edge(&interner, 3, 2)];
+
+        let icfg = Icfg::from_facts(&functions, &nodes, &edges, &sites, &refined);
+
+        let from_first = icfg
+            .outgoing
+            .get(&CfgNodeId(1))
+            .into_iter()
+            .flatten()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        assert!(
+            from_first.contains(&IcfgEdge {
+                to: CfgNodeId(2),
+                kind: IcfgEdgeKind::CallToReturn(CallSiteId(1), CfgEdgeKind::Normal),
+            }),
+            "the first node for the operation owns the call-to-return edge"
+        );
+        let from_second = icfg
+            .outgoing
+            .get(&CfgNodeId(3))
+            .into_iter()
+            .flatten()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            from_second,
+            BTreeSet::from([IcfgEdge {
+                to: CfgNodeId(2),
+                kind: IcfgEdgeKind::Intra(CfgEdgeKind::Normal),
+            }]),
+            "the shadowed node keeps a plain intraprocedural edge"
+        );
+    }
 
     #[test]
     fn icfg_builds_call_to_return_and_matched_return_edges() {

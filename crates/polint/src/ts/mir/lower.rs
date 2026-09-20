@@ -17,6 +17,7 @@ use crate::analysis_neutral::ids::{
     CallSiteId, MirBodyId, MirOpId, MirPredicateId, MirStatementId, MirTerminatorId, PlaceId,
     UnsupportedId,
 };
+use crate::analysis_neutral::lowering_index::LoweringIndex;
 use crate::analysis_neutral::mir_body::{
     MirBlock, MirBlockId, MirBody, MirOutput, MirStatement, MirStatus, MirTerminator,
     MirTerminatorKind, SuspendKind,
@@ -46,6 +47,7 @@ pub fn lower_ts_mir(db: &impl AnalysisHost) -> MirOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut lowering = TsMirLowering::default();
+    let index = LoweringIndex::build(db);
     let mut files = db
         .files()
         .iter()
@@ -54,7 +56,7 @@ pub fn lower_ts_mir(db: &impl AnalysisHost) -> MirOutput {
     files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
     for file in files {
-        lowering.lower_file(interner, db, file);
+        lowering.lower_file(interner, db, &index, file);
     }
 
     let (places, place_types) = lowering.places.clone().finish_with_types(interner);
@@ -113,7 +115,6 @@ pub fn lower_ts_mir(db: &impl AnalysisHost) -> MirOutput {
         operations,
         unsupported,
     }
-    .normalized(interner)
 }
 
 fn lower_control_flow(
@@ -129,16 +130,33 @@ fn lower_control_flow(
     let mut statements = Vec::new();
     let mut terminators = Vec::new();
 
+    // One pass over each whole-program input instead of one filter per body; see
+    // the Go twin. Operations are the largest MIR family, so this was the
+    // heaviest of the lowerer's quadratic terms (research doc section 3.2).
+    let mut operations_by_body = BTreeMap::<MirBodyId, Vec<&MirOperation>>::new();
+    for operation in operations {
+        operations_by_body
+            .entry(operation.body)
+            .or_default()
+            .push(operation);
+    }
+    let mut effects_by_body = BTreeMap::<MirBodyId, Vec<&ControlEffect>>::new();
+    for effect in control_effects {
+        effects_by_body.entry(effect.body).or_default().push(effect);
+    }
+
     for body in bodies {
-        let body_operations = operations
+        let body_operations = operations_by_body
+            .get(&body.id)
+            .map_or(&[][..], Vec::as_slice)
             .iter()
-            .filter(|operation| operation.body == body.id)
-            .map(|operation| (operation.id, operation))
+            .map(|operation| (operation.id, *operation))
             .collect::<BTreeMap<_, _>>();
-        let body_effects = control_effects
+        let body_effects = effects_by_body
+            .get(&body.id)
+            .map_or(&[][..], Vec::as_slice)
             .iter()
-            .filter(|effect| effect.body == body.id)
-            .map(|effect| (effect.id, effect))
+            .map(|effect| (effect.id, *effect))
             .collect::<BTreeMap<_, _>>();
         let step_ids = body_operations
             .keys()
@@ -525,6 +543,7 @@ impl TsMirLowering {
         &mut self,
         interner: &crate::internal_core::StableKeyInterner,
         db: &impl AnalysisHost,
+        index: &LoweringIndex<'_>,
         file: &SourceFile,
     ) {
         let allocator = Allocator::default();
@@ -584,8 +603,8 @@ impl TsMirLowering {
         for function in functions {
             let span = span_from_oxc(file, function.span);
             let Some(function_fact) =
-                matching_function(db, file.id, file.language, &function.name, &span)
-                    .or_else(|| enclosing_function(db, file.id, file.language, &span))
+                matching_function(index, file.id, file.language, &function.name, &span)
+                    .or_else(|| enclosing_function(index, file.id, file.language, &span))
             else {
                 continue;
             };
@@ -595,7 +614,7 @@ impl TsMirLowering {
             if !prepared_identities.insert((function_fact.id, span.start_byte, span.end_byte)) {
                 continue;
             }
-            let body = self.push_body(interner, db, file, function_fact, span);
+            let body = self.push_body(interner, index, file, function_fact, span);
             prepared.push((function, function_fact.id, body));
         }
         let closure_bodies = prepared
@@ -605,9 +624,9 @@ impl TsMirLowering {
         let closure_capture_names =
             closure_capture_names(db, file.id, file.source.as_ref(), &prepared);
 
-        if let Some(module_function) = matching_module_function(db, file.id, file.language) {
+        if let Some(module_function) = matching_module_function(index, file.id, file.language) {
             let span = file.span_from_byte_range(0, file.source.len());
-            let body = self.push_body(interner, db, file, module_function, span);
+            let body = self.push_body(interner, index, file, module_function, span);
             let mut module_lowering = FunctionLowering::new(
                 interner,
                 file,
@@ -678,7 +697,7 @@ impl TsMirLowering {
     fn push_body(
         &mut self,
         interner: &crate::internal_core::StableKeyInterner,
-        db: &impl AnalysisHost,
+        index: &LoweringIndex<'_>,
         file: &SourceFile,
         function: &FunctionFact,
         span: Span,
@@ -703,18 +722,8 @@ impl TsMirLowering {
             language: file.language,
             file: file.id,
             function: function.id,
-            package: db
-                .packages()
-                .iter()
-                .find(|package| package.file == file.id && package.language == file.language)
-                .map(|package| package.id),
-            module: db
-                .module_nodes()
-                .iter()
-                .find(|module| {
-                    module.file == Some(file.id) && module.language == Some(file.language)
-                })
-                .map(|module| module.id),
+            package: index.package_for_file(file.id, file.language),
+            module: index.module_node_for_file(file.id, file.language),
             owner_stable_key,
             span,
             stable_key,
@@ -4539,45 +4548,45 @@ fn source_text(source: &str, span: oxc_span::Span) -> Option<&str> {
 }
 
 fn matching_function<'db>(
-    db: &'db impl AnalysisHost,
+    index: &LoweringIndex<'db>,
     file: FileId,
     language: Language,
     name: &str,
     span: &Span,
 ) -> Option<&'db FunctionFact> {
-    db.functions().iter().find(|function| {
-        function.file == file
-            && function.language == language
-            && function.name == name
-            && span_contains(span, &function.span)
-    })
+    index
+        .functions_named(file, language, name)
+        .iter()
+        .copied()
+        .find(|function| span_contains(span, &function.span))
 }
 
-fn matching_module_function(
-    db: &impl AnalysisHost,
+fn matching_module_function<'db>(
+    index: &LoweringIndex<'db>,
     file: FileId,
     language: Language,
-) -> Option<&FunctionFact> {
-    db.functions().iter().find(|function| {
-        function.file == file
-            && function.language == language
-            && is_synthetic_ts_js_module_function(function)
-    })
+) -> Option<&'db FunctionFact> {
+    index
+        .functions_in_file(file, language)
+        .iter()
+        .copied()
+        .find(|function| is_synthetic_ts_js_module_function(function))
 }
 
 fn enclosing_function<'db>(
-    db: &'db impl AnalysisHost,
+    index: &LoweringIndex<'db>,
     file: FileId,
     language: Language,
     span: &Span,
 ) -> Option<&'db FunctionFact> {
-    db.functions()
+    // The bucket is in fact-table order, so `min_by_key` keeps the same
+    // first-minimum tie-break the whole-table scan had.
+    index
+        .functions_in_file(file, language)
         .iter()
+        .copied()
         .filter(|function| {
-            function.file == file
-                && function.language == language
-                && span_contains(&function.span, span)
-                && !is_synthetic_ts_js_module_function(function)
+            span_contains(&function.span, span) && !is_synthetic_ts_js_module_function(function)
         })
         .min_by_key(|function| function.span.end_byte - function.span.start_byte)
 }
@@ -5746,5 +5755,137 @@ export function flow(options, data) {
 
         assert_eq!(operation_keys.len(), output.operations.len());
         assert_eq!(unsupported_keys.len(), output.unsupported.len());
+    }
+}
+
+#[cfg(test)]
+mod lowering_index_joins {
+    //! W1 commit 2: the joins `LoweringIndex` replaced, on buckets with more than
+    //! one candidate. `matching_function` took the first function whose span the
+    //! declaration contains, `enclosing_function` the smallest containing one with
+    //! a first-minimum tie-break, and `matching_module_function` the first
+    //! synthetic module row. A bucket in fact-table order plus the same predicate
+    //! has to answer the same.
+    use super::*;
+    use crate::analysis_api::TS_JS_MODULE_FUNCTION_NAME;
+    use crate::analysis_neutral::LocalAnalysisDb;
+    use std::path::PathBuf;
+
+    fn lower(path: &str, source: &str) -> (LocalAnalysisDb, MirOutput) {
+        let mut db = LocalAnalysisDb::new();
+        db.add_file(PathBuf::from(path), path.to_string(), source.to_string());
+        let diagnostics = crate::ts::analyze_with_options(
+            &mut db,
+            &crate::analysis_api::DisabledAnalysisCache,
+            "",
+            "",
+            false,
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let output = lower_ts_mir(&db);
+        (db, output)
+    }
+
+    /// Two functions with the same name in one file at different spans: a
+    /// redeclaration, which TypeScript's parser accepts.
+    #[test]
+    fn two_same_named_functions_in_one_file_keep_their_own_owners() {
+        let (db, output) = lower(
+            "dup.ts",
+            "function run() { return 1; }\nfunction run() { return 2; }\n",
+        );
+
+        let file = db.files()[0].id;
+        let index = LoweringIndex::build(&db);
+        assert_eq!(
+            index
+                .functions_named(file, Language::TypeScript, "run")
+                .len(),
+            2,
+            "the fixture must produce a bucket with two candidates"
+        );
+
+        let mut owners = output
+            .bodies
+            .iter()
+            .filter(|body| {
+                db.functions()
+                    .iter()
+                    .any(|fact| fact.id == body.function && fact.name == "run")
+            })
+            .map(|body| (body.span.start_byte, body.function))
+            .collect::<Vec<_>>();
+        owners.sort();
+        assert_eq!(owners.len(), 2);
+        assert_ne!(
+            owners[0].1, owners[1].1,
+            "each redeclaration keeps its own FunctionFact"
+        );
+    }
+
+    /// `enclosing_function` resolves an anonymous callable to the smallest
+    /// function fact that contains it. Nested arrows give it three containing
+    /// candidates, one of which is the synthetic module row it must skip.
+    #[test]
+    fn nested_callables_resolve_to_the_smallest_containing_function() {
+        let (db, output) = lower(
+            "nested.ts",
+            "export function outer() {\n  const middle = () => {\n    const inner = () => 1;\n    return inner();\n  };\n  return middle();\n}\n",
+        );
+
+        let file = db.files()[0].id;
+        let index = LoweringIndex::build(&db);
+        let containing = index
+            .functions_in_file(file, Language::TypeScript)
+            .iter()
+            .filter(|function| function.name != TS_JS_MODULE_FUNCTION_NAME)
+            .count();
+        assert!(
+            containing >= 2,
+            "the fixture must give enclosing_function more than one candidate"
+        );
+
+        // Every lowered body's owner really contains it, and no body claims an
+        // owner that some other candidate contains more tightly.
+        for body in &output.bodies {
+            let Some(owner) = db.functions().iter().find(|fact| fact.id == body.function) else {
+                continue;
+            };
+            if owner.name == TS_JS_MODULE_FUNCTION_NAME {
+                continue;
+            }
+            assert!(
+                owner.span.start_byte <= body.span.start_byte
+                    && owner.span.end_byte >= body.span.end_byte,
+                "a body's owner must contain it: owner {}..{} vs body {}..{}",
+                owner.span.start_byte,
+                owner.span.end_byte,
+                body.span.start_byte,
+                body.span.end_byte
+            );
+        }
+    }
+
+    /// The synthetic per-module row, which `matching_module_function` found with a
+    /// whole-table scan and now finds in the file's bucket.
+    #[test]
+    fn the_synthetic_module_function_is_still_found_and_lowered() {
+        let (db, output) = lower("mod.ts", "const value = 1;\nexport default value;\n");
+
+        let file = db.files()[0].id;
+        let index = LoweringIndex::build(&db);
+        let module_function = index
+            .functions_in_file(file, Language::TypeScript)
+            .iter()
+            .copied()
+            .find(|function| function.name == TS_JS_MODULE_FUNCTION_NAME)
+            .expect("the frontend inserts a synthetic module row");
+        assert!(
+            output
+                .bodies
+                .iter()
+                .any(|body| body.function == module_function.id),
+            "the module body is lowered"
+        );
     }
 }

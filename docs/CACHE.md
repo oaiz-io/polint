@@ -77,7 +77,10 @@ the length and digest the entry recorded before it is moved into place and run,
 and any failure, a missing entry, an unreadable one, a corrupt blob, is a miss
 that compiles locally instead. Committing the rule package's `Cargo.lock` is
 what lets a fresh checkout compute the same key the build in another one
-published under.
+published under. Cargo configuration is hashed by content and never by
+location, so two machines or containers whose cargo homes sit at different
+paths but hold the same `config*` files compute the same key and share one
+compiled host.
 
 Three constructs make polint build locally without restoring or publishing a
 machine-global host: any `path` dependency that leaves the rule package

@@ -1500,28 +1500,6 @@ impl AnalysisDb {
 
     #[allow(
         dead_code,
-        reason = "Retained for AnalysisDb until dual accessors are removed."
-    )]
-    pub(crate) fn merge_summary_facts_without_metadata(
-        &mut self,
-        summaries: &[SummaryFact],
-        events: &[SummaryEventFact],
-    ) {
-        let interner = self.stable_key_interner();
-        self.summary_store_mut()
-            .merge_updates(summaries, events, &interner);
-    }
-
-    #[allow(
-        dead_code,
-        reason = "Retained for AnalysisDb until dual accessors are removed."
-    )]
-    pub(crate) fn refresh_summary_metadata_after_bulk_update(&mut self) {
-        self.refresh_summary_metadata();
-    }
-
-    #[allow(
-        dead_code,
         reason = "Extension fact replacement is wired into the kernel provider in the next plan."
     )]
     pub(crate) fn replace_extension_facts(&mut self, output: ExtensionOutput) {
@@ -6078,8 +6056,69 @@ impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
         self.scopes()
     }
 
+    /// Route the trait's symbol and reference lookups to the indexed inherent
+    /// methods.
+    ///
+    /// Every lowerer is generic over `impl AnalysisHost`, so it reached the trait
+    /// defaults in `analysis_neutral/host.rs`, which filter the whole reference
+    /// and definition tables once per call — the closure-capture scan in each
+    /// lowerer calls them once per closure literal. `AnalysisDb` has had the
+    /// indexes all along (`references_by_file`, `definitions_by_symbol`); only
+    /// the inherent methods reached them, and an inherent method is out of scope
+    /// inside a generic function.
+    ///
+    /// Identity: `definitions_by_symbol` is built by walking the definition table
+    /// in order, so the override yields the same rows in the same order as the
+    /// default's filter. `references_by_file` is sorted by `ReferenceId`, which
+    /// the default's table order need not follow; every trait-generic caller
+    /// either folds the rows into a `BTreeSet` (both lowerers' closure captures)
+    /// or accepts exactly one match and rejects two (`calls/direct.rs`'s
+    /// `unique_reference_by_site_name`), so no output depends on the order.
+    /// The defaults stay for `LocalAnalysisDb` and the two `LocalFactDb` test
+    /// databases, which carry no index.
+    fn references_for_file(
+        &self,
+        file: crate::internal_core::FileId,
+    ) -> Vec<&crate::analysis_api::ReferenceFact> {
+        AnalysisDb::references_for_file(self, file).collect()
+    }
+
+    fn definitions_for_symbol(
+        &self,
+        symbol: SymbolId,
+    ) -> Box<dyn Iterator<Item = &crate::analysis_api::DefinitionFact> + '_> {
+        Box::new(AnalysisDb::definitions_for_symbol(self, symbol))
+    }
+
+    fn definition_for_symbol(
+        &self,
+        symbol: SymbolId,
+    ) -> Option<&crate::analysis_api::DefinitionFact> {
+        AnalysisDb::definition_for_symbol(self, symbol)
+    }
+
     fn replace_summary_facts(&mut self, output: SummaryOutput) {
         AnalysisDb::replace_summary_facts(self, output);
+    }
+
+    /// Route the SCC closure's bulk refresh to `AnalysisDb`'s digest recipe.
+    ///
+    /// `close_summaries_by_scc` is generic over `impl AnalysisHost`, so inherent
+    /// methods are out of scope inside it: it calls this trait method, and
+    /// without this override the trait default ran, which re-records every
+    /// summary and event row as the verbatim text `summary:<SummaryId>` /
+    /// `summary-event:<SummaryEventId>`. That is what the five summary families'
+    /// `FactMeta::payload_digest` column held on every scan whose closure
+    /// updated anything: not a digest of the fact's parts, unmoved by any parts
+    /// change and moved by any id reassignment. The default stays for
+    /// `LocalAnalysisDb` and the language-local fact databases, which have no
+    /// recipe of their own.
+    ///
+    /// No provider output digest folds `FactMeta::payload_digest`, so this moves
+    /// no `digest=` anywhere; it moves the second column of those five families'
+    /// fact rows, and nothing else.
+    fn refresh_summary_metadata_after_bulk_update(&mut self) {
+        self.refresh_summary_metadata();
     }
 
     fn replace_call_facts(&mut self, output: CallOutput) -> Result<(), AnalysisError> {

@@ -3877,7 +3877,13 @@ fn selected_rule_patterns(
         .map(|rules| rules.into_iter().collect()))
 }
 
-fn load_config_for_check(root: &Path, paths: &[PathBuf]) -> Result<LoadedConfig> {
+/// The config a `check`-shaped run loads: the repo config with its workspace
+/// include list narrowed to the requested paths.
+///
+/// `pub(crate)` for the `fact_rows_dump` harness entry, which must scope a cell
+/// exactly as `polint unknowns <paths>` does or the I1b dump would cover a
+/// different file set than the probe it is compared against.
+pub(crate) fn load_config_for_check(root: &Path, paths: &[PathBuf]) -> Result<LoadedConfig> {
     let mut config = load_config(root)?;
     if !paths.is_empty() {
         config.config.workspace.include = paths

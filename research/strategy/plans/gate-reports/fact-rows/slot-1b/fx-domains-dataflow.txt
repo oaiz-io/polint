@@ -1,0 +1,132 @@
+schema	polint-fact-rows-1
+capability	dataflow
+files	2
+rows	3863
+
+# family	rows	sha256(family file)
+AccessPath	23	527cc6ec1ef103c460d30526136ede90c21b248700da832c8969318b07f9d464
+AdaptationModel	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Alias	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+AliasAnswer	65	2038a0402b52df3937452528942cfb53b18bd2654d26bf467f2f7bd985f556a4
+AllocationToken	2	5dc6c5cedde970537d4e87e031cc18dd5ffd929dc1cbcf89b6bcd57cf5fa300c
+BasicBlock	49	d67c890acb43765e240db9e43cef6e4c0876bea1a5139c233fdc23b08d4f6cba
+BranchObligation	7	373419683e91f6b7ed2362d8e1e43445ae5cf31d23f573e9f7d6436b0c31cc10
+CallSite	4	d78c8c5509edf024b6e7c7e1e7aebd392cb72bfd06adffae7a5df1f4e78bcc2f
+CallTarget	2	d87cde1e414d287acb52285034008f88548d890f56422e3acfb4d5f6a8d2cb20
+CfgControlDependence	23	f6d2f991ca777e7ed59a162c1f079f1422a9b0d8bf0bb6732b93e0bd1bc7890d
+CfgDominator	212	ffc764d4aec0b6b0e939c88ce46ebba1c77eebf72fa4c96135961662f40a4dfe
+CfgEdge	72	db6eb1af426e83e2676c3b13477abbb8348b41cd6b8e6c2f6a915a6633ab09ea
+CfgFunction	5	79182c505aa323a8f7ff18f7b97f594c43b476210b59ded70dcd80a7cc5da1bb
+CfgNode	69	5b0e6b80e4fafc727d4ba8bee701b2d868a66966707e80afae5baaa7f492101e
+CfgPostDominator	189	67eac918825d0ff0bd9f1fa096e7739441927de4f6ae4cb7587e34b94cc08dcb
+CfgReachability	49	812a463b0b87d974037d5c222cedd20712ce906d5a57dfe8320e31f5d5bd88ca
+ComplexityMetric	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Coverage	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+DataFlowBudget	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+DataFlowEdge	37	5ffa96c65589de492d77355f3811dbe4c9f5da23dda8429fb06516a2842a94db
+DataFlowModel	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+DataFlowNode	57	d872ee70499f18af7fffbe6540e71483ec1e5118974f7e5d11b580f70a327fdb
+Definition	16	84f358d243f44aca61c8c1e79ac7491fe74892ebfa7739d795329f5dd2844c06
+DependencyRequirement	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+DispatchEdge	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+DomainEvent	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+DomainObservation	2458	c5685829bb8dc6c602fb2255efd4aebcf270bb368aabcee580d03d2594a2b325
+Entrypoint	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+EvidenceBundle	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+EvidenceEdge	60	1967c6feeb196adb57b06ae11dc16bedc1edc43686b087b06dcf00482aba1aec
+EvidenceNode	103	9a7edf954ddddc1679cec8055f90e1fa8c4fa2f0d9a398ecd0261ae41e09c045
+EvidenceOmittedRegion	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+EvidencePath	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+EvidenceReplayKey	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+EvidenceSlice	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+EvidenceUnknown	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Export	2	77076ddf927109bc6d12041437df421c16fe0106b6f035cdd0e1a7d168e0f6a3
+ExtensionFact	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+FileMetric	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Function	5	7378c8fbfe17a1d9476192ecfac93337683906e08a333f6b56794b7a4e10e786
+FunctionMetric	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+GeneratedSymbol	2	9ff9489ca2a735fc7052720124672617579d8e8a56eb07bc84d99755850a5997
+GoSemantic	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Identity	9	5d3048257171d759a3fecffe774a2a57cdb0ead7a747a1055bef82a939f9915f
+Import	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ImportToPackage	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+JsxAttribute	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+MirBody	5	63733e46d389301e50d8b0dca1e7d92fb5c321b9168a29cec28dcb5949906c09
+MirOperation	43	f11a560f8a9899dd292ea009fda13f7881338696c3cf4115b7ea6db3b706accf
+MirStatement	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+MirTerminator	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ModuleEdge	3	51d1b71f029a7fc6626a1e0e235bcb90ec33fd7648aad47bb4de8cccdac48409
+ModuleNode	6	a8abb5e98f9d8546bcc62a7cd1b9dc3532568c0b57a13d53599d96d1d5fbd6c7
+NarrowedType	2	2942cefdccb3d03726b00c8da088a83eceae7d575e21e8621180753e55bb0a99
+Package	1	af1205f16e4a3b075a6ed91d7cae5f4dac9407d70729ef11528d463380b7678b
+Place	23	d56c50c97c4dc29d9f20ec1ddabf2fd856f5a7f47515124b145e9a9ff9f0ab80
+PointsToConstraint	9	7dfacdfcb6404a64cc20daa6b2a25a2c3c342a47bb7c3dc587c589cf0bb621e0
+PointsToSet	6	f7b2d862313332049d26b1ef9e163f56154e26bebaf13e7b175f1e1904bf23c8
+Reachability	2	52709783ed751c90715ddf79d57218152f8bbeb4813aaee47e86c638f95a8765
+Reference	41	6fb5164beaf6974e17b7888662524fa2cfc95305946b0d376117aaf8d531fcaf
+RefinedCallEdge	6	b178a12b3345e1f4b0866e507fc238a3f11a5ab8b52b744323f81991bd803771
+RepoTopologyOverlay	10	f30ec5204660fa344c0f18fbee101c0640c2c40a6f10064b6ccdd553a7bd1078
+Resolution	43	233258ab8368ea50ef98731d10bbb8173b453de1492bb16c6bc4e89a9c923ca3
+ResolvedDependencyEdge	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ResolvedImport	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Scope	20	a6c22cf1da8506cbbadca9aa24d525764ed1cea14d45b20dc407c95e9ab83d50
+SemanticGraph	1	1fb98d3cd8d22aab324ddc8c631f6b9ec5ca6819cb953da91a09de5f159f8a8c
+SemanticImport	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+SolverDerivedEdge	3	5fa8a504696fe77cd9466e0857ebe720c009e483e94f281532293edbdb361e2a
+SourceFile	2	8e0a6ed0b001eef4fef4c70665b28124fe78469793b1d84d8b021902cf3be837
+SourceSet	2	8ac9b2805cceb880a505ea67aefe2c94fbe9000857141cb8c5fa63bea59b52bd
+StableExport	2	21455dcb05539b658098b8d35b884e7355167aef3bf3c940babfd68fee275512
+StringLiteral	9	ecbf7449b2ec035211b8a396a66a61e7e598387e2734846b1697c694b4267a46
+SummaryCall	5	8677a3a71ea117fc0ab0bd1deec4d212cca8a1909580e1090ba4dfca699278eb
+SummaryControl	5	533fc6ea39124930dc47b5862f7567ba7a8a1ea4d66bb7493602a5bedca4dc73
+SummaryEvent	3	60bf64c3f83444b10e402b2b71ec9b7d9de088e9880a0f6d71099b487872f50c
+SummaryMemory	5	6cbcfc4d8277292d5e05273e594268af47cf97d599dc6bf3685fea51f42626d1
+SummaryTito	5	2ef9e5304f8b9032a1f4e8b33fd8464bc29db7e2fc98b995aad022c33c8c565d
+Symbol	20	369f19c3f5080e2bffd229d0eb5a7c8fec2699dd85295299a490b9eeab61c837
+Test	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+TopologyPackage	3	7e8d9410c12e3c3c0a60331e0c585b7aa7001b2f1880f49f214ce69164f0eb22
+TrustBoundary	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+TsClass	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+TsComponent	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+TsObjectModel	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Type	26	22048b4e6f67c6749495f967f0185dfa36332579157e8456894e3b6e1979385f
+TypeValueAliasEvent	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+UnresolvedCall	2	0bdcfd83f2247ec376c8e325b04201315fa3bccf14d316000ce982e497e88b91
+UnresolvedFramework	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+UnsupportedControlFlow	1	be91429ff2bca626315b723f1992a2af1cebaa0549a5ad47e8843caa7b1fe05f
+UnsupportedSemantic	1	b90edc2a987a533cf356b9b311ff562bf7d5c42c027f15d437b0ec7602c113ac
+Value	26	56bfd472f4d32fb82311032a31c1c8628fc6cf6da241760b9049bb9d85822a5f
+WorkspaceRoot	2	f9113c86df3d73172a94c93b72cc4d409f94fd1dce40682b0aed3ffda860433c
+
+# SummaryControl rows: key	payload	parts	attributes
+14:SummaryControl|8:callable=197:7:MirBody|8:end_byte=2:60|8:language=2:go|5:owner=105:8:Function|8:end_byte=2:60|8:function=10:unknownInt|8:language=2:go|4:path=9:domain.go|10:start_byte=2:25|4:path=9:domain.go|10:start_byte=2:25|6:domain=15:control_effects	57fbd0a6f35b785d	exit:Returns;async:Sync;cleanup:false	present;local;native_local
+14:SummaryControl|8:callable=198:7:MirBody|8:end_byte=3:715|8:language=2:go|5:owner=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|4:path=9:domain.go|10:start_byte=3:125|6:domain=15:control_effects	3d55c95debf97a7d	callee_propagated:exit:Returns;async:Sync;cleanup:false;callee_propagated:exit:Returns;async:Sync;cleanup:false;exit:Returns;async:Sync;cleanup:false	present;setup_aware;interprocedural_closure
+14:SummaryControl|8:callable=200:7:MirBody|8:end_byte=3:123|8:language=2:go|5:owner=107:8:Function|8:end_byte=3:123|8:function=11:unsupported|8:language=2:go|4:path=9:domain.go|10:start_byte=2:62|4:path=9:domain.go|10:start_byte=2:62|6:domain=15:control_effects	57fcf1710858bfee	exit:Returns;async:Sync;cleanup:false	present;local;native_local
+14:SummaryControl|8:callable=232:7:MirBody|8:end_byte=3:870|8:language=10:typescript|5:owner=121:8:Function|8:end_byte=3:870|8:function=8:tsDomain|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=2:61|4:path=17:web/src/domain.ts|10:start_byte=2:61|6:domain=15:control_effects	5e31e831128726d6	exit:Returns;exit:Unknown;async:Sync;cleanup:false	present;local;native_local
+14:SummaryControl|8:callable=238:7:MirBody|8:end_byte=3:871|8:language=10:typescript|5:owner=128:8:Function|8:end_byte=3:871|8:function=15:<polint:module>|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=1:0|4:path=17:web/src/domain.ts|10:start_byte=1:0|6:domain=15:control_effects	e2b7e448eedd908b	exit:Returns;async:Sync;cleanup:false	present;local;native_local
+
+# SummaryCall rows: key	payload	parts	attributes
+11:SummaryCall|8:callable=197:7:MirBody|8:end_byte=2:60|8:language=2:go|5:owner=105:8:Function|8:end_byte=2:60|8:function=10:unknownInt|8:language=2:go|4:path=9:domain.go|10:start_byte=2:25|4:path=9:domain.go|10:start_byte=2:25|6:domain=12:call_effects	49864506c563afa9	call=bottom	present;local;native_local
+11:SummaryCall|8:callable=198:7:MirBody|8:end_byte=3:715|8:language=2:go|5:owner=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|4:path=9:domain.go|10:start_byte=3:125|6:domain=12:call_effects	11de9b855dadfb6c	callee:10:CallTarget|9:algorithm=15:DirectReference|5:model=6:absent|8:provider=12:polint.calls|6:schema=15:calls-facts-1:1|4:site=1177:8:CallSite|9:call_kind=8:Function|12:callee_shape=22:identifier:unsupported|10:caller_key=91:8:Function|8:language=2:go|4:name=8:GoDomain|4:path=9:domain.go|4:span=17:125-715:11:1-36:2|8:file_key=68:10:SourceFile|12:content_hash=16:01fd325b1e15c3c1|4:path=9:domain.go|8:language=2:Go|13:operation_key=841:12:MirOperation|4:body=198:7:MirBody|8:end_byte=3:715|8:language=2:go|5:owner=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|4:path=9:domain.go|10:start_byte=3:125|8:end_byte=3:701|4:kind=4:call|8:language=2:go|7:ordinal=3:683|12:place_000000=253:5:Place|4:file=9:domain.go|8:function=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|8:language=2:Go|15:parameter_index=1:1|16:projection_count=1:0|9:root_kind=9:parameter|9:root_name=5:input|12:place_000001=238:5:Place|15:call_start_byte=3:683|4:file=9:domain.go|8:function=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|8:language=2:Go|16:projection_count=1:0|9:root_kind=11:call_return|10:start_byte=3:683|4:span=20:34:6..34:24@683..701|6:target=345:6:symbol|language=2:go|module=37:go:module:example.com/abstractdomains|package=171:go:sidecar:go:package|module:example.com/abstractdomains|package:example.com/abstractdomains|variant:regular|namespace:value|kind:function|name:unsupported|line:7|column:6|file=6:<none>|owner=0:|namespace=5:value|kind=8:function|name=11:unsupported|span=6:<none>;callee:10:CallTarget|9:algorithm=15:DirectReference|5:model=6:absent|8:provider=12:polint.calls|6:schema=15:calls-facts-1:1|4:site=903:8:CallSite|9:call_kind=8:Function|12:callee_shape=21:identifier:unknownInt|10:caller_key=91:8:Function|8:language=2:go|4:name=8:GoDomain|4:path=9:domain.go|4:span=17:125-715:11:1-36:2|8:file_key=68:10:SourceFile|12:content_hash=16:01fd325b1e15c3c1|4:path=9:domain.go|8:language=2:Go|13:operation_key=567:12:MirOperation|4:body=198:7:MirBody|8:end_byte=3:715|8:language=2:go|5:owner=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|4:path=9:domain.go|10:start_byte=3:125|8:end_byte=3:564|4:kind=4:call|8:language=2:go|7:ordinal=3:552|12:place_000000=238:5:Place|15:call_start_byte=3:552|4:file=9:domain.go|8:function=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|8:language=2:Go|16:projection_count=1:0|9:root_kind=11:call_return|10:start_byte=3:552|4:span=21:27:14..27:26@552..564|6:target=343:6:symbol|language=2:go|module=37:go:module:example.com/abstractdomains|package=170:go:sidecar:go:package|module:example.com/abstractdomains|package:example.com/abstractdomains|variant:regular|namespace:value|kind:function|name:unknownInt|line:3|column:6|file=6:<none>|owner=0:|namespace=5:value|kind=8:function|name=10:unknownInt|span=6:<none>;unresolved:0;callback_invoked:false;callback_stored:false;callee_control:exit:Returns;async:Sync;cleanup:false;callee_control:exit:Returns;async:Sync;cleanup:false	present;setup_aware;interprocedural_closure
+11:SummaryCall|8:callable=200:7:MirBody|8:end_byte=3:123|8:language=2:go|5:owner=107:8:Function|8:end_byte=3:123|8:function=11:unsupported|8:language=2:go|4:path=9:domain.go|10:start_byte=2:62|4:path=9:domain.go|10:start_byte=2:62|6:domain=12:call_effects	79e76e0ca870ab00	call=bottom	present;local;native_local
+11:SummaryCall|8:callable=232:7:MirBody|8:end_byte=3:870|8:language=10:typescript|5:owner=121:8:Function|8:end_byte=3:870|8:function=8:tsDomain|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=2:61|4:path=17:web/src/domain.ts|10:start_byte=2:61|6:domain=12:call_effects	142b44f073f2ef1b	unresolved:2;callback_invoked:false;callback_stored:false	present;local;native_local
+11:SummaryCall|8:callable=238:7:MirBody|8:end_byte=3:871|8:language=10:typescript|5:owner=128:8:Function|8:end_byte=3:871|8:function=15:<polint:module>|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=1:0|4:path=17:web/src/domain.ts|10:start_byte=1:0|6:domain=12:call_effects	fd55599248ff69ad	call=bottom	present;local;native_local
+
+# SummaryMemory rows: key	payload	parts	attributes
+13:SummaryMemory|8:callable=197:7:MirBody|8:end_byte=2:60|8:language=2:go|5:owner=105:8:Function|8:end_byte=2:60|8:function=10:unknownInt|8:language=2:go|4:path=9:domain.go|10:start_byte=2:25|4:path=9:domain.go|10:start_byte=2:25|6:domain=14:memory_effects	289beb74ea181731	external:false;global:None;local:None;module:None;receiver:None;return:Write	present;local;native_local
+13:SummaryMemory|8:callable=198:7:MirBody|8:end_byte=3:715|8:language=2:go|5:owner=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|4:path=9:domain.go|10:start_byte=3:125|6:domain=14:memory_effects	31b91c30a45619ec	callee_memory:external:false;global:None;local:None;module:None;param[0]:Read;receiver:None;return:Write;callee_memory:external:false;global:None;local:None;module:None;receiver:None;return:Write;external:false;global:Write;local:ReadWrite;module:None;param[1]:Read;receiver:None;return:Write	present;setup_aware;interprocedural_closure
+13:SummaryMemory|8:callable=200:7:MirBody|8:end_byte=3:123|8:language=2:go|5:owner=107:8:Function|8:end_byte=3:123|8:function=11:unsupported|8:language=2:go|4:path=9:domain.go|10:start_byte=2:62|4:path=9:domain.go|10:start_byte=2:62|6:domain=14:memory_effects	41feb16340146296	external:false;global:None;local:None;module:None;param[0]:Read;receiver:None;return:Write	present;local;native_local
+13:SummaryMemory|8:callable=232:7:MirBody|8:end_byte=3:870|8:language=10:typescript|5:owner=121:8:Function|8:end_byte=3:870|8:function=8:tsDomain|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=2:61|4:path=17:web/src/domain.ts|10:start_byte=2:61|6:domain=14:memory_effects	8d17b38b18437dee	external:true;global:None;local:ReadWrite;module:None;param[1]:Read;receiver:None;return:Write	present;local;native_local
+13:SummaryMemory|8:callable=238:7:MirBody|8:end_byte=3:871|8:language=10:typescript|5:owner=128:8:Function|8:end_byte=3:871|8:function=15:<polint:module>|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=1:0|4:path=17:web/src/domain.ts|10:start_byte=1:0|6:domain=14:memory_effects	f68bd901f773e33f	external:false;global:None;local:Write;module:None;receiver:None;return:None	present;local;native_local
+
+# SummaryTito rows: key	payload	parts	attributes
+11:SummaryTito|8:callable=197:7:MirBody|8:end_byte=2:60|8:language=2:go|5:owner=105:8:Function|8:end_byte=2:60|8:function=10:unknownInt|8:language=2:go|4:path=9:domain.go|10:start_byte=2:25|4:path=9:domain.go|10:start_byte=2:25|6:domain=14:data_flow_tito	0ecfaea6034d347d	tito=bottom	present;local;native_local
+11:SummaryTito|8:callable=198:7:MirBody|8:end_byte=3:715|8:language=2:go|5:owner=104:8:Function|8:end_byte=3:715|8:function=8:GoDomain|8:language=2:go|4:path=9:domain.go|10:start_byte=3:125|4:path=9:domain.go|10:start_byte=3:125|6:domain=14:data_flow_tito	ca6a5e0510f08d71	tito=bottom	present;setup_aware;interprocedural_closure
+11:SummaryTito|8:callable=200:7:MirBody|8:end_byte=3:123|8:language=2:go|5:owner=107:8:Function|8:end_byte=3:123|8:function=11:unsupported|8:language=2:go|4:path=9:domain.go|10:start_byte=2:62|4:path=9:domain.go|10:start_byte=2:62|6:domain=14:data_flow_tito	a7e15a7eed2d6fdf	edge:Param(0)->Return:Value;source_return:true;sink_param:false	present;local;native_local
+11:SummaryTito|8:callable=232:7:MirBody|8:end_byte=3:870|8:language=10:typescript|5:owner=121:8:Function|8:end_byte=3:870|8:function=8:tsDomain|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=2:61|4:path=17:web/src/domain.ts|10:start_byte=2:61|6:domain=14:data_flow_tito	b0568dae9e02677d	source_return:false;sink_param:false	present;local;native_local
+11:SummaryTito|8:callable=238:7:MirBody|8:end_byte=3:871|8:language=10:typescript|5:owner=128:8:Function|8:end_byte=3:871|8:function=15:<polint:module>|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=1:0|4:path=17:web/src/domain.ts|10:start_byte=1:0|6:domain=14:data_flow_tito	7b3695412668d1ff	tito=bottom	present;local;native_local
+
+# SummaryEvent rows: key	payload	parts	attributes
+12:SummaryEvent|8:callable=232:7:MirBody|8:end_byte=3:870|8:language=10:typescript|5:owner=121:8:Function|8:end_byte=3:870|8:function=8:tsDomain|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=2:61|4:path=17:web/src/domain.ts|10:start_byte=2:61|6:domain=12:call_effects|5:event=17:unresolved_callee	3e34d16594033242	unresolved_callee;2 unresolved calls	call_effects;unknown;unknown_top
+12:SummaryEvent|8:callable=232:7:MirBody|8:end_byte=3:870|8:language=10:typescript|5:owner=121:8:Function|8:end_byte=3:870|8:function=8:tsDomain|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=2:61|4:path=17:web/src/domain.ts|10:start_byte=2:61|6:domain=14:data_flow_tito|5:event=11:unknown_top	0e897850d0f5d1e9	unknown_top;unresolved_calls	data_flow_tito;unknown;unknown_top
+12:SummaryEvent|8:callable=232:7:MirBody|8:end_byte=3:870|8:language=10:typescript|5:owner=121:8:Function|8:end_byte=3:870|8:function=8:tsDomain|8:language=10:typescript|4:path=17:web/src/domain.ts|10:start_byte=2:61|4:path=17:web/src/domain.ts|10:start_byte=2:61|6:domain=14:memory_effects|5:event=25:may_have_external_effects	9eae651554459866	may_have_external_effects;unresolved_calls	memory_effects;unknown;unknown_top

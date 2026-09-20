@@ -136,15 +136,31 @@ pub trait AnalysisHost: FactDatabase {
             .collect()
     }
 
+    /// Every definition of a symbol, in database order.
+    ///
+    /// The default filters the whole definition table, which is the scan
+    /// `definition_for_symbol` used to perform inline. `AnalysisDb` overrides it
+    /// with its `definitions_by_symbol` index; that index is built by walking the
+    /// same table in order and pushing positions, so both orders are the table's
+    /// and the first-primary-else-first rule below picks the same row either way.
+    fn definitions_for_symbol(
+        &self,
+        symbol: crate::internal_core::SymbolId,
+    ) -> Box<dyn Iterator<Item = &crate::analysis_api::DefinitionFact> + '_> {
+        Box::new(
+            FactDatabase::definitions(self)
+                .iter()
+                .filter(move |definition| definition.symbol == symbol),
+        )
+    }
+
     /// Return the primary definition for a symbol, falling back to the first
     /// definition when no primary marker is present.
     fn definition_for_symbol(
         &self,
         symbol: crate::internal_core::SymbolId,
     ) -> Option<&crate::analysis_api::DefinitionFact> {
-        let mut definitions = FactDatabase::definitions(self)
-            .iter()
-            .filter(|definition| definition.symbol == symbol);
+        let mut definitions = self.definitions_for_symbol(symbol);
         let first = definitions.next();
         first
             .filter(|definition| definition.is_primary)

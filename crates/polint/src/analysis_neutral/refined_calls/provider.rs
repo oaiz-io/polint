@@ -1,11 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::analysis_api::{
     CacheStats, Digest, DigestKind, InputComponent, InputSnapshot, ProviderExecution,
     ProviderFailureReason, ProviderFailureStage,
 };
 use crate::analysis_api::{
-    FactFamily, FactRef, ProviderManifest, stable_key_from_parts, stable_key_text_from_parts,
+    FactFamily, FactRef, FunctionFact, ProviderManifest, stable_key_from_parts,
+    stable_key_text_from_parts,
 };
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact, CallSyntaxKind,
@@ -361,10 +362,9 @@ impl<'a> SolverProjectionIndex<'a> {
                 site,
             );
         }
+        let join = GoSemanticJoinIndex::build(db, go_semantic_functions);
         for callsite in go_semantic_callsites {
-            let Some(site) =
-                core_callsite_for_go_semantic_callsite(db, callsite, go_semantic_functions)
-            else {
+            let Some(site) = core_callsite_for_go_semantic_callsite(db, &join, callsite) else {
                 continue;
             };
             callsite_by_stable_key
@@ -389,22 +389,111 @@ impl<'a> SolverProjectionIndex<'a> {
     }
 }
 
+/// The three whole-program joins the Go semantic projection performs, keyed.
+///
+/// `core_callsite_for_go_semantic_callsite` ran once per sidecar call-site row
+/// (286,671 to 362,952 rows on the benchmarked backend) and scanned every native
+/// call site, then, through the caller match, every Go semantic function and
+/// every native function per row (research doc section 3.2, the refined-calls
+/// row: O(rows x sites)). Each bucket below is in the source collection's own
+/// order and each caller keeps the predicate and the tie-break it always had.
+struct GoSemanticJoinIndex<'a> {
+    call_sites_by_file_span: HashMap<(FileId, Language, FileId, u32, u32), Vec<&'a CallSiteFact>>,
+    functions_by_file_name: HashMap<(FileId, Language), HashMap<&'a str, Vec<&'a FunctionFact>>>,
+    go_functions_by_qualified: HashMap<&'a str, Vec<&'a GoSemanticFunctionInput>>,
+}
+
+impl<'a> GoSemanticJoinIndex<'a> {
+    fn build(
+        db: &'a impl AnalysisHost,
+        go_semantic_functions: &'a [GoSemanticFunctionInput],
+    ) -> Self {
+        // `same_byte_span` compares the span's own file as well as the byte
+        // range, and the legacy filter tested `site.file` and the language beside
+        // it, so all five fields are in the key.
+        let mut call_sites_by_file_span: HashMap<_, Vec<&'a CallSiteFact>> = HashMap::new();
+        for site in db.call_sites() {
+            call_sites_by_file_span
+                .entry((
+                    site.file,
+                    site.language,
+                    site.span.file,
+                    site.span.start_byte,
+                    site.span.end_byte,
+                ))
+                .or_default()
+                .push(site);
+        }
+
+        let mut functions_by_file_name: HashMap<_, HashMap<&'a str, Vec<&'a FunctionFact>>> =
+            HashMap::new();
+        for core in db.functions() {
+            functions_by_file_name
+                .entry((core.file, core.language))
+                .or_default()
+                .entry(core.name.as_str())
+                .or_default()
+                .push(core);
+        }
+
+        let mut go_functions_by_qualified: HashMap<_, Vec<&'a GoSemanticFunctionInput>> =
+            HashMap::new();
+        for function in go_semantic_functions {
+            go_functions_by_qualified
+                .entry(function.qualified.as_str())
+                .or_default()
+                .push(function);
+        }
+
+        Self {
+            call_sites_by_file_span,
+            functions_by_file_name,
+            go_functions_by_qualified,
+        }
+    }
+
+    fn call_sites_at(&self, file: FileId, span: &Span) -> &[&'a CallSiteFact] {
+        self.call_sites_by_file_span
+            .get(&(
+                file,
+                Language::Go,
+                span.file,
+                span.start_byte,
+                span.end_byte,
+            ))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    fn core_functions_named<'index>(
+        &'index self,
+        file: FileId,
+        name: &str,
+    ) -> &'index [&'a FunctionFact] {
+        self.functions_by_file_name
+            .get(&(file, Language::Go))
+            .and_then(|by_name| by_name.get(name))
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    fn go_functions_qualified(&self, qualified: &str) -> &[&'a GoSemanticFunctionInput] {
+        self.go_functions_by_qualified
+            .get(qualified)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+}
+
 fn core_callsite_for_go_semantic_callsite<'a>(
     db: &'a impl AnalysisHost,
+    join: &GoSemanticJoinIndex<'a>,
     callsite: &GoSemanticCallsiteInput,
-    go_semantic_functions: &[GoSemanticFunctionInput],
 ) -> Option<&'a CallSiteFact> {
     let file = callsite.file?;
     let span = callsite.span.as_ref()?;
-    let mut candidates = db
-        .call_sites()
-        .iter()
-        .filter(|site| {
-            site.language == Language::Go && site.file == file && same_byte_span(&site.span, span)
-        })
-        .collect::<Vec<_>>();
-    let caller =
-        core_function_for_go_semantic_function(db, &callsite.caller, go_semantic_functions);
+    let mut candidates = join.call_sites_at(file, span).to_vec();
+    let caller = core_function_for_go_semantic_function(join, &callsite.caller);
     if let Some(caller) = caller {
         let caller_matches = candidates
             .iter()
@@ -434,37 +523,33 @@ fn core_callsite_for_go_semantic_callsite<'a>(
 }
 
 fn core_function_for_go_semantic_function(
-    db: &impl AnalysisHost,
+    join: &GoSemanticJoinIndex<'_>,
     qualified: &str,
-    go_semantic_functions: &[GoSemanticFunctionInput],
 ) -> Option<FunctionId> {
-    go_semantic_functions
+    join.go_functions_qualified(qualified)
         .iter()
-        .filter(|function| function.qualified == qualified)
-        .filter_map(|function| core_function_for_go_semantic_fact(db, function))
+        .copied()
+        .filter_map(|function| core_function_for_go_semantic_fact(join, function))
         .next()
 }
 
 fn core_function_for_go_semantic_fact(
-    db: &impl AnalysisHost,
+    join: &GoSemanticJoinIndex<'_>,
     function: &GoSemanticFunctionInput,
 ) -> Option<FunctionId> {
     let file = function.file?;
     let span = function.span.as_ref()?;
-    matching_core_function_for_go_semantic_span(db, file, &function.name, span).map(|core| core.id)
+    matching_core_function_for_go_semantic_span(join, file, &function.name, span)
+        .map(|core| core.id)
 }
 
 fn matching_core_function_for_go_semantic_span<'a>(
-    db: &'a impl AnalysisHost,
+    join: &GoSemanticJoinIndex<'a>,
     file: FileId,
     name: &str,
     span: &Span,
-) -> Option<&'a crate::analysis_api::FunctionFact> {
-    let bucket = db
-        .functions()
-        .iter()
-        .filter(|core| core.language == Language::Go && core.file == file && core.name == name)
-        .collect::<Vec<_>>();
+) -> Option<&'a FunctionFact> {
+    let bucket = join.core_functions_named(file, name);
     if let Some(exact) = bucket
         .iter()
         .copied()
@@ -888,6 +973,139 @@ mod tests {
     use crate::analysis_neutral::calls::facts::{CallCallee, CallSiteFact};
     use crate::analysis_neutral::calls::store::CallOutput;
     use crate::analysis_neutral::ids::{CallSiteId, CallTargetId, MirBodyId, MirOpId};
+    use std::path::PathBuf;
+
+    /// W1 commit 4: the Go semantic projection's three whole-program joins became
+    /// `GoSemanticJoinIndex`. Two native call sites share a span and differ only
+    /// in their caller, which is the narrowing step the index must not lose, and
+    /// the `min_by_key` on the resolved stable key is the tie-break behind it.
+    #[test]
+    fn the_go_semantic_callsite_join_keeps_the_caller_match_and_the_key_tie_break() {
+        use crate::analysis_neutral::calls::facts::{
+            CallPrecision, CallSyntaxKind, CallTargetStatus,
+        };
+
+        let mut db = LocalAnalysisDb::new();
+        let file = db.add_file(
+            PathBuf::from("main.go"),
+            "main.go".to_string(),
+            "package main\n".to_string(),
+        );
+        let alpha_span = Span::new(file, 10, 40, 2, 1, 4, 2);
+        let beta_span = Span::new(file, 50, 90, 6, 1, 8, 2);
+        let alpha = db.push_function(FunctionFact::new(
+            FunctionId::from_raw(0),
+            file,
+            "alpha".to_string(),
+            alpha_span,
+            Language::Go,
+            false,
+            true,
+            1,
+            Vec::new(),
+        ));
+        let beta = db.push_function(FunctionFact::new(
+            FunctionId::from_raw(0),
+            file,
+            "beta".to_string(),
+            beta_span.clone(),
+            Language::Go,
+            false,
+            true,
+            1,
+            Vec::new(),
+        ));
+
+        // Both call sites sit at the same span; only the caller tells them apart.
+        let call_span = Span::new(file, 20, 30, 3, 3, 3, 13);
+        let interner = db.stable_key_interner();
+        let site = |id: u64, caller: FunctionId, key: &str| CallSiteFact {
+            in_throw: false,
+            id: CallSiteId(id),
+            language: Language::Go,
+            file,
+            caller,
+            owner_symbol: None,
+            body: MirBodyId(id),
+            operation: MirOpId(id),
+            span: call_span.clone(),
+            kind: CallSyntaxKind::Function,
+            callee: CallCallee::Identifier {
+                reference: None,
+                name: "callee".to_string(),
+            },
+            receiver: None,
+            arguments: Vec::new(),
+            result: None,
+            status: CallTargetStatus::Resolved,
+            precision: CallPrecision::Exact,
+            stable_key: interner.intern(key.to_string()),
+        };
+        db.replace_call_facts(CallOutput {
+            sites: vec![
+                site(1, alpha, "call-site:zz-in-alpha"),
+                site(2, beta, "call-site:aa-in-beta"),
+            ],
+            targets: Vec::new(),
+            unresolved: Vec::new(),
+        })
+        .expect("call facts should store");
+
+        let go_functions = vec![GoSemanticFunctionInput {
+            qualified: "main.beta".to_string(),
+            name: "beta".to_string(),
+            file: Some(file),
+            span: Some(beta_span),
+        }];
+        let join = GoSemanticJoinIndex::build(&db, &go_functions);
+
+        // The caller narrows two same-span candidates to one, even though the
+        // other one's resolved key sorts first.
+        let matched = core_callsite_for_go_semantic_callsite(
+            &db,
+            &join,
+            &GoSemanticCallsiteInput {
+                stable_key: interner.intern("go-semantic:callsite".to_string()),
+                caller: "main.beta".to_string(),
+                file: Some(file),
+                span: Some(call_span.clone()),
+            },
+        )
+        .expect("the span bucket has candidates");
+        assert_eq!(matched.id, CallSiteId(2));
+
+        // With no caller match the candidates stay both, and the `min_by_key` on
+        // the resolved stable key decides.
+        let tie_broken = core_callsite_for_go_semantic_callsite(
+            &db,
+            &join,
+            &GoSemanticCallsiteInput {
+                stable_key: interner.intern("go-semantic:callsite:unknown".to_string()),
+                caller: "main.unknown".to_string(),
+                file: Some(file),
+                span: Some(call_span),
+            },
+        )
+        .expect("the span bucket has candidates");
+        assert_eq!(
+            tie_broken.id,
+            CallSiteId(2),
+            "`call-site:aa-in-beta` sorts first"
+        );
+
+        // The function join keeps the same answers the scan gave.
+        assert_eq!(
+            core_function_for_go_semantic_function(&join, "main.beta"),
+            Some(beta)
+        );
+        assert_eq!(
+            core_function_for_go_semantic_function(&join, "main.absent"),
+            None
+        );
+        assert_eq!(join.core_functions_named(file, "alpha").len(), 1);
+        assert!(join.core_functions_named(file, "gamma").is_empty());
+        assert_eq!(alpha, FunctionId::from_raw(0));
+    }
 
     fn manifest() -> ProviderManifest {
         ProviderManifest {

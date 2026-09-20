@@ -8,6 +8,7 @@ pub(crate) mod competitors;
 pub(crate) mod delta;
 pub(crate) mod determinism_gate;
 pub(crate) mod external;
+pub(crate) mod fact_rows_dump;
 pub(crate) mod fixtures;
 pub(crate) mod gates;
 #[cfg(test)]
