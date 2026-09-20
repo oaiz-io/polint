@@ -71,6 +71,7 @@ pub fn derive_dominators(
 ) -> Vec<DominatorFact> {
     let mut facts = Vec::new();
     let mut next_id = 1;
+    let mut row_sources = Vec::new();
     let index = CfgGraphIndex::new(interner, output);
     for graph in index.graphs(view) {
         let function = graph.function_id();
@@ -89,12 +90,14 @@ pub fn derive_dominators(
         );
         for dominated in tree.universe() {
             let immediate = tree.immediate(dominated, false);
-            for dominator in tree.dominators(dominated) {
-                if materialization == DominanceMaterialization::ImmediateOnly
-                    && immediate != Some(dominator)
-                {
-                    continue;
-                }
+            // Under the bound the tree edge is the whole emission, so nothing
+            // walks the closure at all; the full relation reads it off the tree.
+            row_sources.clear();
+            match materialization {
+                DominanceMaterialization::ImmediateOnly => row_sources.extend(immediate),
+                DominanceMaterialization::Full => row_sources.extend(tree.dominators(dominated)),
+            }
+            for dominator in row_sources.iter().copied() {
                 facts.push(DominatorFact {
                     id: DominatorId(next_id),
                     cfg_function: function,
@@ -131,6 +134,7 @@ pub fn derive_postdominators(
 ) -> Vec<PostDominatorFact> {
     let mut facts = Vec::new();
     let mut next_id = 1;
+    let mut row_sources = Vec::new();
     let index = CfgGraphIndex::new(interner, output);
     for graph in index.graphs(view) {
         let function = graph.function_id();
@@ -145,13 +149,15 @@ pub fn derive_postdominators(
                 continue;
             }
             let immediate = tree.immediate(postdominated, false);
-            for postdominator in tree.dominators(postdominated) {
-                if postdominator == virtual_exit {
-                    continue;
+            row_sources.clear();
+            match materialization {
+                DominanceMaterialization::ImmediateOnly => row_sources.extend(immediate),
+                DominanceMaterialization::Full => {
+                    row_sources.extend(tree.dominators(postdominated));
                 }
-                if materialization == DominanceMaterialization::ImmediateOnly
-                    && immediate != Some(postdominator)
-                {
+            }
+            for postdominator in row_sources.iter().copied() {
+                if postdominator == virtual_exit {
                     continue;
                 }
                 facts.push(PostDominatorFact {
@@ -1958,11 +1964,26 @@ mod tests {
                     .map(|fact| (fact.postdominator, fact.postdominated, fact.stable_key))
                     .collect::<Vec<_>>()
             );
-            // Control dependence reads the unbounded tree in both modes, so its
-            // rows do not depend on the bound at all.
+            // Control dependence takes no materialisation argument: its input
+            // is the tree, and the map its runner walks is exactly the emitted
+            // tree-edge set, which the two assertions above show the bound does
+            // not move. Pinning the correspondence here is what makes that
+            // argument checkable -- a change that routed control dependence
+            // through the emitted rows instead would fail on this line.
+            let index = CfgGraphIndex::new(&interner, &output);
+            let graph = index.graphs(CfgView::NormalControl).remove(0);
+            let tree = reverse_dom_tree(&graph).expect("the fixtures all have an exit");
+            let runner_map = graph
+                .block_refs()
+                .iter()
+                .filter_map(|block| Some((block.id, tree.immediate(block.id, true)?)))
+                .collect::<BTreeSet<_>>();
             assert_eq!(
-                derive_control_dependence(&interner, &output, CfgView::NormalControl),
-                derive_control_dependence(&interner, &output, CfgView::NormalControl)
+                runner_map,
+                post_tree_only
+                    .iter()
+                    .map(|fact| (fact.postdominated, fact.postdominator))
+                    .collect::<BTreeSet<_>>()
             );
         }
     }
