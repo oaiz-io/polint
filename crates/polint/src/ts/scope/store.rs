@@ -12,23 +12,21 @@ pub struct TsScopeOutput {
 
 impl TsScopeOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.scopes.sort_by_cached_key(|scope| {
-            (
-                interner.resolve(scope.stable_key),
-                scope.span.start_byte,
-                scope.span.end_byte,
-            )
+        self.scopes.sort_by(|scope, other| {
+            interner
+                .compare_canonical(scope.stable_key, other.stable_key)
+                .then_with(|| scope.span.start_byte.cmp(&other.span.start_byte))
+                .then_with(|| scope.span.end_byte.cmp(&other.span.end_byte))
         });
         for (index, scope) in self.scopes.iter_mut().enumerate() {
             scope.id = TsScopeId(index as u64);
         }
 
-        self.bindings.sort_by_cached_key(|binding| {
-            (
-                interner.resolve(binding.stable_key),
-                binding.span.start_byte,
-                binding.span.end_byte,
-            )
+        self.bindings.sort_by(|binding, other| {
+            interner
+                .compare_canonical(binding.stable_key, other.stable_key)
+                .then_with(|| binding.span.start_byte.cmp(&other.span.start_byte))
+                .then_with(|| binding.span.end_byte.cmp(&other.span.end_byte))
         });
         for (index, binding) in self.bindings.iter_mut().enumerate() {
             binding.id = TsBindingId(index as u64);

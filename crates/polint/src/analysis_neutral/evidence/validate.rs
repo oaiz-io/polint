@@ -21,20 +21,13 @@ pub fn validate_extension_evidence(
         .map(|candidate| validate_candidate(store, interner, candidate))
         .collect::<Vec<_>>();
     rows.sort_by(|left, right| {
-        (
-            left.extension_id.as_str(),
-            left.provider_id.as_str(),
-            interner.resolve(left.stable_key),
-            left.verdict,
-            left.reason,
-        )
-            .cmp(&(
-                right.extension_id.as_str(),
-                right.provider_id.as_str(),
-                interner.resolve(right.stable_key),
-                right.verdict,
-                right.reason,
-            ))
+        left.extension_id
+            .as_str()
+            .cmp(right.extension_id.as_str())
+            .then_with(|| left.provider_id.as_str().cmp(right.provider_id.as_str()))
+            .then_with(|| interner.compare_canonical(left.stable_key, right.stable_key))
+            .then_with(|| left.verdict.cmp(&right.verdict))
+            .then_with(|| left.reason.cmp(&right.reason))
     });
     ExtensionEvidenceMergeReport { rows }
 }

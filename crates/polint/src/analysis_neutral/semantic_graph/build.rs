@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::analysis_api::{FactFamily, FunctionFact, PackageFact};
-use crate::internal_core::{StableKeyId, StableKeyInterner};
+use crate::analysis_api::{FactFamily, FunctionFact, PackageFact, stable_key_from_key_parts};
+use crate::internal_core::{KeyPart, StableKeyId, StableKeyInterner};
 
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::store::AdaptationModelStore;
@@ -72,16 +72,14 @@ impl SemanticGraphBuilder {
         // stable keys from the interned node table.
         let source_key = self.node_key_for(source);
         let target_key = self.node_key_for(target);
-        let stable_key = interner.intern(
-            semantic_stable_key(
-                FactFamily::Reference,
-                &[
-                    ("edge_kind", kind.as_str().to_string()),
-                    ("source", interner.resolve(source_key).to_string()),
-                    ("target", interner.resolve(target_key).to_string()),
-                ],
-            )
-            .into_string(),
+        let stable_key = stable_key_from_key_parts(
+            interner,
+            FactFamily::Reference,
+            [
+                ("edge_kind", KeyPart::Text(kind.as_str())),
+                ("source", KeyPart::Key(source_key)),
+                ("target", KeyPart::Key(target_key)),
+            ],
         );
         self.edges.push(SemanticEdgeFact {
             id: Default::default(),

@@ -1,0 +1,117 @@
+{
+ "wall_s": 0.19265228899894282,
+ "exit": 0,
+ "cold": false,
+ "mode": "syn",
+ "repo": "research/evaluation-harness/repos/excalidraw-excalidraw",
+ "binary": ".perf/bin/final-polint-tests",
+ "point": {
+  "repo_id": "excalidraw-excalidraw",
+  "repo_file_count": 385,
+  "repo_source_bytes": 2566051,
+  "diff_files": 0,
+  "diff_hunk_lines": 0,
+  "cold_wall_clock_ms": 181,
+  "warm_wall_clock_ms": 181,
+  "peak_rss_bytes": 53313536,
+  "peak_rss_delta_bytes": 39682048,
+  "size": {
+   "cache_bytes": 10072103,
+   "store_bytes": 0
+  },
+  "budget": {
+   "budget_exceeded": 0,
+   "tokens_exhausted": 0,
+   "iteration_capped": 0
+  }
+ },
+ "stages": [
+  {
+   "provider": "polint.source",
+   "elapsed_ms": 0,
+   "rss_mb": 23,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 23,
+   "facts": 385,
+   "keys": 385,
+   "key_mb": 0,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.go.syntax",
+   "elapsed_ms": 0,
+   "rss_mb": 24,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 23,
+   "facts": 385,
+   "keys": 385,
+   "key_mb": 0,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.ts.syntax",
+   "elapsed_ms": 79,
+   "rss_mb": 40,
+   "rss_delta_mb": 15,
+   "peak_rss_mb": 43,
+   "facts": 19398,
+   "keys": 19398,
+   "key_mb": 2,
+   "digest": "52fea312df92f2c9"
+  },
+  {
+   "provider": "polint.module_graph",
+   "elapsed_ms": 0,
+   "rss_mb": 40,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 43,
+   "facts": 19398,
+   "keys": 19398,
+   "key_mb": 2,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.symbol_graph",
+   "elapsed_ms": 0,
+   "rss_mb": 40,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 43,
+   "facts": 19398,
+   "keys": 19398,
+   "key_mb": 2,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.metrics",
+   "elapsed_ms": 65,
+   "rss_mb": 51,
+   "rss_delta_mb": 10,
+   "peak_rss_mb": 50,
+   "facts": 28479,
+   "keys": 28479,
+   "key_mb": 4,
+   "digest": "651012bd050d9422"
+  }
+ ],
+ "diagnostics": {
+  "count": 3,
+  "digest": "2fa3f65a11b6a51e"
+ },
+ "load_before": [
+  3.60546875,
+  8.8662109375,
+  54.68603515625
+ ],
+ "load_after": [
+  3.60546875,
+  8.8662109375,
+  54.68603515625
+ ],
+ "competing_builds": [],
+ "stamps_before": [],
+ "stamps_after_clear": [],
+ "stamps_final": [],
+ "stderr": "2026-09-10T00:24:53.674985Z  INFO polint::kernel::stage: stage done provider=\"polint.source\" elapsed_ms=0 rss_mb=23 rss_delta_mb=0 peak_rss_mb=23 facts=385 keys=385 key_mb=0 digest=\"-\"\n2026-09-10T00:24:53.677046Z  INFO polint::kernel::stage: stage done provider=\"polint.go.syntax\" elapsed_ms=0 rss_mb=24 rss_delta_mb=0 peak_rss_mb=23 facts=385 keys=385 key_mb=0 digest=\"-\"\n2026-09-10T00:24:53.757228Z  INFO polint::kernel::stage: stage done provider=\"polint.ts.syntax\" elapsed_ms=79 rss_mb=40 rss_delta_mb=15 peak_rss_mb=43 facts=19398 keys=19398 key_mb=2 digest=\"52fea312df92f2c9\"\n2026-09-10T00:24:53.757571Z  INFO polint::kernel::stage: stage done provider=\"polint.module_graph\" elapsed_ms=0 rss_mb=40 rss_delta_mb=0 peak_rss_mb=43 facts=19398 keys=19398 key_mb=2 digest=\"-\"\n2026-09-10T00:24:53.757936Z  INFO polint::kernel::stage: stage done provider=\"polint.symbol_graph\" elapsed_ms=0 rss_mb=40 rss_delta_mb=0 peak_rss_mb=43 facts=19398 keys=19398 key_mb=2 digest=\"-\"\n2026-09-10T00:24:53.824339Z  INFO polint::kernel::stage: stage done provider=\"polint.metrics\" elapsed_ms=65 rss_mb=51 rss_delta_mb=10 peak_rss_mb=50 facts=28479 keys=28479 key_mb=4 digest=\"651012bd050d9422\"\n2026-09-10T00:24:53.828712Z  INFO polint::kernel::stage: run diagnostics diagnostics=3 diagnostics_digest=\"2fa3f65a11b6a51e\"\n",
+ "rejected_attempts": [],
+ "kind": "warm2"
+}

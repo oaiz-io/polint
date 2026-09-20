@@ -23,24 +23,14 @@ impl RefinedCallOutput {
             .map(RefinedCallEdgeFact::normalized)
             .collect();
         self.edges.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.site,
-                left.tier,
-                left.algorithm,
-                left.provenance,
-                left.status,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.site,
-                    right.tier,
-                    right.algorithm,
-                    right.provenance,
-                    right.status,
-                    right.id,
-                ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.site.cmp(&right.site))
+                .then_with(|| left.tier.cmp(&right.tier))
+                .then_with(|| left.algorithm.cmp(&right.algorithm))
+                .then_with(|| left.provenance.cmp(&right.provenance))
+                .then_with(|| left.status.cmp(&right.status))
+                .then_with(|| left.id.cmp(&right.id))
         });
         self
     }

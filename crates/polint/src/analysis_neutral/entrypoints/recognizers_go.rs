@@ -179,8 +179,10 @@ pub fn recognize_go_entrypoints(db: &impl AnalysisHost) -> GoRecognizerOutput {
     );
 
     // Sort output by stable key
-    entrypoints.sort_by_key(|entrypoint| interner.resolve(entrypoint.stable_key));
-    unresolved.sort_by_key(|fact| interner.resolve(fact.stable_key));
+    entrypoints.sort_by(|entrypoint, other| {
+        interner.compare_canonical(entrypoint.stable_key, other.stable_key)
+    });
+    unresolved.sort_by(|fact, other| interner.compare_canonical(fact.stable_key, other.stable_key));
 
     GoRecognizerOutput {
         entrypoints,

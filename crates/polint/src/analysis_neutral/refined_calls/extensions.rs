@@ -2,7 +2,7 @@ use super::facts::{
     RefinedCallConfidence, RefinedCallEdgeFact, RefinedCallTier, RefinedCallValidation,
 };
 use super::store::RefinedCallOutput;
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallCallee, CallEdgeKind, CallPrecision, CallProvenance, CallTargetStatus,
@@ -13,7 +13,7 @@ use crate::analysis_neutral::extensions::sinks::{
 };
 use crate::analysis_neutral::extensions::store::AcceptedExtensionFact;
 use crate::analysis_neutral::ids::{CallSiteId, RefinedCallEdgeId};
-use crate::internal_core::{FunctionId, SymbolId};
+use crate::internal_core::{FunctionId, KeyPart, SymbolId};
 
 pub fn derive_extension_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
     let interner_handle = db.stable_key_interner();
@@ -80,14 +80,14 @@ fn edge_from_extension_fact(
         confidence: extension_confidence(fact.confidence),
         evidence: extension_evidence(fact),
         input_stable_keys: vec![interner.resolve(fact.stable_key).to_string()],
-        stable_key: stable_key_from_parts(
+        stable_key: stable_key_from_key_parts(
             interner,
             FactFamily::RefinedCallEdge,
-            &[
-                ("tier", "extension_model".to_string()),
-                ("extension", fact.extension_id.clone()),
-                ("provider", fact.provider_id.clone()),
-                ("candidate", interner.resolve(fact.stable_key).to_string()),
+            [
+                ("tier", KeyPart::Text("extension_model")),
+                ("extension", KeyPart::Text(&fact.extension_id.clone())),
+                ("provider", KeyPart::Text(&fact.provider_id.clone())),
+                ("candidate", KeyPart::Key(fact.stable_key)),
             ],
         ),
     })

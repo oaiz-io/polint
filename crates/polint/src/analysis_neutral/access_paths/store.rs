@@ -12,8 +12,9 @@ pub struct AccessPathOutput {
 impl AccessPathOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.access_paths.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, row) in self.access_paths.iter_mut().enumerate() {
             row.id = AccessPathId(index as u64);

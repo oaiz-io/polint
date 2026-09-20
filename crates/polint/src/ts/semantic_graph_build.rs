@@ -272,13 +272,27 @@ impl TsDirectBindingCollection {
 pub(crate) fn collect_ts_direct_binding_collection(
     db: &impl AnalysisHost,
 ) -> TsDirectBindingCollection {
+    let started = std::time::Instant::now();
     let (analyses, callable_flows) = collect_ts_file_analyses(db);
+    let after_analyses = started.elapsed().as_millis() as u64;
     let output = collect_ts_direct_bindings_from_analyses(db, &analyses);
+    ts_step(
+        "direct_bindings",
+        started.elapsed().as_millis() as u64 - after_analyses,
+    );
     TsDirectBindingCollection {
         output,
         analyses,
         callable_flows,
     }
+}
+
+/// Private substep timing for the TS side inputs.
+///
+/// `polint.semantic_graph` is the largest stage on JS/TS corpora and almost all
+/// of it is this collection, which the stage log reports as one number.
+fn ts_step(step: &'static str, elapsed_ms: u64) {
+    tracing::debug!(target: "polint::kernel::stage", provider = "polint.semantic_graph", step, elapsed_ms, "provider step");
 }
 
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
@@ -299,11 +313,14 @@ fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec
         .iter()
         .map(|_| Allocator::default())
         .collect::<Vec<_>>();
+    let started = std::time::Instant::now();
     let parsed = files
         .iter()
         .zip(&arenas)
         .map(|(file, arena)| parse_ts_file(arena, file))
         .collect::<Vec<_>>();
+    ts_step("parse", started.elapsed().as_millis() as u64);
+    let started = std::time::Instant::now();
     let analyses = files
         .iter()
         .zip(&parsed)
@@ -311,13 +328,16 @@ fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec
             crate::ts::semantic_graph::analyze_parsed_ts_file(&interner, file, parsed)
         })
         .collect();
+    ts_step("analyze", started.elapsed().as_millis() as u64);
     let programs = files
         .iter()
         .zip(&parsed)
         .filter(|(_, parsed)| parsed.fully_parsed)
         .map(|(file, parsed)| (file.id, parsed.program()))
         .collect();
+    let started = std::time::Instant::now();
     let callable_flows = crate::ts::callable_flow::collect_callable_flows(db, &programs);
+    ts_step("callable_flows", started.elapsed().as_millis() as u64);
     (analyses, callable_flows)
 }
 

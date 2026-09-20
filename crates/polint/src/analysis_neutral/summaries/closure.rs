@@ -7,14 +7,14 @@ use super::facts::{
     SummaryStatus,
 };
 use super::scc::{Scc, SccSchedule};
-use crate::analysis_api::{Digest, DigestKind, PrecisionTier, QueryKey};
+use crate::analysis_api::{Digest, DigestKind, PrecisionTier, QueryKey, stable_key_from_key_parts};
 use crate::analysis_api::{FactFamily, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::CallTargetStatus;
 use crate::analysis_neutral::demand::{DemandQueryEngine, DemandQueryResult};
 use crate::analysis_neutral::ids::{SummaryEventId, SummaryId};
 use crate::analysis_neutral::summaries::scc::resolved_member_keys;
-use crate::internal_core::{FunctionId, StableKeyId};
+use crate::internal_core::{FunctionId, KeyPart, StableKeyId};
 
 // ---------------------------------------------------------------------------
 // SccClosureConfig
@@ -391,16 +391,13 @@ fn process_recursive_scc(
                 ),
                 status: SummaryStatus::BudgetExceeded,
                 precision: SummaryPrecision::UnknownTop,
-                stable_key: stable_key_from_parts(
+                stable_key: stable_key_from_key_parts(
                     interner,
                     FactFamily::SummaryEvent,
-                    &[
-                        (
-                            "callable",
-                            interner.resolve(state.callable_stable_key).to_string(),
-                        ),
-                        ("domain", "scc_closure".to_string()),
-                        ("event", "budget_exceeded".to_string()),
+                    [
+                        ("callable", KeyPart::Key(state.callable_stable_key)),
+                        ("domain", KeyPart::Text("scc_closure")),
+                        ("event", KeyPart::Text("budget_exceeded")),
                     ],
                 ),
             });
@@ -593,13 +590,13 @@ fn apply_callee_effects(
             reason: "callee has no summary or is unresolved".to_string(),
             status: SummaryStatus::Unknown,
             precision: SummaryPrecision::UnknownTop,
-            stable_key: stable_key_from_parts(
+            stable_key: stable_key_from_key_parts(
                 interner,
                 FactFamily::SummaryEvent,
-                &[
-                    ("callable", interner.resolve(callable_key).to_string()),
-                    ("domain", "scc_closure".to_string()),
-                    ("event", "unresolved_callee_in_closure".to_string()),
+                [
+                    ("callable", KeyPart::Key(callable_key)),
+                    ("domain", KeyPart::Text("scc_closure")),
+                    ("event", KeyPart::Text("unresolved_callee_in_closure")),
                 ],
             ),
         });
