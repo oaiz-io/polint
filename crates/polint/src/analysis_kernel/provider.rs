@@ -412,6 +412,41 @@ impl Provider for GoSemanticProvider {
     }
 }
 
+pub(crate) struct TsTypesProvider;
+
+impl Provider for TsTypesProvider {
+    fn manifest(&self) -> &'static ProviderManifest {
+        manifest_by_id("polint.ts.types")
+    }
+
+    fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
+        let ctx = CtxHandle::from_ctx(ctx);
+        let root = ctx.loaded.root.clone();
+        let ts_settings = ctx.loaded.config.languages.ts.clone();
+        let config_digest = ctx.config_digest;
+        let ts_syntax_digest = ctx.dependency_digest("polint.ts.syntax");
+        let sidecar_cache_dir = ctx.cache.sidecar_cache_dir();
+        let derivation = crate::analysis::ts_types::provider::derive_ts_types(
+            ctx.db,
+            &root,
+            &ts_settings,
+            config_digest,
+            self.manifest(),
+            ts_syntax_digest,
+            crate::analysis::ts_types::provider::TsTypesSidecarAccess {
+                cache_dir: sidecar_cache_dir.as_deref(),
+            },
+        );
+        ProviderRunResult {
+            diagnostics: derivation.diagnostics,
+            cache_stats: derivation.cache_stats,
+            output_digest: derivation.output_digest,
+            execution: derivation.execution,
+            counts: derivation.counts,
+        }
+    }
+}
+
 pub(crate) struct IdentityProvider;
 
 impl Provider for IdentityProvider {
@@ -992,6 +1027,7 @@ pub(crate) fn run_named_provider(id: &str, ctx: &mut ProviderCtx<'_>) -> Provide
         "polint.cfg" => CfgProvider.run(ctx),
         "polint.calls" => CallsProvider.run(ctx),
         "polint.go.semantic" => GoSemanticProvider.run(ctx),
+        "polint.ts.types" => TsTypesProvider.run(ctx),
         "polint.identity" => IdentityProvider.run(ctx),
         "polint.abstract_domains" => AbstractDomainsProvider.run(ctx),
         "polint.direct_summaries" => DirectSummariesProvider.run(ctx),
@@ -1049,6 +1085,7 @@ pub(crate) fn providers_enabled_by_boolean_gates(
             "polint.cfg",
             "polint.calls",
             "polint.go.semantic",
+            "polint.ts.types",
             "polint.identity",
             "polint.abstract_domains",
             "polint.direct_summaries",
@@ -1233,6 +1270,11 @@ const CALLS_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
 
 const GO_SEMANTIC_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
     name: crate::go::semantic::cache_key::GO_SEMANTIC_SCHEMA_LABEL,
+    version: 1,
+}];
+
+const TS_TYPES_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
+    name: crate::ts::types::cache_key::TS_TYPES_SCHEMA_LABEL,
     version: 1,
 }];
 
@@ -1522,6 +1564,32 @@ const PROVIDER_MANIFESTS: &[ProviderManifest] = &[
         language_ids: crate::frontend::LANGUAGE_IDS_GO,
         cache_policy: CachePolicy::InMemoryDerived,
         schema_versions: GO_SEMANTIC_SCHEMA,
+        precision_ceiling: PrecisionCeiling::SetupAware,
+    },
+    ProviderManifest {
+        id: "polint.ts.types",
+        kind: ProviderKind::WholeRepoDerived,
+        inputs: &[
+            "source_files",
+            "functions",
+            "call_sites",
+            "ts.type_sidecar",
+            "ts.type_projects",
+            "ts.typescript_path",
+            "ts.type_timeout_ms",
+        ],
+        outputs: &[
+            "ts_type_projects",
+            "ts_type_callables",
+            "ts_type_callsites",
+            "ts_type_callees",
+            "ts_type_receivers",
+            "ts_type_file_densities",
+            "ts_type_project_errors",
+        ],
+        language_ids: crate::frontend::LANGUAGE_IDS_TS,
+        cache_policy: CachePolicy::InMemoryDerived,
+        schema_versions: TS_TYPES_SCHEMA,
         precision_ceiling: PrecisionCeiling::SetupAware,
     },
     ProviderManifest {
@@ -1832,6 +1900,10 @@ const PROVIDER_MANIFESTS: &[ProviderManifest] = &[
             "semantic_constraints",
             "go_semantic_functions",
             "go_semantic_callsites",
+            "ts_type_callsites",
+            "ts_type_callees",
+            "ts_type_receivers",
+            "ts_type_file_densities",
             "solver_derived_edges",
         ],
         outputs: &["refined_call_edges"],
@@ -2066,6 +2138,7 @@ mod tests {
                 "polint.cfg",
                 "polint.calls",
                 "polint.go.semantic",
+                "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
                 "polint.direct_summaries",
@@ -2098,6 +2171,7 @@ mod tests {
                 "polint.cfg",
                 "polint.calls",
                 "polint.go.semantic",
+                "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
                 "polint.direct_summaries",
@@ -2157,6 +2231,7 @@ mod tests {
                 "polint.cfg",
                 "polint.calls",
                 "polint.go.semantic",
+                "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
                 "polint.direct_summaries",
@@ -2412,6 +2487,29 @@ mod tests {
                         "go_semantic_dynamic_dispatch",
                         "go_semantic_rta_edges",
                         "go_semantic_package_errors",
+                    ],
+                },
+                ProviderOrderRow {
+                    id: "polint.ts.types",
+                    kind: "whole_repo_derived",
+                    language_scope: "typescript_javascript",
+                    inputs: vec![
+                        "source_files",
+                        "functions",
+                        "call_sites",
+                        "ts.type_sidecar",
+                        "ts.type_projects",
+                        "ts.typescript_path",
+                        "ts.type_timeout_ms",
+                    ],
+                    outputs: vec![
+                        "ts_type_projects",
+                        "ts_type_callables",
+                        "ts_type_callsites",
+                        "ts_type_callees",
+                        "ts_type_receivers",
+                        "ts_type_file_densities",
+                        "ts_type_project_errors",
                     ],
                 },
                 ProviderOrderRow {
@@ -2674,6 +2772,10 @@ mod tests {
                         "semantic_constraints",
                         "go_semantic_functions",
                         "go_semantic_callsites",
+                        "ts_type_callsites",
+                        "ts_type_callees",
+                        "ts_type_receivers",
+                        "ts_type_file_densities",
                         "solver_derived_edges",
                     ],
                     outputs: vec!["refined_call_edges"],

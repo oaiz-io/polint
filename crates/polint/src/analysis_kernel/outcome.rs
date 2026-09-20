@@ -668,6 +668,7 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
         "polint.cfg" => &[GO, MIR, TS],
         "polint.calls" => &[CFG, GO, TOP, MIR, SYM, TS],
         "polint.go.semantic" => &[GO],
+        "polint.ts.types" => &[TS],
         "polint.identity" => &[CALLS, GO_SEM],
         "polint.abstract_domains" => &[CALLS, CFG, GO, TOP, MIR, SYM, TS],
         "polint.direct_summaries" => &[DOM, CALLS, CFG, GO, TOP, MIR, SYM, TS],
@@ -679,6 +680,10 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
             DOM, CALLS, ENTRY, GO_SEM, GO, ID, TOP, REACH, MIR, SYM, TS, TVA,
         ],
         "polint.solver" => &[GO_SEM, GRAPH, TVA],
+        // The typed TS tier is deliberately absent: it is optional precision.
+        // A repository with no Node, no TypeScript install or no tsconfig must
+        // still get refined calls from the points-to tier, so a failed
+        // `polint.ts.types` cannot block this provider.
         "polint.refined_calls" => &[CALLS, SUM, ENTRY, EXT, SOLVER, TVA],
         "polint.data_flow" => &[CALLS, CFG, SUM, ENTRY, EXT, REFINED, MIR, TVA],
         "polint.evidence" => &[CALLS, CFG, FLOW, SUM, ENTRY, EXT, REFINED, MIR, TVA],
@@ -695,6 +700,11 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
 /// the public surface gates against by name, and they are reported only when
 /// they failed or were blocked — the one case a consumer must be able to trace,
 /// and the one the blocker evidence already exposes.
+///
+/// `polint.ts.types` is deliberately absent. It reports counters whenever it
+/// has anything to say, including when it skipped, so it appears in the report
+/// of every run it was relevant to; naming it here would also list it in every
+/// Go-only run, where it did nothing.
 pub(crate) const PUBLICLY_NAMED_PROVIDERS: [&str; 7] = [
     "polint.go.semantic",
     "polint.go.syntax",

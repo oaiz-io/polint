@@ -101,6 +101,103 @@ unchanged repository reuses it and skips the sidecar round trip. `--no-cache`
 disables that, so a `--no-cache` timing is a cold timing and is not what a normal
 run costs.
 
+## TypeScript type-directed call resolution
+
+polint resolves TypeScript and JavaScript calls with a points-to solver by
+default. When a TypeScript compiler is available it also runs a type sidecar
+under Node and adds a *type-directed* tier above that solver: calls the checker
+resolves exactly, plus the instantiated implementations an interface-typed call
+can reach.
+
+This tier is optional precision, not a capability. If it cannot run, nothing is
+blocked and nothing fails — the points-to tier answers those calls as before.
+
+### What it needs
+
+- **Node** on `PATH`. The sidecar is plain JavaScript and needs no build step.
+- **A TypeScript compiler**, resolved in this order:
+  1. `POLINT_TS_TYPESCRIPT`, or `[languages.ts] typescript_path`
+  2. the analyzed repository's own `node_modules/typescript`, searched from each
+     project directory upward
+  3. a global `npm` install
+- **A `tsconfig.json`** at or above the analyzed files. polint walks from each
+  discovered TS/JS file to the nearest one, the same walk import resolution
+  uses; there is no separate project flag. A solution-style config — no inputs
+  of its own, only `references` — is followed to the projects it references.
+
+Preferring the repository's own compiler is deliberate: it is the compiler the
+repository type-checks with, so the types polint sees are the types the
+repository has. TypeScript 7 is refused rather than guessed at — it exposes no
+stable programmatic API before 7.1 — and so are versions older than 4.x.
+
+### Configuration
+
+No configuration is needed for a repository that has a `tsconfig.json` and a
+TypeScript install. Everything below is optional:
+
+```toml
+[languages.ts]
+type_sidecar = true
+type_projects = ["packages/web/tsconfig.json", "packages/api/tsconfig.json"]
+typescript_path = "node_modules/typescript"
+type_timeout_ms = 300000
+```
+
+Naming any of these keys tells polint the tier was asked for, which changes how
+a setup gap is reported: a repository that never mentions the tier and has no
+compiler stays silent, while one that asked for it gets a `polint/ts-types`
+diagnostic explaining why it did not run. The provider row in
+`summary.providers` of `--format json` is present either way, so a skip is never
+invisible.
+
+### What the tier will not claim
+
+- **`any` is never a typed edge.** A call whose receiver the checker types as
+  `any` or `unknown` produces an explicitly unresolved, low-confidence row
+  rather than a target.
+- **Density gates.** A file where at least 25% of call receivers are untyped has
+  its typed answers reported as degraded; at 50% its inexact calls are left to
+  the points-to tier entirely, while its exactly resolved calls still produce
+  edges.
+- **Expanded candidates are candidates.** An interface-typed call expands to the
+  methods of classes this scan instantiates, which is a rapid-type
+  over-approximation, and those edges carry medium confidence rather than the
+  high confidence an exactly resolved call gets.
+- **Files with no project get no typed edges.** A TS/JS file with no
+  `tsconfig.json` above it is analysed by the other tiers only.
+
+### Bounding a type-directed scan
+
+| Lever | Default | Effect |
+|---|---|---|
+| `type_timeout_ms` | `300000` | Budget for one sidecar run. `POLINT_TS_TYPES_TIMEOUT_MS` overrides it for one run. |
+| `type_projects` | discovered | Which tsconfig units are loaded. |
+| `type_sidecar` | `true` | Whether the tier runs at all. |
+
+The sidecar builds a full TypeScript program per project because a checker that
+cannot see an import cannot type the call, but it emits rows only for the files
+this scan discovered. As with the Go sidecar, narrowing the scan reduces
+emission, not what the analysis knows.
+
+Per-stage timings appear under the same tracing target as every other kernel
+stage:
+
+```bash
+RUST_LOG=polint::kernel::stage=debug polint check --format json
+```
+
+Stages are `resolve_typescript`, `discover_projects`, `create_program` and
+`walk_callsites`, and the same counters appear in `summary.providers` of
+`--format json`, alongside `ts_types.dropped_rows` and
+`ts_types.dangling_callees` — rows the store could not key or join, which are a
+regression signal rather than a repository property.
+
+The sidecar's raw output is cached on disk, keyed by the sidecar script, the
+TypeScript version, the upstream syntax digest, the lifecycle settings, the
+discovered-file set and the text of each project's `tsconfig.json` together with
+everything it extends or references. Editing `strict`, `paths` or `include`
+therefore invalidates the entry, even though it moves no TypeScript source.
+
 ## Inspect and test local rules
 
 Use `polint inspect rule` to inspect registered repo-local rules before running
@@ -176,6 +273,10 @@ internals, or eval/debug schemas.
 | `POLINT_CACHE_STORE` | Absolute path to the machine-global store of compiled rule-host binaries, or `off` / `disabled` / `none` to share nothing. Defaults to the platform user cache directory (`$XDG_CACHE_HOME/polint/store`, `~/Library/Caches/polint/store`, `%LOCALAPPDATA%\polint\store`). |
 | `POLINT_GO_SYMBOLS` | Optional path to a `polint-go-symbols` binary or sidecar source directory. A binary can avoid requiring Go for that sidecar; a source directory still needs Go. |
 | `POLINT_GO_FRONTEND` | Internal/private override for the Go semantic frontend used by graph analysis experiments. A binary can avoid requiring Go for that sidecar; a source directory still needs Go 1.25+. This is not a rule-authoring SDK surface. |
+| `POLINT_TS_TYPESCRIPT` | Path to the `typescript` package directory (or its entry script) the TS type sidecar should load. Overrides `[languages.ts] typescript_path` and the repository's own install. |
+| `POLINT_TS_TYPES_TIMEOUT_MS` | Budget for one TS type sidecar run, overriding `[languages.ts] type_timeout_ms` for that run. |
+| `POLINT_TS_TYPES_NODE` | Node executable used for the TS type sidecar. Defaults to `node` on `PATH`. |
+| `POLINT_TS_TYPES_SIDECAR` | Internal/private override pointing at a TS type sidecar script. This is not a rule-authoring SDK surface. |
 | `POLINT_RULES_PROFILE` | Cargo profile used for repo-local rule hosts. Defaults to `release`; set `dev` or `debug` for unoptimized rule-pack development, or any custom Cargo profile name. |
 | `POLINT_RULES_TARGET_DIR` | Optional Cargo target directory for repo-local rule hosts. Defaults to `$POLINT_CACHE_DIR/rules-target`. |
 | `POLINT_RULES_TOOLCHAIN` | When set to a non-empty value, forwarded as `RUSTUP_TOOLCHAIN` to every subprocess polint starts for a repo-local rule host (parent `polint check` only). |

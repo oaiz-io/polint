@@ -253,6 +253,7 @@ mod tests {
                 "polint.cfg",
                 "polint.calls",
                 "polint.go.semantic",
+                "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
                 "polint.direct_summaries",

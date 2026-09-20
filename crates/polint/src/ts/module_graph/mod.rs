@@ -1588,7 +1588,12 @@ fn collect_ts_path_aliases(root: &Path, db: &dyn FactDatabase) -> BTreeMap<PathB
     aliases
 }
 
-fn nearest_tsconfig_path(root: &Path, file_path: &Path) -> Option<PathBuf> {
+/// First `tsconfig.json` at or above `file_path`, bounded by `root`.
+///
+/// Import resolution and the type sidecar must agree on where a TypeScript
+/// project starts, so both ask this one walk rather than each keeping its own
+/// notion of a project boundary.
+pub(crate) fn nearest_tsconfig_path(root: &Path, file_path: &Path) -> Option<PathBuf> {
     let root = normalize_path(root)?;
     let mut current = normalize_path(file_path.parent()?)?;
     loop {
@@ -1600,6 +1605,85 @@ fn nearest_tsconfig_path(root: &Path, file_path: &Path) -> Option<PathBuf> {
             return None;
         }
     }
+}
+
+/// Digest of a `tsconfig.json`, every config it extends, and every project it
+/// references.
+///
+/// What a TypeScript program contains and how it is type-checked is decided by
+/// these files, and no source-file digest covers them: editing `strict`,
+/// `paths`, `lib` or `include` changes every type answer while leaving every
+/// `.ts` file untouched. Anything keyed on the scan's sources alone would
+/// replay the previous run's typed facts after such an edit.
+///
+/// A named config that does not exist contributes its absence, so creating it
+/// later is also a change.
+pub(crate) fn tsconfig_chain_digest(root: &Path, relative_config: &str) -> String {
+    let mut visited = BTreeSet::new();
+    let mut parts = Vec::new();
+    collect_tsconfig_chain_digest(root, relative_config, &mut visited, &mut parts);
+    parts.sort();
+    parts.dedup();
+    crate::ts::hash::stable_hash(&parts.iter().map(String::as_str).collect::<Vec<_>>())
+}
+
+fn collect_tsconfig_chain_digest(
+    root: &Path,
+    relative_config: &str,
+    visited: &mut BTreeSet<String>,
+    parts: &mut Vec<String>,
+) {
+    let Some(relative_path) = normalize_repo_relative(relative_config) else {
+        return;
+    };
+    if !visited.insert(relative_path.clone()) {
+        return;
+    }
+    let Ok(source) =
+        read_repo_file_to_string_with_limit(root, &relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
+    else {
+        parts.push(format!("{relative_path}=absent"));
+        return;
+    };
+    parts.push(format!(
+        "{relative_path}={}",
+        crate::ts::hash::stable_hash(&[source.as_str()])
+    ));
+
+    let Some(config) = parse_tsconfig_chain_wire(&source) else {
+        return;
+    };
+    let config_dir = Path::new(&relative_path).parent().unwrap_or(Path::new(""));
+    let extended = config
+        .extends
+        .into_iter()
+        .flat_map(TsconfigExtendsWire::into_specifiers)
+        .filter_map(|specifier| resolve_tsconfig_extends_path(root, config_dir, &specifier));
+    // A referenced project is a config whose own options decide the types of
+    // the files the referencing config delegates to it, so the chain follows
+    // references exactly as it follows `extends`.
+    let referenced = config
+        .references
+        .into_iter()
+        .flatten()
+        .filter_map(|reference| reference.path)
+        .filter_map(|path| {
+            resolve_tsconfig_file_candidate(root, &config_dir.join(Path::new(&path)))
+        });
+    for next in extended.chain(referenced) {
+        collect_tsconfig_chain_digest(root, &next, visited, parts);
+    }
+}
+
+fn parse_tsconfig_chain_wire(source: &str) -> Option<TsconfigChainWire> {
+    let mut source = source.to_string();
+    if let Some(stripped) = source.strip_prefix('\u{feff}') {
+        source = stripped.to_string();
+    }
+    if json_strip_comments::strip(&mut source).is_err() {
+        return None;
+    }
+    serde_json::from_str::<TsconfigChainWire>(&source).ok()
 }
 
 fn read_tsconfig_path_aliases(root: &Path, path: &Path) -> Vec<String> {
@@ -1748,6 +1832,20 @@ impl TsconfigExtendsWire {
             Self::Multiple(specifiers) => specifiers,
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct TsconfigChainWire {
+    #[serde(default)]
+    extends: Option<TsconfigExtendsWire>,
+    #[serde(default)]
+    references: Option<Vec<TsconfigReferenceWire>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TsconfigReferenceWire {
+    #[serde(default)]
+    path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -55,6 +55,7 @@ pub(crate) mod repo_fs;
 pub(crate) mod rule_error;
 pub(crate) mod rule_manifest;
 pub(crate) mod rule_test;
+pub(crate) mod subprocess;
 pub(crate) mod symbol_graph;
 #[allow(dead_code, unreachable_pub, unused_imports)]
 pub(crate) mod ts;

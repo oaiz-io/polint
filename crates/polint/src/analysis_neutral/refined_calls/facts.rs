@@ -35,6 +35,11 @@ pub struct RefinedCallEdgeFact {
 pub enum RefinedCallTier {
     DirectOnly,
     DirectPlusFramework,
+    /// An edge a language type checker resolved, or a rapid-type candidate it
+    /// narrowed. Ranked above the token and points-to tiers because it is
+    /// derived from declared types rather than from value flow, and its
+    /// ordering is what lets a consumer prefer it for the same call site.
+    TypeDirected,
     TypeValueFunctionToken,
     SummaryAssisted,
     PointsToAssisted,

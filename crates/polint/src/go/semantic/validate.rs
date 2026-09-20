@@ -284,9 +284,14 @@ fn reject_empty_stable_key(
     Ok(())
 }
 
+/// Rejects a path that leaves the repository.
+///
+/// The shape check is platform-independent: `Path::is_absolute` calls
+/// `/etc/passwd` absolute on Unix and merely drive-relative on Windows, so
+/// asking the host would make a path that escapes on one platform acceptable
+/// on another.
 pub fn validate_relative_path(path: &str) -> Result<(), AnalysisError> {
-    let candidate = Path::new(path);
-    if candidate.is_absolute() || path == ".." || path.starts_with("../") || path.contains("/../") {
+    if crate::internal_core::escapes_repository(path) {
         return Err(invalid_fact(format!(
             "Go semantic sidecar file path `{path}` escapes repository"
         )));

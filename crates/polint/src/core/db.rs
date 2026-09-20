@@ -99,6 +99,11 @@ use crate::ts::object_model::facts::{
     TsReceiverBindingFact,
 };
 use crate::ts::object_model::store::{TsObjectModelOutput, TsObjectModelStore};
+use crate::ts::types::facts::{
+    TsTypeCallableFact, TsTypeCalleeFact, TsTypeCallsiteFact, TsTypeFileDensityFact,
+    TsTypeReceiverFact,
+};
+use crate::ts::types::store::{TS_TYPES_STORE_FAMILY, TsTypesStore};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -324,6 +329,9 @@ impl Default for AnalysisDb {
             TS_OBJECT_MODEL_STORE_FAMILY,
             FactStoreEntry::new(ts_object_model),
         );
+        let mut ts_types = TsTypesStore::default();
+        FactStore::clear(&mut ts_types);
+        fact_stores.insert(TS_TYPES_STORE_FAMILY, FactStoreEntry::new(ts_types));
         let mut identity = IdentityStore::default();
         FactStore::clear(&mut identity);
         fact_stores.insert(IDENTITY_STORE_FAMILY, FactStoreEntry::new(identity));
@@ -538,6 +546,11 @@ impl AnalysisDb {
     fn ts_object_model_store_mut(&mut self) -> &mut TsObjectModelStore {
         self.fact_store_mut(TS_OBJECT_MODEL_STORE_FAMILY)
             .expect("TsObjectModelStore is installed when AnalysisDb is constructed")
+    }
+
+    fn ts_types_store(&self) -> &TsTypesStore {
+        self.fact_store(TS_TYPES_STORE_FAMILY)
+            .expect("TsTypesStore is installed when AnalysisDb is constructed")
     }
 
     fn identity_store_inner(&self) -> &IdentityStore {
@@ -1778,6 +1791,26 @@ impl AnalysisDb {
 
     pub(crate) fn go_semantic_callsites(&self) -> &[GoSemanticCallsiteFact] {
         &self.go_semantic_store().output().callsites
+    }
+
+    pub(crate) fn ts_type_callables(&self) -> &[TsTypeCallableFact] {
+        &self.ts_types_store().output().callables
+    }
+
+    pub(crate) fn ts_type_callsites(&self) -> &[TsTypeCallsiteFact] {
+        &self.ts_types_store().output().callsites
+    }
+
+    pub(crate) fn ts_type_callees(&self) -> &[TsTypeCalleeFact] {
+        &self.ts_types_store().output().callees
+    }
+
+    pub(crate) fn ts_type_receivers(&self) -> &[TsTypeReceiverFact] {
+        &self.ts_types_store().output().receivers
+    }
+
+    pub(crate) fn ts_type_file_densities(&self) -> &[TsTypeFileDensityFact] {
+        &self.ts_types_store().output().file_densities
     }
 
     #[allow(

@@ -25,6 +25,7 @@ pub(crate) mod refined_calls;
 pub(crate) mod semantic_graph;
 pub(crate) mod solver;
 pub(crate) mod summaries;
+pub(crate) mod ts_types;
 pub(crate) mod types;
 pub(crate) mod unknown_taxonomy;
 pub(crate) mod validate;
