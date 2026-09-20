@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::analysis_api::FunctionFact;
-use crate::analysis_api::{FactFamily, FactRef};
+use crate::analysis_api::{FactFamily, FactRef, SymbolFact};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{
     CallCallee, CallPrecision, CallSiteFact, CallSyntaxKind, CallTargetStatus, UnresolvedCallReason,
@@ -64,6 +64,20 @@ pub fn extract_call_sites(db: &impl AnalysisHost) -> Vec<CallSiteFact> {
         .iter()
         .map(|function| (function.id, function))
         .collect::<BTreeMap<_, _>>();
+    // `owner_symbol` scanned every symbol in the program per call site (research
+    // doc section 3.2, the `owner_symbol` row: O(sites x symbols)). Bucket the
+    // symbols that carry a file by (file, name) in table order; the span equality
+    // that narrowed the scan stays where it was, over the bucket.
+    let mut symbols_by_file_name: BTreeMap<(FileId, &str), Vec<&SymbolFact>> = BTreeMap::new();
+    for symbol in db.symbols() {
+        let Some(file) = symbol.file else {
+            continue;
+        };
+        symbols_by_file_name
+            .entry((file, symbol.name.as_str()))
+            .or_default()
+            .push(symbol);
+    }
 
     let mut call_operations = db
         .mir_operations()
@@ -136,7 +150,7 @@ pub fn extract_call_sites(db: &impl AnalysisHost) -> Vec<CallSiteFact> {
             language: body.language,
             file: body.file,
             caller: body.function,
-            owner_symbol: owner_symbol(db, &functions, body.function),
+            owner_symbol: owner_symbol(&symbols_by_file_name, &functions, body.function),
             body: body.id,
             operation: operation.id,
             span: operation.span.clone(),
@@ -552,18 +566,17 @@ fn call_site_stable_key(
 }
 
 fn owner_symbol(
-    db: &impl AnalysisHost,
+    symbols_by_file_name: &BTreeMap<(FileId, &str), Vec<&SymbolFact>>,
     functions: &BTreeMap<FunctionId, &FunctionFact>,
     function: FunctionId,
 ) -> Option<SymbolId> {
     let function = functions.get(&function)?;
-    db.symbols()
-        .iter()
-        .find(|symbol| {
-            symbol.file == Some(function.file)
-                && symbol.name == function.name
-                && symbol.primary_span.as_ref() == Some(&function.span)
-        })
+    symbols_by_file_name
+        .get(&(function.file, function.name.as_str()))
+        .into_iter()
+        .flatten()
+        .copied()
+        .find(|symbol| symbol.primary_span.as_ref() == Some(&function.span))
         .map(|symbol| symbol.id)
 }
 
@@ -1053,5 +1066,96 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(first_keys, second_keys);
+    }
+
+    /// W1 commit 4: `owner_symbol` scanned every symbol per call site and now
+    /// reads a `(file, name)` bucket. Two symbols share the name in one file, so
+    /// the span equality that narrowed the scan has to still narrow the bucket.
+    #[test]
+    fn owner_symbol_picks_the_symbol_whose_span_matches_the_function() {
+        let mut db = LocalAnalysisDb::new();
+        let (file, function) = add_file_and_function(&mut db, "src/app.ts");
+        let function_span = span(file, 1, 0);
+        let symbol = |raw: u64, name: &str, primary_span: Option<Span>| {
+            crate::analysis_api::SymbolFact::new(
+                crate::internal_core::SymbolId::from_raw(raw),
+                Language::TypeScript,
+                name.to_string(),
+                format!("src/app.ts::{name}"),
+                crate::analysis_api::SymbolKind::Function,
+                crate::analysis_api::SymbolNamespace::Value,
+                Some(file),
+                None,
+                None,
+                None,
+                primary_span,
+                true,
+                key(&db, format!("ts|src/app.ts|value|function|{name}|{raw}")),
+                crate::analysis_api::SymbolPrecision::ExactLocal,
+            )
+        };
+        db.replace_symbol_graph_facts(
+            vec![
+                // Same file, same name, a different span: the decoy the old scan
+                // walked past and the bucket must too.
+                symbol(10, "caller", Some(span(file, 7, 400))),
+                symbol(11, "caller", Some(function_span.clone())),
+                symbol(12, "caller", None),
+                // Same name, no file: never indexed, as the old predicate
+                // required `symbol.file == Some(function.file)`.
+                crate::analysis_api::SymbolFact::new(
+                    crate::internal_core::SymbolId::from_raw(13),
+                    Language::TypeScript,
+                    "caller".to_string(),
+                    "::caller".to_string(),
+                    crate::analysis_api::SymbolKind::Function,
+                    crate::analysis_api::SymbolNamespace::Value,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(function_span),
+                    true,
+                    key(&db, "ts|<none>|value|function|caller|13"),
+                    crate::analysis_api::SymbolPrecision::ExactLocal,
+                ),
+            ],
+            Vec::new(),
+            Vec::new(),
+        );
+
+        let output = MirOutput {
+            bodies: vec![body(&db, file, function, Language::TypeScript)],
+            places: vec![place(
+                &db,
+                9,
+                file,
+                function,
+                PlaceRoot::CallReturn {
+                    call: CallSiteId(10),
+                },
+                Vec::new(),
+            )],
+            operations: vec![call_op(
+                &db,
+                1,
+                0,
+                file,
+                10,
+                MirValue::Place(PlaceId(9)),
+                Vec::new(),
+            )],
+            ..MirOutput::default()
+        };
+        db.replace_semantic_mir(output)
+            .expect("semantic MIR should store");
+
+        let sites = super::extract_call_sites(&db);
+        assert_eq!(sites.len(), 1);
+        assert_eq!(
+            sites[0].owner_symbol,
+            Some(crate::internal_core::SymbolId::from_raw(11)),
+            "the symbol whose primary span equals the function's span wins"
+        );
     }
 }
