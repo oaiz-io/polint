@@ -2,7 +2,7 @@
 # Regenerate: POLINT_UPDATE_DENSE_ID_BASELINE=1 cargo test -p polint --test internal_architecture dense_id_sweep --locked
 # Entry: <sha256 of (repo-relative path, enclosing fn/impl item, whitespace-collapsed line)>  <command>  <scope>  <count>
 # dot0: 154 hits, 39 test-only, 115 non-test
-# debug: 539 hits, 201 test-only, 338 non-test
+# debug: 541 hits, 203 test-only, 338 non-test
 # raw: 0 hits, 0 test-only, 0 non-test
 # other-debug: 108 hits, 108 test-only, 0 non-test
 0038500d6decf3dbeb069116d00d773912c3b88e191bbf9f87efeb9a70451dd1  debug  non-test  1
@@ -504,7 +504,7 @@ a924392aa8338f79617da2955c07a05ebda88e52faa9232160504dc0df654327  debug  non-tes
 a92c498afa02296fd6647da61528e08e3aa2e65e62c11ee499206d74e4ade6be  dot0  test  1
 a92ff7fb7c13ee247ed45b7a796189be71d537b7f42ca3b35c302d3d4a27b5d9  debug  non-test  1
 a96598e9c40b6d08054dbc110bfdd1f5db58294b3f2fe0742c79c9980653eb41  debug  non-test  1
-a97ed562ed867c1f449096a257cd8802e827751541d1e3f21b10c65a73ed1e22  debug  test  2
+a97ed562ed867c1f449096a257cd8802e827751541d1e3f21b10c65a73ed1e22  debug  test  3
 a995f3bb2f23c2179b2d31bb7ade87ba96f8a82081715c9ad0718929e814ea8f  debug  non-test  1
 a9b17ffe072c8ba2dcd9bb5ba7c5034037ccacbc5f2f435c7c00ba23bc41baeb  dot0  non-test  1
 a9fbb960fd88f603f2c2a05c9a44ccc2bbc2d1d76e943a4508eb9ebaea5e6084  debug  non-test  1
@@ -669,7 +669,7 @@ e37930fc772d9d459c5b70bfc9f9824f64991452c37cebd9bbbfff037a5fcb6c  debug  non-tes
 e38e4b7f55970fce55b0d28c015f28c0234fca20a9cb6912e99f97da49a5ae97  debug  test  1
 e3b1f7ecc66fa105bcab417a82b35765f590689b835ae0e737222be4ab7de387  debug  non-test  1
 e46a3266c47a484e227899ab966c7bb1f81559f0d8328ed56a4cecec430f4287  debug  non-test  1
-e4a326140444febad11c3cefebcc52e53162f8cb4f9581fea385e56c5569a2d8  debug  test  2
+e4a326140444febad11c3cefebcc52e53162f8cb4f9581fea385e56c5569a2d8  debug  test  3
 e53243ee0b38bc4216841851ba8b192faaaece5e3f5a08612716cd6be4128590  debug  non-test  1
 e573dbff49e62493a49fd2f71db2f1ab018d1967ac37b8f510556f8756e0d1a9  dot0  non-test  1
 e5c20152e04b52e2f0350863c61af45549155c39bfe92ee94751346806ade572  debug  test  1

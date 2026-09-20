@@ -25,6 +25,7 @@ pub mod identity;
 pub mod ids;
 pub mod ifds;
 pub mod local_db;
+pub mod lowering_index;
 pub mod metrics;
 pub mod mir_body;
 pub mod mir_body_compose;
