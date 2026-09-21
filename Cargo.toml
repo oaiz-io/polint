@@ -42,6 +42,7 @@ description = "polint workspace crate: multi-language repo-local static analysis
 anyhow = "1.0.103"
 assert_cmd = "2.2.1"
 clap = { version = "4.6.1", features = ["derive"] }
+cc = "1.2"
 globset = "0.4.18"
 ignore = "0.4.25"
 insta = "1.47.2"
@@ -49,6 +50,9 @@ json-strip-comments = "3.1.1"
 libc = "0.2"
 # These versions are part of persistent cache identities. Keep them exact so a
 # downstream resolution cannot change analysis behavior without changing a key.
+# The Go grammar is vendored at crates/polint/vendor/tree-sitter-go (tree-sitter-go
+# 0.25.0 plus a compatible new(expr) widening); its identity stays
+# `tree-sitter-go-0.25.0` in parser_identity.rs.
 oxc_allocator = "=0.129.0"
 oxc_ast = "=0.129.0"
 oxc_parser = "=0.129.0"
@@ -74,7 +78,6 @@ toml = "1.1.2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
 tree-sitter = "=0.26.8"
-tree-sitter-go = "=0.25.0"
 windows-sys = "0.61.2"
 
 

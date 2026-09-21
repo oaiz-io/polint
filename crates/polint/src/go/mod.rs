@@ -7,6 +7,8 @@ mod adapter;
 mod embedded_cache;
 pub mod error;
 mod frontend;
+#[cfg(feature = "lang-go")]
+mod grammar;
 mod hash;
 pub mod lifecycle;
 mod local_db;
