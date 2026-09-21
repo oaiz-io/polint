@@ -11,7 +11,7 @@ description = "Multi-language repo-local static-analysis rules (Go and TypeScrip
 [features]
 default = ["lang-go", "lang-typescript"]
 all-languages = ["lang-go", "lang-typescript"]
-lang-go = ["dep:tree-sitter", "dep:tree-sitter-go"]
+lang-go = ["dep:tree-sitter"]
 lang-typescript = [
     "dep:oxc_allocator",
     "dep:oxc_ast",
@@ -49,7 +49,9 @@ toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tree-sitter = { workspace = true, optional = true }
-tree-sitter-go = { workspace = true, optional = true }
+
+[build-dependencies]
+cc.workspace = true
 
 # Unix-only: src/measure.rs reads getrusage(RUSAGE_SELF).ru_maxrss for
 # peak RSS. Windows uses K32GetProcessMemoryInfo (kernel32) with no crate dependency.
@@ -87,9 +89,9 @@ toml.workspace = true
 # single audited `getrusage` FFI in src/measure.rs can opt in via a
 # per-item `#[allow(unsafe_code)]`. Every workspace lint is mirrored verbatim;
 # ONLY `unsafe_code` is downgraded `forbid` -> `deny`, so unsafe stays denied
-# crate-wide and any use must carry an explicit, greppable allow. The only
-# unsafe in this crate is platform FFI: process containment, non-blocking fds,
-# and RSS measurement.
+# crate-wide and any use must carry an explicit, greppable allow. Unsafe in this
+# crate is platform FFI: process containment, non-blocking fds, RSS measurement,
+# and the vendored tree-sitter-go language entrypoint.
 [lints.rust]
 unsafe_code = "deny"
 unreachable_pub = "deny"

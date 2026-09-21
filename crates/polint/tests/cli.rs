@@ -8828,6 +8828,113 @@ rules = []
 }
 
 #[test]
+fn check_go_1_26_new_expr_repro_forms_have_no_parser_diagnostic() {
+    let temp = tempfile::tempdir().unwrap();
+    write_file(
+        &temp.path().join(".polint.toml"),
+        r#"
+[profiles.phase4]
+rules = []
+"#,
+    );
+    for (name, source) in [
+        (
+            "new_int.go",
+            "package models\n\nfunc Example() { _ = new(int) }\n",
+        ),
+        (
+            "new_literal.go",
+            "package models\n\nfunc Example() { _ = new(1) }\n",
+        ),
+        (
+            "new_qualified_type.go",
+            "package models\n\nfunc Example() { _ = new(types.Cost) }\n",
+        ),
+        (
+            "new_call.go",
+            "package models\n\nfunc Example() { _ = new(types.NewCost(0.35)) }\n",
+        ),
+    ] {
+        write_file(&temp.path().join(name), source);
+    }
+
+    let json = stdout_json(
+        polint_cmd()
+            .current_dir(temp.path())
+            .args([
+                "check",
+                "--profile",
+                "phase4",
+                "--format",
+                "json",
+                "--fail-on",
+                "none",
+            ])
+            .assert()
+            .success(),
+    );
+
+    assert!(
+        !diagnostics(&json)
+            .iter()
+            .any(|diagnostic| diagnostic["rule_id"] == "parser/go"),
+        "Go 1.26 new(expr) repro forms should not emit parser/go: {json:#?}"
+    );
+}
+
+#[test]
+fn check_go_1_26_new_expr_oaiz_pattern_has_no_parser_diagnostic() {
+    let temp = tempfile::tempdir().unwrap();
+    write_file(
+        &temp.path().join(".polint.toml"),
+        r#"
+[profiles.phase4]
+rules = []
+"#,
+    );
+    write_file(
+        &temp.path().join("units.go"),
+        r#"package models
+
+import "example.com/oaiz/types"
+
+type Units struct {
+	InputCostPerMillionTokens *types.Cost
+}
+
+func Example() Units {
+	return Units{
+		InputCostPerMillionTokens: new(types.NewCost(2.50)),
+	}
+}
+"#,
+    );
+
+    let json = stdout_json(
+        polint_cmd()
+            .current_dir(temp.path())
+            .args([
+                "check",
+                "--profile",
+                "phase4",
+                "--format",
+                "json",
+                "--fail-on",
+                "none",
+            ])
+            .assert()
+            .success(),
+    );
+
+    assert!(
+        !diagnostics(&json)
+            .iter()
+            .any(|diagnostic| diagnostic["rule_id"] == "parser/go"),
+        "Go 1.26 new(expr) oaiz pattern should not emit parser/go: {json:#?}"
+    );
+}
+
+#[test]
 fn check_go_named_profile_uses_branch_and_test_facts() {
     let temp = tempfile::tempdir().unwrap();
     write_file(

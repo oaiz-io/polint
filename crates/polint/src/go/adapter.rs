@@ -632,7 +632,7 @@ fn parse_go_file(db: &mut dyn FactDatabase, file_id: FileId) -> Result<Vec<Diagn
             Some(parser) => parser,
             None => {
                 let mut parser = Parser::new();
-                parser.set_language(&tree_sitter_go::LANGUAGE.into())?;
+                parser.set_language(&super::grammar::language())?;
                 slot.insert(parser)
             }
         };
