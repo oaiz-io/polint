@@ -245,6 +245,21 @@ range_start_column = 21
 The JSON report schema is
 [`polint-test-report-v1.json`](schemas/polint-test-report-v1.json).
 
+Rule packs can also carry Rust unit tests in `#[cfg(test)]` modules, for
+example for a helper that parses a path or a regular expression. `polint check`
+never compiles them. Run them with:
+
+```bash
+polint test --unit
+```
+
+It runs `cargo test` for every rule pack with the profile and target directory
+of the rule host (`POLINT_RULES_PROFILE` and `POLINT_RULES_TARGET_DIR`, see
+[CACHE.md](CACHE.md)), so the tests reuse the polint build that `polint check`
+compiled. A plain `cargo test` in `.polint/rules` builds polint again in a
+separate profile and target directory. `--unit` does not run fixture cases and
+takes none of their flags.
+
 Agents can also use bounded public inspection JSON:
 
 ```bash

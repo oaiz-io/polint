@@ -743,6 +743,62 @@ fn polint_test_json_matches_schema_v1() {
     );
 }
 
+/// Appends a unit test to the generated rule pack.
+fn append_rule_pack_unit_test(root: &Path, body: &str) {
+    let main_rs = root.join(".polint/rules/src/main.rs");
+    let mut source = fs::read_to_string(&main_rs).unwrap();
+    source.push_str(&format!(
+        "\n#[cfg(test)]\nmod unit_probe {{\n    #[test]\n    fn probe() {{\n        {body}\n    }}\n}}\n"
+    ));
+    fs::write(main_rs, source).unwrap();
+}
+
+#[test]
+fn test_unit_runs_rule_pack_tests_in_the_rule_host_target_dir() {
+    let temp = fixture_workspace();
+    point_generated_rule_pack_at_local_polint(temp.path());
+    append_rule_pack_unit_test(
+        temp.path(),
+        r#"let exe = std::env::current_exe().unwrap();
+        let expected = std::path::PathBuf::from(std::env::var("EXPECTED_RULE_HOST_OUTPUT").unwrap());
+        assert!(exe.starts_with(&expected), "{} is not under {}", exe.display(), expected.display());"#,
+    );
+
+    // polint_cmd builds rule hosts with the dev profile, whose output directory
+    // is `debug`.
+    polint_cmd()
+        .current_dir(temp.path())
+        .env(
+            "EXPECTED_RULE_HOST_OUTPUT",
+            shared_rules_target_dir().join("debug"),
+        )
+        .args(["test", "--unit"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_unit_fails_when_a_rule_pack_test_fails() {
+    let temp = fixture_workspace();
+    point_generated_rule_pack_at_local_polint(temp.path());
+    append_rule_pack_unit_test(temp.path(), r#"panic!("rule pack unit test failed");"#);
+
+    polint_cmd()
+        .current_dir(temp.path())
+        .args(["test", "--unit"])
+        .assert()
+        .code(1);
+}
+
+#[test]
+fn test_unit_rejects_fixture_only_flags() {
+    polint_cmd()
+        .args(["test", "--unit", "--format", "json"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
 #[test]
 fn new_rule_generates_clean_and_violating_agent_fixtures() {
     let temp = tempfile::tempdir().unwrap();

@@ -383,6 +383,11 @@ struct TestArgs {
     /// Keep temporary fixture repositories on disk.
     #[arg(long)]
     keep_temp: bool,
+    /// Run each rule pack's Rust unit tests with `cargo test` instead of the
+    /// fixture cases. They build with the profile and target directory the rule
+    /// host uses, so they reuse the polint build `polint check` compiled.
+    #[arg(long, conflicts_with_all = ["format", "rule", "case", "no_cache", "keep_temp"])]
+    unit: bool,
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -2801,6 +2806,9 @@ fn inspect_rule(root: &Path, args: &InspectRuleArgs) -> Result<u8> {
 }
 
 fn test(root: PathBuf, args: &TestArgs) -> Result<u8> {
+    if args.unit {
+        return test_rule_pack_units(&root);
+    }
     let report = run_rule_tests(
         &root,
         RuleTestOptions {
@@ -2820,6 +2828,35 @@ fn test(root: PathBuf, args: &TestArgs) -> Result<u8> {
     } else {
         Ok(0)
     }
+}
+
+/// Run every rule pack's `cargo test` with the profile, target directory,
+/// toolchain, and job limit its rule host builds with. A separate profile or
+/// target directory would compile the polint dependency a second time.
+fn test_rule_pack_units(root: &Path) -> Result<u8> {
+    let manifests = discover_local_rule_hosts(root)?;
+    if manifests.is_empty() {
+        println!("No repo-local rule packs found.");
+        return Ok(0);
+    }
+    let cargo = local_rule_host_cargo();
+    let cache_layout = CacheLayout::for_repo(root);
+    let mut failed = false;
+    for manifest in &manifests {
+        let mut command = ProcessCommand::new(&cargo);
+        command.current_dir(root).args(["test", "--quiet"]);
+        apply_local_rule_host_profile(&mut command);
+        command.args(["--manifest-path", manifest_path_argument(manifest)?]);
+        apply_local_rule_host_env(&mut command, &cache_layout);
+        let status = command.status().with_context(|| {
+            format!(
+                "failed to run the unit tests of rule pack {} with `{cargo}`",
+                manifest.display()
+            )
+        })?;
+        failed |= !status.success();
+    }
+    Ok(u8::from(failed))
 }
 
 fn render_inspect_rule_human(report: &InspectRuleReport) -> String {

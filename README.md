@@ -78,6 +78,7 @@ polint init                        # scaffold .polint.toml and .polint/rules/
 polint add-skill                   # install the agent skill
 polint new-rule ts no-raw-colors   # add a rule module
 polint test                        # run the rule fixtures
+polint test --unit                 # run the rule packs' Rust unit tests
 polint check                       # run every rule
 ```
 
