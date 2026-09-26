@@ -164,7 +164,7 @@ fn shared_cargo_target_dir() -> PathBuf {
     repo_root().join("target/polint-cli-test-cargo")
 }
 
-fn shared_rules_target_dir() -> PathBuf {
+pub(crate) fn shared_rules_target_dir() -> PathBuf {
     repo_root().join("target/polint-cli-test-rules")
 }
 
