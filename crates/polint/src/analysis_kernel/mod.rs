@@ -371,28 +371,28 @@ fn run_scheduled_providers<'a>(
                     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
             } else {
                 let digest = match provider_id {
-                "polint.go.syntax" => {
-                    let parser_diagnostics = diagnostics
-                        .iter()
-                        .filter(|diagnostic| diagnostic.rule_id == "parser/go")
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    crate::analysis_kernel::go_syntax_projection::CanonicalGoSyntaxOutput::from_db(
-                        db,
-                        &parser_diagnostics,
-                    )
-                    .ok()
-                    .map(|output| output.digest())
+                    "polint.go.syntax" => {
+                        let parser_diagnostics = diagnostics
+                            .iter()
+                            .filter(|diagnostic| diagnostic.rule_id == "parser/go")
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        crate::analysis_kernel::go_syntax_projection::canonical_go_syntax_digest(
+                            db,
+                            input.cache,
+                            output_digest.as_ref(),
+                            &parser_diagnostics,
+                        )
+                    }
+                    _ => output_digest,
                 }
-                _ => output_digest,
-            }
-            .or_else(|| {
-                Some(incremental::provider_output_digest_from_manifest(
-                    manifest,
-                    &provider_output_summary_parts(db, manifest),
-                ))
-            })
-            .expect("provider output digest fallback is always available");
+                .or_else(|| {
+                    Some(incremental::provider_output_digest_from_manifest(
+                        manifest,
+                        &provider_output_summary_parts(db, manifest),
+                    ))
+                })
+                .expect("provider output digest fallback is always available");
                 let identity =
                     incremental::provider_output_identity_from_manifest(manifest, digest.clone());
                 tracker
