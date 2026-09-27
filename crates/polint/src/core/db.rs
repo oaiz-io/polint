@@ -4156,9 +4156,11 @@ impl AnalysisDb {
     /// deferred, and restores eagerly from then on.
     ///
     /// The metadata is computed from the stored facts in restore order, and no
-    /// syntax fact's metadata depends on another fact's metadata, so the rows,
-    /// their insertion order, and the stable-key ids they intern are exactly
-    /// those an eager restore would have recorded.
+    /// syntax fact's metadata depends on another fact's metadata, so the rows
+    /// and their insertion order are exactly those an eager restore would have
+    /// recorded. So are the stable-key ids they intern, provided nothing
+    /// interns a key between the deferred restores and this call: the kernel
+    /// loads every file before it defers, and interns nothing until here.
     pub(crate) fn record_deferred_syntax_metadata(&mut self) {
         self.defer_syntax_metadata = false;
         let deferred = std::mem::take(&mut self.deferred_syntax_metadata);

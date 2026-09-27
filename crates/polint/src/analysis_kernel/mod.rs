@@ -673,9 +673,22 @@ impl AnalysisKernel {
         tracing::info!(target: "polint::kernel", "phase: metrics + derived done");
 
         let validation_downgrades = if validation::fact_metadata_validation_enabled() {
-            db.record_deferred_syntax_metadata();
+            // Validation reads every metadata row. A run that deferred syntax
+            // metadata validates a copy with the rows recorded and returns the
+            // database a release build returns, so a reader of deferred
+            // metadata after the run trips `AnalysisDb::metadata_for` in tests
+            // instead of passing them.
+            let recorded;
+            let validated = if db.deferred_syntax_metadata_len() > 0 {
+                let mut copy = db.clone();
+                copy.record_deferred_syntax_metadata();
+                recorded = copy;
+                &recorded
+            } else {
+                &db
+            };
             let validation_report =
-                validation::validate_fact_metadata(&db, Self::provider_manifests());
+                validation::validate_fact_metadata(validated, Self::provider_manifests());
             diagnostics.extend(validation_report.iter().cloned());
             validation_report.downgrades()
         } else {
@@ -1180,6 +1193,7 @@ mod tests {
         db
     }
 
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
     #[test]
     fn rule_check_runs_defer_syntax_metadata_without_changing_results() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -1206,7 +1220,7 @@ mod tests {
             parallel: false,
         };
         let eager = AnalysisKernel::run(input()).expect("kernel runs");
-        let deferred = AnalysisKernel::run_for_rule_check(input()).expect("kernel runs");
+        let mut deferred = AnalysisKernel::run_for_rule_check(input()).expect("kernel runs");
 
         assert_eq!(deferred.diagnostics, eager.diagnostics);
         assert_eq!(
@@ -1221,8 +1235,11 @@ mod tests {
             serde_json::to_string(deferred.db.string_literals()).expect("literals serialize"),
             serde_json::to_string(eager.db.string_literals()).expect("literals serialize")
         );
-        // Test builds validate fact metadata, which records the deferred rows first.
-        assert_eq!(deferred.db.deferred_syntax_metadata_len(), 0);
+        // Validation ran on a recorded copy: the run returns what a release
+        // build returns, restored syntax facts without their metadata rows.
+        assert!(deferred.db.deferred_syntax_metadata_len() > 0);
+        assert!(deferred.db.fact_meta().row_count() < eager.db.fact_meta().row_count());
+        deferred.db.record_deferred_syntax_metadata();
         assert_eq!(
             deferred.db.fact_meta().row_count(),
             eager.db.fact_meta().row_count()

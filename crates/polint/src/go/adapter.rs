@@ -2248,15 +2248,35 @@ mod deferred_metadata_tests {
             .collect()
     }
 
-    fn restore(defer: bool) -> AnalysisDb {
+    /// A database with a stable-key interner of its own: the one test builds
+    /// share process-wide hands every database the same id for the same key,
+    /// whatever order each interned in.
+    fn database() -> AnalysisDb {
         let mut db = AnalysisDb::new();
+        db.stable_keys = crate::core::StableKeyInterner::default();
+        db
+    }
+
+    /// Loads every file, then restores their facts: the kernel's order.
+    fn load_and_restore(db: &mut AnalysisDb, defer: bool) {
+        let files = parsed()
+            .into_iter()
+            .map(|(path, source, facts)| {
+                let file = db.add_file(path.into(), path.to_string(), source.to_string());
+                (file, facts)
+            })
+            .collect::<Vec<_>>();
         if defer {
             db.defer_syntax_fact_metadata();
         }
-        for (path, source, facts) in parsed() {
-            let file = db.add_file(path.into(), path.to_string(), source.to_string());
+        for (file, facts) in files {
             db.restore_file_facts(file, facts);
         }
+    }
+
+    fn restore(defer: bool) -> AnalysisDb {
+        let mut db = database();
+        load_and_restore(&mut db, defer);
         db
     }
 
@@ -2298,13 +2318,10 @@ mod deferred_metadata_tests {
 
     #[test]
     fn restores_after_recording_are_eager_again() {
-        let mut db = AnalysisDb::new();
+        let mut db = database();
         db.defer_syntax_fact_metadata();
         db.record_deferred_syntax_metadata();
-        for (path, source, facts) in parsed() {
-            let file = db.add_file(path.into(), path.to_string(), source.to_string());
-            db.restore_file_facts(file, facts);
-        }
+        load_and_restore(&mut db, false);
         assert_eq!(db.deferred_syntax_metadata_len(), 0);
         assert_eq!(metadata_rows(&db), metadata_rows(&restore(false)));
     }
