@@ -836,33 +836,26 @@ fn is_go_string_literal(node: Node<'_>) -> bool {
 }
 
 fn extract_string_literals(db: &mut dyn FactDatabase, file: FileId, source: &str, root: Node<'_>) {
-    visit_named_descendants(root, &mut |node| {
-        if !is_go_string_literal(node) || is_inside_go_import(node) {
-            return;
+    visit_named_descendants_pruned(root, &mut |node| {
+        // Import paths are imports, not string literals: nothing inside an
+        // import declaration is reported. Pruning the walk there answers the
+        // question for every literal at once; asking `Node::parent` per
+        // literal re-descends from the root of the tree for every ancestor.
+        if matches!(node.kind(), "import_spec" | "import_declaration") {
+            return false;
         }
-
-        let Some(value) = unquote_go_string_literal(source, node) else {
-            return;
-        };
-
-        db.push_string_literal(StringLiteralFact::new(
-            file,
-            value,
-            node_span(db, file, node),
-            Language::Go,
-        ));
+        if is_go_string_literal(node)
+            && let Some(value) = unquote_go_string_literal(source, node)
+        {
+            db.push_string_literal(StringLiteralFact::new(
+                file,
+                value,
+                node_span(db, file, node),
+                Language::Go,
+            ));
+        }
+        true
     });
-}
-
-fn is_inside_go_import(node: Node<'_>) -> bool {
-    let mut current = node.parent();
-    while let Some(parent) = current {
-        if matches!(parent.kind(), "import_spec" | "import_declaration") {
-            return true;
-        }
-        current = parent.parent();
-    }
-    false
 }
 
 fn extract_functions(db: &mut dyn FactDatabase, file: FileId, source: &str, root: Node<'_>) {
@@ -1450,6 +1443,23 @@ where
             continue;
         };
         visit_named_descendants(child, visit);
+    }
+}
+
+/// [`visit_named_descendants`], descending below a node only when `visit`
+/// returns `true` for it.
+fn visit_named_descendants_pruned<'tree, F>(node: Node<'tree>, visit: &mut F)
+where
+    F: FnMut(Node<'tree>) -> bool,
+{
+    if !visit(node) {
+        return;
+    }
+    for index in 0..node.named_child_count() as u32 {
+        let Some(child) = node.named_child(index) else {
+            continue;
+        };
+        visit_named_descendants_pruned(child, visit);
     }
 }
 
