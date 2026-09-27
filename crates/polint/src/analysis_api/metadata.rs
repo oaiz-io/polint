@@ -209,6 +209,7 @@ impl FactFamily {
         Self::UnsupportedSemantic,
         Self::GoSemantic,
         Self::TsObjectModel,
+        Self::TsTypes,
         Self::Identity,
         Self::Reachability,
         Self::SemanticGraph,
