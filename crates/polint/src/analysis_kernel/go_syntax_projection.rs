@@ -28,6 +28,7 @@ pub(crate) struct CanonicalGoSyntaxSource {
 }
 
 impl CanonicalGoSyntaxSource {
+    #[cfg(test)]
     pub(crate) fn digest(&self) -> Digest {
         let mut digest = Digest::builder(DigestKind::SourceText, "go-syntax-source-v1");
         digest.field("path", &self.path);
@@ -97,6 +98,7 @@ impl GoSyntaxParserContract {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn digest(&self) -> Digest {
         let mut digest = Digest::builder(DigestKind::ProviderParameters, "go-parser-contract-v1");
         for (label, value) in [

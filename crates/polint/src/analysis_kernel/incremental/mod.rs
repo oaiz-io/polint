@@ -6,6 +6,7 @@ mod invalidation;
 mod keys;
 mod layer_cache;
 mod quarantine;
+#[cfg(test)]
 mod run_manifest;
 mod run_report;
 mod stats;
@@ -137,6 +138,7 @@ pub(crate) use layer_cache::{
     expect(unused_imports, reason = "kept for private internal consumers")
 )]
 pub(crate) use quarantine::{QuarantineEntry, QuarantinePolicy, QuarantineStore};
+#[cfg(test)]
 pub(crate) use run_manifest::{
     EncodedRunManifest, EncodedRunManifestSource, RunManifest, RunManifestError, RunManifestInputs,
 };
