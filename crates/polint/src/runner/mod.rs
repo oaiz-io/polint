@@ -436,7 +436,7 @@ fn analyze_and_run(
 
     let mut diagnostics = plan_inputs.diagnostics();
     diagnostics.extend(plan.diagnostics());
-    let mut output = AnalysisKernel::run(KernelInput {
+    let mut output = AnalysisKernel::run_for_rule_check(KernelInput {
         loaded: &loaded,
         cache: &cache,
         config_digest: &config_digest,

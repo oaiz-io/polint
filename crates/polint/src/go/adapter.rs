@@ -2204,3 +2204,98 @@ mod layer_digest_tests {
         std::fs::remove_dir_all(&cache_root).ok();
     }
 }
+
+#[cfg(test)]
+mod deferred_metadata_tests {
+    use super::*;
+    use crate::analysis_api::{FactMeta, FactRef};
+    use crate::core::AnalysisDb;
+
+    const SOURCES: [(&str, &str); 2] = [
+        (
+            "svc/a.go",
+            "package svc\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\ntype Row struct{ Name string }\n\nfunc Check(x int) error {\n\tif x > 0 {\n\t\treturn fmt.Errorf(\"positive %d\", x)\n\t}\n\tfor i := 0; i < x; i++ {\n\t\t_ = i\n\t}\n\treturn errors.New(\"done\")\n}\n",
+        ),
+        (
+            "svc/a_test.go",
+            "package svc\n\nimport \"testing\"\n\nfunc TestCheck(t *testing.T) {\n\tcases := []struct{ in int }{{in: 1}, {in: 2}}\n\tfor _, c := range cases {\n\t\tt.Run(\"case\", func(t *testing.T) {\n\t\t\tif Check(c.in) == nil {\n\t\t\t\tt.Fatal(\"want error\")\n\t\t\t}\n\t\t})\n\t}\n}\n",
+        ),
+    ];
+
+    fn parsed() -> Vec<(&'static str, &'static str, CachedFileFacts)> {
+        SOURCES
+            .iter()
+            .map(|(path, source)| {
+                let mut local = LocalFactDb::new();
+                let file = local.add_file(
+                    std::path::PathBuf::from(path),
+                    (*path).to_string(),
+                    (*source).to_string(),
+                );
+                parse_go_file(&mut local, file).expect("parse go");
+                (*path, *source, local.facts_for_file(file))
+            })
+            .collect()
+    }
+
+    fn restore(defer: bool) -> AnalysisDb {
+        let mut db = AnalysisDb::new();
+        if defer {
+            db.defer_syntax_fact_metadata();
+        }
+        for (path, source, facts) in parsed() {
+            let file = db.add_file(path.into(), path.to_string(), source.to_string());
+            db.restore_file_facts(file, facts);
+        }
+        db
+    }
+
+    fn metadata_rows(db: &AnalysisDb) -> Vec<(FactRef, String, FactMeta)> {
+        db.fact_meta()
+            .rows()
+            .map(|(reference, metadata)| {
+                let key = db.resolve_stable_key(metadata.stable_key).to_string();
+                (reference, key, metadata.clone())
+            })
+            .collect()
+    }
+
+    fn json<T: serde::Serialize>(facts: &[T]) -> String {
+        serde_json::to_string(facts).expect("facts serialize")
+    }
+
+    #[test]
+    fn deferred_metadata_records_what_an_eager_restore_records() {
+        let eager = restore(false);
+        let mut deferred = restore(true);
+        assert!(deferred.deferred_syntax_metadata_len() > 0);
+        assert!(metadata_rows(&deferred).len() < metadata_rows(&eager).len());
+
+        deferred.record_deferred_syntax_metadata();
+        assert_eq!(deferred.deferred_syntax_metadata_len(), 0);
+        assert_eq!(metadata_rows(&deferred), metadata_rows(&eager));
+        assert_eq!(json(deferred.packages()), json(eager.packages()));
+        assert_eq!(json(deferred.functions()), json(eager.functions()));
+        assert_eq!(json(deferred.imports()), json(eager.imports()));
+        assert_eq!(json(deferred.branches()), json(eager.branches()));
+        assert_eq!(json(deferred.tests()), json(eager.tests()));
+        assert_eq!(
+            json(deferred.string_literals()),
+            json(eager.string_literals())
+        );
+        assert_eq!(json(deferred.go_types()), json(eager.go_types()));
+    }
+
+    #[test]
+    fn restores_after_recording_are_eager_again() {
+        let mut db = AnalysisDb::new();
+        db.defer_syntax_fact_metadata();
+        db.record_deferred_syntax_metadata();
+        for (path, source, facts) in parsed() {
+            let file = db.add_file(path.into(), path.to_string(), source.to_string());
+            db.restore_file_facts(file, facts);
+        }
+        assert_eq!(db.deferred_syntax_metadata_len(), 0);
+        assert_eq!(metadata_rows(&db), metadata_rows(&restore(false)));
+    }
+}

@@ -289,6 +289,7 @@ fn run_scheduled_providers<'a>(
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         }
         let stage_started = std::time::Instant::now();
+        let deferred_before = db.deferred_syntax_metadata_len();
         let stage_rss_before = crate::measure::current_rss_bytes();
         let result = if ready {
             let mut ctx = ProviderCtx {
@@ -323,6 +324,15 @@ fn run_scheduled_providers<'a>(
             } else {
                 None
             };
+        // A syntax provider without a native identity falls back to a digest
+        // over the metadata of the facts it produced, so any of those it
+        // deferred must be recorded before the fallback reads them. A provider
+        // that restored nothing — no sources in its language — deferred nothing,
+        // and the other provider's deferred rows are not its to read.
+        let deferred_by_provider = db.deferred_syntax_metadata_len() > deferred_before;
+        if output_digest.is_none() && is_syntax_provider(provider_id) && deferred_by_provider {
+            db.record_deferred_syntax_metadata();
+        }
         if ready {
             envelope.observe(provider_id);
             let stage_rss_after = crate::measure::current_rss_bytes();
@@ -334,7 +344,7 @@ fn run_scheduled_providers<'a>(
                 rss_mb = stage_rss_after / (1024 * 1024),
                 rss_delta_mb = stage_rss_after.saturating_sub(stage_rss_before) / (1024 * 1024),
                 peak_rss_mb = crate::measure::peak_rss_bytes() / (1024 * 1024),
-                facts = db.fact_meta().row_count(),
+                facts = db.fact_meta().row_count() + db.deferred_syntax_metadata_len(),
                 keys = interner.len(),
                 key_mb = interner.text_bytes() / (1024 * 1024),
                 digest = output_digest.as_ref().map_or("-", |digest| digest.value.as_str()),
@@ -385,14 +395,19 @@ fn run_scheduled_providers<'a>(
                         )
                     }
                     _ => output_digest,
-                }
-                .or_else(|| {
-                    Some(incremental::provider_output_digest_from_manifest(
-                        manifest,
-                        &provider_output_summary_parts(db, manifest),
-                    ))
-                })
-                .expect("provider output digest fallback is always available");
+                };
+                let digest = match digest {
+                    Some(digest) => digest,
+                    None => {
+                        if is_syntax_provider(provider_id) && deferred_by_provider {
+                            db.record_deferred_syntax_metadata();
+                        }
+                        incremental::provider_output_digest_from_manifest(
+                            manifest,
+                            &provider_output_summary_parts(db, manifest),
+                        )
+                    }
+                };
                 let identity =
                     incremental::provider_output_identity_from_manifest(manifest, digest.clone());
                 tracker
@@ -548,6 +563,22 @@ impl AnalysisKernel {
     }
 
     pub(crate) fn run(input: KernelInput<'_>) -> anyhow::Result<KernelOutput> {
+        Self::run_with(input, false)
+    }
+
+    /// Runs the kernel for a rule check or review, whose readers after the run
+    /// are the rules and the report. When the plan requests nothing past
+    /// syntax, the metadata of restored syntax facts is recorded only if
+    /// validation or a syntax provider's fallback identity needs it; see
+    /// [`AnalysisDb::defer_syntax_fact_metadata`].
+    pub(crate) fn run_for_rule_check(input: KernelInput<'_>) -> anyhow::Result<KernelOutput> {
+        Self::run_with(input, true)
+    }
+
+    fn run_with(
+        input: KernelInput<'_>,
+        defer_syntax_metadata: bool,
+    ) -> anyhow::Result<KernelOutput> {
         let requested_capabilities = requested_trigger_capabilities(input.plan);
         let run_cross_file_analysis = requested_capabilities.iter().any(|capability| {
             matches!(
@@ -575,6 +606,12 @@ impl AnalysisKernel {
 
         let (mut db, load_diagnostics) =
             crate::fs::load_analysis_files_scoped(input.loaded, rule_scope.as_ref())?;
+        // Every capability a provider past syntax does work for is a trigger
+        // capability, so with none requested nothing in the run reads syntax
+        // metadata before validation.
+        if defer_syntax_metadata && requested_capabilities.is_empty() {
+            db.defer_syntax_fact_metadata();
+        }
         log_loaded_source_files(&db);
         let scope_diagnostics = if run_cross_file_analysis {
             rule_scope_narrower_than_analysis(input.plan, &db)
@@ -627,6 +664,7 @@ impl AnalysisKernel {
         tracing::info!(target: "polint::kernel", "phase: metrics + derived done");
 
         let validation_downgrades = if validation::fact_metadata_validation_enabled() {
+            db.record_deferred_syntax_metadata();
             let validation_report =
                 validation::validate_fact_metadata(&db, Self::provider_manifests());
             diagnostics.extend(validation_report.iter().cloned());
@@ -878,6 +916,10 @@ impl AnalysisKernel {
     }
 }
 
+fn is_syntax_provider(provider_id: &str) -> bool {
+    matches!(provider_id, "polint.go.syntax" | "polint.ts.syntax")
+}
+
 fn provider_output_summary_parts(db: &AnalysisDb, manifest: &ProviderManifest) -> Vec<String> {
     let mut parts = db
         .fact_meta()
@@ -1127,6 +1169,55 @@ mod tests {
             )],
         );
         db
+    }
+
+    #[test]
+    fn rule_check_runs_defer_syntax_metadata_without_changing_results() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tif len(\"x\") > 0 {\n\t\tfmt.Println(\"hi\")\n\t}\n}\n",
+        )
+        .expect("write go");
+        std::fs::write(
+            temp.path().join("app.ts"),
+            "import { x } from './x';\nexport function render(value: number) { return `${x}${value}`; }\n",
+        )
+        .expect("write ts");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan =
+            AnalysisPlan::from_capability_names_for_test(&["syntax", "imports", "string_literals"]);
+        let input = || KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        };
+        let eager = AnalysisKernel::run(input()).expect("kernel runs");
+        let deferred = AnalysisKernel::run_for_rule_check(input()).expect("kernel runs");
+
+        assert_eq!(deferred.diagnostics, eager.diagnostics);
+        assert_eq!(
+            serde_json::to_string(deferred.db.functions()).expect("functions serialize"),
+            serde_json::to_string(eager.db.functions()).expect("functions serialize")
+        );
+        assert_eq!(
+            serde_json::to_string(deferred.db.imports()).expect("imports serialize"),
+            serde_json::to_string(eager.db.imports()).expect("imports serialize")
+        );
+        assert_eq!(
+            serde_json::to_string(deferred.db.string_literals()).expect("literals serialize"),
+            serde_json::to_string(eager.db.string_literals()).expect("literals serialize")
+        );
+        // Test builds validate fact metadata, which records the deferred rows first.
+        assert_eq!(deferred.db.deferred_syntax_metadata_len(), 0);
+        assert_eq!(
+            deferred.db.fact_meta().row_count(),
+            eager.db.fact_meta().row_count()
+        );
     }
 
     #[test]
