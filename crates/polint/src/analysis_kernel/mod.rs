@@ -1246,6 +1246,55 @@ mod tests {
         );
     }
 
+    /// Runs a syntax-only rule check over a repository holding one source file.
+    ///
+    /// The syntax provider of the absent language restores nothing and has no
+    /// native identity, so it takes the fallback digest. That fallback must not
+    /// record the rows the other provider deferred before it, nor switch deferral
+    /// off for the provider that runs after it: either way the returned database
+    /// would carry every metadata row, and the rule check would pay for all of it.
+    #[cfg(any(feature = "lang-go", feature = "lang-typescript"))]
+    fn assert_single_language_rule_check_keeps_metadata_deferred(path: &str, source: &str) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join(path), source).expect("write source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan =
+            AnalysisPlan::from_capability_names_for_test(&["syntax", "imports", "string_literals"]);
+        let output = AnalysisKernel::run_for_rule_check(KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel runs");
+
+        assert!(
+            output.db.deferred_syntax_metadata_len() > 0,
+            "a rule check over only {path} recorded its deferred syntax metadata"
+        );
+    }
+
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn go_only_rule_checks_keep_syntax_metadata_deferred() {
+        assert_single_language_rule_check_keeps_metadata_deferred(
+            "main.go",
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n",
+        );
+    }
+
+    #[cfg(feature = "lang-typescript")]
+    #[test]
+    fn typescript_only_rule_checks_keep_syntax_metadata_deferred() {
+        assert_single_language_rule_check_keeps_metadata_deferred(
+            "app.ts",
+            "import { x } from './x';\nexport function render(value: number) { return `${x}${value}`; }\n",
+        );
+    }
+
     #[cfg(feature = "lang-go")]
     #[test]
     fn syntax_only_rule_checks_keep_the_native_go_syntax_identity() {
