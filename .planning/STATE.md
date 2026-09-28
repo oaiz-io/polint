@@ -59,6 +59,7 @@ Add `public surface leak gate (ubuntu-latest)` AND `public surface leak gate (ma
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260927-fk1 | perf-5: measured baseline, then byte-identical cold/warm/ice-cold wins on Plinty and OAIZ (warm −21…−36%, cold −18…−27%, ice-cold −13%) | 2026-09-27 | e7bf1e52 | [260927-fk1-perf-5-campaign-measured-baseline-and-by](./quick/260927-fk1-perf-5-campaign-measured-baseline-and-by/) |
 | 260906-1ex | Index deep-analysis joins and stream evidence payloads; inherited Jelly gate remains red | 2026-09-08 | this commit | [260906-1ex-fundamental-deep-analysis-performance-re](./quick/260906-1ex-fundamental-deep-analysis-performance-re/) |
 | 260830-nzd | Implement and A/B benchmark byte-identical Polint algorithmic scan speedups | 2026-08-31 | d196786d | [260830-nzd-implement-and-a-b-benchmark-the-polint-1](./quick/260830-nzd-implement-and-a-b-benchmark-the-polint-1/) |
 | 260829-s1l | Refuse cross-checkout sharing for rule hosts that embed Cargo-provided checkout paths | 2026-08-29 | this commit | [260829-s1l-fix-cache-sharing-for-rule-hosts-that-em](./quick/260829-s1l-fix-cache-sharing-for-rule-hosts-that-em/) |
