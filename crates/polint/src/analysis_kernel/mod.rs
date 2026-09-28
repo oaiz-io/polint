@@ -219,11 +219,14 @@ fn skipped_direct_summaries_result(
     }
 }
 
+/// `syntax_only_rule_check` marks a rule check that requests nothing past
+/// syntax: its only readers are the rules and the report.
 fn run_scheduled_providers<'a>(
     db: &'a mut AnalysisDb,
     input: &KernelInput<'a>,
     input_snapshot: &'a incremental::InputSnapshot,
     enabled_providers: &std::collections::BTreeSet<&'static str>,
+    syntax_only_rule_check: bool,
     diagnostics: &mut Vec<Diagnostic>,
     provider_outputs: &mut Vec<incremental::ProviderOutputMeta>,
 ) -> anyhow::Result<(
@@ -289,6 +292,7 @@ fn run_scheduled_providers<'a>(
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         }
         let stage_started = std::time::Instant::now();
+        let deferred_before = db.deferred_syntax_metadata_len();
         let stage_rss_before = crate::measure::current_rss_bytes();
         let result = if ready {
             let mut ctx = ProviderCtx {
@@ -323,6 +327,15 @@ fn run_scheduled_providers<'a>(
             } else {
                 None
             };
+        // A syntax provider without a native identity falls back to a digest
+        // over the metadata of the facts it produced, so any of those it
+        // deferred must be recorded before the fallback reads them. A provider
+        // that restored nothing — no sources in its language — deferred nothing,
+        // and the other provider's deferred rows are not its to read.
+        let deferred_by_provider = db.deferred_syntax_metadata_len() > deferred_before;
+        if output_digest.is_none() && is_syntax_provider(provider_id) && deferred_by_provider {
+            db.record_deferred_syntax_metadata();
+        }
         if ready {
             envelope.observe(provider_id);
             let stage_rss_after = crate::measure::current_rss_bytes();
@@ -334,7 +347,7 @@ fn run_scheduled_providers<'a>(
                 rss_mb = stage_rss_after / (1024 * 1024),
                 rss_delta_mb = stage_rss_after.saturating_sub(stage_rss_before) / (1024 * 1024),
                 peak_rss_mb = crate::measure::peak_rss_bytes() / (1024 * 1024),
-                facts = db.fact_meta().row_count(),
+                facts = db.fact_meta().row_count() + db.deferred_syntax_metadata_len(),
                 keys = interner.len(),
                 key_mb = interner.text_bytes() / (1024 * 1024),
                 digest = output_digest.as_ref().map_or("-", |digest| digest.value.as_str()),
@@ -371,28 +384,39 @@ fn run_scheduled_providers<'a>(
                     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
             } else {
                 let digest = match provider_id {
-                "polint.go.syntax" => {
-                    let parser_diagnostics = diagnostics
-                        .iter()
-                        .filter(|diagnostic| diagnostic.rule_id == "parser/go")
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    crate::analysis_kernel::go_syntax_projection::CanonicalGoSyntaxOutput::from_db(
-                        db,
-                        &parser_diagnostics,
-                    )
-                    .ok()
-                    .map(|output| output.digest())
-                }
-                _ => output_digest,
-            }
-            .or_else(|| {
-                Some(incremental::provider_output_digest_from_manifest(
-                    manifest,
-                    &provider_output_summary_parts(db, manifest),
-                ))
-            })
-            .expect("provider output digest fallback is always available");
+                    // The canonical projection makes the go.syntax identity
+                    // independent of the adapter's encoding, for the providers
+                    // that key their caches on it. A syntax-only rule check runs
+                    // none of them, and past them the identity reaches only the
+                    // run report, which a rule check neither prints nor
+                    // persists, so it keeps the adapter's native digest.
+                    "polint.go.syntax" if !syntax_only_rule_check => {
+                        let parser_diagnostics = diagnostics
+                            .iter()
+                            .filter(|diagnostic| diagnostic.rule_id == "parser/go")
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        crate::analysis_kernel::go_syntax_projection::canonical_go_syntax_digest(
+                            db,
+                            input.cache,
+                            output_digest.as_ref(),
+                            &parser_diagnostics,
+                        )
+                    }
+                    _ => output_digest,
+                };
+                let digest = match digest {
+                    Some(digest) => digest,
+                    None => {
+                        if is_syntax_provider(provider_id) && deferred_by_provider {
+                            db.record_deferred_syntax_metadata();
+                        }
+                        incremental::provider_output_digest_from_manifest(
+                            manifest,
+                            &provider_output_summary_parts(db, manifest),
+                        )
+                    }
+                };
                 let identity =
                     incremental::provider_output_identity_from_manifest(manifest, digest.clone());
                 tracker
@@ -548,6 +572,20 @@ impl AnalysisKernel {
     }
 
     pub(crate) fn run(input: KernelInput<'_>) -> anyhow::Result<KernelOutput> {
+        Self::run_with(input, false)
+    }
+
+    /// Runs the kernel for a rule check or review, whose readers after the run
+    /// are the rules and the report. When the plan requests nothing past
+    /// syntax, the metadata of restored syntax facts is recorded only if
+    /// validation or a syntax provider's fallback identity needs it (see
+    /// [`AnalysisDb::defer_syntax_fact_metadata`]), and the go.syntax identity
+    /// is the adapter's native digest rather than the canonical projection.
+    pub(crate) fn run_for_rule_check(input: KernelInput<'_>) -> anyhow::Result<KernelOutput> {
+        Self::run_with(input, true)
+    }
+
+    fn run_with(input: KernelInput<'_>, rule_check: bool) -> anyhow::Result<KernelOutput> {
         let requested_capabilities = requested_trigger_capabilities(input.plan);
         let run_cross_file_analysis = requested_capabilities.iter().any(|capability| {
             matches!(
@@ -575,6 +613,13 @@ impl AnalysisKernel {
 
         let (mut db, load_diagnostics) =
             crate::fs::load_analysis_files_scoped(input.loaded, rule_scope.as_ref())?;
+        // Every capability a provider past syntax does work for is a trigger
+        // capability, so with none requested nothing in the run reads syntax
+        // metadata before validation, or the go.syntax identity at all.
+        let syntax_only_rule_check = rule_check && requested_capabilities.is_empty();
+        if syntax_only_rule_check {
+            db.defer_syntax_fact_metadata();
+        }
         log_loaded_source_files(&db);
         let scope_diagnostics = if run_cross_file_analysis {
             rule_scope_narrower_than_analysis(input.plan, &db)
@@ -621,14 +666,29 @@ impl AnalysisKernel {
                 &input,
                 &input_snapshot,
                 &enabled_providers,
+                syntax_only_rule_check,
                 &mut diagnostics,
                 &mut provider_outputs,
             )?;
         tracing::info!(target: "polint::kernel", "phase: metrics + derived done");
 
         let validation_downgrades = if validation::fact_metadata_validation_enabled() {
+            // Validation reads every metadata row. A run that deferred syntax
+            // metadata validates a copy with the rows recorded and returns the
+            // database a release build returns, so a reader of deferred
+            // metadata after the run trips `AnalysisDb::metadata_for` in tests
+            // instead of passing them.
+            let recorded;
+            let validated = if db.deferred_syntax_metadata_len() > 0 {
+                let mut copy = db.clone();
+                copy.record_deferred_syntax_metadata();
+                recorded = copy;
+                &recorded
+            } else {
+                &db
+            };
             let validation_report =
-                validation::validate_fact_metadata(&db, Self::provider_manifests());
+                validation::validate_fact_metadata(validated, Self::provider_manifests());
             diagnostics.extend(validation_report.iter().cloned());
             validation_report.downgrades()
         } else {
@@ -876,6 +936,10 @@ impl AnalysisKernel {
             })
             .collect()
     }
+}
+
+fn is_syntax_provider(provider_id: &str) -> bool {
+    matches!(provider_id, "polint.go.syntax" | "polint.ts.syntax")
 }
 
 fn provider_output_summary_parts(db: &AnalysisDb, manifest: &ProviderManifest) -> Vec<String> {
@@ -1127,6 +1191,167 @@ mod tests {
             )],
         );
         db
+    }
+
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
+    #[test]
+    fn rule_check_runs_defer_syntax_metadata_without_changing_results() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tif len(\"x\") > 0 {\n\t\tfmt.Println(\"hi\")\n\t}\n}\n",
+        )
+        .expect("write go");
+        std::fs::write(
+            temp.path().join("app.ts"),
+            "import { x } from './x';\nexport function render(value: number) { return `${x}${value}`; }\n",
+        )
+        .expect("write ts");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan =
+            AnalysisPlan::from_capability_names_for_test(&["syntax", "imports", "string_literals"]);
+        let input = || KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        };
+        let eager = AnalysisKernel::run(input()).expect("kernel runs");
+        let mut deferred = AnalysisKernel::run_for_rule_check(input()).expect("kernel runs");
+
+        assert_eq!(deferred.diagnostics, eager.diagnostics);
+        assert_eq!(
+            serde_json::to_string(deferred.db.functions()).expect("functions serialize"),
+            serde_json::to_string(eager.db.functions()).expect("functions serialize")
+        );
+        assert_eq!(
+            serde_json::to_string(deferred.db.imports()).expect("imports serialize"),
+            serde_json::to_string(eager.db.imports()).expect("imports serialize")
+        );
+        assert_eq!(
+            serde_json::to_string(deferred.db.string_literals()).expect("literals serialize"),
+            serde_json::to_string(eager.db.string_literals()).expect("literals serialize")
+        );
+        // Validation ran on a recorded copy: the run returns what a release
+        // build returns, restored syntax facts without their metadata rows.
+        assert!(deferred.db.deferred_syntax_metadata_len() > 0);
+        assert!(deferred.db.fact_meta().row_count() < eager.db.fact_meta().row_count());
+        deferred.db.record_deferred_syntax_metadata();
+        assert_eq!(
+            deferred.db.fact_meta().row_count(),
+            eager.db.fact_meta().row_count()
+        );
+    }
+
+    /// Runs a syntax-only rule check over a repository holding one source file.
+    ///
+    /// The syntax provider of the absent language restores nothing and has no
+    /// native identity, so it takes the fallback digest. That fallback must not
+    /// record the rows the other provider deferred before it, nor switch deferral
+    /// off for the provider that runs after it: either way the returned database
+    /// would carry every metadata row, and the rule check would pay for all of it.
+    #[cfg(any(feature = "lang-go", feature = "lang-typescript"))]
+    fn assert_single_language_rule_check_keeps_metadata_deferred(path: &str, source: &str) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join(path), source).expect("write source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan =
+            AnalysisPlan::from_capability_names_for_test(&["syntax", "imports", "string_literals"]);
+        let output = AnalysisKernel::run_for_rule_check(KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel runs");
+
+        assert!(
+            output.db.deferred_syntax_metadata_len() > 0,
+            "a rule check over only {path} recorded its deferred syntax metadata"
+        );
+    }
+
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn go_only_rule_checks_keep_syntax_metadata_deferred() {
+        assert_single_language_rule_check_keeps_metadata_deferred(
+            "main.go",
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n",
+        );
+    }
+
+    #[cfg(feature = "lang-typescript")]
+    #[test]
+    fn typescript_only_rule_checks_keep_syntax_metadata_deferred() {
+        assert_single_language_rule_check_keeps_metadata_deferred(
+            "app.ts",
+            "import { x } from './x';\nexport function render(value: number) { return `${x}${value}`; }\n",
+        );
+    }
+
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn syntax_only_rule_checks_keep_the_native_go_syntax_identity() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n",
+        )
+        .expect("write go");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let run = |plan: &AnalysisPlan, rule_check: bool| {
+            let input = KernelInput {
+                loaded: &loaded,
+                cache: &cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan,
+                parallel: false,
+            };
+            let output = if rule_check {
+                AnalysisKernel::run_for_rule_check(input)
+            } else {
+                AnalysisKernel::run(input)
+            }
+            .expect("kernel runs");
+            let identity = output
+                .run_report
+                .provider_outcomes
+                .iter()
+                .find(|outcome| outcome.provider_id == "polint.go.syntax")
+                .and_then(|outcome| outcome.output_identity.clone())
+                .expect("go.syntax succeeds")
+                .output_digest;
+            let native = output
+                .run_report
+                .provider_outputs
+                .iter()
+                .find(|row| row.provider_id == "polint.go.syntax")
+                .expect("go.syntax output row")
+                .output_digest
+                .clone();
+            let canonical = go_syntax_projection::CanonicalGoSyntaxOutput::from_db(&output.db, &[])
+                .expect("projection")
+                .digest();
+            (identity, native, canonical)
+        };
+        let syntax = AnalysisPlan::from_capability_names_for_test(&["syntax"]);
+        let metrics = AnalysisPlan::from_capability_names_for_test(&["syntax", "function_metrics"]);
+
+        let (identity, native, canonical) = run(&syntax, true);
+        assert_eq!(identity, native);
+        assert_ne!(identity, canonical);
+        for (plan, rule_check) in [(&syntax, false), (&metrics, true), (&metrics, false)] {
+            let (identity, _, canonical) = run(plan, rule_check);
+            assert_eq!(identity, canonical);
+        }
     }
 
     #[test]

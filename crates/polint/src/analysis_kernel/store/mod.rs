@@ -3,23 +3,38 @@
 //! This module owns database paths, connection policy, migrations, and raw SQL.
 //! Callers receive typed configuration and status values only; rusqlite types do
 //! not cross this boundary.
+//!
+//! Only test builds link the SQLite backend. Production never enables the
+//! store — `Cache` turns it on solely through a test-only builder — so the
+//! kernel's per-run [`SemanticStore::maintain`] always answers
+//! [`StoreStatus::Disabled`] there, and no shipped binary or repo-local rule
+//! host compiles the bundled SQLite amalgamation for code that cannot run.
 
 #![cfg_attr(not(test), expect(dead_code))]
 
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
 use super::go_syntax_projection::GoSyntaxProviderProjection;
+#[cfg(test)]
 use super::incremental::{RunManifest, RunManifestInputs};
+#[cfg(test)]
 use super::metrics_projection::MetricsProviderProjection;
 
+#[cfg(test)]
 mod connection;
+#[cfg(test)]
 mod generation;
+#[cfg(test)]
 mod go_syntax_mirror;
+#[cfg(test)]
 mod migrations;
+#[cfg(test)]
 mod provider_mirror;
 #[cfg(test)]
 mod scale_tests;
 
+#[cfg(test)]
 pub(crate) use generation::{
     GenerationError, GenerationHandle, GoSyntaxMatch, ManifestMatch, MetricsMatch,
 };
@@ -140,12 +155,14 @@ pub(crate) enum StoreRebuildReason {
 
 pub(crate) struct SemanticStore;
 
+#[cfg(test)]
 pub(crate) struct PublicationInputs<'a> {
     pub(crate) manifest: RunManifestInputs<'a>,
     pub(crate) metrics: MetricsProviderProjection,
     pub(crate) go_syntax: GoSyntaxProviderProjection,
 }
 
+#[cfg(test)]
 impl<'a> PublicationInputs<'a> {
     pub(crate) fn new(
         manifest: RunManifestInputs<'a>,
@@ -161,6 +178,18 @@ impl<'a> PublicationInputs<'a> {
 }
 
 impl SemanticStore {
+    /// Without the SQLite backend there is nothing to open, and nothing outside
+    /// test builds can enable the store.
+    #[cfg(not(test))]
+    pub(crate) fn maintain(config: &StoreConfig) -> StoreStatus {
+        debug_assert!(
+            !config.is_enabled(),
+            "the semantic store can only be enabled in test builds"
+        );
+        StoreStatus::Disabled
+    }
+
+    #[cfg(test)]
     pub(crate) fn maintain(config: &StoreConfig) -> StoreStatus {
         if !config.is_enabled() {
             return StoreStatus::Disabled;
@@ -181,13 +210,7 @@ impl SemanticStore {
         }
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the private lifecycle is reserved for semantic metadata publication"
-        )
-    )]
+    #[cfg(test)]
     pub(crate) fn reserve_generation(
         config: &StoreConfig,
     ) -> Result<GenerationHandle, GenerationError> {
@@ -196,13 +219,7 @@ impl SemanticStore {
         generation::reserve(&mut writer)
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the private lifecycle is reserved for semantic metadata publication"
-        )
-    )]
+    #[cfg(test)]
     pub(crate) fn publish_generation(
         config: &StoreConfig,
         handle: GenerationHandle,
@@ -221,13 +238,7 @@ impl SemanticStore {
         )
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the private lifecycle is reserved for semantic metadata publication"
-        )
-    )]
+    #[cfg(test)]
     pub(crate) fn active_generation(
         config: &StoreConfig,
     ) -> Result<Option<GenerationHandle>, GenerationError> {
@@ -237,13 +248,7 @@ impl SemanticStore {
         generation::active(&reader)
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the private match seam is reserved for semantic metadata reuse"
-        )
-    )]
+    #[cfg(test)]
     pub(crate) fn match_active_manifest(
         config: &StoreConfig,
         inputs: RunManifestInputs<'_>,
@@ -256,6 +261,7 @@ impl SemanticStore {
         generation::match_active(&reader, &manifest)
     }
 
+    #[cfg(test)]
     pub(crate) fn active_metrics(
         config: &StoreConfig,
     ) -> Result<Option<(GenerationHandle, MetricsProviderProjection)>, GenerationError> {
@@ -265,6 +271,7 @@ impl SemanticStore {
         generation::active_metrics(&reader)
     }
 
+    #[cfg(test)]
     pub(crate) fn match_active_metrics(
         config: &StoreConfig,
         manifest: RunManifestInputs<'_>,
@@ -278,6 +285,7 @@ impl SemanticStore {
         generation::match_active_metrics(&reader, &manifest, metrics)
     }
 
+    #[cfg(test)]
     pub(crate) fn active_go_syntax(
         config: &StoreConfig,
     ) -> Result<Option<(GenerationHandle, GoSyntaxProviderProjection)>, GenerationError> {
@@ -287,6 +295,7 @@ impl SemanticStore {
         generation::active_go_syntax(&reader)
     }
 
+    #[cfg(test)]
     pub(crate) fn match_active_go_syntax(
         config: &StoreConfig,
         manifest: RunManifestInputs<'_>,
@@ -322,11 +331,13 @@ impl SemanticStore {
     }
 }
 
+#[cfg(test)]
 fn prepare_generation_store(config: &StoreConfig) -> Result<(), GenerationError> {
     require_enabled(config)?;
     prepare_store_path(config.path()).map_err(GenerationError::Store)
 }
 
+#[cfg(test)]
 fn require_enabled(config: &StoreConfig) -> Result<(), GenerationError> {
     if config.is_enabled() {
         Ok(())
@@ -405,6 +416,7 @@ fn map_path_error(error: crate::repo_fs::RepoFileReadError) -> StoreStatus {
     }
 }
 
+#[cfg(test)]
 fn map_connection_error(error: connection::ConnectionError) -> StoreStatus {
     match error {
         connection::ConnectionError::Busy => StoreStatus::BusySkipped,

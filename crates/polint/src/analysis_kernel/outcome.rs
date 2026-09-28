@@ -25,6 +25,7 @@ impl ProviderOutcomeStatus {
             Self::BudgetExceeded => "budget_exceeded",
         }
     }
+    #[cfg(test)]
     pub(crate) fn decode(label: &str) -> Option<Self> {
         match label {
             "succeeded" => Some(Self::Succeeded),
@@ -56,6 +57,7 @@ impl ProviderFailureStage {
             Self::Validation => "validation",
         }
     }
+    #[cfg(test)]
     pub(crate) fn decode(label: &str) -> Option<Self> {
         match label {
             "planning" => Some(Self::Planning),
@@ -91,6 +93,7 @@ impl ProviderFailureReason {
             Self::MemoryCeiling => "memory_ceiling",
         }
     }
+    #[cfg(test)]
     pub(crate) fn decode(label: &str) -> Option<Self> {
         match label {
             "not_selected" => Some(Self::NotSelected),

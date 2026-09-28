@@ -555,6 +555,45 @@ func Validate() {
 }
 
 #[test]
+fn grouped_and_aliased_go_import_paths_are_not_string_literals() {
+    let mut db = db_with_go_file(
+        "payment.go",
+        r#"package payment
+
+import (
+	"fmt"
+	stdhttp "net/http"
+	_ "embed"
+)
+
+import "strings"
+
+var routes = map[string]string{"pay": "/pay"}
+
+func Validate() string {
+	return fmt.Sprint(stdhttp.StatusOK, strings.ToUpper(`raw`))
+}
+"#,
+    );
+
+    let diagnostics = analyze(&mut db);
+
+    assert!(diagnostics.is_empty());
+    let literal_values = db
+        .string_literals()
+        .iter()
+        .map(|literal| literal.value.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(literal_values, vec!["pay", "/pay", "raw"]);
+    let import_paths = db
+        .imports()
+        .iter()
+        .map(|import| import.path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(import_paths, vec!["fmt", "net/http", "embed", "strings"]);
+}
+
+#[test]
 fn extracts_go_functions_methods_calls_and_complexity_from_tree_sitter() {
     let mut db = db_with_go_file(
         "payment.go",

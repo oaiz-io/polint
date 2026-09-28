@@ -266,6 +266,10 @@ pub struct AnalysisDb {
     /// derived by a provider. It is `None` under `polint check` (so the
     /// `ChangedFiles` view is empty there) and excluded from all cache digests.
     pub(crate) changeset: Option<ReviewChangeset>,
+    /// Syntax facts restored while metadata is deferred, in restore order. See
+    /// [`AnalysisDb::defer_syntax_fact_metadata`].
+    deferred_syntax_metadata: Vec<FactRef>,
+    defer_syntax_metadata: bool,
 }
 
 impl Clone for AnalysisDb {
@@ -278,6 +282,8 @@ impl Clone for AnalysisDb {
             fact_view_indexes: self.fact_view_indexes.clone(),
             path_contexts: self.path_contexts.clone(),
             changeset: self.changeset.clone(),
+            deferred_syntax_metadata: self.deferred_syntax_metadata.clone(),
+            defer_syntax_metadata: self.defer_syntax_metadata,
         }
     }
 }
@@ -409,6 +415,8 @@ impl Default for AnalysisDb {
             fact_view_indexes: OnceLock::new(),
             path_contexts: None,
             changeset: None,
+            deferred_syntax_metadata: Vec::new(),
+            defer_syntax_metadata: false,
         }
     }
 }
@@ -3205,6 +3213,12 @@ impl AnalysisDb {
     }
 
     pub(crate) fn metadata_for(&self, fact_ref: FactRef) -> Option<&FactMeta> {
+        debug_assert!(
+            self.deferred_syntax_metadata.is_empty()
+                || !is_deferrable_syntax_family(fact_ref.family),
+            "{} metadata read while restored syntax metadata is deferred",
+            fact_ref.family.label()
+        );
         self.fact_meta().get(fact_ref)
     }
 }
@@ -3990,25 +4004,42 @@ impl AnalysisDb {
     pub fn restore_file_facts(&mut self, file: FileId, facts: CachedFileFacts) {
         let mut function_ids = BTreeMap::new();
         let mut branch_ids = BTreeMap::new();
+        let defer = self.defer_syntax_metadata;
 
         for mut package in facts.packages {
             package.file = file;
             package.span.file = file;
-            self.push_package(package);
+            if defer {
+                let id = self.go_syntax_store_mut().push_package(package);
+                self.defer_fact_metadata(FactFamily::Package, id.0);
+            } else {
+                self.push_package(package);
+            }
         }
 
         for mut function in facts.functions {
             let cached_id = function.id;
             function.file = file;
             function.span.file = file;
-            let restored_id = self.push_function(function);
+            let restored_id = if defer {
+                let id = self.go_syntax_store_mut().push_function(function);
+                self.defer_fact_metadata(FactFamily::Function, id.0);
+                id
+            } else {
+                self.push_function(function)
+            };
             function_ids.insert(cached_id, restored_id);
         }
 
         for mut import in facts.imports {
             import.file = file;
             import.span.file = file;
-            self.push_import(import);
+            if defer {
+                let id = self.go_syntax_store_mut().push_import(import);
+                self.defer_fact_metadata(FactFamily::Import, id.0);
+            } else {
+                self.push_import(import);
+            }
         }
 
         for mut branch in facts.branches {
@@ -4018,7 +4049,13 @@ impl AnalysisDb {
                 .function
                 .and_then(|function| function_ids.get(&function).copied());
             branch.decision_span.file = file;
-            let restored_id = self.push_branch(branch);
+            let restored_id = if defer {
+                let id = self.go_syntax_store_mut().push_branch(branch);
+                self.defer_fact_metadata(FactFamily::BranchObligation, id.0);
+                id
+            } else {
+                self.push_branch(branch)
+            };
             branch_ids.insert(cached_id, restored_id);
         }
 
@@ -4028,13 +4065,23 @@ impl AnalysisDb {
                 .function
                 .and_then(|function| function_ids.get(&function).copied());
             test.span.file = file;
-            self.push_test(test);
+            if defer {
+                let run_id = self.go_syntax_store_mut().push_test(test);
+                self.defer_fact_metadata(FactFamily::Test, run_id);
+            } else {
+                self.push_test(test);
+            }
         }
 
         for mut coverage in facts.coverage {
             if let Some(branch) = branch_ids.get(&coverage.branch).copied() {
                 coverage.branch = branch;
-                self.push_coverage(coverage);
+                if defer {
+                    let run_id = self.metrics_store_mut().push_coverage(coverage);
+                    self.defer_fact_metadata(FactFamily::Coverage, run_id);
+                } else {
+                    self.push_coverage(coverage);
+                }
             }
         }
 
@@ -4044,25 +4091,45 @@ impl AnalysisDb {
                 .function
                 .and_then(|function| function_ids.get(&function).copied());
             component.span.file = file;
-            self.push_ts_component(component);
+            if defer {
+                let run_id = self.ts_syntax_store_mut().push_ts_component(component);
+                self.defer_fact_metadata(FactFamily::TsComponent, run_id);
+            } else {
+                self.push_ts_component(component);
+            }
         }
 
         for mut class in facts.ts_classes {
             class.file = file;
             class.span.file = file;
-            self.push_ts_class(class);
+            if defer {
+                let run_id = self.ts_syntax_store_mut().push_ts_class(class);
+                self.defer_fact_metadata(FactFamily::TsClass, run_id);
+            } else {
+                self.push_ts_class(class);
+            }
         }
 
         for mut literal in facts.string_literals {
             literal.file = file;
             literal.span.file = file;
-            self.push_string_literal(literal);
+            if defer {
+                let run_id = self.ts_syntax_store_mut().push_string_literal(literal);
+                self.defer_fact_metadata(FactFamily::StringLiteral, run_id);
+            } else {
+                self.push_string_literal(literal);
+            }
         }
 
         for mut attribute in facts.jsx_attributes {
             attribute.file = file;
             attribute.span.file = file;
-            self.push_jsx_attribute(attribute);
+            if defer {
+                let run_id = self.ts_syntax_store_mut().push_jsx_attribute(attribute);
+                self.defer_fact_metadata(FactFamily::JsxAttribute, run_id);
+            } else {
+                self.push_jsx_attribute(attribute);
+            }
         }
 
         for mut go_type in facts.go_types {
@@ -4070,6 +4137,78 @@ impl AnalysisDb {
             go_type.span.file = file;
             self.push_go_type(go_type);
         }
+    }
+
+    /// Restores syntax facts from here on without recording their metadata.
+    ///
+    /// Fact metadata — each fact's interned stable-key text and payload digest —
+    /// is read by validation and by the providers that build on syntax facts
+    /// (graphs, metrics, lowering, deeper analysis), never by rules or by the
+    /// report. For a rule check that requests nothing beyond syntax, building
+    /// it is most of the cost of restoring facts from the analysis cache, and
+    /// all of it is wasted. [`AnalysisDb::record_deferred_syntax_metadata`]
+    /// records it later for whoever does need it.
+    pub(crate) fn defer_syntax_fact_metadata(&mut self) {
+        self.defer_syntax_metadata = true;
+    }
+
+    /// Records the metadata of every syntax fact restored while metadata was
+    /// deferred, and restores eagerly from then on.
+    ///
+    /// The metadata is computed from the stored facts in restore order, and no
+    /// syntax fact's metadata depends on another fact's metadata, so the rows
+    /// and their insertion order are exactly those an eager restore would have
+    /// recorded. So are the stable-key ids they intern, provided nothing
+    /// interns a key between the deferred restores and this call: the kernel
+    /// loads every file before it defers, and interns nothing until here.
+    pub(crate) fn record_deferred_syntax_metadata(&mut self) {
+        self.defer_syntax_metadata = false;
+        let deferred = std::mem::take(&mut self.deferred_syntax_metadata);
+        if deferred.is_empty() {
+            return;
+        }
+        let interner_handle = self.stable_key_interner();
+        let interner = &interner_handle;
+        for reference in deferred {
+            let index = usize::try_from(reference.run_id).expect("run ids index their store");
+            let metadata = match reference.family {
+                FactFamily::Package => self.package_metadata(interner, &self.packages()[index]),
+                FactFamily::Function => self.function_metadata(interner, &self.functions()[index]),
+                FactFamily::Import => self.import_metadata(interner, &self.imports()[index]),
+                FactFamily::BranchObligation => {
+                    self.branch_metadata(interner, &self.branches()[index])
+                }
+                FactFamily::Test => self.test_metadata(interner, &self.tests()[index]),
+                FactFamily::Coverage => self.coverage_metadata(interner, &self.coverage()[index]),
+                FactFamily::TsComponent => {
+                    self.ts_component_metadata(interner, &self.ts_components()[index])
+                }
+                FactFamily::TsClass => self.ts_class_metadata(interner, &self.ts_classes()[index]),
+                FactFamily::StringLiteral => {
+                    self.string_literal_metadata(interner, &self.string_literals()[index])
+                }
+                FactFamily::JsxAttribute => {
+                    self.jsx_attribute_metadata(interner, &self.jsx_attributes()[index])
+                }
+                family => {
+                    unreachable!(
+                        "{} facts are never restored with deferred metadata",
+                        family.label()
+                    )
+                }
+            };
+            self.record_fact_meta(reference.family, reference.run_id, metadata);
+        }
+    }
+
+    /// Syntax facts whose metadata is deferred and not yet recorded.
+    pub(crate) fn deferred_syntax_metadata_len(&self) -> usize {
+        self.deferred_syntax_metadata.len()
+    }
+
+    fn defer_fact_metadata(&mut self, family: FactFamily, run_id: u64) {
+        self.deferred_syntax_metadata
+            .push(FactRef::new(family, run_id));
     }
 
     fn record_fact_meta(&mut self, family: FactFamily, run_id: u64, meta: FactMeta) {
@@ -5894,6 +6033,24 @@ impl AnalysisDb {
     }
 }
 
+/// The families [`AnalysisDb::restore_file_facts`] can restore with deferred
+/// metadata.
+fn is_deferrable_syntax_family(family: FactFamily) -> bool {
+    matches!(
+        family,
+        FactFamily::Package
+            | FactFamily::Function
+            | FactFamily::Import
+            | FactFamily::BranchObligation
+            | FactFamily::Test
+            | FactFamily::Coverage
+            | FactFamily::TsComponent
+            | FactFamily::TsClass
+            | FactFamily::StringLiteral
+            | FactFamily::JsxAttribute
+    )
+}
+
 fn option_file_path(db: &AnalysisDb, file: Option<FileId>) -> String {
     file.map(|file| db.path_for(file))
         .unwrap_or_else(none_value)
@@ -6095,6 +6252,12 @@ impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
         symbol: SymbolId,
     ) -> Option<&crate::analysis_api::DefinitionFact> {
         AnalysisDb::definition_for_symbol(self, symbol)
+    }
+
+    /// Route trait-generic metadata reads to the inherent method, which asserts
+    /// that no deferred syntax metadata is read before it is recorded.
+    fn metadata_for(&self, fact_ref: FactRef) -> Option<&FactMeta> {
+        AnalysisDb::metadata_for(self, fact_ref)
     }
 
     fn replace_summary_facts(&mut self, output: SummaryOutput) {

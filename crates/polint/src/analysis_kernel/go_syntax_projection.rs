@@ -4,8 +4,10 @@ use super::{
     ProviderManifest, ProviderOutcome, ProviderOutcomeStatus, ProviderOutputIdentity, provider,
 };
 use crate::analysis_api::{GO_PARSER_BACKEND, GO_PARSER_GRAMMAR};
+use crate::cache::{Cache, CacheKey, CacheReadStatus};
 use crate::core::{AnalysisDb, FileId, FunctionId, Language, SourceFile, Span};
 use crate::diagnostics::{Diagnostic, TextRange};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -28,6 +30,7 @@ pub(crate) struct CanonicalGoSyntaxSource {
 }
 
 impl CanonicalGoSyntaxSource {
+    #[cfg(test)]
     pub(crate) fn digest(&self) -> Digest {
         let mut digest = Digest::builder(DigestKind::SourceText, "go-syntax-source-v1");
         digest.field("path", &self.path);
@@ -97,6 +100,7 @@ impl GoSyntaxParserContract {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn digest(&self) -> Digest {
         let mut digest = Digest::builder(DigestKind::ProviderParameters, "go-parser-contract-v1");
         for (label, value) in [
@@ -294,6 +298,86 @@ impl CanonicalGoSyntaxOutput {
         }
         digest.finish()
     }
+}
+
+/// Version of the canonical Go syntax output recipe: the rows
+/// [`CanonicalGoSyntaxOutput::from_db`] builds and the fold in
+/// [`CanonicalGoSyntaxOutput::digest`]. Memoized digests are keyed by it, so any
+/// change to either must change this string.
+const CANONICAL_OUTPUT_MEMO_SCHEMA: &str = "go-syntax-canonical-output-memo-v1";
+
+/// Stands in for a source path in the memo's cache key; it names no file.
+const CANONICAL_OUTPUT_MEMO_KEY: &str = "<go-syntax-canonical-output>";
+
+#[derive(Serialize, Deserialize)]
+struct CanonicalOutputMemo {
+    schema: String,
+    native: Digest,
+    canonical: Digest,
+}
+
+/// The canonical Go syntax output digest, read from the analysis cache when the
+/// Go syntax provider's native output digest was seen by an earlier run.
+///
+/// The native digest names every Go file's path, content hash, and serialized
+/// facts and parser diagnostics, and the canonical projection is a function of
+/// exactly those restored facts and diagnostics, so one native digest has one
+/// canonical digest. A warm run restores the facts from an unchanged layer and
+/// would otherwise recompute the projection — every Go fact projected,
+/// digested, and sorted on the scheduler thread — to arrive at the same value.
+/// A projection that fails is recomputed every time rather than remembered.
+pub(crate) fn canonical_go_syntax_digest(
+    db: &AnalysisDb,
+    cache: &Cache,
+    native: Option<&Digest>,
+    parser_diagnostics: &[Diagnostic],
+) -> Option<Digest> {
+    let key = native.map(canonical_output_memo_key);
+    if let (Some(key), Some(native)) = (&key, native)
+        && let Some(canonical) = read_canonical_output_memo(cache, key, native)
+    {
+        return Some(canonical);
+    }
+    let canonical = CanonicalGoSyntaxOutput::from_db(db, parser_diagnostics)
+        .ok()?
+        .digest();
+    if let (Some(key), Some(native)) = (&key, native) {
+        let memo = CanonicalOutputMemo {
+            schema: CANONICAL_OUTPUT_MEMO_SCHEMA.to_string(),
+            native: native.clone(),
+            canonical: canonical.clone(),
+        };
+        // Best effort: a memo that cannot be written only costs the next run
+        // the projection.
+        if let Ok(bytes) = serde_json::to_vec(&memo) {
+            let _ = cache.write_json_bytes_with_status(key, &bytes);
+        }
+    }
+    Some(canonical)
+}
+
+fn canonical_output_memo_key(native: &Digest) -> CacheKey {
+    CacheKey::for_file(
+        CANONICAL_OUTPUT_MEMO_KEY,
+        &native.value,
+        native.kind.as_str(),
+        "",
+        "",
+        CANONICAL_OUTPUT_MEMO_SCHEMA,
+        GO_PAYLOAD_SCHEMA,
+    )
+}
+
+fn read_canonical_output_memo(cache: &Cache, key: &CacheKey, native: &Digest) -> Option<Digest> {
+    let read = cache.read_json_bytes_with_status(key);
+    if read.status != CacheReadStatus::Hit {
+        return None;
+    }
+    let memo = serde_json::from_slice::<CanonicalOutputMemo>(&read.value?).ok()?;
+    (memo.schema == CANONICAL_OUTPUT_MEMO_SCHEMA
+        && memo.native == *native
+        && memo.canonical.kind == DigestKind::ProviderOutput)
+        .then_some(memo.canonical)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -647,6 +731,59 @@ mod tests {
             RelatedFact::Branch => { db.push_branch(BranchObligation::new(BranchId::from_raw(0), function, file, if mutation == RelationshipMutation::Span { span(file, 45, 46) } else { span(file, 20, 21) }, "condition".into(), "true".into(), false, "fingerprint".into())); }
         }
         CanonicalGoSyntaxOutput::from_db(&db, &[])
+    }
+
+    #[test]
+    fn canonical_digest_memo_answers_only_for_the_native_digest_it_recorded() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let cache = Cache::new(temp.path().join("analysis"), true);
+        let mut go = AnalysisDb::new();
+        let file = go.add_file(
+            "a.go".into(),
+            "a.go".into(),
+            "package a\nfunc A() {}\n".into(),
+        );
+        go.push_function(function_fact(file, "A".into(), span(file, 10, 21)));
+        let empty = AnalysisDb::new();
+        let projected = CanonicalGoSyntaxOutput::from_db(&go, &[]).unwrap().digest();
+        let empty_projection = CanonicalGoSyntaxOutput::from_db(&empty, &[])
+            .unwrap()
+            .digest();
+        assert_ne!(projected, empty_projection);
+        let native = Digest {
+            kind: DigestKind::ProviderOutput,
+            value: "0123456789abcdef".into(),
+        };
+
+        // A first run projects and records the answer for its native digest.
+        assert_eq!(
+            canonical_go_syntax_digest(&go, &cache, Some(&native), &[]),
+            Some(projected.clone())
+        );
+        // A later run with that native digest is answered from the memo, without
+        // projecting: the empty database would project to a different digest.
+        assert_eq!(
+            canonical_go_syntax_digest(&empty, &cache, Some(&native), &[]),
+            Some(projected)
+        );
+        // Any other native digest, no native digest, or a disabled cache projects.
+        let other = Digest {
+            value: "fedcba9876543210".into(),
+            ..native
+        };
+        assert_eq!(
+            canonical_go_syntax_digest(&empty, &cache, Some(&other), &[]),
+            Some(empty_projection.clone())
+        );
+        assert_eq!(
+            canonical_go_syntax_digest(&empty, &cache, None, &[]),
+            Some(empty_projection.clone())
+        );
+        let disabled = Cache::new(temp.path().join("analysis"), false);
+        assert_eq!(
+            canonical_go_syntax_digest(&empty, &disabled, Some(&native), &[]),
+            Some(empty_projection)
+        );
     }
 
     #[test]
