@@ -619,11 +619,11 @@ impl AnalysisKernel {
         let (mut db, load_diagnostics) =
             crate::fs::load_analysis_files_scoped(input.loaded, rule_scope.as_ref())?;
         // Every capability a provider past syntax does work for is a trigger
-        // capability. The metric ones add only the metrics provider, which
-        // derives its facts from syntax facts without reading their metadata or
-        // the go.syntax identity, and defers its own metadata with theirs. So
-        // with no other one requested, nothing in the run reads syntax metadata
-        // before validation, or the go.syntax identity at all.
+        // capability. The metric ones give work only to the metrics provider,
+        // which derives its facts from syntax facts without reading their
+        // metadata or the go.syntax identity, and defers its own metadata with
+        // theirs. So with no other one requested, nothing in the run reads
+        // syntax metadata before validation, or the go.syntax identity at all.
         let syntax_level_rule_check = rule_check
             && requested_capabilities
                 .iter()

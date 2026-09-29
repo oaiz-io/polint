@@ -4192,11 +4192,11 @@ impl AnalysisDb {
     /// syntax fact's metadata depends on another fact's metadata, so the rows
     /// and their insertion order are exactly those an eager restore would have
     /// recorded. The metric rows follow them, as they do when the metrics
-    /// provider runs after the syntax providers, and they read the function
-    /// rows recorded just before. So are the stable-key ids all of these rows
-    /// intern, provided nothing interns a key between the deferred restores and
-    /// this call: the kernel loads every file before it defers, and nothing it
-    /// runs with metadata deferred interns one.
+    /// provider runs after the syntax providers, and read the function rows
+    /// recorded just before them. The stable-key ids all of these rows intern
+    /// are the eager run's too, provided nothing interns a key between the
+    /// deferred restores and this call: the kernel loads every file before it
+    /// defers, and nothing it runs with metadata deferred interns one.
     pub(crate) fn record_deferred_syntax_metadata(&mut self) {
         self.defer_syntax_metadata = false;
         let deferred = std::mem::take(&mut self.deferred_syntax_metadata);
@@ -6081,8 +6081,6 @@ impl AnalysisDb {
     }
 }
 
-/// The families [`AnalysisDb::restore_file_facts`] can restore with deferred
-/// metadata.
 /// The fact families [`AnalysisDb::replace_metric_facts`] replaces.
 const METRIC_FACT_FAMILIES: [FactFamily; 3] = [
     FactFamily::FileMetric,
@@ -6090,6 +6088,8 @@ const METRIC_FACT_FAMILIES: [FactFamily; 3] = [
     FactFamily::ComplexityMetric,
 ];
 
+/// The families [`AnalysisDb::restore_file_facts`] can restore with deferred
+/// metadata.
 fn is_deferrable_syntax_family(family: FactFamily) -> bool {
     matches!(
         family,
