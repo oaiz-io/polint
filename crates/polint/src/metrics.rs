@@ -294,7 +294,8 @@ mod tests {
     use crate::cache::Cache;
     use crate::config::load_config;
     use crate::core::{
-        FileId, FunctionFact, FunctionId, Language, Span, TS_JS_MODULE_FUNCTION_NAME,
+        FileId, FunctionFact, FunctionId, ImportFact, ImportId, Language, PackageFact, PackageId,
+        Span, StringLiteralFact, TS_JS_MODULE_FUNCTION_NAME,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -662,6 +663,178 @@ mod tests {
             db.resolve_stable_key(complexity_metric.stable_key)
                 .contains("cyclomatic_complexity")
         );
+    }
+
+    /// A database with a stable-key interner of its own. Test databases share a
+    /// process-wide one, which hands every database the same id for the same
+    /// key whatever order each interned in.
+    fn isolated_db() -> AnalysisDb {
+        let mut db = AnalysisDb::new();
+        db.stable_keys = crate::core::StableKeyInterner::default();
+        db
+    }
+
+    fn metadata_rows(db: &AnalysisDb) -> Vec<(FactRef, String, crate::analysis_kernel::FactMeta)> {
+        db.fact_meta()
+            .rows()
+            .map(|(reference, metadata)| {
+                let key = db.resolve_stable_key(metadata.stable_key).to_string();
+                (reference, key, metadata.clone())
+            })
+            .collect()
+    }
+
+    /// Loads a Go and a TypeScript file, restores their syntax facts, and runs
+    /// the metrics provider over them: the kernel's order.
+    fn restore_then_derive_metrics(root: &Path, cache: &Cache, defer: bool) -> AnalysisDb {
+        // (path, source, function, the function's first and last line, import)
+        let sources = [
+            (
+                "main.go",
+                "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tif true {\n\t\tfmt.Println()\n\t}\n}\n",
+                "main",
+                (5, 9),
+                "fmt",
+            ),
+            (
+                "src/app.ts",
+                "import { x } from './x';\nexport function handler() {\n  if (x) return 1;\n  return 0;\n}\n",
+                "handler",
+                (2, 5),
+                "./x",
+            ),
+        ];
+        let mut db = isolated_db();
+        let files = sources.map(|(path, source, ..)| {
+            db.add_file(root.join(path), path.to_string(), source.to_string())
+        });
+        if defer {
+            db.defer_syntax_fact_metadata();
+        }
+        for (file, (path, source, name, (first, last), import)) in files.into_iter().zip(sources) {
+            let language = Language::from_path(Path::new(path));
+            let start = source.find(&format!("{name}(")).expect("function name") as u32;
+            let end = source.len() as u32 - 1;
+            db.restore_file_facts(
+                file,
+                crate::analysis_api::CachedFileFacts {
+                    packages: (language == Language::Go)
+                        .then(|| {
+                            PackageFact::new(
+                                PackageId::from_raw(0),
+                                file,
+                                "main".to_string(),
+                                Span::new(file, 0, 12, 1, 1, 1, 13),
+                                language,
+                            )
+                        })
+                        .into_iter()
+                        .collect(),
+                    functions: vec![FunctionFact::new(
+                        FunctionId::from_raw(7),
+                        file,
+                        name.to_string(),
+                        Span::new(file, start, end, first, 1, last, 2),
+                        language,
+                        false,
+                        true,
+                        2,
+                        vec!["Println".to_string()],
+                    )],
+                    imports: vec![ImportFact::new(
+                        ImportId::from_raw(0),
+                        file,
+                        None,
+                        import.to_string(),
+                        Span::new(file, 0, 10, 1, 1, 1, 11),
+                        language,
+                    )],
+                    string_literals: vec![StringLiteralFact::new(
+                        file,
+                        import.to_string(),
+                        Span::new(file, 1, 4, 1, 2, 1, 5),
+                        language,
+                    )],
+                    ..Default::default()
+                },
+            );
+        }
+        derive_requested_metrics_with_cache_stats(
+            &mut db,
+            &requested_metrics_plan(),
+            cache,
+            metrics_manifest(),
+        )
+        .expect("canonical metrics derivation");
+        db
+    }
+
+    /// Deferral must be invisible once the metadata is recorded: the same rows
+    /// in the same order, and so the same stable-key ids, as an eager run —
+    /// whether the metrics provider derived its facts or restored its layer.
+    #[test]
+    fn deferred_metric_metadata_records_what_an_eager_run_records() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let disabled = Cache::new(temp.path().join("disabled"), false);
+        let warm = Cache::new(temp.path().join("cache").join("analysis"), true);
+        let primed = restore_then_derive_metrics(temp.path(), &warm, false);
+        assert!(!primed.file_metrics().is_empty());
+
+        fn json<T: serde::Serialize>(facts: &[T]) -> String {
+            serde_json::to_string(facts).expect("facts serialize")
+        }
+        for (label, cache) in [("derived", &disabled), ("restored", &warm)] {
+            let eager = restore_then_derive_metrics(temp.path(), cache, false);
+            let mut deferred = restore_then_derive_metrics(temp.path(), cache, true);
+
+            for (family, deferred_facts, eager_facts) in [
+                (
+                    "functions",
+                    json(deferred.functions()),
+                    json(eager.functions()),
+                ),
+                (
+                    "file metrics",
+                    json(deferred.file_metrics()),
+                    json(eager.file_metrics()),
+                ),
+                (
+                    "function metrics",
+                    json(deferred.function_metrics()),
+                    json(eager.function_metrics()),
+                ),
+                (
+                    "complexity metrics",
+                    json(deferred.complexity_metrics()),
+                    json(eager.complexity_metrics()),
+                ),
+            ] {
+                assert_eq!(deferred_facts, eager_facts, "{label}: {family}");
+            }
+            assert_eq!(
+                deferred
+                    .fact_meta()
+                    .family_rows(FactFamily::FunctionMetric)
+                    .count(),
+                0,
+                "{label}: metric metadata was recorded while syntax metadata was deferred"
+            );
+            let eager_rows = metadata_rows(&eager);
+            assert_eq!(
+                metadata_rows(&deferred).len() + deferred.deferred_syntax_metadata_len(),
+                eager_rows.len(),
+                "{label}"
+            );
+
+            deferred.record_deferred_syntax_metadata();
+            assert_eq!(deferred.deferred_syntax_metadata_len(), 0, "{label}");
+            assert_eq!(metadata_rows(&deferred), eager_rows, "{label}");
+            assert_eq!(
+                deferred.stable_key_interner().len(),
+                eager.stable_key_interner().len(),
+                "{label}"
+            );
+        }
     }
 
     mod metrics_layer_cache {

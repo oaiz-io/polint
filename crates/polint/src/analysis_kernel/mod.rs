@@ -1,3 +1,4 @@
+use crate::analysis_neutral::metrics::METRIC_CAPABILITIES;
 use crate::analysis_plan::AnalysisPlan;
 use crate::cache::Cache;
 use crate::config::LoadedConfig;
@@ -577,10 +578,11 @@ impl AnalysisKernel {
 
     /// Runs the kernel for a rule check or review, whose readers after the run
     /// are the rules and the report. When the plan requests nothing past
-    /// syntax, the metadata of restored syntax facts is recorded only if
-    /// validation or a syntax provider's fallback identity needs it (see
-    /// [`AnalysisDb::defer_syntax_fact_metadata`]), and the go.syntax identity
-    /// is the adapter's native digest rather than the canonical projection.
+    /// syntax and metrics, the metadata of restored syntax facts and of metric
+    /// facts is recorded only if validation or a syntax provider's fallback
+    /// identity needs it (see [`AnalysisDb::defer_syntax_fact_metadata`]). When
+    /// it requests nothing past syntax, the go.syntax identity is also the
+    /// adapter's native digest rather than the canonical projection.
     pub(crate) fn run_for_rule_check(input: KernelInput<'_>) -> anyhow::Result<KernelOutput> {
         Self::run_with(input, true)
     }
@@ -617,7 +619,13 @@ impl AnalysisKernel {
         // capability, so with none requested nothing in the run reads syntax
         // metadata before validation, or the go.syntax identity at all.
         let syntax_only_rule_check = rule_check && requested_capabilities.is_empty();
-        if syntax_only_rule_check {
+        // The metric capabilities add only the metrics provider, which reads
+        // syntax facts but not their metadata, and defers its own with them.
+        let defer_syntax_metadata = rule_check
+            && requested_capabilities
+                .iter()
+                .all(|capability| METRIC_CAPABILITIES.contains(capability));
+        if defer_syntax_metadata {
             db.defer_syntax_fact_metadata();
         }
         log_loaded_source_files(&db);
@@ -1244,6 +1252,146 @@ mod tests {
             deferred.db.fact_meta().row_count(),
             eager.db.fact_meta().row_count()
         );
+    }
+
+    /// A rule check whose only trigger capabilities are the metric ones keeps
+    /// syntax metadata deferred, and the metric facts' metadata with it, on a
+    /// cold cache and on a warm one, and nothing the rules or the report read
+    /// changes. Once recorded, the metadata rows are the eager run's.
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
+    #[test]
+    fn metrics_rule_checks_defer_metadata_without_changing_results() {
+        fn json<T: serde::Serialize>(facts: &[T]) -> String {
+            serde_json::to_string(facts).expect("facts serialize")
+        }
+        fn metadata_rows(db: &AnalysisDb) -> Vec<(FactRef, String, FactMeta)> {
+            db.fact_meta()
+                .rows()
+                .map(|(reference, metadata)| {
+                    let key = db.resolve_stable_key(metadata.stable_key).to_string();
+                    (reference, key, metadata.clone())
+                })
+                .collect()
+        }
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tif len(\"x\") > 0 {\n\t\tfmt.Println(\"hi\")\n\t}\n}\n",
+        )
+        .expect("write go");
+        std::fs::write(
+            temp.path().join("app.ts"),
+            "import { x } from './x';\nexport function render(value: number) {\n  if (value > 1) { return `${x}${value}`; }\n  return x;\n}\n",
+        )
+        .expect("write ts");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let disabled = Cache::new("", false);
+        let warm = Cache::new(temp.path().join(".polint/cache/analysis"), true);
+        let plan = AnalysisPlan::from_capability_names_for_test(&[
+            "syntax",
+            "imports",
+            "string_literals",
+            "file_metrics",
+            "function_metrics",
+            "complexity_metrics",
+        ]);
+        let run = |cache: &Cache, rule_check: bool| {
+            let input = KernelInput {
+                loaded: &loaded,
+                cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            };
+            if rule_check {
+                AnalysisKernel::run_for_rule_check(input)
+            } else {
+                AnalysisKernel::run(input)
+            }
+            .expect("kernel runs")
+        };
+        let _prime = run(&warm, false);
+
+        for (label, cache) in [("cold", &disabled), ("warm", &warm)] {
+            let eager = run(cache, false);
+            let mut deferred = run(cache, true);
+
+            assert_eq!(deferred.diagnostics, eager.diagnostics, "{label}");
+            for (family, deferred_facts, eager_facts) in [
+                (
+                    "functions",
+                    json(deferred.db.functions()),
+                    json(eager.db.functions()),
+                ),
+                (
+                    "imports",
+                    json(deferred.db.imports()),
+                    json(eager.db.imports()),
+                ),
+                (
+                    "string literals",
+                    json(deferred.db.string_literals()),
+                    json(eager.db.string_literals()),
+                ),
+                (
+                    "file metrics",
+                    json(deferred.db.file_metrics()),
+                    json(eager.db.file_metrics()),
+                ),
+                (
+                    "function metrics",
+                    json(deferred.db.function_metrics()),
+                    json(eager.db.function_metrics()),
+                ),
+                (
+                    "complexity metrics",
+                    json(deferred.db.complexity_metrics()),
+                    json(eager.db.complexity_metrics()),
+                ),
+            ] {
+                assert_eq!(deferred_facts, eager_facts, "{label}: {family}");
+            }
+            assert!(!eager.db.function_metrics().is_empty(), "{label}");
+            assert_eq!(
+                deferred.run_report.provider_outcomes, eager.run_report.provider_outcomes,
+                "{label}"
+            );
+            // The rows the report prints, less the wall time two runs never share.
+            let report_rows = |output: &KernelOutput| {
+                provider_outcome_rows(
+                    &output.run_report.provider_outcomes,
+                    &output.run_report.provider_telemetry,
+                )
+                .into_iter()
+                .map(|mut row| {
+                    row.elapsed_ms = None;
+                    row
+                })
+                .collect::<Vec<_>>()
+            };
+            assert_eq!(report_rows(&deferred), report_rows(&eager), "{label}");
+            assert_eq!(deferred.completeness, eager.completeness, "{label}");
+
+            // Validation ran on a recorded copy: the run returns what a release
+            // build returns, restored facts without their metadata rows.
+            assert!(deferred.db.deferred_syntax_metadata_len() > 0, "{label}");
+            assert_eq!(
+                deferred
+                    .db
+                    .fact_meta()
+                    .family_rows(FactFamily::ComplexityMetric)
+                    .count(),
+                0,
+                "{label}"
+            );
+            deferred.db.record_deferred_syntax_metadata();
+            assert_eq!(
+                metadata_rows(&deferred.db),
+                metadata_rows(&eager.db),
+                "{label}"
+            );
+        }
     }
 
     /// Runs a syntax-only rule check over a repository holding one source file.
