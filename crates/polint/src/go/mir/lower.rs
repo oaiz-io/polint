@@ -519,7 +519,7 @@ impl GoMirLowering {
     ) {
         let mut parser = Parser::new();
         if parser
-            .set_language(&tree_sitter_go::LANGUAGE.into())
+            .set_language(&crate::go::grammar::language())
             .is_err()
         {
             return;

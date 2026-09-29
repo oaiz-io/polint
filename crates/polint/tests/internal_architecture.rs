@@ -250,15 +250,30 @@ fn language_features_are_isolated_and_default_to_both() {
     let dependencies = parsed["dependencies"]
         .as_table()
         .expect("dependencies table");
-    for dependency in ["tree-sitter", "tree-sitter-go"] {
-        assert_eq!(dependencies[dependency]["optional"].as_bool(), Some(true));
-        assert!(
-            features["lang-go"]
-                .as_array()
-                .unwrap()
-                .contains(&format!("dep:{dependency}").into())
-        );
-    }
+    assert_eq!(
+        dependencies["tree-sitter"]["optional"].as_bool(),
+        Some(true)
+    );
+    assert!(
+        features["lang-go"]
+            .as_array()
+            .unwrap()
+            .contains(&"dep:tree-sitter".into())
+    );
+    assert!(
+        !features["lang-go"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value.as_str() == Some("dep:tree-sitter-go")),
+        "Go parsing uses the vendored grammar, not crates.io tree-sitter-go"
+    );
+    assert!(
+        repo_root()
+            .join("crates/polint/vendor/tree-sitter-go/src/parser.c")
+            .is_file(),
+        "vendored tree-sitter-go parser.c must be present for lang-go builds"
+    );
     for dependency in [
         "oxc_allocator",
         "oxc_ast",
