@@ -59,6 +59,8 @@ Add `public surface leak gate (ubuntu-latest)` AND `public surface leak gate (ma
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 20260929-post-l4-next-lever | Post-L4 re-analysis of the perf-5 levers: re-measured OAIZ tiers on both engines (first edit-tier numbers), re-ranked levers, picked the metrics-trigger cliff, de-risk plans for it and for L1; appended to PR #130 | 2026-09-29 | 2893a9fd | [20260929-post-l4-next-lever](./quick/20260929-post-l4-next-lever/) |
+| 20260928-perf-levers-research-pr | Research report: perf-5 campaign's unshipped levers L1–L7, sized-not-taken targets, and methodology, one file per topic; PR #130 (non-draft) against main | 2026-09-28 | 26f77552 | [20260928-perf-levers-research-pr](./quick/20260928-perf-levers-research-pr/) |
 | 260927-fk1 | perf-5: measured baseline, then byte-identical cold/warm/ice-cold wins on Plinty and OAIZ (warm −21…−36%, cold −18…−27%, ice-cold −13%) | 2026-09-27 | e7bf1e52 | [260927-fk1-perf-5-campaign-measured-baseline-and-by](./quick/260927-fk1-perf-5-campaign-measured-baseline-and-by/) |
 | 260906-1ex | Index deep-analysis joins and stream evidence payloads; inherited Jelly gate remains red | 2026-09-08 | this commit | [260906-1ex-fundamental-deep-analysis-performance-re](./quick/260906-1ex-fundamental-deep-analysis-performance-re/) |
 | 260830-nzd | Implement and A/B benchmark byte-identical Polint algorithmic scan speedups | 2026-08-31 | d196786d | [260830-nzd-implement-and-a-b-benchmark-the-polint-1](./quick/260830-nzd-implement-and-a-b-benchmark-the-polint-1/) |
