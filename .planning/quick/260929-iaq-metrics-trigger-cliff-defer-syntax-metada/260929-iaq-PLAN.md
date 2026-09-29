@@ -1,7 +1,7 @@
 ---
 quick_id: 260929-iaq
 type: quick
-status: in-progress
+status: complete
 description: metrics-trigger cliff — keep syntax metadata deferred for metrics-only rule checks with identical stable-key ids, and memoize the warm metrics projection
 ---
 
