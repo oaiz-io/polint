@@ -35,8 +35,9 @@ impl SemanticGraphOutput {
     /// consistent after re-densification.
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.nodes.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         // Map each node's pre-sort dense id to its post-sort dense id so edges can
         // be rewritten to the new node numbering.
@@ -57,8 +58,9 @@ impl SemanticGraphOutput {
             }
         }
         self.edges.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, edge) in self.edges.iter_mut().enumerate() {
             edge.id = SemanticEdgeId(index as u64);
@@ -74,8 +76,9 @@ impl SemanticGraphOutput {
                 .remap_nodes(|node| remap.get(&node).copied().unwrap_or(node));
         }
         self.constraints.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         for (index, constraint) in self.constraints.iter_mut().enumerate() {
             constraint.id = SemanticConstraintId(index as u64);

@@ -97,22 +97,13 @@ impl EvidenceOutput {
             })
             .collect();
         self.edges.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.from,
-                left.to,
-                left.kind,
-                left.query_mode,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.from,
-                    right.to,
-                    right.kind,
-                    right.query_mode,
-                    right.id,
-                ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.from.cmp(&right.from))
+                .then_with(|| left.to.cmp(&right.to))
+                .then_with(|| left.kind.cmp(&right.kind))
+                .then_with(|| left.query_mode.cmp(&right.query_mode))
+                .then_with(|| left.id.cmp(&right.id))
         });
         let edge_remap = self
             .edges
@@ -136,11 +127,10 @@ impl EvidenceOutput {
             })
             .collect();
         self.paths.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.rank, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.rank,
-                right.id,
-            ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.rank.cmp(&right.rank))
+                .then_with(|| left.id.cmp(&right.id))
         });
         let path_remap = self
             .paths
@@ -165,11 +155,10 @@ impl EvidenceOutput {
             })
             .collect();
         self.slices.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.query_mode, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.query_mode,
-                right.id,
-            ))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.query_mode.cmp(&right.query_mode))
+                .then_with(|| left.id.cmp(&right.id))
         });
         let slice_remap = self
             .slices
@@ -200,12 +189,14 @@ impl EvidenceOutput {
         }
 
         self.unknowns.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.reason)
-                .cmp(&(interner.resolve(right.stable_key), right.reason))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.reason.cmp(&right.reason))
         });
         self.replay_keys.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.query_mode)
-                .cmp(&(interner.resolve(right.stable_key), right.query_mode))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.query_mode.cmp(&right.query_mode))
         });
 
         self
@@ -427,11 +418,10 @@ fn normalize_nodes(
         .map(EvidenceNodeFact::normalized)
         .collect();
     nodes.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.kind, left.id).cmp(&(
-            interner.resolve(right.stable_key),
-            right.kind,
-            right.id,
-        ))
+        interner
+            .compare_canonical(left.stable_key, right.stable_key)
+            .then_with(|| left.kind.cmp(&right.kind))
+            .then_with(|| left.id.cmp(&right.id))
     });
     nodes
 }
@@ -441,11 +431,10 @@ fn normalize_omitted_regions(
     interner: &StableKeyInterner,
 ) -> Vec<EvidenceOmittedRegionFact> {
     omitted_regions.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.reason, left.id).cmp(&(
-            interner.resolve(right.stable_key),
-            right.reason,
-            right.id,
-        ))
+        interner
+            .compare_canonical(left.stable_key, right.stable_key)
+            .then_with(|| left.reason.cmp(&right.reason))
+            .then_with(|| left.id.cmp(&right.id))
     });
     omitted_regions
 }
@@ -459,11 +448,10 @@ fn normalize_bundles(
         .map(EvidenceBundleFact::normalized)
         .collect::<Vec<_>>();
     bundles.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.query_mode, left.id).cmp(&(
-            interner.resolve(right.stable_key),
-            right.query_mode,
-            right.id,
-        ))
+        interner
+            .compare_canonical(left.stable_key, right.stable_key)
+            .then_with(|| left.query_mode.cmp(&right.query_mode))
+            .then_with(|| left.id.cmp(&right.id))
     });
     bundles
 }

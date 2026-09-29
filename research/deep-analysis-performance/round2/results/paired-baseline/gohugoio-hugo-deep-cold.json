@@ -1,0 +1,227 @@
+{
+ "wall_s": 58.69667104195105,
+ "exit": 0,
+ "cold": true,
+ "mode": "deep",
+ "repo": "research/evaluation-harness/repos/gohugoio-hugo",
+ "binary": ".perf/bin/baseline-polint-tests",
+ "point": {
+  "repo_id": "gohugoio-hugo",
+  "repo_file_count": 849,
+  "repo_source_bytes": 5207821,
+  "diff_files": 0,
+  "diff_hunk_lines": 0,
+  "cold_wall_clock_ms": 57952,
+  "warm_wall_clock_ms": 57952,
+  "peak_rss_bytes": 5234937856,
+  "peak_rss_delta_bytes": 5221699584,
+  "size": {
+   "cache_bytes": 69140423,
+   "store_bytes": 0
+  },
+  "budget": {
+   "budget_exceeded": 0,
+   "tokens_exhausted": 0,
+   "iteration_capped": 17685
+  }
+ },
+ "stages": [
+  {
+   "provider": "polint.source",
+   "elapsed_ms": 0,
+   "rss_mb": 31,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 30,
+   "facts": 849,
+   "keys": 849,
+   "key_mb": 0,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.go.syntax",
+   "elapsed_ms": 749,
+   "rss_mb": 94,
+   "rss_delta_mb": 62,
+   "peak_rss_mb": 93,
+   "facts": 76094,
+   "keys": 76094,
+   "key_mb": 9,
+   "digest": "6ae4a5cb71816e6f"
+  },
+  {
+   "provider": "polint.ts.syntax",
+   "elapsed_ms": 0,
+   "rss_mb": 97,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 96,
+   "facts": 76094,
+   "keys": 76094,
+   "key_mb": 9,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.module_graph",
+   "elapsed_ms": 1606,
+   "rss_mb": 119,
+   "rss_delta_mb": 21,
+   "peak_rss_mb": 118,
+   "facts": 92070,
+   "keys": 92070,
+   "key_mb": 18,
+   "digest": "1e4e59e998a8c63a"
+  },
+  {
+   "provider": "polint.symbol_graph",
+   "elapsed_ms": 252,
+   "rss_mb": 127,
+   "rss_delta_mb": 7,
+   "peak_rss_mb": 126,
+   "facts": 93768,
+   "keys": 94617,
+   "key_mb": 18,
+   "digest": "e5cac64302c4c3ff"
+  },
+  {
+   "provider": "polint.module_topology",
+   "elapsed_ms": 97,
+   "rss_mb": 130,
+   "rss_delta_mb": 3,
+   "peak_rss_mb": 130,
+   "facts": 99288,
+   "keys": 100137,
+   "key_mb": 18,
+   "digest": "441bef0271438638"
+  },
+  {
+   "provider": "polint.semantic_mir",
+   "elapsed_ms": 9797,
+   "rss_mb": 724,
+   "rss_delta_mb": 593,
+   "peak_rss_mb": 1064,
+   "facts": 327273,
+   "keys": 636166,
+   "key_mb": 279,
+   "digest": "9712c23b776b52d7"
+  },
+  {
+   "provider": "polint.cfg",
+   "elapsed_ms": 16517,
+   "rss_mb": 2094,
+   "rss_delta_mb": 1370,
+   "peak_rss_mb": 2094,
+   "facts": 1135796,
+   "keys": 1444630,
+   "key_mb": 1515,
+   "digest": "6dd44c2f8fa035f0"
+  },
+  {
+   "provider": "polint.calls",
+   "elapsed_ms": 2675,
+   "rss_mb": 2262,
+   "rss_delta_mb": 167,
+   "peak_rss_mb": 2440,
+   "facts": 1220559,
+   "keys": 1532098,
+   "key_mb": 1639,
+   "digest": "3fd0981bad2cf894"
+  },
+  {
+   "provider": "polint.go.semantic",
+   "elapsed_ms": 136,
+   "rss_mb": 2262,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 2440,
+   "facts": 1220559,
+   "keys": 1532098,
+   "key_mb": 1639,
+   "digest": "-"
+  },
+  {
+   "provider": "polint.abstract_domains",
+   "elapsed_ms": 11270,
+   "rss_mb": 2921,
+   "rss_delta_mb": 659,
+   "peak_rss_mb": 2921,
+   "facts": 1475926,
+   "keys": 1787466,
+   "key_mb": 1738,
+   "digest": "5bfc66bc36ce174a"
+  },
+  {
+   "provider": "polint.direct_summaries",
+   "elapsed_ms": 1336,
+   "rss_mb": 2922,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 2922,
+   "facts": 1520289,
+   "keys": 1831829,
+   "key_mb": 1752,
+   "digest": "e898a6b097a2bdf5"
+  },
+  {
+   "provider": "polint.entrypoints",
+   "elapsed_ms": 1230,
+   "rss_mb": 2973,
+   "rss_delta_mb": 50,
+   "peak_rss_mb": 3022,
+   "facts": 1523620,
+   "keys": 1835160,
+   "key_mb": 1753,
+   "digest": "cf41d7ba844ba5a9"
+  },
+  {
+   "provider": "polint.extensions",
+   "elapsed_ms": 0,
+   "rss_mb": 2973,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 3022,
+   "facts": 1523620,
+   "keys": 1835160,
+   "key_mb": 1753,
+   "digest": "b64586144146b5e1"
+  },
+  {
+   "provider": "polint.type_value_alias",
+   "elapsed_ms": 11649,
+   "rss_mb": 4461,
+   "rss_delta_mb": 1488,
+   "peak_rss_mb": 4992,
+   "facts": 2017822,
+   "keys": 2329306,
+   "key_mb": 2104,
+   "digest": "659ed50c22a33ab1"
+  },
+  {
+   "provider": "polint.metrics",
+   "elapsed_ms": 260,
+   "rss_mb": 4461,
+   "rss_delta_mb": 0,
+   "peak_rss_mb": 4992,
+   "facts": 2032661,
+   "keys": 2344145,
+   "key_mb": 2107,
+   "digest": "f1be5f24e78c21b1"
+  }
+ ],
+ "diagnostics": {
+  "count": 5,
+  "digest": "37da3ce75ed0d715"
+ },
+ "load_before": [
+  3.22998046875,
+  3.5244140625,
+  4.2177734375
+ ],
+ "load_after": [
+  3.2265625,
+  3.4619140625,
+  4.150390625
+ ],
+ "competing_builds": [],
+ "stamps_before": [],
+ "stamps_after_clear": [],
+ "stamps_final": [],
+ "stderr": "2026-09-10T03:49:18.330084Z  INFO polint::kernel::stage: stage done provider=\"polint.source\" elapsed_ms=0 rss_mb=31 rss_delta_mb=0 peak_rss_mb=30 facts=849 keys=849 key_mb=0 digest=\"-\"\n2026-09-10T03:49:19.083824Z  INFO polint::kernel::stage: stage done provider=\"polint.go.syntax\" elapsed_ms=749 rss_mb=94 rss_delta_mb=62 peak_rss_mb=93 facts=76094 keys=76094 key_mb=9 digest=\"6ae4a5cb71816e6f\"\n2026-09-10T03:49:19.190486Z  INFO polint::kernel::stage: stage done provider=\"polint.ts.syntax\" elapsed_ms=0 rss_mb=97 rss_delta_mb=0 peak_rss_mb=96 facts=76094 keys=76094 key_mb=9 digest=\"-\"\n2026-09-10T03:49:20.799339Z  INFO polint::kernel::stage: stage done provider=\"polint.module_graph\" elapsed_ms=1606 rss_mb=119 rss_delta_mb=21 peak_rss_mb=118 facts=92070 keys=92070 key_mb=18 digest=\"1e4e59e998a8c63a\"\n2026-09-10T03:49:21.052752Z  INFO polint::kernel::stage: stage done provider=\"polint.symbol_graph\" elapsed_ms=252 rss_mb=127 rss_delta_mb=7 peak_rss_mb=126 facts=93768 keys=94617 key_mb=18 digest=\"e5cac64302c4c3ff\"\n2026-09-10T03:49:21.151262Z  INFO polint::kernel::stage: stage done provider=\"polint.module_topology\" elapsed_ms=97 rss_mb=130 rss_delta_mb=3 peak_rss_mb=130 facts=99288 keys=100137 key_mb=18 digest=\"441bef0271438638\"\n2026-09-10T03:49:30.950655Z  INFO polint::kernel::stage: stage done provider=\"polint.semantic_mir\" elapsed_ms=9797 rss_mb=724 rss_delta_mb=593 peak_rss_mb=1064 facts=327273 keys=636166 key_mb=279 digest=\"9712c23b776b52d7\"\n2026-09-10T03:49:47.472706Z  INFO polint::kernel::stage: stage done provider=\"polint.cfg\" elapsed_ms=16517 rss_mb=2094 rss_delta_mb=1370 peak_rss_mb=2094 facts=1135796 keys=1444630 key_mb=1515 digest=\"6dd44c2f8fa035f0\"\n2026-09-10T03:49:50.154503Z  INFO polint::kernel::stage: stage done provider=\"polint.calls\" elapsed_ms=2675 rss_mb=2262 rss_delta_mb=167 peak_rss_mb=2440 facts=1220559 keys=1532098 key_mb=1639 digest=\"3fd0981bad2cf894\"\n2026-09-10T03:49:50.298894Z  INFO polint::kernel::stage: stage done provider=\"polint.go.semantic\" elapsed_ms=136 rss_mb=2262 rss_delta_mb=0 peak_rss_mb=2440 facts=1220559 keys=1532098 key_mb=1639 digest=\"-\"\n2026-09-10T03:50:01.576086Z  INFO polint::kernel::stage: stage done provider=\"polint.abstract_domains\" elapsed_ms=11270 rss_mb=2921 rss_delta_mb=659 peak_rss_mb=2921 facts=1475926 keys=1787466 key_mb=1738 digest=\"5bfc66bc36ce174a\"\n2026-09-10T03:50:02.919823Z  INFO polint::kernel::stage: stage done provider=\"polint.direct_summaries\" elapsed_ms=1336 rss_mb=2922 rss_delta_mb=0 peak_rss_mb=2922 facts=1520289 keys=1831829 key_mb=1752 digest=\"e898a6b097a2bdf5\"\n2026-09-10T03:50:04.156456Z  INFO polint::kernel::stage: stage done provider=\"polint.entrypoints\" elapsed_ms=1230 rss_mb=2973 rss_delta_mb=50 peak_rss_mb=3022 facts=1523620 keys=1835160 key_mb=1753 digest=\"cf41d7ba844ba5a9\"\n2026-09-10T03:50:04.163947Z  INFO polint::kernel::stage: stage done provider=\"polint.extensions\" elapsed_ms=0 rss_mb=2973 rss_delta_mb=0 peak_rss_mb=3022 facts=1523620 keys=1835160 key_mb=1753 digest=\"b64586144146b5e1\"\n2026-09-10T03:50:15.821566Z  INFO polint::kernel::stage: stage done provider=\"polint.type_value_alias\" elapsed_ms=11649 rss_mb=4461 rss_delta_mb=1488 peak_rss_mb=4992 facts=2017822 keys=2329306 key_mb=2104 digest=\"659ed50c22a33ab1\"\n2026-09-10T03:50:16.096924Z  INFO polint::kernel::stage: stage done provider=\"polint.metrics\" elapsed_ms=260 rss_mb=4461 rss_delta_mb=0 peak_rss_mb=4992 facts=2032661 keys=2344145 key_mb=2107 digest=\"f1be5f24e78c21b1\"\n2026-09-10T03:50:16.167151Z  INFO polint::kernel::stage: run diagnostics diagnostics=5 diagnostics_digest=\"37da3ce75ed0d715\"\n",
+ "rejected_attempts": [],
+ "kind": "cold"
+}

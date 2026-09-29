@@ -588,7 +588,7 @@ fn normalize_rows<T, Id>(
 where
     Id: Copy + Ord + From<u64>,
 {
-    rows.sort_by_cached_key(|row| interner.resolve(stable_key(row)));
+    rows.sort_by(|row, other| interner.compare_canonical(stable_key(row), stable_key(other)));
     let mut ids = BTreeMap::new();
     for (index, row) in rows.iter_mut().enumerate() {
         let old_id = id(row);

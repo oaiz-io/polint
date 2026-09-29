@@ -26,6 +26,9 @@ pub use language_id::{
 pub use repo_path::escapes_repository;
 pub(crate) use span::{SourceTextIndex, span_from_byte_range};
 pub use span::{Span, TextRange};
+pub(crate) use stable_key::{
+    KeyPart, push_decimal, push_length_prefixed, push_length_prefixed_path,
+};
 pub use stable_key::{StableKeyId, StableKeyInterner};
 
 #[doc(hidden)]

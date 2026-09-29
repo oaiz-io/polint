@@ -17,23 +17,21 @@ pub struct TsInventoryOutput {
 
 impl TsInventoryOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.functions.sort_by_cached_key(|function| {
-            (
-                interner.resolve(function.stable_key),
-                function.span.start_byte,
-                function.span.end_byte,
-            )
+        self.functions.sort_by(|function, other| {
+            interner
+                .compare_canonical(function.stable_key, other.stable_key)
+                .then_with(|| function.span.start_byte.cmp(&other.span.start_byte))
+                .then_with(|| function.span.end_byte.cmp(&other.span.end_byte))
         });
         for (index, function) in self.functions.iter_mut().enumerate() {
             function.id = TsInventoryFunctionId(index as u64);
         }
 
-        self.callsites.sort_by_cached_key(|callsite| {
-            (
-                interner.resolve(callsite.stable_key),
-                callsite.span.start_byte,
-                callsite.span.end_byte,
-            )
+        self.callsites.sort_by(|callsite, other| {
+            interner
+                .compare_canonical(callsite.stable_key, other.stable_key)
+                .then_with(|| callsite.span.start_byte.cmp(&other.span.start_byte))
+                .then_with(|| callsite.span.end_byte.cmp(&other.span.end_byte))
         });
         for (index, callsite) in self.callsites.iter_mut().enumerate() {
             callsite.id = TsInventoryCallsiteId(index as u64);

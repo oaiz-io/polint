@@ -38,12 +38,14 @@ pub struct TypeOutput {
 impl TypeOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.types.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         self.narrowed.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
+            interner
+                .compare_canonical(left.stable_key, right.stable_key)
+                .then_with(|| left.id.cmp(&right.id))
         });
         let mut type_set_remap = BTreeMap::new();
         for (index, row) in self.types.iter().enumerate() {

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis_api::SemanticImportKind;
 use crate::analysis_api::SourceFile;
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_key_parts, stable_key_from_parts};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::access_paths::facts::{
     AccessPathFact, AccessPathProjection, AccessPathStatus,
@@ -27,7 +27,7 @@ use crate::analysis_neutral::values::facts::{
     ValueStatus, ValueSubject,
 };
 use crate::analysis_neutral::values::store::ValueOutput;
-use crate::internal_core::{FileId, FunctionId, Language, Span};
+use crate::internal_core::{FileId, FunctionId, KeyPart, Language, Span};
 
 type RootPlaceKey = (PlaceRoot, Option<FileId>, Option<FunctionId>);
 
@@ -247,13 +247,13 @@ fn type_fact_for_place(
         confidence,
         status,
         provenance: TypeProvenance::Native,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::Type,
             [
-                ("language", language_label(place.language).to_string()),
-                ("place", interner.resolve(place.stable_key).to_string()),
-                ("phase", type_phase_label(phase).to_string()),
+                ("language", KeyPart::Text(language_label(place.language))),
+                ("place", KeyPart::Key(place.stable_key)),
+                ("phase", KeyPart::Text(type_phase_label(phase))),
             ],
         ),
     }
@@ -319,12 +319,12 @@ fn access_path_for_place(
         function: place.function.or_else(|| body.map(|body| body.function)),
         body: body.map(|body| body.id).or_else(|| place.root.body()),
         status,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::AccessPath,
             [
-                ("language", language_label(place.language).to_string()),
-                ("place", interner.resolve(place.stable_key).to_string()),
+                ("language", KeyPart::Text(language_label(place.language))),
+                ("place", KeyPart::Key(place.stable_key)),
             ],
         ),
     }
@@ -415,16 +415,13 @@ fn collect_values_for_operation(
                 precision: ValuePrecision::Conservative,
                 status: ValueStatus::Unknown,
                 provenance: ValueProvenance::Native,
-                stable_key: stable_key(
+                stable_key: stable_key_ref(
                     interner,
                     FactFamily::Value,
                     [
-                        ("language", "ts-js".to_string()),
-                        (
-                            "operation",
-                            interner.resolve(operation.stable_key).to_string(),
-                        ),
-                        ("kind", "call_return".to_string()),
+                        ("language", KeyPart::Text("ts-js")),
+                        ("operation", KeyPart::Key(operation.stable_key)),
+                        ("kind", KeyPart::Text("call_return")),
                     ],
                 ),
             });
@@ -547,16 +544,13 @@ fn push_value_for_mir_value(
         precision,
         status,
         provenance: ValueProvenance::Native,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::Value,
             [
-                ("language", "ts-js".to_string()),
-                (
-                    "operation",
-                    interner.resolve(operation.stable_key).to_string(),
-                ),
-                ("role", "assigned_value".to_string()),
+                ("language", KeyPart::Text("ts-js")),
+                ("operation", KeyPart::Key(operation.stable_key)),
+                ("role", KeyPart::Text("assigned_value")),
             ],
         ),
     });
@@ -740,16 +734,13 @@ fn push_function_value(
         precision: ValuePrecision::Heuristic,
         status: ValueStatus::Present,
         provenance: ValueProvenance::Native,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::Value,
             [
-                ("language", "ts-js".to_string()),
-                (
-                    "operation",
-                    interner.resolve(operation.stable_key).to_string(),
-                ),
-                ("kind", "function_object".to_string()),
+                ("language", KeyPart::Text("ts-js")),
+                ("operation", KeyPart::Key(operation.stable_key)),
+                ("kind", KeyPart::Text("function_object")),
             ],
         ),
     });
@@ -790,16 +781,13 @@ fn collect_module_namespace_values(
             source_operation: None,
             span: None,
             provenance: ValueProvenance::Native,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::AllocationToken,
                 [
-                    ("language", language_label(import.language).to_string()),
-                    (
-                        "semantic_import",
-                        interner.resolve(import.stable_key).to_string(),
-                    ),
-                    ("kind", "module_namespace".to_string()),
+                    ("language", KeyPart::Text(language_label(import.language))),
+                    ("semantic_import", KeyPart::Key(import.stable_key)),
+                    ("kind", KeyPart::Text("module_namespace")),
                 ],
             ),
         });
@@ -815,16 +803,13 @@ fn collect_module_namespace_values(
             precision: ValuePrecision::SetupAware,
             status: ValueStatus::Present,
             provenance: ValueProvenance::Native,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::Value,
                 [
-                    ("language", language_label(import.language).to_string()),
-                    (
-                        "semantic_import",
-                        interner.resolve(import.stable_key).to_string(),
-                    ),
-                    ("kind", "module_object".to_string()),
+                    ("language", KeyPart::Text(language_label(import.language))),
+                    ("semantic_import", KeyPart::Key(import.stable_key)),
+                    ("kind", KeyPart::Text("module_object")),
                 ],
             ),
         });
@@ -866,17 +851,14 @@ fn collect_narrowing_for_operation(
         let place = place_fact.id;
         let place_stable_key = interner.resolve(place_fact.stable_key).to_string();
         let type_set = TypeSetId(types.len() as u64);
-        let type_stable_key = stable_key(
+        let type_stable_key = stable_key_ref(
             interner,
             FactFamily::Type,
             [
-                ("language", language_label(body.language).to_string()),
-                (
-                    "operation",
-                    interner.resolve(operation.stable_key).to_string(),
-                ),
-                ("place", place_stable_key.clone()),
-                ("phase", "flow_narrowed".to_string()),
+                ("language", KeyPart::Text(language_label(body.language))),
+                ("operation", KeyPart::Key(operation.stable_key)),
+                ("place", KeyPart::Text(&place_stable_key.clone())),
+                ("phase", KeyPart::Text("flow_narrowed")),
             ],
         );
         types.push(TypeFact {
@@ -912,17 +894,14 @@ fn collect_narrowing_for_operation(
             body: Some(body.id),
             precision: TypePrecision::Heuristic,
             status: TypeStatus::Present,
-            stable_key: stable_key(
+            stable_key: stable_key_ref(
                 interner,
                 FactFamily::NarrowedType,
                 [
-                    ("language", language_label(body.language).to_string()),
-                    (
-                        "operation",
-                        interner.resolve(operation.stable_key).to_string(),
-                    ),
-                    ("place", place_stable_key.clone()),
-                    ("evidence", evidence.trim().to_string()),
+                    ("language", KeyPart::Text(language_label(body.language))),
+                    ("operation", KeyPart::Key(operation.stable_key)),
+                    ("place", KeyPart::Text(&place_stable_key.clone())),
+                    ("evidence", KeyPart::Text(evidence.trim())),
                 ],
             ),
         });
@@ -1002,16 +981,13 @@ fn push_allocation(
         source_operation: Some(operation.id),
         span: Some(operation.span.clone()),
         provenance: ValueProvenance::Native,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::AllocationToken,
             [
-                ("language", language_label(language).to_string()),
-                (
-                    "operation",
-                    interner.resolve(operation.stable_key).to_string(),
-                ),
-                ("kind", label.to_string()),
+                ("language", KeyPart::Text(language_label(language))),
+                ("operation", KeyPart::Key(operation.stable_key)),
+                ("kind", KeyPart::Text(label)),
             ],
         ),
     });
@@ -1062,16 +1038,16 @@ fn unsupported_type_fact(
         confidence: TypeConfidence::Low,
         status,
         provenance: TypeProvenance::Native,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::Type,
             [
-                ("language", language_label(unsupported.language).to_string()),
                 (
-                    "unsupported",
-                    interner.resolve(unsupported.stable_key).to_string(),
+                    "language",
+                    KeyPart::Text(language_label(unsupported.language)),
                 ),
-                ("subject", subject_identity.to_string()),
+                ("unsupported", KeyPart::Key(unsupported.stable_key)),
+                ("subject", KeyPart::Text(subject_identity)),
             ],
         ),
     }
@@ -1099,16 +1075,16 @@ fn unsupported_value_fact(
         precision: ValuePrecision::Unsupported,
         status: ValueStatus::Unsupported,
         provenance: ValueProvenance::Native,
-        stable_key: stable_key(
+        stable_key: stable_key_ref(
             interner,
             FactFamily::Value,
             [
-                ("language", language_label(unsupported.language).to_string()),
                 (
-                    "unsupported",
-                    interner.resolve(unsupported.stable_key).to_string(),
+                    "language",
+                    KeyPart::Text(language_label(unsupported.language)),
                 ),
-                ("subject", subject_identity.to_string()),
+                ("unsupported", KeyPart::Key(unsupported.stable_key)),
+                ("subject", KeyPart::Text(subject_identity)),
             ],
         ),
     }
@@ -1137,6 +1113,15 @@ fn stable_key<const N: usize>(
     parts: [(&'static str, String); N],
 ) -> crate::internal_core::StableKeyId {
     stable_key_from_parts(interner, family, &parts)
+}
+
+/// Like [`stable_key`], for a key that embeds another key's identity.
+fn stable_key_ref<const N: usize>(
+    interner: &crate::internal_core::StableKeyInterner,
+    family: FactFamily,
+    parts: [(&str, KeyPart<'_>); N],
+) -> crate::internal_core::StableKeyId {
+    stable_key_from_key_parts(interner, family, parts)
 }
 
 fn language_label(language: Language) -> &'static str {
