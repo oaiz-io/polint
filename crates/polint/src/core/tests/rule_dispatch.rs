@@ -3,7 +3,7 @@
     mod rule_dispatch {
         use super::*;
         use crate::core::rule::{RuleRunOutput, RuleStartOrder};
-        use std::sync::Mutex;
+        use std::sync::{Condvar, Mutex};
 
         type StartLog = Arc<Mutex<Vec<&'static str>>>;
 
@@ -401,5 +401,112 @@
                     );
                 }
             }
+        }
+
+        /// Which rules of a pass have started, so a rule can wait for another
+        /// one to start and a test can tell which rules a pass runs side by
+        /// side.
+        #[derive(Default)]
+        struct Starts {
+            started: Mutex<BTreeSet<&'static str>>,
+            changed: Condvar,
+        }
+
+        impl Starts {
+            fn note(&self, id: &'static str) {
+                self.started.lock().expect("starts").insert(id);
+                self.changed.notify_all();
+            }
+
+            /// Whether `id` starts within a bound far longer than an idle
+            /// worker takes to pick up the next rule.
+            fn wait_for(&self, id: &'static str) -> bool {
+                let started = self.started.lock().expect("starts");
+                let (started, _) = self
+                    .changed
+                    .wait_timeout_while(started, Duration::from_secs(10), |started| {
+                        !started.contains(id)
+                    })
+                    .expect("starts");
+                started.contains(id)
+            }
+        }
+
+        /// A rule that notes its start and, given `awaited`, keeps its worker
+        /// until that rule starts too, reporting it if it gave up waiting.
+        fn awaiting_rule(
+            id: &'static str,
+            awaited: Option<&'static str>,
+            starts: &Arc<Starts>,
+        ) -> Rule {
+            let starts = Arc::clone(starts);
+            Rule::from_parts(
+                move || meta(id),
+                Capabilities::new,
+                move |_db, ctx| {
+                    starts.note(id);
+                    if let Some(awaited) = awaited
+                        && !starts.wait_for(awaited)
+                    {
+                        ctx.report(
+                            Diagnostic::new(
+                                id,
+                                Severity::Error,
+                                "src/main.go",
+                                DiagnosticRange::point(1, 1),
+                                format!("{awaited} did not start while {id} ran"),
+                            )
+                            .with_fingerprint(id),
+                        );
+                    }
+                    Ok(())
+                },
+            )
+        }
+
+        #[test]
+        fn a_timed_pass_starts_a_rule_on_every_worker() {
+            let starts = Arc::new(Starts::default());
+            let rules = vec![
+                awaiting_rule("examples/a", Some("examples/c"), &starts),
+                awaiting_rule("examples/b", Some("examples/c"), &starts),
+                awaiting_rule("examples/c", None, &starts),
+                awaiting_rule("examples/d", None, &starts),
+            ];
+            let recorded = timings(&[
+                ("examples/a", 40),
+                ("examples/b", 30),
+                ("examples/c", 20),
+                ("examples/d", 10),
+            ]);
+
+            let output = rule_pass(&rules, None, true, Some(&recorded), 3);
+
+            assert_eq!(
+                (output.diagnostics, output.start_order),
+                (Vec::new(), RuleStartOrder::LongestFirst)
+            );
+        }
+
+        /// Without recorded times the parallel iterator hands the far half of
+        /// the rule list to another worker at once, so a rule registered late
+        /// can start while the first rules still run. A queue in registration
+        /// order would hold it until one of them finished.
+        #[test]
+        fn a_pass_without_timings_starts_later_rules_while_earlier_ones_run() {
+            let starts = Arc::new(Starts::default());
+            let rules = vec![
+                awaiting_rule("examples/a", Some("examples/c"), &starts),
+                awaiting_rule("examples/b", Some("examples/c"), &starts),
+                awaiting_rule("examples/c", None, &starts),
+                awaiting_rule("examples/d", None, &starts),
+            ];
+
+            let output = rule_pass(&rules, None, true, None, 2);
+
+            assert_eq!(
+                (output.diagnostics, output.start_order),
+                (Vec::new(), RuleStartOrder::Registration)
+            );
         }
     }
