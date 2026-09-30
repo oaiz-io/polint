@@ -14,7 +14,7 @@ branch: perf/cost-ordered-dispatch
 
 - Attributed the full-repository rules phase on OAIZ with throwaway spans (never committed).
   `local/backend-endpoint-authority` (~2.45 s) bounds it in every sample; rayon's parallel iterator
-  started it 0.01–1.01 s late, anywhere from 1st to 20th of 23 rules. A pull queue in registration
+  started it 0.01–1.01 s late, anywhere from 2nd to 20th of 23 rules. A pull queue in registration
   order is worse (it is 9th registered: always ~0.8 s late); a queue ordered by one run's times
   starts it within 0.021 s every time and the phase collapses to the rule's own time. Its own time
   does not depend on when it starts. 69 samples across ten different dispatch orders wrote the same

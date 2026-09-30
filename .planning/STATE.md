@@ -59,6 +59,7 @@ Add `public surface leak gate (ubuntu-latest)` AND `public surface leak gate (ma
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| fast | cost-ordered dispatch final review: the 260930-1ep summary said today's iterator started the bounding rule 1st to 20th of 23; the attribution host's 0-based start sequence (1–19) makes it 2nd to 20th | 2026-09-30 | this commit | — |
 | fast | cost-ordered dispatch final review: comments and docs/CACHE.md now say a parallel pass without recorded times splits the registered rules across the workers, and that the pass merges results in registration order but returns diagnostics sorted | 2026-09-30 | 11072dd4 | — |
 | fast | cost-ordered dispatch final review: two concurrency tests fail when a timed pass runs on fewer workers than the pool or an untimed parallel pass becomes a registration-order queue (both mutants had survived the suite) | 2026-09-30 | a72ecd10 | — |
 | fast | cost-ordered dispatch final review: the permutation test now depends on registration-order merging (two rules tie on every sort key and differ only in severity) | 2026-09-30 | bd204e1a | — |
