@@ -39,6 +39,18 @@ campaign's report of record. Current OAIZ states, in seconds:
 - **The rule-host compile is unchanged:** 206.5 s fresh on 0.4.2, with 3.18 GB peak RSS.
 - **Also:** L2 is killed as a performance lever, L3 is parked, and L7 is downgraded.
 
+## Post-metrics-cliff update (2026-09-30)
+
+The metrics-trigger cliff fix merged as #131 and shipped in v0.4.3. On the OAIZ full repo, warm
+went 9.05 → 6.00 s, cold 13.70 → 10.40 s and edit 9.94 → 7.16 s; code-health warm went
+1.99 → 1.01 s. [`11-next-after-metrics-cliff.md`](11-next-after-metrics-cliff.md) re-derives the
+state from that fix's raw runs and re-ranks what is left:
+
+- **New finding:** on the full repo, rayon's split order decides when the one bounding consumer rule
+  starts, which costs a median 0.77 s of the rules phase (n = 107 samples).
+- **The pick:** cost-ordered rule dispatch, which is in-contract and 2–3 days of work.
+- **Then:** L1's E1 spike, and the cold-path metrics miss once its owner question is answered.
+
 ## Files
 
 | File | Lever | One line |
@@ -53,6 +65,7 @@ campaign's report of record. Current OAIZ states, in seconds:
 | [08-next-targets.md](08-next-targets.md) | — | Small in-contract targets sized but not taken, the two measured rejections, and the one consumer finding L4 doesn't cover. |
 | [09-methodology.md](09-methodology.md) | — | How every number in this directory was measured, so the evidence is auditable. |
 | [10-next-lever.md](10-next-lever.md) | — | Post-L4 re-analysis: re-measured gaps (the edit tier included), re-ranked levers, the pick (the metrics-trigger cliff), and de-risk plans for it and for L1. |
+| [11-next-after-metrics-cliff.md](11-next-after-metrics-cliff.md) | — | After the metrics-cliff fix (#131, v0.4.3): state-of-the-union table, a new rules-dispatch scheduling finding, re-ranked candidates, the pick (cost-ordered rule dispatch) and its spike plan. |
 
 ## What each lever is
 
