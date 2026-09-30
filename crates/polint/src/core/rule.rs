@@ -372,7 +372,8 @@ pub(crate) type RuleTimings = BTreeMap<String, Duration>;
 /// The order a rule pass started its rules in.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum RuleStartOrder {
-    /// Registration order: a sequential pass, or no recorded times to go by.
+    /// The rules as registered: one after another in a sequential pass, or
+    /// split across the workers when there are no recorded times to go by.
     #[default]
     Registration,
     /// The longest recorded time first.
@@ -404,11 +405,12 @@ pub(crate) struct RuleRunOutput {
     pub(crate) start_order: RuleStartOrder,
 }
 
-/// Runs `rules` and returns their diagnostics in registration order.
+/// Runs `rules` and merges their results in registration order.
 ///
 /// A parallel pass given `timings` from an earlier pass starts the rules with
 /// the longest recorded time first, so a rule that bounds the pass does not
-/// wait behind shorter ones. Without them it keeps registration order.
+/// wait behind shorter ones. Without them the parallel iterator splits the
+/// rules across the workers as registered.
 pub(crate) fn run_rules_observed(
     db: &AnalysisDb,
     rules: &[Rule],
@@ -523,8 +525,8 @@ pub(crate) fn run_rules_observed(
 /// recorded time first, since any of them may be the longest, then the rest
 /// from the longest recorded time down. Ties keep registration order.
 ///
-/// `None` when no rule has a recorded time, so the pass keeps registration
-/// order.
+/// `None` when no rule has a recorded time, so the pass starts its rules as
+/// registered.
 fn longest_first_order(rules: &[Rule], timings: &RuleTimings) -> Option<Vec<usize>> {
     let recorded: Vec<Option<Duration>> = rules
         .iter()

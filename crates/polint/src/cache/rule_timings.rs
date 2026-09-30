@@ -3,7 +3,7 @@
 //! The next pass of the same plan starts its rules longest-first from these
 //! times. They order dispatch and nothing else: no cache key or digest folds
 //! them, no report prints them, and no rule reads them. A missing, unreadable
-//! or stale entry leaves the next pass in registration order.
+//! or stale entry leaves the next pass to start its rules as registered.
 
 use super::{Cache, CacheKey, CacheReadStatus};
 use crate::core::RuleTimings;
@@ -62,8 +62,8 @@ pub(crate) fn read_rule_timings(
 
 /// Records this pass's times for the next pass of the same rule plan.
 ///
-/// Best effort: times that cannot be written only leave the next pass in
-/// registration order.
+/// Best effort: times that cannot be written only leave the next pass to
+/// start its rules as registered.
 pub(crate) fn write_rule_timings(
     cache: &Cache,
     config_digest: &str,
