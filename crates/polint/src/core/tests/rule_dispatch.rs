@@ -201,12 +201,39 @@
             );
         }
 
+        /// A rule that reports the diagnostic every tied rule reports, at
+        /// `severity`. The reports agree on everything diagnostics are sorted
+        /// and deduped by, so which one a pass keeps depends only on the order
+        /// it merges rule results in.
+        fn tied_rule(id: &'static str, severity: Severity) -> Rule {
+            Rule::from_parts(
+                move || meta(id),
+                Capabilities::new,
+                move |_db, ctx| {
+                    ctx.report(
+                        Diagnostic::new(
+                            "examples/tied",
+                            severity,
+                            "src/main.go",
+                            DiagnosticRange::point(2, 1),
+                            "tied report",
+                        )
+                        .with_fingerprint("tied-fingerprint"),
+                    );
+                    Ok(())
+                },
+            )
+        }
+
         /// Every row shape a pass merges: plain reports with observation
-        /// counts, two rules whose diagnostics dedupe into one, an error, a
-        /// panic, a rule the enabled set skips, and rules of varied length.
+        /// counts, two rules whose diagnostics dedupe into one, two rules whose
+        /// reports tie on every sort key (registration order alone decides
+        /// which one is kept), an error, a panic, a rule the enabled set skips,
+        /// and rules of varied length.
         fn mixed_rules(log: &StartLog) -> (Vec<Rule>, BTreeSet<String>) {
             let rules = vec![
                 logged_rule("examples/alpha", 3, Duration::ZERO, log),
+                tied_rule("examples/tied-warn", Severity::Warn),
                 logged_rule("examples/beta", 5, Duration::from_millis(2), log),
                 TestRule::report("examples/duplicate-a", Severity::Warn, "shared-fingerprint")
                     .into_rule(),
@@ -220,6 +247,7 @@
                 logged_rule("examples/epsilon", 2, Duration::ZERO, log),
                 logged_rule("examples/zeta", 4, Duration::from_millis(1), log),
                 logged_rule("examples/eta", 6, Duration::ZERO, log),
+                tied_rule("examples/tied-error", Severity::Error),
             ];
             let enabled = rules
                 .iter()
