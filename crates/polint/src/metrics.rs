@@ -2,19 +2,21 @@ use crate::analysis_api::ProviderExecution;
 use crate::analysis_kernel::ProviderManifest;
 use crate::analysis_kernel::incremental::{
     CacheNode, CacheStats, DependencyEdge, DependencyKind, Digest, DigestKind, LayerCacheManifest,
-    LayerCacheReadStatus, LayerCacheStore, LayerCacheWriteStatus, LayerKey, PrecisionTier,
-    ShapeKind,
+    LayerCacheReadOutcome, LayerCacheReadStatus, LayerCacheStore, LayerCacheWriteStatus, LayerKey,
+    PrecisionTier, ShapeKind,
 };
 use crate::analysis_kernel::metrics_projection::{
-    CanonicalMetricsContext, CanonicalMetricsInputs, CanonicalMetricsOutput, MetricsProjectionError,
+    CanonicalMetricsContext, CanonicalMetricsInputs, CanonicalMetricsOutput,
+    MetricsProjectionError, language_label,
 };
 use crate::analysis_neutral::metrics::{
     METRIC_CAPABILITIES, METRICS_LAYER_SCHEMA, MetricsLayerPayload,
 };
 use crate::analysis_plan::AnalysisPlan;
-use crate::cache::Cache;
+use crate::cache::{Cache, CacheKey, CacheReadStatus};
 use crate::core::AnalysisDb;
 use crate::diagnostics::{Diagnostic, TextRange};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MetricsDerivation {
@@ -43,15 +45,47 @@ pub(crate) fn derive_requested_metrics_with_cache_stats(
         return Ok(MetricsDerivation::default());
     }
 
+    let store = cache.layer_cache_store();
+    let memo_inputs = metrics_inputs_digest(db, manifest);
+    let memo_key = metrics_inputs_memo_key(&memo_inputs);
+    let memo = read_metrics_inputs_memo(cache, &memo_key, &memo_inputs);
+    let mut memo_read = memo
+        .as_ref()
+        .map(|memo| read_memoized_metrics_layer(&store, memo));
+    if let (Some(memo), Some(read)) = (&memo, &mut memo_read)
+        && read.status == LayerCacheReadStatus::Hit
+        && let Some(payload) = read.value.take()
+    {
+        restore_metrics_layer_payload(db, &payload);
+        let mut cache_stats = CacheStats::default();
+        cache_stats.record_hit();
+        cache_stats.record_verified_reuse();
+        return Ok(MetricsDerivation {
+            cache_stats,
+            diagnostics: Vec::new(),
+            output_digest: Some(memo.output_digest.clone()),
+            execution: ProviderExecution::Succeeded,
+        });
+    }
+
     let context = CanonicalMetricsContext::from_db(db)?;
     let inputs = context.inputs();
     let layer_key = metrics_layer_key(inputs, manifest);
-    let store = cache.layer_cache_store();
     let mut cache_stats = CacheStats::default();
-    let read = store
-        .read_json_validated::<MetricsLayerPayload, _>(&layer_key, |payload, manifest| {
-            validate_metrics_layer_payload(&context, payload, manifest)
-        });
+    let read = match (memo, memo_read) {
+        // The memo named this very layer, and reading it found the entry
+        // invalid and evicted it: a second read could only miss.
+        (Some(memo), Some(read))
+            if memo.layer_key == layer_key
+                && read.status == LayerCacheReadStatus::InvalidEvicted =>
+        {
+            read
+        }
+        _ => store
+            .read_json_validated::<MetricsLayerPayload, _>(&layer_key, |payload, manifest| {
+                validate_metrics_layer_payload(&context, payload, manifest)
+            }),
+    };
 
     Ok(match read.status {
         LayerCacheReadStatus::Hit => {
@@ -61,6 +95,20 @@ pub(crate) fn derive_requested_metrics_with_cache_stats(
                 .value
                 .expect("layer cache hit should include metrics payload");
             restore_metrics_layer_payload(db, &payload);
+            if let (Some(output_digest), Some(payload_digest)) =
+                (&read.output_digest, read.payload_digest)
+            {
+                write_metrics_inputs_memo(
+                    cache,
+                    &memo_key,
+                    &MetricsInputsMemo::new(
+                        memo_inputs,
+                        layer_key,
+                        output_digest.clone(),
+                        payload_digest,
+                    ),
+                );
+            }
             MetricsDerivation {
                 cache_stats,
                 diagnostics: Vec::new(),
@@ -89,18 +137,163 @@ pub(crate) fn derive_requested_metrics_with_cache_stats(
                 .output_digest
                 .clone()
                 .ok_or(MetricsProjectionError::Output)?;
-            write_metrics_layer_payload(
+            let written = write_metrics_layer_payload(
                 &store,
-                layer_key,
+                layer_key.clone(),
                 &payload,
                 dependencies,
-                output_digest,
+                output_digest.clone(),
                 &mut cache_stats,
                 &mut derivation.diagnostics,
             );
+            if let Some(payload_digest) = written {
+                write_metrics_inputs_memo(
+                    cache,
+                    &memo_key,
+                    &MetricsInputsMemo::new(memo_inputs, layer_key, output_digest, payload_digest),
+                );
+            }
             derivation.cache_stats = cache_stats;
             derivation
         }
+    })
+}
+
+/// Version of the metrics inputs memo: the fields [`metrics_inputs_digest`]
+/// folds and what an entry records. Entries are keyed by it, so any change to
+/// either must change this string.
+const METRICS_INPUTS_MEMO_SCHEMA: &str = "metrics-inputs-memo-v1";
+
+/// Stands in for a source path in the memo's cache key; it names no file.
+const METRICS_INPUTS_MEMO_KEY: &str = "<metrics-inputs>";
+
+/// The metrics layer an earlier run validated or wrote for one set of inputs.
+#[derive(Serialize, Deserialize)]
+struct MetricsInputsMemo {
+    schema: String,
+    inputs: Digest,
+    layer_key: LayerKey,
+    output_digest: Digest,
+    payload_digest: Digest,
+}
+
+impl MetricsInputsMemo {
+    fn new(
+        inputs: Digest,
+        layer_key: LayerKey,
+        output_digest: Digest,
+        payload_digest: Digest,
+    ) -> Self {
+        Self {
+            schema: METRICS_INPUTS_MEMO_SCHEMA.to_string(),
+            inputs,
+            layer_key,
+            output_digest,
+            payload_digest,
+        }
+    }
+}
+
+/// Digest of every input the canonical metrics projection and the metric
+/// derivation read, in database order: each source file's id, path, language
+/// and content hash, and each function's id, file, name, span, language and
+/// complexity, together with the provider's version, schema and parameters.
+///
+/// Database order carries the file and function ids the stored metric facts
+/// refer to. Folding the fields as they are, without building a canonical row
+/// for each, costs a small fraction of the projection it lets a warm run skip;
+/// each function's fixed-width fields go in as one part so the fold stays
+/// short on a repository with a hundred thousand functions.
+fn metrics_inputs_digest(db: &AnalysisDb, manifest: &ProviderManifest) -> Digest {
+    let mut digest = Digest::builder(DigestKind::ProviderParameters, "metrics-inputs-v1");
+    digest.field("provider", manifest.id);
+    digest.field("provider-version", manifest.provider_version());
+    digest.field("schema", &manifest.primary_schema_label());
+    digest.field("parameters", &metrics_parameter_digest().value);
+    digest.field("layer-schema", METRICS_LAYER_SCHEMA);
+    for file in db.files() {
+        digest.bytes_field("file", &file.id.raw().to_le_bytes());
+        digest.field("path", &file.relative_path);
+        digest.field("language", language_label(file.language));
+        digest.field("content-hash", &file.content_hash);
+    }
+    // id, then file, span file, start and end byte, start line and column,
+    // end line and column, and complexity
+    let mut fixed = [0_u8; 8 + 9 * 4];
+    for function in db.functions() {
+        let span = &function.span;
+        fixed[..8].copy_from_slice(&function.id.raw().to_le_bytes());
+        for (slot, value) in fixed[8..].chunks_exact_mut(4).zip([
+            function.file.raw(),
+            span.file.raw(),
+            span.start_byte,
+            span.end_byte,
+            span.start_line,
+            span.start_col,
+            span.end_line,
+            span.end_col,
+            function.cyclomatic_complexity,
+        ]) {
+            slot.copy_from_slice(&value.to_le_bytes());
+        }
+        digest.bytes_field("function", &fixed);
+        digest.field("name", &function.name);
+        digest.field("language", language_label(function.language));
+    }
+    digest.finish()
+}
+
+fn metrics_inputs_memo_key(inputs: &Digest) -> CacheKey {
+    CacheKey::for_file(
+        METRICS_INPUTS_MEMO_KEY,
+        &inputs.value,
+        inputs.kind.as_str(),
+        "",
+        "",
+        METRICS_INPUTS_MEMO_SCHEMA,
+        METRICS_LAYER_SCHEMA,
+    )
+}
+
+fn read_metrics_inputs_memo(
+    cache: &Cache,
+    key: &CacheKey,
+    inputs: &Digest,
+) -> Option<MetricsInputsMemo> {
+    let read = cache.read_json_bytes_with_status(key);
+    if read.status != CacheReadStatus::Hit {
+        return None;
+    }
+    let memo = serde_json::from_slice::<MetricsInputsMemo>(&read.value?).ok()?;
+    (memo.schema == METRICS_INPUTS_MEMO_SCHEMA && memo.inputs == *inputs).then_some(memo)
+}
+
+/// Best effort: a memo that cannot be written only costs the next run the
+/// projection.
+fn write_metrics_inputs_memo(cache: &Cache, key: &CacheKey, memo: &MetricsInputsMemo) {
+    if let Ok(bytes) = serde_json::to_vec(memo) {
+        let _ = cache.write_json_bytes_with_status(key, &bytes);
+    }
+}
+
+/// Reads the metrics layer an earlier run recorded for these exact inputs,
+/// without the canonical projection that would otherwise find its key and
+/// validate its payload.
+///
+/// A memo is written only once its layer was validated against, or derived
+/// from, facts with the same inputs digest, and that digest folds every field
+/// the projection and the derivation read. The read still verifies the payload
+/// against its own digest, which must be the one the memo recorded. A read
+/// that is not a hit — the layer gone or changed — leaves the run to the full
+/// path, which records the memo again.
+fn read_memoized_metrics_layer(
+    store: &LayerCacheStore,
+    memo: &MetricsInputsMemo,
+) -> LayerCacheReadOutcome<MetricsLayerPayload> {
+    store.read_json_validated::<MetricsLayerPayload, _>(&memo.layer_key, |payload, manifest| {
+        payload.schema == METRICS_LAYER_SCHEMA
+            && manifest.output_digest == memo.output_digest
+            && manifest.payload_digest == memo.payload_digest
     })
 }
 
@@ -228,6 +421,8 @@ fn validate_metrics_layer_payload(
         .is_ok_and(|output| manifest.output_digest == output.digest())
 }
 
+/// Writes the layer and answers its payload digest, or `None` when nothing was
+/// written.
 fn write_metrics_layer_payload(
     store: &LayerCacheStore,
     layer_key: LayerKey,
@@ -236,18 +431,18 @@ fn write_metrics_layer_payload(
     output_digest: Digest,
     stats: &mut CacheStats,
     diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> Option<Digest> {
     let payload_digest = match LayerCacheStore::payload_digest_for_json(payload) {
         Ok(digest) => digest,
         Err(error) => {
             diagnostics.push(cache_write_diagnostic("metrics layer", error));
-            return;
+            return None;
         }
     };
     let manifest = LayerCacheManifest::new(
         layer_key,
         output_digest,
-        payload_digest,
+        payload_digest.clone(),
         dependencies,
         PrecisionTier::Syntax,
         "native_trusted",
@@ -255,9 +450,18 @@ fn write_metrics_layer_payload(
     );
 
     match store.write_json(&manifest, payload) {
-        Ok(LayerCacheWriteStatus::Written) => stats.record_write(),
-        Ok(LayerCacheWriteStatus::BypassedDisabled) => stats.record_disabled_bypass(),
-        Err(error) => diagnostics.push(cache_write_diagnostic("metrics layer", error)),
+        Ok(LayerCacheWriteStatus::Written) => {
+            stats.record_write();
+            Some(payload_digest)
+        }
+        Ok(LayerCacheWriteStatus::BypassedDisabled) => {
+            stats.record_disabled_bypass();
+            None
+        }
+        Err(error) => {
+            diagnostics.push(cache_write_diagnostic("metrics layer", error));
+            None
+        }
     }
 }
 
@@ -294,7 +498,8 @@ mod tests {
     use crate::cache::Cache;
     use crate::config::load_config;
     use crate::core::{
-        FileId, FunctionFact, FunctionId, Language, Span, TS_JS_MODULE_FUNCTION_NAME,
+        FileId, FunctionFact, FunctionId, ImportFact, ImportId, Language, PackageFact, PackageId,
+        Span, StringLiteralFact, TS_JS_MODULE_FUNCTION_NAME,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -664,6 +869,178 @@ mod tests {
         );
     }
 
+    /// A database with a stable-key interner of its own. Test databases share a
+    /// process-wide one, which hands every database the same id for the same
+    /// key whatever order each interned in.
+    fn isolated_db() -> AnalysisDb {
+        let mut db = AnalysisDb::new();
+        db.stable_keys = crate::core::StableKeyInterner::default();
+        db
+    }
+
+    fn metadata_rows(db: &AnalysisDb) -> Vec<(FactRef, String, crate::analysis_kernel::FactMeta)> {
+        db.fact_meta()
+            .rows()
+            .map(|(reference, metadata)| {
+                let key = db.resolve_stable_key(metadata.stable_key).to_string();
+                (reference, key, metadata.clone())
+            })
+            .collect()
+    }
+
+    /// Loads a Go and a TypeScript file, restores their syntax facts, and runs
+    /// the metrics provider over them: the kernel's order.
+    fn restore_then_derive_metrics(root: &Path, cache: &Cache, defer: bool) -> AnalysisDb {
+        // (path, source, function, the function's first and last line, import)
+        let sources = [
+            (
+                "main.go",
+                "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tif true {\n\t\tfmt.Println()\n\t}\n}\n",
+                "main",
+                (5, 9),
+                "fmt",
+            ),
+            (
+                "src/app.ts",
+                "import { x } from './x';\nexport function handler() {\n  if (x) return 1;\n  return 0;\n}\n",
+                "handler",
+                (2, 5),
+                "./x",
+            ),
+        ];
+        let mut db = isolated_db();
+        let files = sources.map(|(path, source, ..)| {
+            db.add_file(root.join(path), path.to_string(), source.to_string())
+        });
+        if defer {
+            db.defer_syntax_fact_metadata();
+        }
+        for (file, (path, source, name, (first, last), import)) in files.into_iter().zip(sources) {
+            let language = Language::from_path(Path::new(path));
+            let start = source.find(&format!("{name}(")).expect("function name") as u32;
+            let end = source.len() as u32 - 1;
+            db.restore_file_facts(
+                file,
+                crate::analysis_api::CachedFileFacts {
+                    packages: (language == Language::Go)
+                        .then(|| {
+                            PackageFact::new(
+                                PackageId::from_raw(0),
+                                file,
+                                "main".to_string(),
+                                Span::new(file, 0, 12, 1, 1, 1, 13),
+                                language,
+                            )
+                        })
+                        .into_iter()
+                        .collect(),
+                    functions: vec![FunctionFact::new(
+                        FunctionId::from_raw(7),
+                        file,
+                        name.to_string(),
+                        Span::new(file, start, end, first, 1, last, 2),
+                        language,
+                        false,
+                        true,
+                        2,
+                        vec!["Println".to_string()],
+                    )],
+                    imports: vec![ImportFact::new(
+                        ImportId::from_raw(0),
+                        file,
+                        None,
+                        import.to_string(),
+                        Span::new(file, 0, 10, 1, 1, 1, 11),
+                        language,
+                    )],
+                    string_literals: vec![StringLiteralFact::new(
+                        file,
+                        import.to_string(),
+                        Span::new(file, 1, 4, 1, 2, 1, 5),
+                        language,
+                    )],
+                    ..Default::default()
+                },
+            );
+        }
+        derive_requested_metrics_with_cache_stats(
+            &mut db,
+            &requested_metrics_plan(),
+            cache,
+            metrics_manifest(),
+        )
+        .expect("canonical metrics derivation");
+        db
+    }
+
+    /// Deferral must be invisible once the metadata is recorded: the same rows
+    /// in the same order, and so the same stable-key ids, as an eager run —
+    /// whether the metrics provider derived its facts or restored its layer.
+    #[test]
+    fn deferred_metric_metadata_records_what_an_eager_run_records() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let disabled = Cache::new(temp.path().join("disabled"), false);
+        let warm = Cache::new(temp.path().join("cache").join("analysis"), true);
+        let primed = restore_then_derive_metrics(temp.path(), &warm, false);
+        assert!(!primed.file_metrics().is_empty());
+
+        fn json<T: serde::Serialize>(facts: &[T]) -> String {
+            serde_json::to_string(facts).expect("facts serialize")
+        }
+        for (label, cache) in [("derived", &disabled), ("restored", &warm)] {
+            let eager = restore_then_derive_metrics(temp.path(), cache, false);
+            let mut deferred = restore_then_derive_metrics(temp.path(), cache, true);
+
+            for (family, deferred_facts, eager_facts) in [
+                (
+                    "functions",
+                    json(deferred.functions()),
+                    json(eager.functions()),
+                ),
+                (
+                    "file metrics",
+                    json(deferred.file_metrics()),
+                    json(eager.file_metrics()),
+                ),
+                (
+                    "function metrics",
+                    json(deferred.function_metrics()),
+                    json(eager.function_metrics()),
+                ),
+                (
+                    "complexity metrics",
+                    json(deferred.complexity_metrics()),
+                    json(eager.complexity_metrics()),
+                ),
+            ] {
+                assert_eq!(deferred_facts, eager_facts, "{label}: {family}");
+            }
+            assert_eq!(
+                deferred
+                    .fact_meta()
+                    .family_rows(FactFamily::FunctionMetric)
+                    .count(),
+                0,
+                "{label}: metric metadata was recorded while syntax metadata was deferred"
+            );
+            let eager_rows = metadata_rows(&eager);
+            assert_eq!(
+                metadata_rows(&deferred).len() + deferred.deferred_syntax_metadata_len(),
+                eager_rows.len(),
+                "{label}"
+            );
+
+            deferred.record_deferred_syntax_metadata();
+            assert_eq!(deferred.deferred_syntax_metadata_len(), 0, "{label}");
+            assert_eq!(metadata_rows(&deferred), eager_rows, "{label}");
+            assert_eq!(
+                deferred.stable_key_interner().len(),
+                eager.stable_key_interner().len(),
+                "{label}"
+            );
+        }
+    }
+
     mod metrics_layer_cache {
         use super::*;
 
@@ -702,6 +1079,190 @@ mod tests {
             assert_eq!(second.cache_stats.recomputes, 0);
             assert_eq!(first.output_digest, second.output_digest);
             assert_eq!(metric_rows(&first_db), metric_rows(&second_db));
+        }
+
+        fn contexts_built() -> usize {
+            crate::analysis_kernel::metrics_projection::canonical_metrics_contexts_built_for_test()
+        }
+
+        /// One TypeScript file holding one function whose span and complexity are
+        /// given, so a test can change the source text or the function alone.
+        fn single_function_db(
+            root: &Path,
+            source: &str,
+            span_end: u32,
+            complexity: u32,
+        ) -> AnalysisDb {
+            let mut db = AnalysisDb::new();
+            let file = db.add_file(
+                root.join("src/app.ts"),
+                "src/app.ts".to_string(),
+                source.to_string(),
+            );
+            db.push_function(FunctionFact::new(
+                FunctionId::from_raw(0),
+                file,
+                "handler".to_string(),
+                Span::new(file, 16, span_end, 1, 17, 3, 2),
+                Language::TypeScript,
+                false,
+                true,
+                complexity,
+                Vec::new(),
+            ));
+            db
+        }
+
+        /// A warm run whose inputs an earlier run recorded restores that run's
+        /// layer without building the canonical projection, and restores the
+        /// same facts under the same identity.
+        #[test]
+        fn metrics_inputs_memo_skips_the_projection_on_a_warm_run() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let loaded = load_config(temp.path()).expect("default config loads");
+            let cache = Cache::new(temp.path().join("cache").join("analysis"), true);
+            let plan = requested_metrics_plan();
+            let source = "export function handler() {\n  if (ok) return 1;\n  return 0;\n}\n";
+            let mut cold_db = fixture_db(temp.path(), "handler", source);
+            let mut warm_db = fixture_db(temp.path(), "handler", source);
+
+            let before = contexts_built();
+            let cold =
+                derive_metrics_with_cache(&mut cold_db, &loaded, &cache, &plan, "config", "stable");
+            assert_eq!(contexts_built() - before, 1);
+            assert_eq!(cold.cache_stats.misses, 1);
+
+            let before = contexts_built();
+            let warm =
+                derive_metrics_with_cache(&mut warm_db, &loaded, &cache, &plan, "config", "stable");
+            assert_eq!(
+                contexts_built() - before,
+                0,
+                "a warm run built the canonical projection"
+            );
+            assert_eq!(warm.cache_stats.hits, 1);
+            assert_eq!(warm.cache_stats.verified_reuse, 1);
+            assert_eq!(warm.cache_stats.recomputes, 0);
+            assert_eq!(warm.output_digest, cold.output_digest);
+            assert_eq!(metric_rows(&warm_db), metric_rows(&cold_db));
+        }
+
+        /// The memo answers only for the inputs it recorded. Each dimension the
+        /// metrics read changes on its own here — a source's text with every
+        /// function fact unchanged, one function fact with the text unchanged,
+        /// and the provider's schema — and each builds the projection again,
+        /// with metrics that follow the change.
+        ///
+        /// A layer miss evicts the metrics layer it replaces, so each change is
+        /// made right after the unchanged inputs were answered from the memo:
+        /// had the change left the memo key alone, that memo and its layer would
+        /// answer it too.
+        #[test]
+        fn metrics_inputs_memo_misses_when_any_input_dimension_changes() {
+            static OTHER_SCHEMA: [crate::analysis_kernel::SchemaVersion; 1] =
+                [crate::analysis_kernel::SchemaVersion {
+                    name: "metrics-facts-1",
+                    version: 2,
+                }];
+            let temp = tempfile::tempdir().expect("tempdir");
+            let cache = Cache::new(temp.path().join("cache").join("analysis"), true);
+            let plan = requested_metrics_plan();
+            let source = "export function handler() {\n  return 1;\n}\n";
+            let commented = format!("{source}// trailing\n");
+            let mut other_manifest = *metrics_manifest();
+            other_manifest.schema_versions = &OTHER_SCHEMA;
+            let derive = |db: &mut AnalysisDb, manifest: &ProviderManifest| {
+                let before = contexts_built();
+                let derivation =
+                    derive_requested_metrics_with_cache_stats(db, &plan, &cache, manifest)
+                        .expect("canonical metrics derivation");
+                (derivation, contexts_built() - before)
+            };
+            let unchanged = || single_function_db(temp.path(), source, 40, 1);
+            let (base, _) = derive(&mut unchanged(), metrics_manifest());
+
+            // (dimension, changed inputs, manifest, whether the metrics change)
+            for (dimension, mut db, manifest, metrics_change) in [
+                (
+                    "source text",
+                    single_function_db(temp.path(), &commented, 40, 1),
+                    metrics_manifest(),
+                    true,
+                ),
+                (
+                    "function fact",
+                    single_function_db(temp.path(), source, 40, 2),
+                    metrics_manifest(),
+                    true,
+                ),
+                ("provider schema", unchanged(), &other_manifest, false),
+            ] {
+                let (_, projections) = derive(&mut unchanged(), metrics_manifest());
+                assert_eq!(projections, 0, "{dimension}: the memo did not answer");
+
+                let (changed, projections) = derive(&mut db, manifest);
+                assert_eq!(projections, 1, "{dimension}: the memo answered a change");
+                assert_eq!(changed.cache_stats.misses, 1, "{dimension}");
+                assert_eq!(
+                    changed.output_digest != base.output_digest,
+                    metrics_change,
+                    "{dimension}"
+                );
+
+                // Make the unchanged inputs' layer current again for the next
+                // dimension.
+                derive(&mut unchanged(), metrics_manifest());
+            }
+            let mut commented_db = single_function_db(temp.path(), &commented, 40, 1);
+            derive(&mut commented_db, metrics_manifest());
+            assert_eq!(commented_db.file_metrics()[0].line_count, 4);
+            let mut complex_db = single_function_db(temp.path(), source, 40, 2);
+            derive(&mut complex_db, metrics_manifest());
+            assert_eq!(complex_db.complexity_metrics()[0].cyclomatic_complexity, 2);
+        }
+
+        /// A memo whose layer is gone costs the projection once, and the run
+        /// that rebuilds the layer records the memo again.
+        #[test]
+        fn metrics_inputs_memo_falls_back_when_its_layer_is_gone() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let loaded = load_config(temp.path()).expect("default config loads");
+            let cache = Cache::new(temp.path().join("cache").join("analysis"), true);
+            let plan = requested_metrics_plan();
+            let source = "export function handler() {\n  return 1;\n}\n";
+            let mut first_db = fixture_db(temp.path(), "handler", source);
+            let first = derive_metrics_with_cache(
+                &mut first_db,
+                &loaded,
+                &cache,
+                &plan,
+                "config",
+                "stable",
+            );
+            fs::remove_dir_all(temp.path().join("cache").join("layers")).expect("drop layers");
+
+            let mut rebuilt_db = fixture_db(temp.path(), "handler", source);
+            let before = contexts_built();
+            let rebuilt = derive_metrics_with_cache(
+                &mut rebuilt_db,
+                &loaded,
+                &cache,
+                &plan,
+                "config",
+                "stable",
+            );
+            assert_eq!(contexts_built() - before, 1);
+            assert_eq!(rebuilt.cache_stats.misses, 1);
+            assert_eq!(rebuilt.cache_stats.writes, 1);
+            assert_eq!(rebuilt.output_digest, first.output_digest);
+
+            let mut warm_db = fixture_db(temp.path(), "handler", source);
+            let before = contexts_built();
+            let warm =
+                derive_metrics_with_cache(&mut warm_db, &loaded, &cache, &plan, "config", "stable");
+            assert_eq!(contexts_built() - before, 0);
+            assert_eq!(warm.cache_stats.hits, 1);
+            assert_eq!(metric_rows(&warm_db), metric_rows(&first_db));
         }
 
         #[test]

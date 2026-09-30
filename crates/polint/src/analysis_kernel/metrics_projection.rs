@@ -67,6 +67,16 @@ pub(crate) struct CanonicalMetricsContext {
     functions: BTreeMap<FunctionId, (CanonicalMetricFunction, FunctionFact)>,
     file_summaries: BTreeMap<FileId, MetricFileSummary>,
 }
+#[cfg(test)]
+thread_local! {
+    /// Canonical metrics contexts built on this thread, so a test can tell a
+    /// run that skipped the projection from one that built it.
+    static CONTEXTS_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(crate) fn canonical_metrics_contexts_built_for_test() -> usize {
+    CONTEXTS_BUILT.with(std::cell::Cell::get)
+}
 impl CanonicalMetricsInputs {
     #[cfg(test)]
     pub(crate) fn from_db(db: &AnalysisDb) -> Result<Self, MetricsProjectionError> {
@@ -349,6 +359,8 @@ fn validate_inputs(inputs: &CanonicalMetricsInputs) -> Result<(), MetricsProject
 }
 impl CanonicalMetricsContext {
     pub(crate) fn from_db(db: &AnalysisDb) -> Result<Self, MetricsProjectionError> {
+        #[cfg(test)]
+        CONTEXTS_BUILT.with(|count| count.set(count.get() + 1));
         if db.files().len() > MAX_METRIC_ROWS || db.functions().len() > MAX_METRIC_ROWS {
             return Err(MetricsProjectionError::Source);
         }

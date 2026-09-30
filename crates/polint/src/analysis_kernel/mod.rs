@@ -1,3 +1,4 @@
+use crate::analysis_neutral::metrics::METRIC_CAPABILITIES;
 use crate::analysis_plan::AnalysisPlan;
 use crate::cache::Cache;
 use crate::config::LoadedConfig;
@@ -219,14 +220,15 @@ fn skipped_direct_summaries_result(
     }
 }
 
-/// `syntax_only_rule_check` marks a rule check that requests nothing past
-/// syntax: its only readers are the rules and the report.
+/// `syntax_level_rule_check` marks a rule check that requests nothing past
+/// syntax and the metrics derived from it: its only readers are the rules and
+/// the report.
 fn run_scheduled_providers<'a>(
     db: &'a mut AnalysisDb,
     input: &KernelInput<'a>,
     input_snapshot: &'a incremental::InputSnapshot,
     enabled_providers: &std::collections::BTreeSet<&'static str>,
-    syntax_only_rule_check: bool,
+    syntax_level_rule_check: bool,
     diagnostics: &mut Vec<Diagnostic>,
     provider_outputs: &mut Vec<incremental::ProviderOutputMeta>,
 ) -> anyhow::Result<(
@@ -386,11 +388,13 @@ fn run_scheduled_providers<'a>(
                 let digest = match provider_id {
                     // The canonical projection makes the go.syntax identity
                     // independent of the adapter's encoding, for the providers
-                    // that key their caches on it. A syntax-only rule check runs
-                    // none of them, and past them the identity reaches only the
-                    // run report, which a rule check neither prints nor
-                    // persists, so it keeps the adapter's native digest.
-                    "polint.go.syntax" if !syntax_only_rule_check => {
+                    // that key their caches on it. A syntax-level rule check
+                    // runs none of them — the metrics provider keys its layer on
+                    // its own canonical inputs — and past them the identity
+                    // reaches only the run report, which a rule check neither
+                    // prints nor persists, so it keeps the adapter's native
+                    // digest.
+                    "polint.go.syntax" if !syntax_level_rule_check => {
                         let parser_diagnostics = diagnostics
                             .iter()
                             .filter(|diagnostic| diagnostic.rule_id == "parser/go")
@@ -577,8 +581,9 @@ impl AnalysisKernel {
 
     /// Runs the kernel for a rule check or review, whose readers after the run
     /// are the rules and the report. When the plan requests nothing past
-    /// syntax, the metadata of restored syntax facts is recorded only if
-    /// validation or a syntax provider's fallback identity needs it (see
+    /// syntax and the metrics derived from it, the metadata of restored syntax
+    /// facts and of metric facts is recorded only if validation or a syntax
+    /// provider's fallback identity needs it (see
     /// [`AnalysisDb::defer_syntax_fact_metadata`]), and the go.syntax identity
     /// is the adapter's native digest rather than the canonical projection.
     pub(crate) fn run_for_rule_check(input: KernelInput<'_>) -> anyhow::Result<KernelOutput> {
@@ -614,10 +619,16 @@ impl AnalysisKernel {
         let (mut db, load_diagnostics) =
             crate::fs::load_analysis_files_scoped(input.loaded, rule_scope.as_ref())?;
         // Every capability a provider past syntax does work for is a trigger
-        // capability, so with none requested nothing in the run reads syntax
-        // metadata before validation, or the go.syntax identity at all.
-        let syntax_only_rule_check = rule_check && requested_capabilities.is_empty();
-        if syntax_only_rule_check {
+        // capability. The metric ones give work only to the metrics provider,
+        // which derives its facts from syntax facts without reading their
+        // metadata or the go.syntax identity, and defers its own metadata with
+        // theirs. So with no other one requested, nothing in the run reads
+        // syntax metadata before validation, or the go.syntax identity at all.
+        let syntax_level_rule_check = rule_check
+            && requested_capabilities
+                .iter()
+                .all(|capability| METRIC_CAPABILITIES.contains(capability));
+        if syntax_level_rule_check {
             db.defer_syntax_fact_metadata();
         }
         log_loaded_source_files(&db);
@@ -666,7 +677,7 @@ impl AnalysisKernel {
                 &input,
                 &input_snapshot,
                 &enabled_providers,
-                syntax_only_rule_check,
+                syntax_level_rule_check,
                 &mut diagnostics,
                 &mut provider_outputs,
             )?;
@@ -1246,6 +1257,154 @@ mod tests {
         );
     }
 
+    /// A rule check whose only trigger capabilities are the metric ones keeps
+    /// syntax metadata deferred, and the metric facts' metadata with it, on a
+    /// cold cache and on a warm one, and nothing the rules or the report read
+    /// changes. Once recorded, the metadata rows are the eager run's.
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
+    #[test]
+    fn metrics_rule_checks_defer_metadata_without_changing_results() {
+        fn json<T: serde::Serialize>(facts: &[T]) -> String {
+            serde_json::to_string(facts).expect("facts serialize")
+        }
+        fn metadata_rows(db: &AnalysisDb) -> Vec<(FactRef, String, FactMeta)> {
+            db.fact_meta()
+                .rows()
+                .map(|(reference, metadata)| {
+                    let key = db.resolve_stable_key(metadata.stable_key).to_string();
+                    (reference, key, metadata.clone())
+                })
+                .collect()
+        }
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tif len(\"x\") > 0 {\n\t\tfmt.Println(\"hi\")\n\t}\n}\n",
+        )
+        .expect("write go");
+        std::fs::write(
+            temp.path().join("app.ts"),
+            "import { x } from './x';\nexport function render(value: number) {\n  if (value > 1) { return `${x}${value}`; }\n  return x;\n}\n",
+        )
+        .expect("write ts");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let disabled = Cache::new("", false);
+        let warm = Cache::new(temp.path().join(".polint/cache/analysis"), true);
+        let plan = AnalysisPlan::from_capability_names_for_test(&[
+            "syntax",
+            "imports",
+            "string_literals",
+            "file_metrics",
+            "function_metrics",
+            "complexity_metrics",
+        ]);
+        let run = |cache: &Cache, rule_check: bool| {
+            let input = KernelInput {
+                loaded: &loaded,
+                cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            };
+            if rule_check {
+                AnalysisKernel::run_for_rule_check(input)
+            } else {
+                AnalysisKernel::run(input)
+            }
+            .expect("kernel runs")
+        };
+        let _prime = run(&warm, false);
+
+        for (label, cache) in [("cold", &disabled), ("warm", &warm)] {
+            let eager = run(cache, false);
+            let mut deferred = run(cache, true);
+
+            assert_eq!(deferred.diagnostics, eager.diagnostics, "{label}");
+            for (family, deferred_facts, eager_facts) in [
+                (
+                    "functions",
+                    json(deferred.db.functions()),
+                    json(eager.db.functions()),
+                ),
+                (
+                    "imports",
+                    json(deferred.db.imports()),
+                    json(eager.db.imports()),
+                ),
+                (
+                    "string literals",
+                    json(deferred.db.string_literals()),
+                    json(eager.db.string_literals()),
+                ),
+                (
+                    "file metrics",
+                    json(deferred.db.file_metrics()),
+                    json(eager.db.file_metrics()),
+                ),
+                (
+                    "function metrics",
+                    json(deferred.db.function_metrics()),
+                    json(eager.db.function_metrics()),
+                ),
+                (
+                    "complexity metrics",
+                    json(deferred.db.complexity_metrics()),
+                    json(eager.db.complexity_metrics()),
+                ),
+            ] {
+                assert_eq!(deferred_facts, eager_facts, "{label}: {family}");
+            }
+            assert!(!eager.db.function_metrics().is_empty(), "{label}");
+            // Every provider outcome but the go.syntax identity, which a rule
+            // check keeps native: nothing it runs reads the canonical one.
+            let outcomes = |output: &KernelOutput| {
+                output
+                    .run_report
+                    .provider_outcomes
+                    .iter()
+                    .filter(|outcome| outcome.provider_id != "polint.go.syntax")
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(outcomes(&deferred), outcomes(&eager), "{label}");
+            // The rows the report prints, less the wall time two runs never share.
+            let report_rows = |output: &KernelOutput| {
+                provider_outcome_rows(
+                    &output.run_report.provider_outcomes,
+                    &output.run_report.provider_telemetry,
+                )
+                .into_iter()
+                .map(|mut row| {
+                    row.elapsed_ms = None;
+                    row
+                })
+                .collect::<Vec<_>>()
+            };
+            assert_eq!(report_rows(&deferred), report_rows(&eager), "{label}");
+            assert_eq!(deferred.completeness, eager.completeness, "{label}");
+
+            // Validation ran on a recorded copy: the run returns what a release
+            // build returns, restored facts without their metadata rows.
+            assert!(deferred.db.deferred_syntax_metadata_len() > 0, "{label}");
+            assert_eq!(
+                deferred
+                    .db
+                    .fact_meta()
+                    .family_rows(FactFamily::ComplexityMetric)
+                    .count(),
+                0,
+                "{label}"
+            );
+            deferred.db.record_deferred_syntax_metadata();
+            assert_eq!(
+                metadata_rows(&deferred.db),
+                metadata_rows(&eager.db),
+                "{label}"
+            );
+        }
+    }
+
     /// Runs a syntax-only rule check over a repository holding one source file.
     ///
     /// The syntax provider of the absent language restores nothing and has no
@@ -1297,7 +1456,7 @@ mod tests {
 
     #[cfg(feature = "lang-go")]
     #[test]
-    fn syntax_only_rule_checks_keep_the_native_go_syntax_identity() {
+    fn syntax_level_rule_checks_keep_the_native_go_syntax_identity() {
         let temp = tempfile::tempdir().expect("tempdir");
         std::fs::write(
             temp.path().join("main.go"),
@@ -1344,11 +1503,20 @@ mod tests {
         };
         let syntax = AnalysisPlan::from_capability_names_for_test(&["syntax"]);
         let metrics = AnalysisPlan::from_capability_names_for_test(&["syntax", "function_metrics"]);
+        let module_graph =
+            AnalysisPlan::from_capability_names_for_test(&["syntax", "module_graph"]);
 
-        let (identity, native, canonical) = run(&syntax, true);
-        assert_eq!(identity, native);
-        assert_ne!(identity, canonical);
-        for (plan, rule_check) in [(&syntax, false), (&metrics, true), (&metrics, false)] {
+        for plan in [&syntax, &metrics] {
+            let (identity, native, canonical) = run(plan, true);
+            assert_eq!(identity, native);
+            assert_ne!(identity, canonical);
+        }
+        for (plan, rule_check) in [
+            (&syntax, false),
+            (&metrics, false),
+            (&module_graph, true),
+            (&module_graph, false),
+        ] {
             let (identity, _, canonical) = run(plan, rule_check);
             assert_eq!(identity, canonical);
         }

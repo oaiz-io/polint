@@ -269,6 +269,9 @@ pub struct AnalysisDb {
     /// Syntax facts restored while metadata is deferred, in restore order. See
     /// [`AnalysisDb::defer_syntax_fact_metadata`].
     deferred_syntax_metadata: Vec<FactRef>,
+    /// Whether the metric facts were replaced while metadata was deferred, so
+    /// their metadata is not recorded yet.
+    deferred_metric_metadata: bool,
     defer_syntax_metadata: bool,
 }
 
@@ -283,6 +286,7 @@ impl Clone for AnalysisDb {
             path_contexts: self.path_contexts.clone(),
             changeset: self.changeset.clone(),
             deferred_syntax_metadata: self.deferred_syntax_metadata.clone(),
+            deferred_metric_metadata: self.deferred_metric_metadata,
             defer_syntax_metadata: self.defer_syntax_metadata,
         }
     }
@@ -416,6 +420,7 @@ impl Default for AnalysisDb {
             path_contexts: None,
             changeset: None,
             deferred_syntax_metadata: Vec::new(),
+            deferred_metric_metadata: false,
             defer_syntax_metadata: false,
         }
     }
@@ -919,20 +924,36 @@ impl AnalysisDb {
         self.record_fact_meta(FactFamily::Coverage, run_id, metadata);
     }
 
+    /// Replaces the metric facts and their metadata.
+    ///
+    /// While syntax metadata is deferred, the metric facts' metadata is deferred
+    /// with it: each function metric's stable key embeds its function's stable
+    /// key, which is syntax metadata. See
+    /// [`AnalysisDb::record_deferred_syntax_metadata`].
     pub(crate) fn replace_metric_facts(
         &mut self,
         file_metrics: Vec<FileMetricFact>,
         function_metrics: Vec<FunctionMetricFact>,
         complexity_metrics: Vec<ComplexityMetricFact>,
     ) {
-        let interner_handle = self.stable_key_interner();
-        let interner = &interner_handle;
+        debug_assert!(
+            !self.deferred_metric_metadata,
+            "metric facts replaced twice while their metadata is deferred"
+        );
         self.metrics_store_mut().replace_metrics(
             file_metrics,
             function_metrics,
             complexity_metrics,
         );
-        self.refresh_metric_metadata(interner);
+        if self.defer_syntax_metadata {
+            for family in METRIC_FACT_FAMILIES {
+                self.fact_meta.remove_family(family);
+            }
+            self.deferred_metric_metadata = true;
+        } else {
+            let interner = self.stable_key_interner();
+            self.refresh_metric_metadata(&interner);
+        }
     }
 
     pub(crate) fn replace_module_graph_facts(
@@ -3219,6 +3240,11 @@ impl AnalysisDb {
             "{} metadata read while restored syntax metadata is deferred",
             fact_ref.family.label()
         );
+        debug_assert!(
+            !self.deferred_metric_metadata || !METRIC_FACT_FAMILIES.contains(&fact_ref.family),
+            "{} metadata read while metric metadata is deferred",
+            fact_ref.family.label()
+        );
         self.fact_meta().get(fact_ref)
     }
 }
@@ -4005,6 +4031,10 @@ impl AnalysisDb {
         let mut function_ids = BTreeMap::new();
         let mut branch_ids = BTreeMap::new();
         let defer = self.defer_syntax_metadata;
+        debug_assert!(
+            !self.deferred_metric_metadata,
+            "syntax facts restored after the metric facts, whose metadata is recorded after theirs"
+        );
 
         for mut package in facts.packages {
             package.file = file;
@@ -4139,32 +4169,39 @@ impl AnalysisDb {
         }
     }
 
-    /// Restores syntax facts from here on without recording their metadata.
+    /// Restores syntax facts, and replaces metric facts, from here on without
+    /// recording their metadata.
     ///
     /// Fact metadata — each fact's interned stable-key text and payload digest —
     /// is read by validation and by the providers that build on syntax facts
-    /// (graphs, metrics, lowering, deeper analysis), never by rules or by the
-    /// report. For a rule check that requests nothing beyond syntax, building
-    /// it is most of the cost of restoring facts from the analysis cache, and
-    /// all of it is wasted. [`AnalysisDb::record_deferred_syntax_metadata`]
+    /// (graphs, lowering, deeper analysis), never by rules or by the report.
+    /// The metrics provider derives its facts from the syntax facts alone. For
+    /// a rule check that requests nothing beyond syntax and metrics, building
+    /// metadata is most of the cost of restoring facts from the analysis cache,
+    /// and all of it is wasted. [`AnalysisDb::record_deferred_syntax_metadata`]
     /// records it later for whoever does need it.
     pub(crate) fn defer_syntax_fact_metadata(&mut self) {
         self.defer_syntax_metadata = true;
     }
 
     /// Records the metadata of every syntax fact restored while metadata was
-    /// deferred, and restores eagerly from then on.
+    /// deferred, then that of the metric facts replaced meanwhile, and records
+    /// eagerly from then on.
     ///
     /// The metadata is computed from the stored facts in restore order, and no
     /// syntax fact's metadata depends on another fact's metadata, so the rows
     /// and their insertion order are exactly those an eager restore would have
-    /// recorded. So are the stable-key ids they intern, provided nothing
-    /// interns a key between the deferred restores and this call: the kernel
-    /// loads every file before it defers, and interns nothing until here.
+    /// recorded. The metric rows follow them, as they do when the metrics
+    /// provider runs after the syntax providers, and read the function rows
+    /// recorded just before them. The stable-key ids all of these rows intern
+    /// are the eager run's too, provided nothing interns a key between the
+    /// deferred restores and this call: the kernel loads every file before it
+    /// defers, and nothing it runs with metadata deferred interns one.
     pub(crate) fn record_deferred_syntax_metadata(&mut self) {
         self.defer_syntax_metadata = false;
         let deferred = std::mem::take(&mut self.deferred_syntax_metadata);
-        if deferred.is_empty() {
+        let deferred_metrics = std::mem::take(&mut self.deferred_metric_metadata);
+        if deferred.is_empty() && !deferred_metrics {
             return;
         }
         let interner_handle = self.stable_key_interner();
@@ -4199,11 +4236,22 @@ impl AnalysisDb {
             };
             self.record_fact_meta(reference.family, reference.run_id, metadata);
         }
+        if deferred_metrics {
+            self.refresh_metric_metadata(interner);
+        }
     }
 
-    /// Syntax facts whose metadata is deferred and not yet recorded.
+    /// Facts whose metadata is deferred and not yet recorded: the restored
+    /// syntax facts and the metric facts replaced after them.
     pub(crate) fn deferred_syntax_metadata_len(&self) -> usize {
-        self.deferred_syntax_metadata.len()
+        let metrics = if self.deferred_metric_metadata {
+            self.file_metrics().len()
+                + self.function_metrics().len()
+                + self.complexity_metrics().len()
+        } else {
+            0
+        };
+        self.deferred_syntax_metadata.len() + metrics
     }
 
     fn defer_fact_metadata(&mut self, family: FactFamily, run_id: u64) {
@@ -6032,6 +6080,13 @@ impl AnalysisDb {
         )
     }
 }
+
+/// The fact families [`AnalysisDb::replace_metric_facts`] replaces.
+const METRIC_FACT_FAMILIES: [FactFamily; 3] = [
+    FactFamily::FileMetric,
+    FactFamily::FunctionMetric,
+    FactFamily::ComplexityMetric,
+];
 
 /// The families [`AnalysisDb::restore_file_facts`] can restore with deferred
 /// metadata.
