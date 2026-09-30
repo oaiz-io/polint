@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime};
 
 pub(crate) mod analysis_cache_adapter;
 pub(crate) mod keys;
+pub(crate) mod rule_timings;
 pub(crate) mod rules_store;
 
 pub(crate) use analysis_cache_adapter::CacheAnalysisCache;

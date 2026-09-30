@@ -27,6 +27,12 @@ loaded config, requested capability plan, cache format, and polint version.
 If a cache artifact cannot be decoded, polint treats it as a miss and removes
 that artifact.
 
+`analysis/` also records how long each rule took on the previous run of the
+same rules, options, and scope, so the next run starts the slowest rules first.
+Those times only decide which rules start first: results and their order never
+depend on them, and without a readable record rules are split across the
+worker threads in the order they are registered.
+
 Useful commands:
 
 ```bash

@@ -46,6 +46,13 @@ pub(crate) fn take_observed_events() -> u64 {
     OBSERVED_EVENTS.with(|observed| observed.replace(0))
 }
 
+/// Counts observations on this thread as a policy query does, so rule
+/// dispatch tests can check each count stays with the rule that made it.
+#[cfg(test)]
+pub(crate) fn observe_events_for_test(count: usize) {
+    observe_events(count);
+}
+
 pub(crate) fn matching_events(db: &AnalysisDb, query: EventPattern) -> Vec<PolicyViolation> {
     let query_digest = query.query_digest();
     let results = normalize_policy_results(match query.kind() {

@@ -11703,6 +11703,213 @@ fn check_parallel_cached_output_is_deterministic_across_repeated_runs() {
 }
 
 #[test]
+fn recorded_rule_times_change_neither_the_report_nor_other_cache_entries() {
+    let temp = tempfile::tempdir().unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    write_rule_timing_repo(temp.path());
+    let run = || run_rule_timing_check(temp.path(), cache.path());
+
+    let (cold, cold_dispatch) = run();
+    let timings = rule_timings_entry(cache.path());
+    let (timed, timed_dispatch) = run();
+    let timed_entries = cache_entries_except(cache.path(), &timings);
+    fs::remove_file(&timings).unwrap();
+    let (untimed, untimed_dispatch) = run();
+    let untimed_entries = cache_entries_except(cache.path(), &timings);
+    fs::write(&timings, "{\"schema\": \"rule-timings-v1\", \"micros\": {").unwrap();
+    let (after_corrupt, after_corrupt_dispatch) = run();
+
+    assert!(
+        cold.contains("local/timing-imports") && cold.contains("local/timing-functions"),
+        "fixture rules should report: {cold}"
+    );
+    assert_eq!(
+        [
+            cold_dispatch,
+            timed_dispatch,
+            untimed_dispatch,
+            after_corrupt_dispatch
+        ],
+        [
+            "registration",
+            "longest-first",
+            "registration",
+            "registration"
+        ],
+        "only a pass with the previous pass's times starts rules longest-first"
+    );
+    assert_eq!(timed, cold);
+    assert_eq!(untimed, cold);
+    assert_eq!(after_corrupt, cold);
+    assert_eq!(timed_entries, untimed_entries);
+    assert_eq!(
+        rule_timings_entry(cache.path()),
+        timings,
+        "the pass after a corrupt entry records its times again"
+    );
+}
+
+/// The report, and the order the rule host said its rule pass started rules in.
+fn run_rule_timing_check(root: &Path, cache_root: &Path) -> (String, &'static str) {
+    let output = polint_cmd()
+        .current_dir(root)
+        .env("POLINT_CACHE_DIR", cache_root)
+        .env("RUST_LOG", "polint::rules=debug")
+        .args(["check", "--format", "json", "--fail-on", "none"])
+        .output()
+        .expect("run check with rule start-order logging on");
+    assert!(output.status.success(), "{output:#?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let dispatch = if stderr.contains("LongestFirst") {
+        "longest-first"
+    } else if stderr.contains("Registration") {
+        "registration"
+    } else {
+        "unreported"
+    };
+    (String::from_utf8(output.stdout).unwrap(), dispatch)
+}
+
+fn write_rule_timing_repo(root: &Path) {
+    let polint_path = repo_root()
+        .join("crates/polint")
+        .to_string_lossy()
+        .replace('\\', "/");
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_file(
+        &root.join(".polint/rules/Cargo.toml"),
+        &format!(
+            r#"[package]
+name = "polint-local-rules"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+polint = {{ path = "{polint_path}" }}
+
+[workspace]
+"#,
+        ),
+    );
+    write_file(
+        &root.join(".polint/rules/src/main.rs"),
+        r#"use std::process::ExitCode;
+
+use polint::sdk::prelude::*;
+
+#[polint::rule(
+    id = "local/timing-imports",
+    description = "Reports every import.",
+    severity = "warn"
+)]
+fn timing_imports(ctx: &mut RuleCtx<'_>, imports: Imports<'_>) -> RuleResult {
+    for import in imports.iter() {
+        ctx.warn(&import.span, format!("imports `{}`", import.path));
+    }
+    Ok(())
+}
+
+#[polint::rule(
+    id = "local/timing-functions",
+    description = "Reports every function.",
+    severity = "warn"
+)]
+fn timing_functions(ctx: &mut RuleCtx<'_>, functions: Functions<'_>) -> RuleResult {
+    for function in functions.iter() {
+        ctx.warn(&function.span, format!("declares `{}`", function.name));
+    }
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    polint::runner::run_cli(vec![timing_imports(), timing_functions()])
+}
+"#,
+    );
+    write_file(
+        &root.join("src/main.go"),
+        r#"package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	fmt.Println(shout("ok"))
+}
+
+func shout(value string) string {
+	return strings.ToUpper(value)
+}
+"#,
+    );
+    write_file(
+        &root.join("src/app.ts"),
+        r#"import { join } from "node:path";
+
+export function app(): string {
+  return join("a", "b");
+}
+"#,
+    );
+}
+
+/// The analysis-cache entry that holds the rules' recorded times.
+fn rule_timings_entry(cache_root: &Path) -> PathBuf {
+    let mut entries = fs::read_dir(cache_root.join("analysis"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            fs::read_to_string(path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+                .is_some_and(|entry| entry["schema"] == "rule-timings-v1")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        entries.len(),
+        1,
+        "expected one rule timings entry: {entries:?}"
+    );
+    entries.remove(0)
+}
+
+/// Every cache file but `excluded`, by path relative to the cache root.
+fn cache_entries_except(cache_root: &Path, excluded: &Path) -> Vec<(String, Vec<u8>)> {
+    let mut files = Vec::new();
+    let mut pending = vec![cache_root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path != excluded {
+                let relative = path
+                    .strip_prefix(cache_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                files.push((relative, fs::read(&path).unwrap()));
+            }
+        }
+    }
+    files.sort();
+    files
+}
+
+#[test]
 fn check_no_cache_bypasses_cache_reads_and_writes() {
     let temp = tempfile::tempdir().unwrap();
     write_phase7_cache_fixture(temp.path());

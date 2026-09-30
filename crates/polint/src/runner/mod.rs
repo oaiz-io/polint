@@ -1,5 +1,6 @@
 use crate::analysis_kernel::{AnalysisKernel, KernelInput};
 use crate::analysis_plan::{AnalysisPlan, RulePlanInputs};
+use crate::cache::rule_timings::{read_rule_timings, write_rule_timings};
 use crate::config::{LoadedConfig, load_config};
 use crate::core::{Rule, RuleKind, RuleRuntimeViews};
 use crate::diagnostics::{
@@ -457,6 +458,8 @@ fn analyze_and_run(
         &output.completeness,
         &output.runtime_blocked_rules,
     );
+    // The previous pass of this rule plan says which rules to start first.
+    let timings = read_rule_timings(&cache, &config_digest, &rule_digest);
     let rule_run = crate::core::run_rules_observed(
         &output.db,
         rules,
@@ -464,7 +467,14 @@ fn analyze_and_run(
         Some(&exact_enabled),
         true,
         &runtime,
+        timings.as_ref(),
     );
+    tracing::debug!(
+        target: "polint::rules",
+        start_order = ?rule_run.start_order,
+        "rule pass start order"
+    );
+    write_rule_timings(&cache, &config_digest, &rule_digest, &rule_run.timings);
     diagnostics.extend(rule_run.diagnostics);
     let file_paths = output
         .db
