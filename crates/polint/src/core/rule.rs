@@ -12,9 +12,12 @@ use crate::rule_error::RuleResult;
 use crate::rule_manifest::{FactViewRequirement, RuleManifest};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 /// Arbitrary per-rule configuration value from `.polint.toml`.
 ///
@@ -356,11 +359,39 @@ pub(crate) fn run_rules_with_runtime_provider_blockers(
     parallel: bool,
     runtime: &RuleRuntimeViews<'_>,
 ) -> Vec<Diagnostic> {
-    run_rules_observed(db, rules, options, enabled, parallel, runtime).diagnostics
+    run_rules_observed(db, rules, options, enabled, parallel, runtime, None).diagnostics
 }
 
-/// One rule's diagnostics, plus its id and observation count when it ran.
-type RuleRunRow = (Vec<Diagnostic>, Option<(String, u64)>);
+/// How long each rule took on an earlier pass, keyed by rule id.
+///
+/// Only the order a parallel pass starts its rules in depends on these times.
+/// Which rules run, what they report, and the order their results come back in
+/// do not.
+pub(crate) type RuleTimings = BTreeMap<String, Duration>;
+
+/// The order a rule pass started its rules in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum RuleStartOrder {
+    /// Registration order: a sequential pass, or no recorded times to go by.
+    #[default]
+    Registration,
+    /// The longest recorded time first.
+    LongestFirst,
+}
+
+/// One rule's diagnostics, plus what its run measured when it ran.
+#[derive(Default)]
+struct RuleRunRow {
+    diagnostics: Vec<Diagnostic>,
+    ran: Option<RuleRunStats>,
+}
+
+/// What one rule that ran observed and how long it took.
+struct RuleRunStats {
+    rule_id: String,
+    observed_events: u64,
+    elapsed: Duration,
+}
 
 /// What one rule-execution pass produced.
 #[derive(Debug, Default)]
@@ -368,8 +399,16 @@ pub(crate) struct RuleRunOutput {
     pub(crate) diagnostics: Vec<Diagnostic>,
     /// Operations each rule's policy queries examined, keyed by rule id.
     pub(crate) observed_events: BTreeMap<String, u64>,
+    /// How long each rule that ran took, for ordering a later pass.
+    pub(crate) timings: RuleTimings,
+    pub(crate) start_order: RuleStartOrder,
 }
 
+/// Runs `rules` and returns their diagnostics in registration order.
+///
+/// A parallel pass given `timings` from an earlier pass starts the rules with
+/// the longest recorded time first, so a rule that bounds the pass does not
+/// wait behind shorter ones. Without them it keeps registration order.
 pub(crate) fn run_rules_observed(
     db: &AnalysisDb,
     rules: &[Rule],
@@ -377,19 +416,20 @@ pub(crate) fn run_rules_observed(
     enabled: Option<&BTreeSet<String>>,
     parallel: bool,
     runtime: &RuleRuntimeViews<'_>,
+    timings: Option<&RuleTimings>,
 ) -> RuleRunOutput {
     let run_one = |rule: &Rule| -> RuleRunRow {
         let meta = match catch_unwind(AssertUnwindSafe(|| rule.meta())) {
             Ok(meta) => meta,
             Err(_) => {
-                return (
-                    vec![internal_rule_error_for_id(
+                return RuleRunRow {
+                    diagnostics: vec![internal_rule_error_for_id(
                         db,
                         "unknown",
                         "rule metadata panicked".to_string(),
                     )],
-                    None,
-                );
+                    ran: None,
+                };
             }
         };
         if let Some(enabled) = enabled
@@ -397,12 +437,12 @@ pub(crate) fn run_rules_observed(
                 .iter()
                 .any(|pattern| rule_id_matches(pattern, &meta.id))
         {
-            return (Vec::new(), None);
+            return RuleRunRow::default();
         }
         if has_blocking_capability(&meta.id, runtime.capability_support)
             || runtime.runtime_blocked_rules.contains(&meta.id)
         {
-            return (Vec::new(), None);
+            return RuleRunRow::default();
         }
         let rule_options = options.get(&meta.id).cloned().unwrap_or_default();
         let mut ctx = RuleCtx::with_runtime_views(
@@ -412,16 +452,17 @@ pub(crate) fn run_rules_observed(
             runtime.capability_support.clone(),
             runtime.completeness.for_rule(&meta.id),
         );
-        let started = std::time::Instant::now();
+        let started = Instant::now();
         // Rules run one at a time per worker, so the thread-local observation
         // counter belongs to this rule for the duration of its run.
         let _ = crate::policy_queries::take_observed_events();
         let result = catch_unwind(AssertUnwindSafe(|| rule.run(db, &mut ctx)));
         let observed = crate::policy_queries::take_observed_events();
+        let elapsed = started.elapsed();
         tracing::info!(
             target: "polint::rules",
             rule = %meta.id,
-            elapsed_ms = started.elapsed().as_millis() as u64,
+            elapsed_ms = elapsed.as_millis() as u64,
             observed_events = observed,
             "rule finished"
         );
@@ -430,28 +471,105 @@ pub(crate) fn run_rules_observed(
             Ok(Err(error)) => vec![internal_rule_error(db, &meta, error.to_string())],
             Err(_) => vec![internal_rule_error(db, &meta, "rule panicked".to_string())],
         };
-        (diagnostics, Some((meta.id, observed)))
+        RuleRunRow {
+            diagnostics,
+            ran: Some(RuleRunStats {
+                rule_id: meta.id,
+                observed_events: observed,
+                elapsed,
+            }),
+        }
     };
 
-    let runs: Vec<RuleRunRow> = if parallel {
-        rules.par_iter().map(run_one).collect()
-    } else {
-        rules.iter().map(run_one).collect()
+    let longest_first = timings
+        .filter(|_| parallel)
+        .and_then(|timings| longest_first_order(rules, timings));
+    let (runs, start_order): (Vec<RuleRunRow>, RuleStartOrder) = match longest_first {
+        Some(order) => (
+            run_in_order(rules, &order, &run_one),
+            RuleStartOrder::LongestFirst,
+        ),
+        None if parallel => (
+            rules.par_iter().map(run_one).collect(),
+            RuleStartOrder::Registration,
+        ),
+        None => (
+            rules.iter().map(run_one).collect(),
+            RuleStartOrder::Registration,
+        ),
     };
 
     let mut diagnostics = Vec::new();
     let mut observed_events = BTreeMap::new();
-    for (rule_diagnostics, observed) in runs {
-        diagnostics.extend(rule_diagnostics);
-        if let Some((rule_id, count)) = observed {
-            *observed_events.entry(rule_id).or_insert(0) += count;
+    let mut timings = RuleTimings::new();
+    for run in runs {
+        diagnostics.extend(run.diagnostics);
+        if let Some(stats) = run.ran {
+            *observed_events.entry(stats.rule_id.clone()).or_insert(0) += stats.observed_events;
+            let recorded = timings.entry(stats.rule_id).or_insert(Duration::ZERO);
+            *recorded = (*recorded).max(stats.elapsed);
         }
     }
 
     RuleRunOutput {
         diagnostics: dedupe_diagnostics(diagnostics),
         observed_events,
+        timings,
+        start_order,
     }
+}
+
+/// Positions in `rules` in the order a timed pass starts them: rules with no
+/// recorded time first, since any of them may be the longest, then the rest
+/// from the longest recorded time down. Ties keep registration order.
+///
+/// `None` when no rule has a recorded time, so the pass keeps registration
+/// order.
+fn longest_first_order(rules: &[Rule], timings: &RuleTimings) -> Option<Vec<usize>> {
+    let recorded: Vec<Option<Duration>> = rules
+        .iter()
+        .map(|rule| {
+            catch_unwind(AssertUnwindSafe(|| rule.meta()))
+                .ok()
+                .and_then(|meta| timings.get(&meta.id).copied())
+        })
+        .collect();
+    if recorded.iter().all(Option::is_none) {
+        return None;
+    }
+    let mut order: Vec<usize> = (0..rules.len()).collect();
+    order.sort_by_key(|&index| (recorded[index].is_some(), Reverse(recorded[index])));
+    Some(order)
+}
+
+/// Runs every rule in `order`, a permutation of the positions in `rules`, on
+/// the rayon workers, and returns their rows in registration order.
+///
+/// Each worker takes the next rule in `order` when its previous rule finishes,
+/// so the rules listed first start first. A parallel iterator would instead
+/// split the rule list in halves, and which half a worker steals would decide
+/// when a long rule starts. A worker still runs one rule at a time, which the
+/// thread-local observation counter relies on.
+fn run_in_order<F>(rules: &[Rule], order: &[usize], run_one: &F) -> Vec<RuleRunRow>
+where
+    F: Fn(&Rule) -> RuleRunRow + Sync,
+{
+    let next = AtomicUsize::new(0);
+    let slots: Vec<OnceLock<RuleRunRow>> = rules.iter().map(|_| OnceLock::new()).collect();
+    let workers = rayon::current_num_threads().min(order.len());
+    rayon::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|_| {
+                while let Some(&index) = order.get(next.fetch_add(1, Ordering::Relaxed)) {
+                    let _ = slots[index].set(run_one(&rules[index]));
+                }
+            });
+        }
+    });
+    slots
+        .into_iter()
+        .map(|slot| slot.into_inner().unwrap_or_default())
+        .collect()
 }
 
 fn has_blocking_capability(rule_id: &str, support: &CapabilitySupportView) -> bool {

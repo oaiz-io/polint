@@ -116,7 +116,9 @@ pub(crate) use rule::run_rules_with_runtime_provider_blockers;
 #[cfg(test)]
 pub(crate) use rule::span_from_byte_range;
 pub use rule::{Rule, RuleConfigValue, RuleCtx, RuleKind, RuleMeta, RuleOptions};
-pub(crate) use rule::{RuleRuntimeViews, rule_id_matches, run_rules, run_rules_observed};
+pub(crate) use rule::{
+    RuleRuntimeViews, RuleTimings, rule_id_matches, run_rules, run_rules_observed,
+};
 
 #[cfg(test)]
 mod tests {
@@ -133,4 +135,6 @@ mod tests {
     include!("tests/summary_metadata_route.rs");
 
     include!("tests/host_lookup_route.rs");
+
+    include!("tests/rule_dispatch.rs");
 }
