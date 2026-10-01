@@ -8947,7 +8947,7 @@ rules = []
 }
 
 #[test]
-fn check_go_1_26_new_expr_oaiz_pattern_has_no_parser_diagnostic() {
+fn check_go_1_26_new_expr_in_struct_literal_field_has_no_parser_diagnostic() {
     let temp = tempfile::tempdir().unwrap();
     write_file(
         &temp.path().join(".polint.toml"),
@@ -8957,18 +8957,18 @@ rules = []
 "#,
     );
     write_file(
-        &temp.path().join("units.go"),
+        &temp.path().join("pricing.go"),
         r#"package models
 
-import "example.com/oaiz/types"
+import "example.com/app/money"
 
-type Units struct {
-	InputCostPerMillionTokens *types.Cost
+type Pricing struct {
+	PerUnit *money.Amount
 }
 
-func Example() Units {
-	return Units{
-		InputCostPerMillionTokens: new(types.NewCost(2.50)),
+func Example() Pricing {
+	return Pricing{
+		PerUnit: new(money.NewAmount(2.50)),
 	}
 }
 "#,
@@ -8994,7 +8994,7 @@ func Example() Units {
         !diagnostics(&json)
             .iter()
             .any(|diagnostic| diagnostic["rule_id"] == "parser/go"),
-        "Go 1.26 new(expr) oaiz pattern should not emit parser/go: {json:#?}"
+        "Go 1.26 new(expr) in a struct-literal field should not emit parser/go: {json:#?}"
     );
 }
 

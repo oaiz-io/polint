@@ -1561,11 +1561,15 @@ fn go_1_26_new_expr_forms_should_not_emit_parser_diagnostics() {
     for (path, source) in GO_1_26_NEW_EXPR_SOURCES {
         let mut db = db_with_go_file(path, source);
         let diagnostics = analyze(&mut db);
-        assert!(
-            diagnostics
-                .iter()
-                .all(|diagnostic| diagnostic.rule_id != "parser/go"),
-            "{path} should not emit parser/go: {diagnostics:?}"
+        let parser_errors = diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.rule_id == "parser/go")
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            parser_errors,
+            Vec::<&str>::new(),
+            "{path} should not emit parser/go"
         );
         assert_eq!(db.packages()[0].name, "models");
         assert_eq!(db.functions()[0].name, "Example");
@@ -1623,18 +1627,18 @@ func Authorize() {
 }
 
 #[test]
-fn oaiz_units_new_expr_struct_literal_should_parse_and_extract_functions() {
+fn struct_literal_field_new_expr_should_parse_and_extract_functions() {
     let source = r#"package models
 
-import "example.com/oaiz/types"
+import "example.com/app/money"
 
-type Units struct {
-	InputCostPerMillionTokens *types.Cost
+type Pricing struct {
+	PerUnit *money.Amount
 }
 
-func Example() Units {
-	return Units{
-		InputCostPerMillionTokens: new(types.NewCost(2.50)),
+func Example() Pricing {
+	return Pricing{
+		PerUnit: new(money.NewAmount(2.50)),
 	}
 }
 
@@ -1646,13 +1650,17 @@ func Ones() *int {
 	return new(1)
 }
 "#;
-    let mut db = db_with_go_file("units.go", source);
+    let mut db = db_with_go_file("pricing.go", source);
     let diagnostics = analyze(&mut db);
-    assert!(
-        diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.rule_id != "parser/go"),
-        "oaiz Units new(expr) pattern should not emit parser/go: {diagnostics:?}"
+    let parser_errors = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.rule_id == "parser/go")
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        parser_errors,
+        Vec::<&str>::new(),
+        "struct-literal new(expr) fields should not emit parser/go"
     );
     let function_names: Vec<_> = db
         .functions()
@@ -1660,7 +1668,7 @@ func Ones() *int {
         .map(|fact| fact.name.as_str())
         .collect();
     assert_eq!(function_names, ["Example", "Budget", "Ones"]);
-    assert_eq!(db.imports()[0].path, "example.com/oaiz/types");
+    assert_eq!(db.imports()[0].path, "example.com/app/money");
     assert!(
         db.string_literals()
             .iter()
