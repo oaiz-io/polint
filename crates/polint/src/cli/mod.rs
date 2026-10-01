@@ -2584,6 +2584,12 @@ fn unknowns(root: PathBuf, args: &UnknownsArgs) -> Result<u8> {
     taxonomy_rows.extend(
         crate::analysis::unknown_taxonomy::collect::resource_budget_unknowns(&analysis.diagnostics),
     );
+    // A pipeline that did not run leaves nothing to report unknowns from, so an
+    // empty answer would read as "nothing is unknown". Name what did not run and
+    // fail instead.
+    let failures = analysis.pipeline_failures(&[args.capability.as_str()]);
+    let exit = if failures.is_empty() { 0 } else { 1 };
+    taxonomy_rows.extend(failures);
     let rows = crate::analysis::unknown_taxonomy::facts::normalize_rows(taxonomy_rows)
         .into_iter()
         .map(UnknownsRow::from_taxonomy_compat)
@@ -2596,7 +2602,7 @@ fn unknowns(root: PathBuf, args: &UnknownsArgs) -> Result<u8> {
         rows,
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
-    Ok(0)
+    Ok(exit)
 }
 
 fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
@@ -2633,6 +2639,8 @@ fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
             crate::analysis::unknown_taxonomy::collect::PUBLIC_UNKNOWN_CAPABILITIES.to_vec()
         });
     let analysis = analyze_for_agent_json(&root, &args.paths, args.no_cache, &requested_caps)?;
+    let failures = analysis.pipeline_failures(&requested_caps);
+    let exit = if failures.is_empty() { 0 } else { 1 };
     let rows = if let Some(capability) = &args.capability {
         // A resource-budget stop is run-level: it is why the run could not
         // finish, so it belongs in every capability's answer, not only the
@@ -2652,7 +2660,10 @@ fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
             &analysis.db,
             &analysis.diagnostics,
         )
-    }
+    };
+    let rows = crate::analysis::unknown_taxonomy::facts::normalize_rows(
+        rows.into_iter().chain(failures).collect(),
+    )
     .into_iter()
     .map(UnknownsRow::from_taxonomy_full)
     .collect();
@@ -2664,7 +2675,7 @@ fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
         rows,
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
-    Ok(0)
+    Ok(exit)
 }
 
 fn view_supports_unknowns(view: &PublicFactView) -> bool {
@@ -3270,6 +3281,23 @@ fn polint_tool_info() -> crate::diagnostics::PolintToolInfo {
 struct AgentJsonAnalysis {
     db: AnalysisDb,
     diagnostics: Vec<Diagnostic>,
+    provider_outcomes: Vec<crate::analysis_kernel::ProviderOutcome>,
+    capability_support: crate::core::CapabilitySupportView,
+}
+
+impl AgentJsonAnalysis {
+    /// Error rows for the part of `capabilities`' pipeline that did not run.
+    fn pipeline_failures(
+        &self,
+        capabilities: &[&str],
+    ) -> Vec<crate::analysis::unknown_taxonomy::facts::UnknownRow> {
+        crate::analysis_kernel::pipeline_failure_unknowns(
+            capabilities,
+            &self.provider_outcomes,
+            &self.capability_support,
+            &self.diagnostics,
+        )
+    }
 }
 
 fn analyze_for_agent_json(
@@ -3312,6 +3340,8 @@ fn analyze_for_agent_json(
     Ok(AgentJsonAnalysis {
         db: output.db,
         diagnostics: output.diagnostics,
+        provider_outcomes: output.run_report.provider_outcomes,
+        capability_support: output.capability_support,
     })
 }
 

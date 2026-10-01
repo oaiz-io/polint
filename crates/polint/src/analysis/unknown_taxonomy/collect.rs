@@ -201,7 +201,7 @@ fn go_semantic_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
         .collect()
 }
 
-fn go_semantic_diagnostic_unknowns(diagnostics: &[Diagnostic]) -> Vec<UnknownRow> {
+pub(crate) fn go_semantic_diagnostic_unknowns(diagnostics: &[Diagnostic]) -> Vec<UnknownRow> {
     diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.rule_id == "polint/go-semantic")

@@ -277,7 +277,13 @@ polint explain --rule custom/no-raw-colors --format json
 samples only bounded public fields. `polint inspect unknowns` reports the
 consolidated setup, unsupported, budget, model, and resolution queue.
 `polint unknowns --cap ...` remains supported for cap-filtered compatibility and
-returns an unsupported row for reserved capabilities. `polint explain` reports macro-derived fact views and
+returns an unsupported row for reserved capabilities. An empty `rows` list means
+nothing is unknown, never that nothing ran: when a provider the requested
+capability depends on failed, was blocked by a failed dependency, is
+setup-missing, or was skipped by the resource budget, or when a language
+support it depends on is setup-missing (for example a Go symbol sidecar that
+cannot load the modules), both commands add one `<workspace>` row per cause
+whose `reason` names the stage that did not run and why, and exit with status 1. `polint explain` reports macro-derived fact views and
 capability support without exposing provider execution graphs, layer-cache
 internals, or eval/debug schemas.
 

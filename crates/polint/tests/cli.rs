@@ -468,13 +468,14 @@ exclude = []
     );
     let missing_frontend = temp.path().join("missing-polint-go-frontend");
 
+    // A stage that did not run is an error, not an empty answer.
     let value = stdout_json(
         polint_cmd()
             .current_dir(temp.path())
             .env("POLINT_GO_FRONTEND", &missing_frontend)
             .args(["inspect", "unknowns", "--format", "json"])
             .assert()
-            .success(),
+            .code(1),
     );
     let rows = value["rows"].as_array().expect("unknown rows");
 
@@ -484,6 +485,13 @@ exclude = []
             && row.get("provider").is_none()
             && row.get("family").is_none()
             && row.get("source_stable_key").is_none()
+    }));
+    assert!(rows.iter().any(|row| {
+        row["category"] == "provider_failed"
+            && row["file"] == "<workspace>"
+            && row["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.starts_with("the Go semantic sidecar did not run"))
     }));
     let rendered = serde_json::to_string(&value).unwrap();
     assert!(!rendered.contains("polint.go.semantic"));

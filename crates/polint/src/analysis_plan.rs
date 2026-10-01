@@ -783,7 +783,7 @@ fn insert_capability_request(
     entry.rules.insert(rule_id.to_string());
 }
 
-fn capability_dependencies(capability: &str) -> &'static [&'static str] {
+pub(crate) fn capability_dependencies(capability: &str) -> &'static [&'static str] {
     match capability {
         "calls" | "control_flow" | "dataflow" => {
             &["resolved_imports", "module_graph", "symbols", "references"]

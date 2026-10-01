@@ -1253,7 +1253,7 @@ fn sort_symbol_derivation(derivation: &mut SymbolGraphDerivation) {
     });
 }
 
-fn language_name(language: Language) -> &'static str {
+pub(crate) fn language_name(language: Language) -> &'static str {
     match language {
         Language::Go => "Go",
         Language::TypeScript => "TypeScript",

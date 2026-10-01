@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[rustfmt::skip]
 #[cfg(test)] mod debug;
 mod completeness;
+pub(crate) use completeness::pipeline_failure_unknowns;
 #[cfg(test)]
 mod dispatch_tests;
 pub(crate) mod go_syntax_projection;

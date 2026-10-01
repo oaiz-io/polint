@@ -1131,6 +1131,21 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
 pub(crate) fn providers_enabled_by_capability_closure(
     requested: &std::collections::BTreeSet<&str>,
 ) -> std::collections::BTreeSet<&'static str> {
+    providers_closure(requested, true)
+}
+
+/// The providers `requested` actually reads: their seeds and everything those
+/// depend on, without the baseline providers every run schedules regardless.
+pub(crate) fn providers_required_by_capabilities(
+    requested: &std::collections::BTreeSet<&str>,
+) -> std::collections::BTreeSet<&'static str> {
+    providers_closure(requested, false)
+}
+
+fn providers_closure(
+    requested: &std::collections::BTreeSet<&str>,
+    with_baseline: bool,
+) -> std::collections::BTreeSet<&'static str> {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
     let manifests = provider_manifests();
@@ -1141,7 +1156,11 @@ pub(crate) fn providers_enabled_by_capability_closure(
         }
     }
 
-    let mut seeds: BTreeSet<&'static str> = BASELINE_PROVIDER_SEEDS.iter().copied().collect();
+    let mut seeds: BTreeSet<&'static str> = if with_baseline {
+        BASELINE_PROVIDER_SEEDS.iter().copied().collect()
+    } else {
+        BTreeSet::new()
+    };
     for &capability in requested {
         seeds.extend(seed_providers_for_capability(capability).iter().copied());
     }
