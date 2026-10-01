@@ -175,6 +175,18 @@ pub(crate) fn derive_requested_symbols_with_cache_stats(
             let (mut derivation, payload) =
                 derive_requested_symbols_uncached_with_payload(db, loaded, plan);
             let payload = payload.unwrap_or_else(|| symbol_graph_layer_payload(db, &derivation));
+            if has_setup_missing_support(&payload) {
+                // A setup-missing graph records a failure of the environment
+                // (toolchain, network, module download), not of the sources the key
+                // covers. Caching it would replay the failure after the environment
+                // is fixed, so it is recomputed on every run until it loads.
+                derivation.output_digest = Some(symbol_graph_output_digest_for_payload(
+                    &payload,
+                    Some(&layer_key),
+                ));
+                derivation.cache_stats = cache_stats;
+                return derivation;
+            }
             let dependencies = symbol_graph_layer_dependency_edges(
                 db,
                 &layer_key,
@@ -197,6 +209,13 @@ pub(crate) fn derive_requested_symbols_with_cache_stats(
             derivation
         }
     }
+}
+
+fn has_setup_missing_support(payload: &SymbolGraphLayerPayload) -> bool {
+    payload
+        .capability_support
+        .iter()
+        .any(|support| support.status == CapabilitySupportStatus::SetupMissing)
 }
 
 fn derive_requested_symbols_uncached(
@@ -1817,6 +1836,56 @@ export function answer() {{
 
     mod symbol_graph_layer_cache {
         use super::*;
+
+        /// A setup-missing graph records a failure of the environment, which the
+        /// layer key does not cover. Caching it would replay the failure on every
+        /// run after the environment is fixed.
+        #[cfg(feature = "lang-go")]
+        #[test]
+        fn setup_missing_symbol_graph_is_recomputed_instead_of_cached() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let loaded = loaded_config_for(temp.path());
+            let cache = Cache::new(temp.path().join("cache").join("analysis"), true);
+            let plan = requested_symbol_plan();
+            // No go.mod anywhere above the file, so the Go symbol facts cannot load.
+            let orphan = "package main\n\nfunc main() {}\n";
+            let mut first_db = AnalysisDb::new();
+            add_file(&mut first_db, temp.path(), "orphan/main.go", orphan);
+            let mut second_db = AnalysisDb::new();
+            add_file(&mut second_db, temp.path(), "orphan/main.go", orphan);
+
+            let first = derive_symbols_with_cache(
+                &mut first_db,
+                &loaded,
+                &cache,
+                &plan,
+                "config",
+                "stable",
+            );
+            let second = derive_symbols_with_cache(
+                &mut second_db,
+                &loaded,
+                &cache,
+                &plan,
+                "config",
+                "stable",
+            );
+
+            assert!(
+                first
+                    .capability_support
+                    .iter()
+                    .any(|support| support.status == CapabilitySupportStatus::SetupMissing),
+                "the fixture must produce a setup-missing symbol graph"
+            );
+            assert_eq!(first.cache_stats.recomputes, 1);
+            assert_eq!(first.cache_stats.writes, 0);
+            assert_eq!(second.cache_stats.hits, 0);
+            assert_eq!(second.cache_stats.recomputes, 1);
+            assert_eq!(second.cache_stats.writes, 0);
+            assert_eq!(first.output_digest, second.output_digest);
+            assert!(first.output_digest.is_some());
+        }
 
         #[test]
         fn symbol_graph_layer_reuses_warm_cache() {
