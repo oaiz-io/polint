@@ -21,6 +21,12 @@ pub(crate) struct AnalysisPlan {
     capabilities: Vec<PlannedCapability>,
     setup_checks: Vec<SetupCheck>,
     support_view: CapabilitySupportView,
+    /// Whether a reader needs the abstract domains' state before and after every
+    /// operation, rather than only the summary inputs the shipped deep
+    /// capabilities read (function-entry and block-entry reachability, and the
+    /// solver's events). No public capability asks for per-point states, so only
+    /// an internal request sets it.
+    per_point_domain_facts: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +188,25 @@ impl AnalysisPlan {
         self.capabilities
             .iter()
             .any(|planned| planned.capability == capability)
+    }
+
+    /// See [`AnalysisPlan::per_point_domain_facts`]: false for every plan built
+    /// from rules or capability names.
+    pub(crate) fn requests_per_point_domain_facts(&self) -> bool {
+        self.per_point_domain_facts
+    }
+
+    /// The same plan, asking the abstract domains for every per-point state.
+    #[cfg(test)]
+    pub(crate) fn with_per_point_domain_facts(mut self) -> Self {
+        self.per_point_domain_facts = true;
+        self.digest = plan_digest(
+            &self.rules,
+            &self.capabilities,
+            &self.setup_checks,
+            self.per_point_domain_facts,
+        );
+        self
     }
 
     pub(crate) fn requests_any_capability(&self, capabilities: &[&str]) -> bool {
@@ -393,7 +418,7 @@ impl AnalysisPlan {
                 })
                 .collect(),
         );
-        let digest = plan_digest(&rules, &capabilities, &setup_checks);
+        let digest = plan_digest(&rules, &capabilities, &setup_checks, false);
 
         Self {
             digest,
@@ -401,6 +426,7 @@ impl AnalysisPlan {
             capabilities,
             setup_checks,
             support_view,
+            per_point_domain_facts: false,
         }
     }
 }
@@ -870,9 +896,15 @@ fn plan_digest(
     rules: &[PlannedRule],
     capabilities: &[PlannedCapability],
     setup_checks: &[SetupCheck],
+    per_point_domain_facts: bool,
 ) -> String {
     let mut parts = Vec::new();
     parts.push(format!("schema={}", encode_str(ANALYSIS_PLAN_SCHEMA)));
+    // Only an internal request sets it, so every other plan keeps the digest it
+    // always had.
+    if per_point_domain_facts {
+        parts.push("domains=per_point".to_string());
+    }
 
     for rule in rules {
         parts.push(format!("rule.id={}", encode_str(&rule.id)));

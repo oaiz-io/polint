@@ -1597,6 +1597,96 @@ mod tests {
         }
     }
 
+    /// Every deep capability gets the compact domain materialization: the
+    /// summaries read only entry reachability, and the per-point states were most
+    /// of a calls or dataflow run's time and memory. The summaries a rule sees
+    /// must not depend on the choice.
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn deep_capabilities_get_compact_domain_facts_unless_per_point_states_are_requested() {
+        use crate::analysis_neutral::domains::facts::DomainLocation;
+
+        let temp = tempfile::tempdir().expect("temp directory");
+        std::fs::write(
+            temp.path().join("go.mod"),
+            "module example.com/domains\n\ngo 1.22\n",
+        )
+        .expect("write go.mod");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nfunc sink(value int) int { return value + 1 }\n\nfunc branch(ready bool) int {\n\tif ready {\n\t\treturn sink(1)\n\t}\n\tpanic(\"never\")\n}\n\nfunc main() { branch(true) }\n",
+        )
+        .expect("write Go source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let run = |plan: &AnalysisPlan| {
+            AnalysisKernel::run(KernelInput {
+                loaded: &loaded,
+                cache: &Cache::new("", false),
+                config_digest: "config",
+                rule_digest: "rules",
+                plan,
+                parallel: false,
+            })
+            .expect("kernel should run")
+        };
+        let per_operation = |output: &KernelOutput| {
+            output
+                .db
+                .abstract_domain_observations()
+                .iter()
+                .filter(|row| {
+                    matches!(
+                        row.location,
+                        DomainLocation::BeforeOperation | DomainLocation::AfterOperation
+                    )
+                })
+                .count()
+        };
+
+        for capability in ["calls", "dataflow", "control_flow"] {
+            let plan = AnalysisPlan::from_capability_names_for_test(&[capability]);
+            assert!(!plan.requests_per_point_domain_facts());
+            let compact = run(&plan);
+            let full = run(&plan.with_per_point_domain_facts());
+
+            assert_eq!(
+                per_operation(&compact),
+                0,
+                "`{capability}` must not materialize per-operation domain states"
+            );
+            assert!(
+                per_operation(&full) > 0,
+                "an explicit per-point request must still get per-operation states"
+            );
+            let summaries = |output: &KernelOutput| {
+                let interner = output.db.stable_key_interner();
+                output
+                    .db
+                    .summary_facts()
+                    .iter()
+                    .map(|fact| {
+                        (
+                            interner.resolve(fact.callable_stable_key).to_string(),
+                            interner.resolve(fact.stable_key).to_string(),
+                            fact.domain,
+                            fact.status,
+                            fact.precision,
+                            fact.provenance,
+                            fact.payload_digest.clone(),
+                            fact.tito_flows.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
+            assert!(!compact.db.summary_facts().is_empty());
+            assert_eq!(
+                summaries(&compact),
+                summaries(&full),
+                "`{capability}` summaries must not depend on the domain materialization"
+            );
+        }
+    }
+
     #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
     #[test]
     fn loop_bodies_stay_reachable_under_a_constant_true_condition() {
@@ -1617,7 +1707,10 @@ mod tests {
         )
         .expect("write TypeScript source");
         let loaded = load_config(temp.path()).expect("default config loads");
-        let plan = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        // The assertion reads the state after each call, which only the
+        // per-point materialization records.
+        let plan = AnalysisPlan::from_capability_names_for_test(&["dataflow"])
+            .with_per_point_domain_facts();
 
         let output = AnalysisKernel::run(KernelInput {
             loaded: &loaded,
@@ -1628,6 +1721,13 @@ mod tests {
             parallel: false,
         })
         .expect("kernel should run");
+        assert!(
+            output.db.abstract_domain_observations().iter().any(|row| {
+                row.location
+                    == crate::analysis_neutral::domains::facts::DomainLocation::AfterOperation
+            }),
+            "the fixture must materialize per-operation states"
+        );
 
         // A loop body is lowered into the block its branch reaches on the
         // `false` edge, so binding the loop condition would refine the body with

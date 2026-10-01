@@ -482,16 +482,12 @@ impl Provider for AbstractDomainsProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
-        let compact_domain_materialization = ctx.plan.rules().iter().any(|rule| {
-            rule.requested_capabilities
-                .iter()
-                .any(|c| c == "control_flow")
-        }) && !ctx.plan.rules().iter().any(|rule| {
-            rule.requested_capabilities
-                .iter()
-                .any(|c| c == "calls" || c == "dataflow")
-        });
-        let derivation = if compact_domain_materialization {
+        // The summaries are the only shipped reader of domain facts, and they read
+        // function-entry and block-entry reachability. Every capability gets that
+        // compact materialization; the per-point states, which on a calls or
+        // dataflow run used to be most of the run's time and memory, are kept only
+        // when a plan asks for them.
+        let derivation = if !ctx.plan.requests_per_point_domain_facts() {
             crate::analysis::domains::provider::derive_summary_input_abstract_domains_with_cache_stats(ctx.db,
                 &ctx.input_snapshot,
                 self.manifest(),
