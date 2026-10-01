@@ -94,6 +94,34 @@ numbers under that marker come from 12's measurements:
   OAIZ package.
   - **Default `include_tests = true`:** the Go semantic sidecar pushes the run past 12 GB.
   - **With it off:** 26 s and 7.8 GB cold, 3.8 s warm, and 1,112 unknowns in 41 files.
+    **Corrected (2026-10-01, [13](13-deep-analysis.md) §2.3):** 1,072 of those rows were an
+    environment artifact. The Go symbols sidecar never loaded on the measurement host (it writes the
+    host's Go version into a synthetic `go.work`, below the module's `go 1.27.1`), so every dotted
+    call fell through to `dynamic_property`. With a working symbols sidecar the same scan leaves 64
+    unknowns, 24 of them type conversions.
+
+## Post-v0.4.4 update (2026-10-01): full-application dataflow and control flow
+
+The owner then raised the target: full analysis with data flow and control flow throughout the
+whole application is the goal, not a later gate. [`13-deep-analysis.md`](13-deep-analysis.md)
+answers why that does not work today, what is missing, and how to get there. Its measurements are
+new and change two of 12's findings:
+
+- **The semantic sidecar's cost is a load-mode choice.** It type-checks every dependency from
+  source and builds SSA bodies for all of them (7.4 GB, 21 s on the whole OAIZ `core` module).
+  Export-data loading gives the same SSA for the same 64,275 in-repo bodies at 1.5 GB and 5.7 s
+  warm, and a one-file edit costs nothing measurable.
+- **The toolchain already resolves 77% of call sites statically**; interface invokes are 6.4%, and
+  x/tools' VTA gives a single target to most of the invoke sites it covers in 5.8 s. polint's Rust
+  side uses none of that for call resolution.
+- **`calls` has its own cliff inside polint:** 38 s and 6.1 GB on 41 files against 6.6 s and
+  0.5 GB for `control_flow`, because any `calls`/`dataflow` rule switches the abstract-domains
+  solver to full materialization.
+- **The pick:** one per-unit pipeline, built typed calls → units and routes → interprocedural
+  dataflow, each step proven by rewriting named OAIZ rules and gated on measured budgets; five
+  step-0 repairs first; deep providers off the default `check` profile until the edit-tier gate
+  passes. The typed middle layer of 12 becomes the first two steps of that pipeline rather than a
+  detour before it.
 
 ## Files
 
@@ -111,6 +139,7 @@ numbers under that marker come from 12's measurements:
 | [10-next-lever.md](10-next-lever.md) | — | Post-L4 re-analysis: re-measured gaps (the edit tier included), re-ranked levers, the pick (the metrics-trigger cliff), and de-risk plans for it and for L1. |
 | [11-next-after-metrics-cliff.md](11-next-after-metrics-cliff.md) | — | After the metrics-cliff fix (#131, v0.4.3): state-of-the-union table, a new rules-dispatch scheduling finding, re-ranked candidates, the pick (cost-ordered rule dispatch) and its spike plan. |
 | [12-next-direction.md](12-next-direction.md) | — | After v0.4.4, under the owner's runtime-or-capability constraint: what runtime is left (A), what capability is missing (B), three new measurements (a warm CPU profile, the layer read-limit A/B, a package-scope deep scan), and the pick (B: the typed middle layer first) with a three-step plan. |
+| [13-deep-analysis.md](13-deep-analysis.md) | — | Full-application dataflow and control flow: the failure chain at v0.4.4 (load mode, thrown-away resolution, a silent symbols-sidecar failure, the `calls` materialization cliff, solvers that are not what their names say), the missing-component inventory, the design decisions (sidecar boundary, middle layer inside the deep stack, per-unit shards), a gated build plan with named OAIZ rules per step, the honest budgets, and the recommendation with its first three steps. |
 
 ## What each lever is
 
@@ -169,6 +198,7 @@ architecture and visibility rules.
 | Go layer read limit (12) | Read OAIZ's 96 MB Go layer instead of rebuilding it every warm run | full-repo warm | **Measured −0.30 s warm** (5.56 → 5.26 s, 5 interleaved rounds, identical reports). Edit unchanged | Hours (raise the limit) or days (chunk the layer); in-contract | Do regardless of direction; see [12](12-next-direction.md) §3.2 A1 |
 | Comment-ignore cache (12) | Cache per-file ignore directives by content hash | every run | ~0.45–0.5 CPU-s per warm full-repo run on the main thread; −0.3…−0.45 s wall **(unmeasured)** | Days; in-contract | Backlog under the pick ([12](12-next-direction.md) A4) |
 | Typed middle layer (12) | Direction B: Go/TS structure facts, test facts, non-code files, then route models | consumer rules phase, every tier | The rules phase is 93% consumer code and regex, and ≥ 50% of it is re-derivation (measured shares). Runtime dividend −1.2…−1.5 s on the full repo and ~−1 s on core warm **(estimate, unmeasured; step 1 measures it)**. Plus new rule classes | Weeks per step; preview SDK views | **The pick**; see [12](12-next-direction.md) §6 |
+| Deep analysis pipeline (13) | Typed call facts and a public call graph; per-package units, shards and route models; IFDS/IDE dataflow with models-as-data | capability: the twenty consumer rules that need depth; deep providers on `review`/CI first, `check` after the edit gate | Step 0 repairs alone: catalog `control_flow` from 29.6 s / 7.7 GB to a ≤ 15 s / ≤ 2.5 GB gate, catalog `calls` from 38 s / 6.1 GB to a ≤ 8 s / ≤ 1 GB gate (sidecar load mode and domains materialization, both measured). Full-core budgets are gates, not measurements: cold ≤ 60 s / 4 GB after step 1, edit ≤ 15 s after step 2, `dataflow` ≤ 120 s / 6 GB after step 3 **(estimates)** | Days (step 0), 3–4 weeks (step 1), 5–7 weeks (step 2), 6–8 weeks (step 3) | **The pick under the raised target**; see [13](13-deep-analysis.md) §5–§7 |
 
 ## Floor analysis
 
