@@ -63,7 +63,7 @@ pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
     // it stores an empty output, so a different budget can produce a different
     // outcome from identical sources.
     let mut parts = vec![
-        format!("include_tests={}", config.include_tests),
+        format!("include_tests={}", config.semantic_include_tests),
         format!("offline={}", config.offline),
         format!("rta_edges={}", config.emit_rta_edges),
         // The scan scope decides which rows the sidecar emits, so two scopes are two
@@ -199,7 +199,7 @@ mod tests {
             },
             GoSemanticCacheInputs {
                 lifecycle: GoAnalysisConfig {
-                    include_tests: false,
+                    semantic_include_tests: !base.lifecycle.semantic_include_tests,
                     ..base.lifecycle.clone()
                 },
                 ..base.clone()
@@ -250,7 +250,7 @@ mod tests {
                 ..base.clone()
             },
             GoAnalysisConfig {
-                include_tests: false,
+                semantic_include_tests: !base.semantic_include_tests,
                 ..base.clone()
             },
             GoAnalysisConfig {
@@ -319,6 +319,7 @@ mod tests {
             package_patterns: vec!["./...".to_string()],
             build_tags: Vec::new(),
             include_tests: true,
+            semantic_include_tests: false,
             offline: false,
             semantic_timeout_ms: None,
             emit_rta_edges: false,

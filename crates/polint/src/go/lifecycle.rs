@@ -21,7 +21,16 @@ pub struct GoAnalysisConfig {
     pub module_roots: Vec<String>,
     pub package_patterns: Vec<String>,
     pub build_tags: Vec<String>,
+    /// Whether the symbol sidecar loads test variants. `[languages.go]
+    /// include_tests`, on unless it is set to `false`.
     pub include_tests: bool,
+    /// Whether the semantic sidecar loads test variants: only when `[languages.go]
+    /// include_tests` is explicitly `true`.
+    ///
+    /// Test variants roughly double what the semantic sidecar holds and builds,
+    /// for test bodies no shipped deep rule reads: test facts come from the syntax
+    /// tier and the symbol sidecar, which keep loading tests by default.
+    pub semantic_include_tests: bool,
     pub offline: bool,
     /// `[languages.go] semantic_timeout_ms`, when configured.
     pub semantic_timeout_ms: Option<u64>,
@@ -122,6 +131,10 @@ impl GoAnalysisConfig {
                 .get("include_tests")
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
+            semantic_include_tests: settings
+                .get("include_tests")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             offline: settings
                 .get("offline")
                 .and_then(Value::as_bool)
@@ -793,6 +806,35 @@ mod derived_lifecycle_defaults {
 
     fn module_root(root: &str) -> (&'static str, Value) {
         ("module_roots", Value::String(root.to_string()))
+    }
+
+    #[test]
+    fn test_variants_are_opt_in_for_the_semantic_sidecar_only() {
+        let files = [go_file("core/app/service.go")];
+        let unset = config_for(&files, &[module_root("core")]);
+        assert!(
+            unset.include_tests,
+            "the symbol sidecar keeps loading tests"
+        );
+        assert!(
+            !unset.semantic_include_tests,
+            "the semantic sidecar loads tests only when asked"
+        );
+
+        let on = config_for(
+            &files,
+            &[module_root("core"), ("include_tests", Value::Boolean(true))],
+        );
+        assert!(on.include_tests && on.semantic_include_tests);
+
+        let off = config_for(
+            &files,
+            &[
+                module_root("core"),
+                ("include_tests", Value::Boolean(false)),
+            ],
+        );
+        assert!(!off.include_tests && !off.semantic_include_tests);
     }
 
     #[test]

@@ -53,6 +53,7 @@ fn phase_counts(output: &crate::go::semantic::protocol::GoSemanticOutput) -> BTr
             deps_with_types = phase.deps_with_types,
             rows_emitted = phase.rows_emitted,
             peak_heap_bytes = phase.peak_heap_bytes,
+            peak_rss_bytes = phase.peak_rss_bytes,
             "go semantic phase"
         );
         counts.insert(
@@ -70,6 +71,7 @@ fn phase_counts(output: &crate::go::semantic::protocol::GoSemanticOutput) -> BTr
             compiled_go_files = totals.compiled_go_files,
             deps_with_types = totals.deps_with_types,
             peak_heap_bytes = totals.peak_heap_bytes,
+            peak_rss_bytes = totals.peak_rss_bytes,
             "go semantic sidecar totals"
         );
         counts.insert("go_semantic.elapsed_ms".to_string(), totals.elapsed_ms);
@@ -85,6 +87,10 @@ fn phase_counts(output: &crate::go::semantic::protocol::GoSemanticOutput) -> BTr
         counts.insert(
             "go_semantic.peak_heap_bytes".to_string(),
             totals.peak_heap_bytes,
+        );
+        counts.insert(
+            "go_semantic.peak_rss_bytes".to_string(),
+            totals.peak_rss_bytes,
         );
     }
     counts
@@ -694,6 +700,7 @@ fn default_lifecycle() -> GoAnalysisConfig {
         package_patterns: vec!["./...".to_string()],
         build_tags: Vec::new(),
         include_tests: true,
+        semantic_include_tests: false,
         offline: false,
         semantic_timeout_ms: None,
         emit_rta_edges: false,

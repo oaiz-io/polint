@@ -44,15 +44,18 @@ not write another setup file into the repository.
 
 ### Bounding a Go semantic scan
 
-The Go semantic sidecar type-checks the full dependency graph, builds SSA over
-every package, and runs reachability analysis. It is the heaviest Go subprocess,
-and it is bounded by wall time:
+The Go semantic sidecar parses and type-checks the selected packages from
+source, types their dependencies from the compiler's export data (the go build
+cache already holds it for any module that builds), and builds SSA for the
+selected packages only. It is the heaviest Go subprocess. It runs with a soft
+`GOMEMLIMIT` of a quarter of the memory available to polint unless the
+environment sets `GOMEMLIMIT`, and it is bounded by wall time:
 
 | Lever | Default | Effect |
 |---|---|---|
 | `semantic_timeout_ms` | `120000` | Budget for one sidecar run. `POLINT_GO_SEMANTIC_TIMEOUT_MS` overrides it for one run. |
 | `package_patterns` | `["./..."]` per module root | Which packages are loaded and analysed. |
-| `include_tests` | `true` | Whether `_test.go` files and their synthesized test packages are loaded. |
+| `include_tests` | `true` for the symbol sidecar, `false` for the semantic sidecar | Whether `_test.go` files and their synthesized test packages are loaded. Unset, the symbol sidecar loads them and the semantic sidecar does not; an explicit `true` or `false` applies to both. |
 
 Exhausting the budget is a *reported outcome*: the provider fails and the rules
 that needed it are blocked with `polint/capability` diagnostics. It never
@@ -64,8 +67,8 @@ RUST_LOG=polint::kernel::stage=debug polint check --format json
 ```
 
 Each sidecar stage (`packages_load`, `ssa_build`, `emit_rows`, `rta_analyze`)
-logs its wall time alongside the packages, compiled Go files, and
-type-checked dependencies it saw, and the same counters appear in
+logs its wall time alongside the packages, compiled Go files, type-checked
+dependencies, heap, and peak resident set it saw, and the same counters appear in
 `summary.providers` of `--format json`. A run dominated by `packages_load` with
 a large `deps_with_types` is a scope problem that `package_patterns` can fix; a
 run dominated by `rta_analyze` is not.

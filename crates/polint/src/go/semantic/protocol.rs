@@ -116,12 +116,16 @@ pub struct GoSemanticRawFrame {
     pub rows_emitted: u64,
     #[serde(default)]
     pub peak_heap_bytes: u64,
+    #[serde(default)]
+    pub peak_rss_bytes: u64,
 }
 
 /// One stage of the Go semantic sidecar, with the workload it saw.
 ///
 /// `peak_heap_bytes` is the largest heap allocation the sidecar observed at a
 /// stage boundary, not a continuously sampled high-water mark.
+/// `peak_rss_bytes` is the kernel's resident-set high-water mark for the
+/// sidecar process up to that boundary, or 0 where the platform reports none.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GoSemanticPhase {
     pub phase: String,
@@ -131,6 +135,7 @@ pub struct GoSemanticPhase {
     pub deps_with_types: u64,
     pub rows_emitted: u64,
     pub peak_heap_bytes: u64,
+    pub peak_rss_bytes: u64,
 }
 
 impl GoSemanticPhase {
@@ -143,6 +148,7 @@ impl GoSemanticPhase {
             deps_with_types: frame.deps_with_types,
             rows_emitted: frame.rows_emitted,
             peak_heap_bytes: frame.peak_heap_bytes,
+            peak_rss_bytes: frame.peak_rss_bytes,
         }
     }
 }
@@ -332,12 +338,15 @@ mod tests {
     fn decode_ndjson_reads_session_totals() {
         let output = decode_ndjson_str(
             "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n\
-             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\",\"elapsed_ms\":42,\"packages\":3}\n",
+             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\",\"elapsed_ms\":42,\"packages\":3,\
+             \"peak_heap_bytes\":4096,\"peak_rss_bytes\":8192}\n",
         )
         .expect("totals decode");
 
         assert_eq!(output.totals.elapsed_ms, 42);
         assert_eq!(output.totals.packages, 3);
+        assert_eq!(output.totals.peak_heap_bytes, 4096);
+        assert_eq!(output.totals.peak_rss_bytes, 8192);
     }
 
     #[test]

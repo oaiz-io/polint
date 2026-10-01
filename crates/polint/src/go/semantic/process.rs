@@ -32,6 +32,14 @@ const EMBEDDED_GO_FRONTEND_FILES: &[(&str, &str)] = &[
         "internal/semantic/emit.go",
         include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/emit.go"),
     ),
+    (
+        "internal/semantic/rss_unix.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/rss_unix.go"),
+    ),
+    (
+        "internal/semantic/rss_other.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/rss_other.go"),
+    ),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -884,6 +892,45 @@ mod tests {
                 "embedded Go semantic frontend drifted at {relative_path}"
             );
         }
+    }
+
+    /// The embedded list is what a release build compiles; a source file missing
+    /// from it builds in the workspace and fails only at a user's first deep run.
+    #[test]
+    fn every_workspace_frontend_source_is_embedded() {
+        let workspace_frontend =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/go-sidecar/polint-go-frontend");
+        let mut pending = vec![workspace_frontend.clone()];
+        let mut sources = Vec::new();
+        while let Some(directory) = pending.pop() {
+            for entry in fs::read_dir(&directory).expect("read frontend directory") {
+                let path = entry.expect("frontend entry").path();
+                if path.is_dir() {
+                    pending.push(path);
+                    continue;
+                }
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("");
+                if name.ends_with(".go") && !name.ends_with("_test.go") {
+                    let relative = path
+                        .strip_prefix(&workspace_frontend)
+                        .expect("under the frontend")
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    sources.push(relative);
+                }
+            }
+        }
+        sources.sort();
+        let mut embedded = EMBEDDED_GO_FRONTEND_FILES
+            .iter()
+            .map(|(relative, _)| (*relative).to_string())
+            .filter(|relative| relative.ends_with(".go"))
+            .collect::<Vec<_>>();
+        embedded.sort();
+        assert_eq!(sources, embedded);
     }
 
     #[test]

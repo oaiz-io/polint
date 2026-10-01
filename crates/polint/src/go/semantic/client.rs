@@ -200,7 +200,7 @@ fn append_request_args(
         .arg("--patterns")
         .arg(config.package_patterns.join(","))
         .arg("--tests")
-        .arg(config.include_tests.to_string())
+        .arg(config.semantic_include_tests.to_string())
         .arg("--build-tags")
         .arg(config.build_tags.join(","));
     if config.emit_rta_edges {
@@ -211,6 +211,33 @@ fn append_request_args(
     }
     command.arg("--ndjson");
     lifecycle::apply_go_offline_env(command, config.offline);
+    apply_sidecar_memory_limit(command);
+}
+
+/// Name of the Go runtime's soft memory limit variable.
+const GO_MEMORY_LIMIT_ENV: &str = "GOMEMLIMIT";
+
+/// Starts the sidecar with a soft memory limit of a quarter of the memory
+/// available to polint, unless polint's own environment already sets one, which
+/// the sidecar then inherits unchanged.
+///
+/// Without a limit the sidecar's collector paces itself on heap growth alone,
+/// and the kernel's memory ceiling cannot see the child: it samples polint's own
+/// resident set. The limit is soft, so it only makes the collector work harder
+/// near it; it never changes what the sidecar emits.
+fn apply_sidecar_memory_limit(command: &mut std::process::Command) {
+    if std::env::var_os(GO_MEMORY_LIMIT_ENV).is_some() {
+        return;
+    }
+    if let Some(limit) =
+        sidecar_memory_limit_bytes(crate::analysis_kernel::resource::available_memory_bytes())
+    {
+        command.env(GO_MEMORY_LIMIT_ENV, limit.to_string());
+    }
+}
+
+fn sidecar_memory_limit_bytes(available: Option<u64>) -> Option<u64> {
+    available.map(|bytes| bytes / 4).filter(|limit| *limit > 0)
 }
 
 fn run_with_timeout(
@@ -252,6 +279,44 @@ mod tests {
     use std::time::Instant;
 
     static FAKE_STDOUT_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    #[test]
+    fn sidecar_memory_limit_is_a_quarter_of_available_memory() {
+        assert_eq!(
+            sidecar_memory_limit_bytes(Some(22 * 1024 * 1024 * 1024)),
+            Some(5_905_580_032)
+        );
+        assert_eq!(sidecar_memory_limit_bytes(Some(3)), None);
+        assert_eq!(sidecar_memory_limit_bytes(None), None);
+    }
+
+    #[test]
+    fn sidecar_command_carries_a_memory_limit_unless_the_environment_sets_one() {
+        let config = crate::go::lifecycle::GoAnalysisConfig::from_settings_files(
+            Path::new("/repo"),
+            &std::collections::BTreeMap::new(),
+            &[],
+        )
+        .expect("default lifecycle");
+        let mut command = std::process::Command::new("true");
+        append_request_args(&mut command, Path::new("/repo"), &config, None);
+        let limit = command
+            .get_envs()
+            .find(|(key, _)| *key == GO_MEMORY_LIMIT_ENV)
+            .and_then(|(_, value)| value.map(|value| value.to_os_string()));
+        if std::env::var_os(GO_MEMORY_LIMIT_ENV).is_some()
+            || crate::analysis_kernel::resource::available_memory_bytes().is_none()
+        {
+            assert_eq!(limit, None);
+        } else {
+            let limit = limit.expect("the sidecar is started with GOMEMLIMIT");
+            let bytes = limit
+                .to_str()
+                .and_then(|text| text.parse::<u64>().ok())
+                .expect("GOMEMLIMIT is a byte count");
+            assert!(bytes > 0);
+        }
+    }
 
     #[test]
     fn timeout_error_uses_go_sidecar_timeout_category() {

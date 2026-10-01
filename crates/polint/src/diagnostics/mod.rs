@@ -262,7 +262,9 @@ impl ProviderOutcomeRow {
 }
 
 fn is_measurement_counter(key: &str) -> bool {
-    key.ends_with("elapsed_ms") || key.ends_with("peak_heap_bytes")
+    key.ends_with("elapsed_ms")
+        || key.ends_with("peak_heap_bytes")
+        || key.ends_with("peak_rss_bytes")
 }
 
 /// Cache counters for one provider, flattened for the report.

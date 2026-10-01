@@ -98,6 +98,7 @@ func (t *phaseTimer) finish(phase string, workload phaseWorkload) {
 		"deps_with_types":   workload.depsWithTypes,
 		"rows_emitted":      workload.rowsEmitted,
 		"peak_heap_bytes":   t.sampleHeap(),
+		"peak_rss_bytes":    peakRSSBytes(),
 	})
 	t.started = now
 }
@@ -200,22 +201,7 @@ func Emit(config Config) ([]Row, error) {
 
 	fset := token.NewFileSet()
 	loadConfig := &packages.Config{
-		Mode: packages.NeedName |
-			packages.NeedFiles |
-			packages.NeedCompiledGoFiles |
-			packages.NeedImports |
-			// NeedDeps loads the full transitive dependency graph with type
-			// info. Without it, indirectly-imported packages (e.g. reflect via
-			// fmt) are type-checked only from export data, so ssautil.AllPackages
-			// builds an incomplete SSA package for them. rta.Analyze then panics
-			// on `reflectPkg.Members["Value"].(*ssa.Type)` when Members["Value"]
-			// is nil. See golang.org/x/tools/go/callgraph/rta/rta.go.
-			packages.NeedDeps |
-			packages.NeedSyntax |
-			packages.NeedTypes |
-			packages.NeedTypesInfo |
-			packages.NeedTypesSizes |
-			packages.NeedModule,
+		Mode:  loadMode(config),
 		Dir:   root,
 		Fset:  fset,
 		Tests: config.IncludeTests,
@@ -233,22 +219,7 @@ func Emit(config Config) ([]Row, error) {
 	workload := countWorkload(pkgs)
 	timer.finish("packages_load", workload)
 
-	hasMain := false
-	for _, pkg := range pkgs {
-		if pkg.Name == "main" {
-			hasMain = true
-			break
-		}
-	}
-	var prog *ssa.Program
-	var ssaPkgs []*ssa.Package
-	if hasMain {
-		prog, ssaPkgs = ssautil.AllPackages(pkgs, ssa.InstantiateGenerics)
-		prog.Build()
-	} else {
-		prog, ssaPkgs = ssautil.Packages(pkgs, ssa.InstantiateGenerics)
-		prog.Build()
-	}
+	prog, ssaPkgs := buildProgram(pkgs, config)
 	sort.Slice(ssaPkgs, func(i, j int) bool {
 		return packageID(ssaPkgs[i]) < packageID(ssaPkgs[j])
 	})
@@ -325,8 +296,68 @@ func Emit(config Config) ([]Row, error) {
 		"compiled_go_files": workload.compiledGoFiles,
 		"deps_with_types":   workload.depsWithTypes,
 		"peak_heap_bytes":   timer.sampleHeap(),
+		"peak_rss_bytes":    peakRSSBytes(),
 	})
 	return e.rows, nil
+}
+
+// loadMode is what go/packages loads for a run.
+//
+// The root packages are parsed and type-checked from source; every dependency
+// is typed from the compiler's export data, which the go build cache already
+// holds for any module that builds. That gives the roots the same syntax, types
+// and SSA bodies as a whole-program load, for a fraction of the memory and time:
+// type-checking every transitive dependency from source is most of a
+// whole-program load's cost, and no row this sidecar emits describes a
+// dependency's body.
+//
+// Only the RTA oracle comparison loads the whole program from source.
+// rta.Analyze builds SSA for every reachable package, and on a dependency
+// created from export data (reflect, imported through fmt) it panics looking up
+// `reflectPkg.Members["Value"]`. See golang.org/x/tools/go/callgraph/rta/rta.go.
+func loadMode(config Config) packages.LoadMode {
+	mode := packages.NeedName |
+		packages.NeedFiles |
+		packages.NeedCompiledGoFiles |
+		packages.NeedImports |
+		packages.NeedSyntax |
+		packages.NeedTypes |
+		packages.NeedTypesInfo |
+		packages.NeedTypesSizes |
+		packages.NeedModule
+	if config.EmitRTAEdges {
+		mode |= packages.NeedDeps
+	}
+	return mode
+}
+
+// buildProgram builds SSA bodies for the root packages only.
+//
+// Dependencies become SSA packages without bodies. A call into one still has its
+// *ssa.Function as the static callee, so a callsite row names the same callee
+// either way; what a whole-program build adds is bodies for every dependency
+// function, which no row reads. The RTA oracle comparison is the exception: it
+// needs every reachable body, so it builds the whole program when a root is a
+// main package, as rta.Analyze requires.
+func buildProgram(pkgs []*packages.Package, config Config) (*ssa.Program, []*ssa.Package) {
+	var prog *ssa.Program
+	var ssaPkgs []*ssa.Package
+	if config.EmitRTAEdges && hasMainPackage(pkgs) {
+		prog, ssaPkgs = ssautil.AllPackages(pkgs, ssa.InstantiateGenerics)
+	} else {
+		prog, ssaPkgs = ssautil.Packages(pkgs, ssa.InstantiateGenerics)
+	}
+	prog.Build()
+	return prog, ssaPkgs
+}
+
+func hasMainPackage(pkgs []*packages.Package) bool {
+	for _, pkg := range pkgs {
+		if pkg.Name == "main" {
+			return true
+		}
+	}
+	return false
 }
 
 // addPhase closes a stage that ran after the emitter existed, so its row can
