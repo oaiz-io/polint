@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	goversion "go/version"
 	"io"
 	"os"
 	"path/filepath"
@@ -448,38 +449,35 @@ func goWorkUseRoot(root string, usePath string) (string, bool) {
 	return clean, true
 }
 
+// writeSyntheticGoWork writes the workspace into a private temporary directory.
+// The go command writes a `go.work.sum` beside the workspace it loads, so the
+// directory, not only the file, is what cleanup removes.
 func writeSyntheticGoWork(root string, moduleRoots []string) (string, func(), error) {
-	file, err := os.CreateTemp(filepath.Dir(root), "polint-go-symbols-*.work")
+	dir, err := os.MkdirTemp("", "polint-go-symbols-")
 	if err != nil {
 		return "", nil, fmt.Errorf("create synthetic go.work: %w", err)
 	}
-	path := file.Name()
-	workDir := filepath.Dir(path)
 	cleanup := func() {
-		_ = os.Remove(path)
+		_ = os.RemoveAll(dir)
 	}
+	path := filepath.Join(dir, "go.work")
 	var builder strings.Builder
 	builder.WriteString("go ")
-	builder.WriteString(workspaceGoVersion())
+	builder.WriteString(syntheticGoWorkVersion(root, moduleRoots))
 	builder.WriteString("\n\nuse (\n")
 	for _, moduleRoot := range moduleRoots {
-		path := root
+		modulePath := root
 		if moduleRoot != "." {
-			path = filepath.Join(root, filepath.FromSlash(moduleRoot))
+			modulePath = filepath.Join(root, filepath.FromSlash(moduleRoot))
 		}
 		builder.WriteString("\t")
-		builder.WriteString(strconv.Quote(goWorkUsePath(workDir, path)))
+		builder.WriteString(strconv.Quote(goWorkUsePath(dir, modulePath)))
 		builder.WriteString("\n")
 	}
 	builder.WriteString(")\n")
-	if _, err := file.WriteString(builder.String()); err != nil {
-		_ = file.Close()
+	if err := os.WriteFile(path, []byte(builder.String()), 0o600); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("write synthetic go.work: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		cleanup()
-		return "", nil, fmt.Errorf("close synthetic go.work: %w", err)
 	}
 	return path, cleanup, nil
 }
@@ -492,15 +490,34 @@ func goWorkUsePath(workDir string, modulePath string) string {
 	return filepath.ToSlash(modulePath)
 }
 
-func workspaceGoVersion() string {
-	version := strings.TrimPrefix(runtime.Version(), "go")
-	version = strings.TrimFunc(version, func(r rune) bool {
-		return !(r == '.' || r >= '0' && r <= '9')
-	})
-	if version == "" {
-		return "1.24"
+// minimumWorkspaceGoVersion is the `go` line of a workspace whose module roots
+// declare nothing newer.
+const minimumWorkspaceGoVersion = "1.24"
+
+// syntheticGoWorkVersion is the highest `go` directive among the module roots.
+//
+// A workspace must declare at least the Go version of every module it uses, or
+// the go command refuses to load it. The version of the toolchain this sidecar
+// was built with says nothing about the modules: a module that asks for a newer
+// patch release than that toolchain would be refused, while the go command run
+// inside the module itself switches to the toolchain the module asks for.
+func syntheticGoWorkVersion(root string, moduleRoots []string) string {
+	highest := minimumWorkspaceGoVersion
+	for _, moduleRoot := range moduleRoots {
+		manifest := moduleRootManifest(moduleRoot)
+		contents, err := readRepoFile(root, manifest, topologyManifestMaxBytes)
+		if err != nil {
+			continue
+		}
+		parsed, err := modfile.Parse(manifest, contents, nil)
+		if err != nil || parsed.Go == nil {
+			continue
+		}
+		if goversion.Compare("go"+parsed.Go.Version, "go"+highest) > 0 {
+			highest = parsed.Go.Version
+		}
 	}
-	return version
+	return highest
 }
 
 func repoRegularFileExists(root string, relative string) bool {

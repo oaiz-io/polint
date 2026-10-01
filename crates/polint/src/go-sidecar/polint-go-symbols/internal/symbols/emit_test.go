@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -119,5 +120,75 @@ func TestGoPackageEnvRejectsGoWorkSymlink(t *testing.T) {
 		if value == "GOWORK="+filepath.Join(root, "go.work") {
 			t.Fatalf("goPackageEnv reused symlinked go.work")
 		}
+	}
+}
+
+func TestSyntheticGoWorkVersionUsesHighestModuleGoLine(t *testing.T) {
+	root := t.TempDir()
+	for dir, goLine := range map[string]string{"api": "1.24", "core": "1.27.1", "tools": "1.26"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		contents := "module example.com/" + dir + "\n\ngo " + goLine + "\n"
+		if err := os.WriteFile(filepath.Join(root, dir, "go.mod"), []byte(contents), 0o644); err != nil {
+			t.Fatalf("write %s go.mod: %v", dir, err)
+		}
+	}
+
+	got := syntheticGoWorkVersion(root, []string{"api", "core", "tools"})
+	if got != "1.27.1" {
+		t.Fatalf("syntheticGoWorkVersion = %q, want the highest module go line 1.27.1", got)
+	}
+}
+
+func TestSyntheticGoWorkVersionNeverDropsBelowTheMinimum(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/app\n\ngo 1.21\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	got := syntheticGoWorkVersion(root, []string{"."})
+	if got != minimumWorkspaceGoVersion {
+		t.Fatalf("syntheticGoWorkVersion = %q, want %q", got, minimumWorkspaceGoVersion)
+	}
+}
+
+func TestWriteSyntheticGoWorkKeepsItsFilesOutOfTheRepositoryParent(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "repo")
+	if err := os.MkdirAll(filepath.Join(root, "core"), 0o755); err != nil {
+		t.Fatalf("mkdir core: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "core", "go.mod"), []byte("module example.com/core\n\ngo 1.27.1\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	path, cleanup, err := writeSyntheticGoWork(root, []string{"core"})
+	if err != nil {
+		t.Fatalf("writeSyntheticGoWork: %v", err)
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read synthetic go.work: %v", err)
+	}
+	if !strings.HasPrefix(string(contents), "go 1.27.1\n") {
+		t.Fatalf("synthetic go.work starts %q, want the module's go line", string(contents))
+	}
+	// The go command writes a checksum file beside the workspace it loads.
+	sum := path + ".sum"
+	if err := os.WriteFile(sum, []byte(""), 0o600); err != nil {
+		t.Fatalf("write go.work.sum: %v", err)
+	}
+	cleanup()
+
+	if _, err := os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
+		t.Fatalf("cleanup left the workspace directory behind: %v", err)
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatalf("read repository parent: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "repo" {
+		t.Fatalf("repository parent holds %d entries, want only the repository", len(entries))
 	}
 }
