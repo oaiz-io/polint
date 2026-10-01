@@ -28,8 +28,12 @@ pub(crate) const LAYER_CACHE_MANIFEST_SCHEMA: &str = "polint-layer-cache-manifes
 // manifest above it is treated as unreadable and evicted, which silently makes
 // its layer miss on every subsequent run. It therefore tracks the payload
 // ceiling rather than sitting below it.
-const LAYER_CACHE_MANIFEST_MAX_BYTES: u64 = 64 * 1_048_576;
-const LAYER_CACHE_PAYLOAD_MAX_BYTES: u64 = 64 * 1_048_576;
+const LAYER_CACHE_MANIFEST_MAX_BYTES: u64 = LAYER_CACHE_PAYLOAD_MAX_BYTES;
+// The writer has no ceiling, so a payload above this one is written, rejected on
+// the next read, evicted and rebuilt from its per-file entries on every warm run.
+// A Go syntax layer for a repository of about five thousand Go files is close to
+// 100 MB of JSON, so the ceiling sits well above that.
+const LAYER_CACHE_PAYLOAD_MAX_BYTES: u64 = 256 * 1_048_576;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 const MANIFEST_LAYER_DEPENDENCY_SOURCE: &str = "__manifest_layer__";
 
@@ -1144,6 +1148,39 @@ mod tests {
         assert!(
             manifest_bytes > 4 * 1_048_576,
             "fixture manifest is {manifest_bytes} bytes, too small to exercise the ceiling"
+        );
+        assert_eq!(outcome.status, LayerCacheReadStatus::Hit);
+        assert_eq!(outcome.value, Some(payload));
+    }
+
+    /// The writer accepts any payload, so a payload the reader refuses is
+    /// evicted and rebuilt on every warm run. A large repository's Go syntax
+    /// layer passes 64 MiB of JSON; it must still restore.
+    #[test]
+    fn a_payload_larger_than_sixty_four_mebibytes_still_round_trips_to_a_hit() {
+        let scratch = scratch_dir();
+        let store = LayerCacheStore::new(scratch.path().join("layers"), true);
+        let payload = Payload {
+            items: (0..66)
+                .map(|ordinal| format!("{ordinal}{}", "x".repeat(1_048_576)))
+                .collect(),
+        };
+        let layer_key = key();
+        let manifest = manifest_for_payload(layer_key.clone(), &payload);
+
+        store.write_json(&manifest, &payload).unwrap();
+        let payload_bytes = std::fs::metadata(
+            store
+                .blobs_dir_for_test()
+                .join(format!("{}.json", manifest.payload_digest.value)),
+        )
+        .expect("payload metadata")
+        .len();
+        let outcome: LayerCacheReadOutcome<Payload> = store.read_json(&layer_key);
+
+        assert!(
+            payload_bytes > 64 * 1_048_576,
+            "fixture payload is {payload_bytes} bytes, too small to exercise the ceiling"
         );
         assert_eq!(outcome.status, LayerCacheReadStatus::Hit);
         assert_eq!(outcome.value, Some(payload));
