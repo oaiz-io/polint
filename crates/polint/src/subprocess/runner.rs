@@ -216,10 +216,34 @@ fn read_all(
                 if cancellation_observed.is_some() {
                     return Ok(bytes);
                 }
-                thread::sleep(PROCESS_POLL_INTERVAL);
+                wait_until_readable(&reader, PROCESS_POLL_INTERVAL);
             }
             Err(error) => return Err(error),
         }
+    }
+}
+
+/// Blocks until `reader` has data, its writer closes, or `timeout` passes.
+///
+/// A pipe holds 64 KiB, so a reader that slept a fixed interval after every
+/// empty read would cap a chatty child at one pipe-full per interval: 6.4 MB/s
+/// at 10 ms, several seconds for a sidecar that emits tens of megabytes. Waiting
+/// on readiness returns as soon as the child writes again, and the timeout still
+/// bounds how long a cancellation can go unobserved.
+#[cfg(unix)]
+fn wait_until_readable(reader: &impl std::os::fd::AsRawFd, timeout: Duration) {
+    let mut descriptor = libc::pollfd {
+        fd: reader.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    let timeout_ms = libc::c_int::try_from(timeout.as_millis()).unwrap_or(libc::c_int::MAX);
+    #[allow(unsafe_code)]
+    // SAFETY: `descriptor` is one initialized pollfd for the borrowed live
+    // pipe, and poll only writes its `revents`. An error or a timeout is
+    // indistinguishable from "not readable yet": the caller reads again either way.
+    unsafe {
+        libc::poll(&mut descriptor, 1, timeout_ms);
     }
 }
 
@@ -487,6 +511,33 @@ fn terminate_child_process_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A child that writes row by row, as the sidecars do, is slower than the
+    /// reader, so the reader keeps finding the pipe empty. A fixed sleep after
+    /// every empty read then caps throughput at one 64 KiB pipe buffer per poll
+    /// interval: these 32 MiB took at least 5 s. Waiting on readiness keeps up
+    /// with the writer.
+    #[cfg(unix)]
+    #[test]
+    fn large_output_drains_without_waiting_out_a_poll_interval_per_pipe_buffer() {
+        let mut command = Command::new("sh");
+        command.args([
+            "-c",
+            "line=$(printf '%01023d' 0); i=0; while [ $i -lt 32768 ]; do echo \"$line\"; i=$((i + 1)); done",
+        ]);
+        let started = Instant::now();
+
+        let output =
+            run_bounded(command, Duration::from_secs(60), "sh", "Timeout").expect("writer exits");
+
+        assert_eq!(output.stdout.len(), 33_554_432);
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < Duration::from_millis(2_500),
+            "draining 32 MiB took {} ms",
+            elapsed.as_millis()
+        );
+    }
 
     #[test]
     fn wait_for_exit_until_returns_at_its_deadline() {
