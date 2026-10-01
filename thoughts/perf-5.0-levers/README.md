@@ -51,6 +51,50 @@ state from that fix's raw runs and re-ranks what is left:
 - **The pick:** cost-ordered rule dispatch, which is in-contract and 2–3 days of work.
 - **Then:** L1's E1 spike, and the cold-path metrics miss once its owner question is answered.
 
+## Post-v0.4.4 update (2026-10-01): the next direction
+
+Cost-ordered rule dispatch merged as #132 and shipped in v0.4.4, with byte-identical reports:
+
+| OAIZ full repo | Before | After |
+|---|---|---|
+| warm | 6.12 s | **5.41 s** |
+| edit | 7.86 s | **7.14 s** |
+| cold | unchanged | unchanged |
+
+Cold is unchanged because a cold run has no recorded timings to dispatch on.
+
+The owner then narrowed the question (2026-09-30). Only two things count:
+- the runtime of `polint check` on real repositories;
+- capability.
+
+Compile, install, update and distribution savings do not. That takes L1, L6, L7, the install-docs
+action and the store-key-depth item off the table.
+
+[`12-next-direction.md`](12-next-direction.md) weighs more runtime work (A) against capability (B). Rows below that it
+affects carry a **Post-v0.4.4 update (2026-10-01)** marker; their original text is unchanged, and the
+numbers under that marker come from 12's measurements:
+
+- **The pick: B, capability, starting with the typed middle layer.**
+  - **First:** exact Go and TS structure facts, test facts, and non-code files.
+  - **Then:** framework models (routes and middleware as data) and type facts.
+  - **Only after that:** deep analysis, behind a measured gate.
+  - **First step:** a one-week spike that rewrites OAIZ's three heaviest scanner-based rules against
+    spike facts.
+- **Why.** A warm full-repo CPU profile puts polint at 4.3% of the rules phase. The other 93% is
+  consumer code and the regex engine it calls, and at least half of it re-derives syntax polint's
+  parsers already built. After direction A's remaining in-contract pot, the floor is that consumer
+  code. That pot is estimated at:
+  - about −0.9…−1.6 s warm;
+  - about −1.9…−2.3 s edit.
+- **New, measured: the layer read limit.** The 64 MiB limit makes every warm run reject OAIZ's 96 MB
+  Go layer.
+  - Raising the limit is worth −0.30 s warm (5 interleaved rounds).
+  - Do it regardless of direction, together with the Go 1.26 grammar fix (#126).
+- **New, measured: the deep stack at package scope.** I forced a `control_flow` scan of one 41-file
+  OAIZ package.
+  - **Default `include_tests = true`:** the Go semantic sidecar pushes the run past 12 GB.
+  - **With it off:** 26 s and 7.8 GB cold, 3.8 s warm, and 1,112 unknowns in 41 files.
+
 ## Files
 
 | File | Lever | One line |
@@ -66,6 +110,7 @@ state from that fix's raw runs and re-ranks what is left:
 | [09-methodology.md](09-methodology.md) | — | How every number in this directory was measured, so the evidence is auditable. |
 | [10-next-lever.md](10-next-lever.md) | — | Post-L4 re-analysis: re-measured gaps (the edit tier included), re-ranked levers, the pick (the metrics-trigger cliff), and de-risk plans for it and for L1. |
 | [11-next-after-metrics-cliff.md](11-next-after-metrics-cliff.md) | — | After the metrics-cliff fix (#131, v0.4.3): state-of-the-union table, a new rules-dispatch scheduling finding, re-ranked candidates, the pick (cost-ordered rule dispatch) and its spike plan. |
+| [12-next-direction.md](12-next-direction.md) | — | After v0.4.4, under the owner's runtime-or-capability constraint: what runtime is left (A), what capability is missing (B), three new measurements (a warm CPU profile, the layer read-limit A/B, a package-scope deep scan), and the pick (B: the typed middle layer first) with a three-step plan. |
 
 ## What each lever is
 
@@ -111,16 +156,19 @@ architecture and visibility rules.
 
 | Lever | What it is (short) | Where it pays | Expected impact (measured, unless noted) | Cost | Status |
 |---|---|---|---|---|---|
-| L1 | Prebuilt engine, thin SDK | ice-cold | Rule-host compile is 97–99% of ice-cold (polint crate ~150 s of ~203 s OAIZ pack build; compile RSS 3.2–3.3 GB vs 0.13–0.35 GB analysis RSS). Projected ice-cold ~225 s → order of 30–60 s **(unmeasured — needs the E1 closure-size prototype)** | Weeks; breaks build/manifest contract, needs a snapshot protocol + versioning | Owner decision — unmeasured prototype needed **Post-L4 update (2026-09-29):** still the only lever on the compile, re-measured at 206.5 s fresh (0.4.2, 4 jobs), ~152 s per adopted release and 3.18 GB peak RSS. Now ranked the next strategic lever, behind the metrics-trigger cliff. The E1/E3 plan, with a measured 15.9 s / 328 MB thin-SDK dependency floor, is in [10](10-next-lever.md) §6.2. |
-| L2 | Whole-run rule-result cache | warm, full-repo no-change rerun | OAIZ full-repo warm 594 s ≈ cold 612 s (rules 97%); projected OAIZ full warm 594→~7 s, OAIZ core warm 4.73→~1.0 s, Go+TS monorepo warm 1.44→~0.9 s **if rules declared their extra inputs (unmeasured contract, not yet built)**. **Post-L4 update (2026-09-29):** superseded. L4 already took OAIZ full-repo warm to 10.12 s as deployed (9.20 s on 0.4.2). What memoization could still remove on a no-change rerun is the rules phase: ~2.2 s core, ~0.7 s frontend, ~3.5 s full repo (0.4.2 stage logs; unbuilt). The blocker grew: four files of the OAIZ pack call `std::fs`. Killed as a performance lever; see [10](10-next-lever.md) §4. | Rule purity / declared-extra-inputs contract; a debug-only soundness assertion | Owner decision |
-| L3 | Per-file rule result cache | edit-loop | Same underlying per-rule costs as L2; heavy rules are per-file scans in practice, so per-file caching maps directly onto edit-loop reruns **(impact unmeasured as a standalone change)** | SDK/API addition for a keyed per-file cache | Owner decision **Post-L4 update (2026-09-29):** the edit tier is now measured: +0.41 s over warm on OAIZ core and +0.31 s on frontend, all of it kernel cache work, and the bounding core rule is cross-file. Parked; see [10](10-next-lever.md) §4. |
+| L1 | Prebuilt engine, thin SDK | ice-cold | Rule-host compile is 97–99% of ice-cold (polint crate ~150 s of ~203 s OAIZ pack build; compile RSS 3.2–3.3 GB vs 0.13–0.35 GB analysis RSS). Projected ice-cold ~225 s → order of 30–60 s **(unmeasured — needs the E1 closure-size prototype)** | Weeks; breaks build/manifest contract, needs a snapshot protocol + versioning | Owner decision — unmeasured prototype needed **Post-L4 update (2026-09-29):** still the only lever on the compile, re-measured at 206.5 s fresh (0.4.2, 4 jobs), ~152 s per adopted release and 3.18 GB peak RSS. Now ranked the next strategic lever, behind the metrics-trigger cliff. The E1/E3 plan, with a measured 15.9 s / 328 MB thin-SDK dependency floor, is in [10](10-next-lever.md) §6.2. **Post-v0.4.4 update (2026-10-01):** out of scope. The owner counts only `polint check` runtime and capability, not compile or distribution savings ([12](12-next-direction.md) §3.1). |
+| L2 | Whole-run rule-result cache | warm, full-repo no-change rerun | OAIZ full-repo warm 594 s ≈ cold 612 s (rules 97%); projected OAIZ full warm 594→~7 s, OAIZ core warm 4.73→~1.0 s, Go+TS monorepo warm 1.44→~0.9 s **if rules declared their extra inputs (unmeasured contract, not yet built)**. **Post-L4 update (2026-09-29):** superseded. L4 already took OAIZ full-repo warm to 10.12 s as deployed (9.20 s on 0.4.2). What memoization could still remove on a no-change rerun is the rules phase: ~2.2 s core, ~0.7 s frontend, ~3.5 s full repo (0.4.2 stage logs; unbuilt). The blocker grew: four files of the OAIZ pack call `std::fs`. Killed as a performance lever; see [10](10-next-lever.md) §4. | Rule purity / declared-extra-inputs contract; a debug-only soundness assertion | Owner decision **Post-v0.4.4 update (2026-10-01):** a non-code files view (B2 in [12](12-next-direction.md)) would remove the main reason rule packs call `std::fs`. |
+| L3 | Per-file rule result cache | edit-loop | Same underlying per-rule costs as L2; heavy rules are per-file scans in practice, so per-file caching maps directly onto edit-loop reruns **(impact unmeasured as a standalone change)** | SDK/API addition for a keyed per-file cache | Owner decision **Post-L4 update (2026-09-29):** the edit tier is now measured: +0.41 s over warm on OAIZ core and +0.31 s on frontend, all of it kernel cache work, and the bounding core rule is cross-file. Parked; see [10](10-next-lever.md) §4. **Post-v0.4.4 update (2026-10-01):** still parked; see L2's note. |
 | L4 | Consumer linear span fix | consumer, full-repo | Measured on a scratch copy of the OAIZ pack, same engine, identical output: full repo 598.7→12.1 s (49×), rules CPU 1,777→7.5 s, core cold 7.32→5.38 s, core warm 5.79→3.86 s (−33%) | None to polint; a consumer-side rewrite of the shared Go scanner | Consumer change — reported to OAIZ, not polint's to ship **Post-L4 update (2026-09-29): SHIPPED 2026-09-29** in oaiz-io/oaiz#4800 (released v1.0.3358); re-measured on the fixed tree in [10](10-next-lever.md) §3. |
-| L5 | Binary layer-cache + faster hash | warm | Layer read = 25% of Go+TS-monorepo warm main-thread samples (decode 17%, FNV 6.7%); OAIZ core decode 12.9%/FNV 6.2%. Projected warm go.syntax ~235→80–100 ms, ts.syntax ~85→40 ms; −10…−14% warm on the Go+TS monorepo, −0.15…−0.25 s OAIZ core warm **(projection, not yet built)** | One-time cache-protocol bump (existing caches miss once), a new dependency, a second deterministic encoding | Owner decision **Post-L4 update (2026-09-29):** OAIZ warm restores now decode 61.5 MB of JSON on core (0.44 s on 0.4.2), 29.7 MB on frontend (0.21 s) and 188 MB on the full repo. Ranked third, after the metrics-trigger cliff; doubles as L1's snapshot codec. See [10](10-next-lever.md) §4. |
-| L6 | ThinLTO off, rule-host build | build time vs cold/warm analysis | Build 210.9→164.5 s (−46 s, −22%); binary 26.9→30.3 MB; measured analysis cost cold +4.7%, warm +10.9% (interleaved, identical output); break-even ≈ 90 warm runs per host rebuild | None to build (env var); ongoing analysis-time cost across every run after | Owner decision — runtime-vs-build trade **Post-L4 update (2026-09-29):** at +10.9% of a 3.12 s post-L4 warm core run, break-even rises to ~135 warm runs per rebuild (projection). Document as a knob for ephemeral environments. |
-| L7 | Parallel crate split | ice-cold | Single rustc frontend for ~261k non-test lines takes ~50 s single-threaded; rustc averages only ~2.7 of 4 job slots across a whole ice-cold build, implying idle capacity a split could use **(entirely unmeasured, needs a prototype)** | Weeks; breaks the two-package architecture and widens visibility across crate boundaries | Owner decision — unmeasured prototype needed **Post-L4 update (2026-09-29):** measured ceiling ~41 s. The 0.4.2 build is 659 CPU-s over 206.5 s at 4 jobs, so at the same total work it cannot beat ~165 s; `polint`'s frontend is 46.1 s single-threaded. Downgraded. |
-| Next targets (08) | Small sized-not-taken fixes | mostly cold, some warm | Go-walk fusion ~0.5 CPU-s; `GoTests::related_for_file` index ~0.13 CPU-s (growing quadratically); rule summary-row matchers ~0.03–0.05 s/run; cold layer write ~0.4 s serial; toolchain-probe caching ~50–80 ms/warm run; edit-loop tier itself is unmeasured | Small each; several need a design decision (streaming, caching key soundness, no-more-parallelism constraint) | Sized, not taken **Post-L4 update (2026-09-29):** the edit-loop tier is now measured. Three new in-contract targets (the metrics-trigger cliff, orphaned layer blobs, store-key depth) are in [10](10-next-lever.md) §4. |
+| L5 | Binary layer-cache + faster hash | warm | Layer read = 25% of Go+TS-monorepo warm main-thread samples (decode 17%, FNV 6.7%); OAIZ core decode 12.9%/FNV 6.2%. Projected warm go.syntax ~235→80–100 ms, ts.syntax ~85→40 ms; −10…−14% warm on the Go+TS monorepo, −0.15…−0.25 s OAIZ core warm **(projection, not yet built)** | One-time cache-protocol bump (existing caches miss once), a new dependency, a second deterministic encoding | Owner decision **Post-L4 update (2026-09-29):** OAIZ warm restores now decode 61.5 MB of JSON on core (0.44 s on 0.4.2), 29.7 MB on frontend (0.21 s) and 188 MB on the full repo. Ranked third, after the metrics-trigger cliff; doubles as L1's snapshot codec. See [10](10-next-lever.md) §4. **Post-v0.4.4 update (2026-10-01):** a warm full-repo profile puts the FNV byte loop at 23% and JSON at ≥ 21% of engine CPU. Under [12](12-next-direction.md)'s pick, L5 becomes the codec the new fact families need once they grow the layers. |
+| L6 | ThinLTO off, rule-host build | build time vs cold/warm analysis | Build 210.9→164.5 s (−46 s, −22%); binary 26.9→30.3 MB; measured analysis cost cold +4.7%, warm +10.9% (interleaved, identical output); break-even ≈ 90 warm runs per host rebuild | None to build (env var); ongoing analysis-time cost across every run after | Owner decision — runtime-vs-build trade **Post-L4 update (2026-09-29):** at +10.9% of a 3.12 s post-L4 warm core run, break-even rises to ~135 warm runs per rebuild (projection). Document as a knob for ephemeral environments. **Post-v0.4.4 update (2026-10-01):** out of scope, as a build-time trade ([12](12-next-direction.md) §3.1). |
+| L7 | Parallel crate split | ice-cold | Single rustc frontend for ~261k non-test lines takes ~50 s single-threaded; rustc averages only ~2.7 of 4 job slots across a whole ice-cold build, implying idle capacity a split could use **(entirely unmeasured, needs a prototype)** | Weeks; breaks the two-package architecture and widens visibility across crate boundaries | Owner decision — unmeasured prototype needed **Post-L4 update (2026-09-29):** measured ceiling ~41 s. The 0.4.2 build is 659 CPU-s over 206.5 s at 4 jobs, so at the same total work it cannot beat ~165 s; `polint`'s frontend is 46.1 s single-threaded. Downgraded. **Post-v0.4.4 update (2026-10-01):** out of scope, compile only ([12](12-next-direction.md) §3.1). |
+| Next targets (08) | Small sized-not-taken fixes | mostly cold, some warm | Go-walk fusion ~0.5 CPU-s; `GoTests::related_for_file` index ~0.13 CPU-s (growing quadratically); rule summary-row matchers ~0.03–0.05 s/run; cold layer write ~0.4 s serial; toolchain-probe caching ~50–80 ms/warm run; edit-loop tier itself is unmeasured | Small each; several need a design decision (streaming, caching key soundness, no-more-parallelism constraint) | Sized, not taken **Post-L4 update (2026-09-29):** the edit-loop tier is now measured. Three new in-contract targets (the metrics-trigger cliff, orphaned layer blobs, store-key depth) are in [10](10-next-lever.md) §4. **Post-v0.4.4 update (2026-10-01):** `GoTests::related_for_file` indexing is dropped: polint's SDK is 0.7% of OAIZ rule CPU, and OAIZ never reads its `GoTests` inputs. New target: a per-file comment-ignore cache ([12](12-next-direction.md) A4). |
 | Consumer finding (08) | Core-profile rule-bound warm floor | consumer, OAIZ core | One rule (~3.7–4.2 s) bounds the OAIZ core rules phase and therefore the profile's warm floor — not covered by L4's span-helper fix | None to polint | Consumer change — reported only **Post-L4 update (2026-09-29):** after L4 that rule takes ~2.1–2.2 s and still bounds the core rules phase (2.17–2.32 s). |
 | Metrics trigger (10) | Keep deferral + memo metrics | full repo / default `polint check`, code-health profile | **Post-L4 update (2026-09-29):** measured by unregistering one rule. One metrics rule costs a default full-repo OAIZ run 3.56 s warm, 5.40 s in the edit loop, 4.29 s cold and ~450 MB RSS on 0.4.2 (≤ 0.18 s of that is the rule), and ~1.0 s of a 1.99 s code-health run | Days; in-contract (deferred stable-key ids must stay identical) | **The pick** — see [10](10-next-lever.md) §5–6 |
+| Go layer read limit (12) | Read OAIZ's 96 MB Go layer instead of rebuilding it every warm run | full-repo warm | **Measured −0.30 s warm** (5.56 → 5.26 s, 5 interleaved rounds, identical reports). Edit unchanged | Hours (raise the limit) or days (chunk the layer); in-contract | Do regardless of direction; see [12](12-next-direction.md) §3.2 A1 |
+| Comment-ignore cache (12) | Cache per-file ignore directives by content hash | every run | ~0.45–0.5 CPU-s per warm full-repo run on the main thread; −0.3…−0.45 s wall **(unmeasured)** | Days; in-contract | Backlog under the pick ([12](12-next-direction.md) A4) |
+| Typed middle layer (12) | Direction B: Go/TS structure facts, test facts, non-code files, then route models | consumer rules phase, every tier | The rules phase is 93% consumer code and regex, and ≥ 50% of it is re-derivation (measured shares). Runtime dividend −1.2…−1.5 s on the full repo and ~−1 s on core warm **(estimate, unmeasured; step 1 measures it)**. Plus new rule classes | Weeks per step; preview SDK views | **The pick**; see [12](12-next-direction.md) §6 |
 
 ## Floor analysis
 
