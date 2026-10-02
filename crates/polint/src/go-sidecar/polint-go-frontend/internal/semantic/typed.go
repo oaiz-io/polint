@@ -153,7 +153,7 @@ func (e *emitter) emitCallEdges(prog *ssa.Program, sites []dynamicSite) {
 			"kind":                "call_edges",
 			"package_id":          packageID(site.pkg),
 			"package_path":        packagePath(site.pkg),
-			"caller":              site.caller.String(),
+			"caller":              functionName(site.caller),
 			"callsite_stable_key": site.key,
 			"stable_key":          stableKey(packageID(site.pkg), "call_edges", site.key),
 		}
@@ -198,13 +198,13 @@ func declaredCalleeNames(prog *ssa.Program, targets []*ssa.Function) ([]string, 
 	byName := make(map[string]string, len(targets))
 	for _, target := range targets {
 		target = declaredCallee(prog, target)
-		name := target.String()
+		name := functionName(target)
 		if _, seen := byName[name]; seen {
 			continue
 		}
 		origin := ""
 		if from := target.Origin(); from != nil {
-			origin = from.String()
+			origin = functionName(from)
 		}
 		byName[name] = origin
 	}
@@ -639,11 +639,11 @@ func (e *emitter) emitParams(pkg *ssa.Package, fn *ssa.Function) {
 			"kind":         "param",
 			"package_id":   packageID(pkg),
 			"package_path": packagePath(pkg),
-			"function":     fn.String(),
+			"function":     functionName(fn),
 			"index":        i,
 			"name":         param.Name(),
 			"type":         canonicalTypeString(param.Type()),
-			"stable_key":   stableKey(packageID(pkg), "param", fn.String(), strconv.Itoa(i)),
+			"stable_key":   stableKey(packageID(pkg), "param", functionName(fn), strconv.Itoa(i)),
 		}
 		if fn.Signature.Variadic() && i == params.Len()-1 {
 			row["variadic"] = true

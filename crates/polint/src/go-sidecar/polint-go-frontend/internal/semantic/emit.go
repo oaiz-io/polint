@@ -163,7 +163,7 @@ type emitter struct {
 	// keep-first is lossless. A package with no such collision never triggers a skip, so its
 	// emitted rows are byte-identical to before this set existed.
 	emittedMethodSetKeys map[string]bool
-	// emittedFunctionKeys makes emitFunction idempotent per (package_id, fn.String()) stable
+	// emittedFunctionKeys makes emitFunction idempotent per (package_id, functionName(fn)) stable
 	// key. A concrete method VALUE of a reachable generic instantiation can be harvested via
 	// TWO entry points — the per-function `ssaFunctions` walk in emitSSAPackage AND
 	// emitInstantiatedMethodSets' `emitFunction` on the instantiated method-set — yielding
@@ -173,7 +173,7 @@ type emitter struct {
 	// the row duplicates → `validate_unique("function", ...)` rejects the ENTIRE Go fact set
 	// (a STRUCTURAL family is, correctly, NOT row-resilient) → RTA derives zero edges
 	// repo-wide (review #4). Keep-first at the SOURCE keeps the validator strict while
-	// suppressing the spurious duplicate. `fn.String()` is the official SSA identity, so two
+	// suppressing the spurious duplicate. `functionName` is the SSA identity, so two
 	// genuinely-distinct functions never share a key; a package without the cross-path
 	// collision never repeats one, so its rows stay byte-identical.
 	emittedFunctionKeys map[string]bool
@@ -596,12 +596,12 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 			"kind":         "unsupported",
 			"package_id":   packageID(pkg),
 			"package_path": packagePath(pkg),
-			"name":         fn.String(),
+			"name":         functionName(fn),
 			"reason":       "synthetic function without stable source identity",
 		})
 		return
 	}
-	// Keep-first per (package_id, fn.String()) so a method VALUE reachable via two harvest
+	// Keep-first per (package_id, functionName(fn)) so a method VALUE reachable via two harvest
 	// paths (the ssaFunctions walk AND emitInstantiatedMethodSets) emits exactly ONE
 	// function/method row — never a duplicate stable_key that fails validate_unique and
 	// zeroes the whole Go fact set (review #4). Gating here also suppresses the duplicate's
@@ -609,7 +609,7 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 	// cross-path collision never repeats a key, so this is a no-op and rows stay
 	// byte-identical. The `unsupported`-synthetic early return above is intentionally
 	// ungated (no stable_key, distinct kind, not a validate_unique family).
-	functionKey := stableKey(packageID(pkg), fn.String())
+	functionKey := stableKey(packageID(pkg), functionName(fn))
 	if e.emittedFunctionKeys[functionKey] {
 		return
 	}
@@ -632,7 +632,7 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 		// or the SSA↔core join (`matching_core_function`, file+name+span) would miss the
 		// instantiated method's node and the generic-dispatch edge would be lost
 		// (FINDING A). A non-generic method name has no `[...]` suffix and is unchanged.
-		if receiver := receiverTypeName(fn.Signature.Recv().Type().String()); receiver != "" {
+		if receiver := receiverTypeName(canonicalTypeString(fn.Signature.Recv().Type())); receiver != "" {
 			name = receiver + "." + stripMethodTypeArgs(fn.Name())
 		}
 	}
@@ -641,7 +641,7 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 		"package_id":   packageID(pkg),
 		"package_path": packagePath(pkg),
 		"name":         name,
-		"qualified":    fn.String(),
+		"qualified":    functionName(fn),
 		"signature":    signatureString(fn.Signature),
 		"stable_key":   functionKey,
 	}
@@ -655,14 +655,14 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 		row["span"] = pos
 	}
 	if fn.Signature != nil && fn.Signature.Recv() != nil {
-		row["receiver"] = fn.Signature.Recv().Type().String()
+		row["receiver"] = canonicalTypeString(fn.Signature.Recv().Type())
 		e.add(Row{
 			"kind":         "receiver_type",
 			"package_id":   packageID(pkg),
 			"package_path": packagePath(pkg),
-			"method":       fn.String(),
-			"receiver":     fn.Signature.Recv().Type().String(),
-			"stable_key":   stableKey(packageID(pkg), "recv", fn.String(), fn.Signature.Recv().Type().String()),
+			"method":       functionName(fn),
+			"receiver":     canonicalTypeString(fn.Signature.Recv().Type()),
+			"stable_key":   stableKey(packageID(pkg), "recv", functionName(fn), canonicalTypeString(fn.Signature.Recv().Type())),
 		})
 	}
 	e.add(row)
@@ -688,7 +688,7 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				"kind":         "callsite",
 				"package_id":   packageID(pkg),
 				"package_path": packagePath(pkg),
-				"caller":       fn.String(),
+				"caller":       functionName(fn),
 			}
 			if mode := callMode(call); mode != "" {
 				row["mode"] = mode
@@ -697,10 +697,10 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 			switch {
 			case common != nil && common.StaticCallee() != nil:
 				callee := common.StaticCallee()
-				row["static_callee"] = callee.String()
+				row["static_callee"] = functionName(callee)
 				row["status"] = "resolved_static"
 				if origin := callee.Origin(); origin != nil {
-					row["static_callee_origin"] = origin.String()
+					row["static_callee_origin"] = functionName(origin)
 				}
 				if callee.Signature != nil && callee.Signature.Recv() != nil && len(common.Args) > 0 {
 					row["receiver_type"] = canonicalTypeString(common.Args[0].Type())
@@ -722,7 +722,7 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 					row["receiver_type"] = canonicalTypeString(common.Value.Type())
 				}
 			}
-			stableParts := []string{packageID(pkg), fn.String(), e.positionKey(call.Pos())}
+			stableParts := []string{packageID(pkg), functionName(fn), e.positionKey(call.Pos())}
 			if syntax := index.syntaxFor(call); syntax != nil {
 				if pos := e.positionSpan(syntax.Pos(), syntax.End()); pos != nil {
 					file := posFile(e.fset, syntax.Pos(), e.root)
@@ -730,7 +730,7 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 					row["span"] = pos
 					stableParts = []string{
 						packageID(pkg),
-						fn.String(),
+						functionName(fn),
 						file,
 						strconv.Itoa(pos.StartByte),
 						strconv.Itoa(pos.EndByte),
@@ -774,7 +774,7 @@ func (e *emitter) emitDynamicDispatch(pkg *ssa.Package, fn *ssa.Function, common
 		"kind":                "dynamic_dispatch",
 		"package_id":          packageID(pkg),
 		"package_path":        packagePath(pkg),
-		"caller":              fn.String(),
+		"caller":              functionName(fn),
 		"callsite_stable_key": callsiteKey,
 	}
 	var discriminant string
@@ -828,7 +828,7 @@ func (e *emitter) emitInstantiatedTypes(pkg *ssa.Package, fn *ssa.Function) {
 					"kind":         "unsupported",
 					"package_id":   packageID(pkg),
 					"package_path": packagePath(pkg),
-					"name":         fn.String(),
+					"name":         functionName(fn),
 					"reason":       "MakeInterface operand without stable type identity",
 				})
 				continue
@@ -876,7 +876,7 @@ func (e *emitter) emitAddressTaken(pkg *ssa.Package, fn *ssa.Function) {
 		if target == nil {
 			return
 		}
-		identity := target.String()
+		identity := functionName(target)
 		if identity == "" || seen[identity] {
 			return
 		}
@@ -1160,7 +1160,7 @@ func ssaFunctions(pkg *ssa.Package) []*ssa.Function {
 			}
 		}
 	}
-	sort.Slice(functions, func(i, j int) bool { return functions[i].String() < functions[j].String() })
+	sort.Slice(functions, func(i, j int) bool { return functionName(functions[i]) < functionName(functions[j]) })
 	return functions
 }
 
@@ -1199,21 +1199,182 @@ func signatureString(sig *types.Signature) string {
 	return sig.String()
 }
 
-// canonicalTypeString returns the type's `.String()` resolved THROUGH any type alias to
-// its underlying type (FIX 3). go/types reports a value of a type alias (`type AliasDog =
-// Dog`) under the alias spelling (`...AliasDog`) for both the MakeInterface operand type
-// and the alias's package-scope TypeName, but the concrete method's receiver is the
-// UNDERLYING `...Dog`. Keying the instantiated_type and method_set under the alias spelling
-// makes the Rust resolver's `methods_by_receiver["...AliasDog"]` lookup miss and the
-// interface-dispatch edge is silently dropped. `types.Unalias` collapses the alias chain to
-// the underlying type so instantiated_type, method_set key, and the method receiver all
-// share one canonical identity and the join succeeds. It is a NO-OP on a non-alias type, so
-// every non-alias identity's `.String()` is unchanged (byte-identity preserved).
+// canonicalTypeString returns the type's `.String()` with every type alias
+// resolved to the type it names, at any depth (`[]Alias`, `Box[Alias]`,
+// `func(Alias)`). go/types reports a value of an alias type (`type AliasDog = Dog`)
+// under the alias spelling, while a method's receiver is the named type itself,
+// so a join keyed by type strings must resolve aliases on both sides. A type
+// that contains no alias prints exactly as `.String()` does.
 func canonicalTypeString(t types.Type) string {
 	if t == nil {
 		return ""
 	}
-	return types.Unalias(t).String()
+	return deepUnalias(t).String()
+}
+
+// deepUnalias rebuilds t with every alias it contains resolved; it returns t
+// itself when t contains none.
+func deepUnalias(t types.Type) types.Type {
+	if t == nil || !containsAlias(t) {
+		return t
+	}
+	switch t := types.Unalias(t).(type) {
+	case *types.Pointer:
+		return types.NewPointer(deepUnalias(t.Elem()))
+	case *types.Slice:
+		return types.NewSlice(deepUnalias(t.Elem()))
+	case *types.Array:
+		return types.NewArray(deepUnalias(t.Elem()), t.Len())
+	case *types.Map:
+		return types.NewMap(deepUnalias(t.Key()), deepUnalias(t.Elem()))
+	case *types.Chan:
+		return types.NewChan(t.Dir(), deepUnalias(t.Elem()))
+	case *types.Named:
+		args := t.TypeArgs()
+		if args == nil || args.Len() == 0 {
+			return t
+		}
+		resolved := make([]types.Type, args.Len())
+		for i := range resolved {
+			resolved[i] = deepUnalias(args.At(i))
+		}
+		instance, err := types.Instantiate(nil, t.Origin(), resolved, false)
+		if err != nil {
+			return t
+		}
+		return instance
+	case *types.Signature:
+		return types.NewSignatureType(nil, nil, nil, deepUnaliasTuple(t.Params()), deepUnaliasTuple(t.Results()), t.Variadic())
+	case *types.Struct:
+		fields := make([]*types.Var, t.NumFields())
+		tags := make([]string, t.NumFields())
+		for i := range fields {
+			field := t.Field(i)
+			fields[i] = types.NewField(field.Pos(), field.Pkg(), field.Name(), deepUnalias(field.Type()), field.Embedded())
+			tags[i] = t.Tag(i)
+		}
+		return types.NewStruct(fields, tags)
+	default:
+		return t
+	}
+}
+
+func deepUnaliasTuple(tuple *types.Tuple) *types.Tuple {
+	if tuple == nil {
+		return nil
+	}
+	vars := make([]*types.Var, tuple.Len())
+	for i := range vars {
+		v := tuple.At(i)
+		vars[i] = types.NewParam(v.Pos(), v.Pkg(), v.Name(), deepUnalias(v.Type()))
+	}
+	return types.NewTuple(vars...)
+}
+
+// containsAlias reports whether t mentions a type alias anywhere a printed type
+// string would show it. Named types are not entered beyond their type arguments,
+// so recursive types terminate.
+func containsAlias(t types.Type) bool {
+	switch t := t.(type) {
+	case *types.Alias:
+		return true
+	case *types.Pointer:
+		return containsAlias(t.Elem())
+	case *types.Slice:
+		return containsAlias(t.Elem())
+	case *types.Array:
+		return containsAlias(t.Elem())
+	case *types.Map:
+		return containsAlias(t.Key()) || containsAlias(t.Elem())
+	case *types.Chan:
+		return containsAlias(t.Elem())
+	case *types.Named:
+		args := t.TypeArgs()
+		for i := 0; args != nil && i < args.Len(); i++ {
+			if containsAlias(args.At(i)) {
+				return true
+			}
+		}
+		return false
+	case *types.Signature:
+		return tupleContainsAlias(t.Params()) || tupleContainsAlias(t.Results())
+	case *types.Struct:
+		for i := 0; i < t.NumFields(); i++ {
+			if containsAlias(t.Field(i).Type()) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+func tupleContainsAlias(tuple *types.Tuple) bool {
+	for i := 0; tuple != nil && i < tuple.Len(); i++ {
+		if containsAlias(tuple.At(i).Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// functionName is fn's identity: its `.String()`, except that the type arguments of
+// a generic instance and the receiver of a method of an instantiated type are
+// printed with their aliases resolved. SSA keeps one instance per identical list
+// of type arguments and names it by the spelling that created it first, and the
+// builder creates instances from every package in parallel, so the raw name of
+// an instance depends on scheduling and on code in unrelated packages.
+func functionName(fn *ssa.Function) string {
+	if fn == nil {
+		return ""
+	}
+	if parent := fn.Parent(); parent != nil {
+		for i, anon := range parent.AnonFuncs {
+			if anon == fn {
+				return fmt.Sprintf("%s$%d", functionName(parent), i+1)
+			}
+		}
+		return fn.String()
+	}
+	var receiver types.Type
+	switch {
+	case fn.Signature.Recv() != nil:
+		receiver = fn.Signature.Recv().Type()
+	case strings.HasSuffix(fn.Name(), "$bound") && len(fn.FreeVars) == 1:
+		receiver = fn.FreeVars[0].Type()
+	case strings.HasSuffix(fn.Name(), "$thunk") && fn.Signature.Params().Len() > 0:
+		receiver = fn.Signature.Params().At(0).Type()
+	}
+	if receiver != nil {
+		if !containsAlias(receiver) {
+			return fn.String()
+		}
+		return fmt.Sprintf("(%s).%s", deepUnalias(receiver).String(), fn.Name())
+	}
+	origin := fn.Origin()
+	targs := fn.TypeArgs()
+	if origin == nil || len(targs) == 0 {
+		return fn.String()
+	}
+	aliased := false
+	for _, targ := range targs {
+		aliased = aliased || containsAlias(targ)
+	}
+	if !aliased {
+		return fn.String()
+	}
+	var name strings.Builder
+	name.WriteString(origin.String())
+	name.WriteString("[")
+	for i, targ := range targs {
+		if i > 0 {
+			name.WriteString(", ")
+		}
+		name.WriteString(deepUnalias(targ).String())
+	}
+	name.WriteString("]")
+	return name.String()
 }
 
 func receiverTypeName(receiver string) string {
