@@ -78,10 +78,16 @@ A dynamic call with several candidates contributes one edge per candidate.
 Unresolved call sites are not edges; `polint unknowns --cap calls` lists them.
 Type conversions written like calls (`Kind(raw)`) are not edges either.
 
-External labels name what the scanned sources do not declare:
+External labels name what has no function of its own in the scanned sources:
 `go:func:fmt.Println` or `go:func:(*net/http.Client).Do` for a dependency's
-function or method, `go:builtin:panic` for a builtin, and the abstract callee a
-type-hierarchy edge names (`go:interface-method:...`, `go:func-value:...`).
+function or method, `go:builtin:panic` for a builtin, `go:func:example.com/app.Run$1`
+for a function literal, and the abstract callee a type-hierarchy edge names
+(`go:interface-method:...`, `go:func-value:...`).
+
+A function literal is part of the function that declares it: the calls written
+inside a literal are edges of that function. A call *of* a literal (a helper
+invoking the callback it was given) is an edge to the literal's label, so a walk
+does not continue from it into the declaring function's other calls.
 
 ### Precision and algorithm
 
@@ -112,6 +118,9 @@ limits:
 
 - Variable-type and class-hierarchy answers are over-approximations of the
   program as loaded, except for calls made through reflection or `unsafe`.
+  Neither distinguishes calling contexts: a helper that calls the function
+  value it was given has an edge to every function or method value any caller
+  passes it.
 - Dependencies are loaded from export data, so a callee whose concrete type
   exists only inside a dependency's code is not a candidate.
 - `_test.go` files are type-checked only when `[languages.go] include_tests`

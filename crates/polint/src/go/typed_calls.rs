@@ -175,11 +175,17 @@ impl GoFunctionNames {
     /// The polint function a callee is, if it has a declaration polint parsed.
     ///
     /// An instantiation of a generic function resolves through its generic
-    /// origin. A function literal (`pkg.F$1`), a bound method value
-    /// (`(T).M$bound`) or a thunk resolves to the function whose body declares
-    /// it: polint lowers a function literal as part of its enclosing function, so
-    /// the enclosing function is where the literal's calls are.
+    /// origin, and a bound method value (`(T).M$bound`) or a thunk to the method
+    /// it calls. A function literal (`pkg.F$1`) resolves to no function: polint
+    /// lowers it as part of the function that declares it, so its calls are
+    /// already that function's calls, while a call *of* the literal is not a
+    /// call of the declaring function. Naming the declaring function would let
+    /// every caller of a callback-taking helper appear to call each function
+    /// that passes it a literal, and everything those functions call.
     fn resolve(&self, callee: &str, origin: Option<&str>) -> Option<FunctionId> {
+        if is_function_literal(callee) {
+            return None;
+        }
         [Some(callee), origin]
             .into_iter()
             .flatten()
@@ -192,17 +198,25 @@ impl GoFunctionNames {
     }
 }
 
-/// `pkg.F$1$2` and `(T).M$bound` without the synthetic suffix the SSA builder
-/// appends to a function literal, a bound method value or a thunk.
+/// `(T).M$bound` and `(T).M$thunk` without the synthetic suffix the SSA builder
+/// appends to a bound method value or a thunk.
 fn declaring_function(name: &str) -> &str {
     name.find('$').map_or(name, |index| &name[..index])
+}
+
+/// Whether the SSA builder named a function literal: the declaring function's
+/// name followed by `$` and the literal's ordinal (`pkg.F$1`, `pkg.F$1$2`).
+fn is_function_literal(name: &str) -> bool {
+    name.split('$')
+        .nth(1)
+        .is_some_and(|suffix| suffix.starts_with(|c: char| c.is_ascii_digit()))
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use super::{declaring_function, go_typed_call_inputs};
+    use super::{declaring_function, go_typed_call_inputs, is_function_literal};
     use crate::analysis_api::FunctionFact;
     use crate::analysis_neutral::calls::facts::{CallAlgorithm, CallEdgeKind, CallPrecision};
     use crate::analysis_neutral::calls::typed::TypedCallSite;
@@ -408,19 +422,15 @@ mod tests {
     }
 
     #[test]
-    fn synthetic_suffixes_resolve_to_the_declaring_function() {
-        assert_eq!(
-            declaring_function("example.com/app.Run$1"),
-            "example.com/app.Run"
-        );
-        assert_eq!(
-            declaring_function("example.com/app.Run$1$2"),
-            "example.com/app.Run"
-        );
+    fn method_values_resolve_to_their_method_and_function_literals_to_nothing() {
         assert_eq!(
             declaring_function("(*example.com/app.Store).Save$bound"),
             "(*example.com/app.Store).Save"
         );
         assert_eq!(declaring_function("fmt.Println"), "fmt.Println");
+        assert!(is_function_literal("example.com/app.Run$1"));
+        assert!(is_function_literal("(*example.com/app.Store).Save$2$1"));
+        assert!(!is_function_literal("(*example.com/app.Store).Save$bound"));
+        assert!(!is_function_literal("example.com/app.Run"));
     }
 }

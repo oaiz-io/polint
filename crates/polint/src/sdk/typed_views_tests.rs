@@ -51,11 +51,15 @@ fn run() -> (tempfile::TempDir, KernelOutput) {
 }
 
 fn run_with_module(module: Option<&str>) -> (tempfile::TempDir, KernelOutput) {
+    run_source(module, SOURCE)
+}
+
+fn run_source(module: Option<&str>, source: &str) -> (tempfile::TempDir, KernelOutput) {
     let temp = tempfile::tempdir().expect("temp directory");
     if let Some(module) = module {
         std::fs::write(temp.path().join("go.mod"), module).expect("write go.mod");
     }
-    std::fs::write(temp.path().join("typed.go"), SOURCE).expect("write Go source");
+    std::fs::write(temp.path().join("typed.go"), source).expect("write Go source");
     let loaded = load_config(temp.path()).expect("default config loads");
     let plan = AnalysisPlan::from_capability_names_for_test(&["call_graph", "go_types"]);
     let output = AnalysisKernel::run(KernelInput {
@@ -279,4 +283,57 @@ fn data_flow_through_exactly_resolved_calls_stays_within_its_precision_ceiling()
     query.barriers = BarrierPattern::call_any(["redact"]);
     query.minimum_precision = PolicyPrecision::Heuristic;
     assert_eq!(DataFlow::build(&output.db).forbidden(query).len(), 1);
+}
+
+#[test]
+fn a_function_literal_passed_to_a_helper_is_not_reached_by_the_helpers_other_callers() {
+    const CALLBACKS: &str = r#"package typed
+
+type Tx struct{}
+
+func (t *Tx) Run(fn func() error) error { return fn() }
+
+func requireAdmin() {}
+
+func Guarded(t *Tx) error {
+	return t.Run(func() error {
+		requireAdmin()
+		return nil
+	})
+}
+
+func Open(t *Tx) error { return t.Run(func() error { return nil }) }
+"#;
+    let (_temp, output) = run_source(Some(MODULE), CALLBACKS);
+    let graph = CallGraph::build(&output.db);
+    let require_admin = function(&output, "requireAdmin");
+    let walk = CallGraphWalk::new(8);
+
+    assert!(
+        graph
+            .reachable(function(&output, "Guarded"), walk)
+            .contains(require_admin),
+        "a literal's calls are calls of the function that declares it"
+    );
+    assert!(
+        !graph
+            .reachable(function(&output, "Open"), walk)
+            .contains(require_admin),
+        "the helper's call of its callback reaches the literals, not their declaring functions"
+    );
+    let mut literals = graph
+        .callees(function(&output, "Tx.Run"))
+        .filter_map(|edge| match edge.callee {
+            CallGraphCallee::External(label) => Some(label),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    literals.sort_unstable();
+    assert_eq!(
+        literals,
+        [
+            "go:func:example.com/typed.Guarded$1",
+            "go:func:example.com/typed.Open$1"
+        ]
+    );
 }
