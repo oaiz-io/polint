@@ -1916,6 +1916,7 @@ mod tests {
             caller: site.caller,
             target_function: None,
             target_symbol: None,
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Unknown,
             algorithm: crate::analysis_neutral::calls::facts::CallAlgorithm::Unsupported,
             status: CallTargetStatus::SetupMissing,

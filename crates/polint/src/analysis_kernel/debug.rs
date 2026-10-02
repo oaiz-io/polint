@@ -2974,6 +2974,7 @@ mod calls_debug_json {
             caller: FunctionId::from_raw(0),
             target_function: Some(FunctionId::from_raw(1)),
             target_symbol: Some(SymbolId::from_raw(1)),
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,

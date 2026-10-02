@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::BTreeSet;
 
-pub const GO_SEMANTIC_SCHEMA: &str = "polint-go-semantic-3";
+pub const GO_SEMANTIC_SCHEMA: &str = "polint-go-semantic-4";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GoSemanticProtocolError {
@@ -118,6 +118,36 @@ pub struct GoSemanticRawFrame {
     pub peak_heap_bytes: u64,
     #[serde(default)]
     pub peak_rss_bytes: u64,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub static_callee_origin: String,
+    #[serde(default)]
+    pub receiver_type: String,
+    #[serde(default)]
+    pub callee_origin: String,
+    #[serde(default)]
+    pub algorithm: String,
+    #[serde(default)]
+    pub generic: String,
+    #[serde(default)]
+    pub generic_kind: String,
+    #[serde(default)]
+    pub type_args: Vec<String>,
+    #[serde(default)]
+    pub field_type: String,
+    #[serde(default)]
+    pub embedded: bool,
+    #[serde(default)]
+    pub tag: String,
+    #[serde(default)]
+    pub index: u32,
+    #[serde(default)]
+    pub interface: String,
+    #[serde(default)]
+    pub via_pointer: bool,
+    #[serde(default)]
+    pub variadic: bool,
 }
 
 /// One stage of the Go semantic sidecar, with the workload it saw.
@@ -294,6 +324,14 @@ fn allowed_kinds() -> BTreeSet<&'static str> {
         "instantiated_type",
         "dynamic_dispatch",
         "rta_edge",
+        "call_edge",
+        "interface",
+        "implements",
+        "instantiation",
+        "conversion",
+        "builtin_call",
+        "field",
+        "param",
     ]
     .into_iter()
     .collect()
@@ -305,14 +343,14 @@ mod tests {
 
     fn framed(row: &str) -> String {
         format!(
-            "{{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\",\"go_version\":\"go1.25.0\",\"x_tools_version\":\"v0.45.0\"}}\n{row}\n{{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\"}}\n"
+            "{{\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_begin\",\"go_version\":\"go1.25.0\",\"x_tools_version\":\"v0.45.0\"}}\n{row}\n{{\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_end\"}}\n"
         )
     }
 
     #[test]
     fn decode_ndjson_accepts_framed_rows() {
         let output = decode_ndjson_str(&framed(
-            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"package\",\"package_id\":\"p\"}",
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"package\",\"package_id\":\"p\"}",
         ))
         .expect("framed output decodes");
         assert_eq!(output.rows.len(), 1);
@@ -321,7 +359,7 @@ mod tests {
     #[test]
     fn decode_ndjson_collects_phase_rows_without_treating_them_as_facts() {
         let output = decode_ndjson_str(&framed(
-            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"phase\",\"phase\":\"packages_load\",\
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"phase\",\"phase\":\"packages_load\",\
              \"elapsed_ms\":1200,\"packages\":7,\"compiled_go_files\":31,\"deps_with_types\":94,\
              \"rows_emitted\":0,\"peak_heap_bytes\":4096}",
         ))
@@ -337,8 +375,8 @@ mod tests {
     #[test]
     fn decode_ndjson_reads_session_totals() {
         let output = decode_ndjson_str(
-            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n\
-             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\",\"elapsed_ms\":42,\"packages\":3,\
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_begin\"}\n\
+             {\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_end\",\"elapsed_ms\":42,\"packages\":3,\
              \"peak_heap_bytes\":4096,\"peak_rss_bytes\":8192}\n",
         )
         .expect("totals decode");
@@ -352,7 +390,7 @@ mod tests {
     #[test]
     fn decode_ndjson_accepts_a_sidecar_that_reports_no_phases() {
         let output = decode_ndjson_str(&framed(
-            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"package\",\"package_id\":\"p\"}",
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"package\",\"package_id\":\"p\"}",
         ))
         .expect("framed output decodes");
 
@@ -377,7 +415,7 @@ mod tests {
     #[test]
     fn decode_ndjson_rejects_unknown_frame_kind() {
         let err = decode_ndjson_str(&framed(
-            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"mystery\"}",
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"mystery\"}",
         ))
         .unwrap_err();
         assert!(err.to_string().contains("unknown Go semantic frame kind"));
@@ -386,7 +424,7 @@ mod tests {
     #[test]
     fn decode_ndjson_rejects_missing_terminator() {
         let err =
-            decode_ndjson_str("{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n")
+            decode_ndjson_str("{\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_begin\"}\n")
                 .unwrap_err();
         assert_eq!(err, GoSemanticProtocolError::MissingEnd);
     }
@@ -394,9 +432,9 @@ mod tests {
     #[test]
     fn decode_ndjson_rejects_rows_after_session_end() {
         let err = decode_ndjson_str(
-            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n\
-             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_end\"}\n\
-             {\"schema\":\"polint-go-semantic-3\",\"kind\":\"package\",\"package_id\":\"p\"}\n",
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_begin\"}\n\
+             {\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_end\"}\n\
+             {\"schema\":\"polint-go-semantic-4\",\"kind\":\"package\",\"package_id\":\"p\"}\n",
         )
         .unwrap_err();
         assert_eq!(

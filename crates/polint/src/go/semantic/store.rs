@@ -5,9 +5,12 @@ use crate::internal_core::{StableKeyId, StableKeyInterner};
 
 use crate::go::error::AnalysisError;
 use crate::go::semantic::facts::{
-    GoSemanticAddressTakenFact, GoSemanticCallsiteFact, GoSemanticDynamicDispatchFact,
-    GoSemanticFunctionFact, GoSemanticInstantiatedTypeFact, GoSemanticMethodSetFact,
-    GoSemanticPackageErrorFact, GoSemanticPackageFact, GoSemanticRtaEdgeFact,
+    GoSemanticAddressTakenFact, GoSemanticBuiltinCallFact, GoSemanticCallEdgeFact,
+    GoSemanticCallsiteFact, GoSemanticConversionFact, GoSemanticDynamicDispatchFact,
+    GoSemanticFieldFact, GoSemanticFunctionFact, GoSemanticImplementsFact,
+    GoSemanticInstantiatedTypeFact, GoSemanticInstantiationFact, GoSemanticInterfaceFact,
+    GoSemanticMethodSetFact, GoSemanticPackageErrorFact, GoSemanticPackageFact,
+    GoSemanticParamFact, GoSemanticRtaEdgeFact,
 };
 use crate::go::semantic::validate::validate_go_semantic_output;
 
@@ -61,6 +64,27 @@ pub struct GoSemanticFactsOutput {
     pub dynamic_dispatch: Vec<GoSemanticDynamicDispatchFact>,
     pub rta_edges: Vec<GoSemanticRtaEdgeFact>,
     pub package_errors: Vec<GoSemanticPackageErrorFact>,
+    pub call_edges: Vec<GoSemanticCallEdgeFact>,
+    pub interfaces: Vec<GoSemanticInterfaceFact>,
+    pub implements: Vec<GoSemanticImplementsFact>,
+    pub instantiations: Vec<GoSemanticInstantiationFact>,
+    pub conversions: Vec<GoSemanticConversionFact>,
+    pub builtin_calls: Vec<GoSemanticBuiltinCallFact>,
+    pub fields: Vec<GoSemanticFieldFact>,
+    pub params: Vec<GoSemanticParamFact>,
+}
+
+/// Sorts a typed family by stable-key text, keeps the first row of each key (a
+/// package and its test variant emit the same declarations), and renumbers the
+/// survivors densely.
+macro_rules! normalize_keyed_family {
+    ($rows:expr, $interner:expr, $id:path) => {{
+        $rows.sort_by_cached_key(|row| $interner.resolve(row.stable_key));
+        $rows.dedup_by(|left, right| left.stable_key == right.stable_key);
+        for (index, fact) in $rows.iter_mut().enumerate() {
+            fact.id = $id(index as u64);
+        }
+    }};
 }
 
 impl GoSemanticFactsOutput {
@@ -141,6 +165,47 @@ impl GoSemanticFactsOutput {
         for (index, fact) in self.package_errors.iter_mut().enumerate() {
             fact.id = crate::go::semantic::facts::GoSemanticPackageErrorId(index as u64);
         }
+
+        normalize_keyed_family!(
+            self.call_edges,
+            interner,
+            crate::go::semantic::facts::GoSemanticCallEdgeId
+        );
+        normalize_keyed_family!(
+            self.interfaces,
+            interner,
+            crate::go::semantic::facts::GoSemanticInterfaceId
+        );
+        normalize_keyed_family!(
+            self.implements,
+            interner,
+            crate::go::semantic::facts::GoSemanticImplementsId
+        );
+        normalize_keyed_family!(
+            self.instantiations,
+            interner,
+            crate::go::semantic::facts::GoSemanticInstantiationId
+        );
+        normalize_keyed_family!(
+            self.conversions,
+            interner,
+            crate::go::semantic::facts::GoSemanticConversionId
+        );
+        normalize_keyed_family!(
+            self.builtin_calls,
+            interner,
+            crate::go::semantic::facts::GoSemanticBuiltinCallId
+        );
+        normalize_keyed_family!(
+            self.fields,
+            interner,
+            crate::go::semantic::facts::GoSemanticFieldId
+        );
+        normalize_keyed_family!(
+            self.params,
+            interner,
+            crate::go::semantic::facts::GoSemanticParamId
+        );
         self
     }
 
@@ -496,6 +561,9 @@ mod tests {
             package_path: "example.com/pkg".to_string(),
             caller: "example.com/pkg.main".to_string(),
             static_callee: None,
+            static_callee_origin: None,
+            receiver_type: None,
+            mode: crate::go::semantic::facts::GoCallMode::Call,
             status: GoSemanticCallStatus::UnresolvedDynamic,
             reason: None,
             relative_file: None,

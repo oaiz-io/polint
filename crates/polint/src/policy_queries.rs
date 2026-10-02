@@ -6003,6 +6003,7 @@ mod tests {
             caller,
             target_function: Some(callee),
             target_symbol: None,
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,

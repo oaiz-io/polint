@@ -99,6 +99,7 @@
             caller: FunctionId::from_raw(caller),
             target_function: Some(FunctionId::from_raw(callee)),
             target_symbol: None,
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: SummaryRouteCallStatus::Resolved,

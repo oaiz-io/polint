@@ -40,6 +40,10 @@ const EMBEDDED_GO_FRONTEND_FILES: &[(&str, &str)] = &[
         "internal/semantic/rss_other.go",
         include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/rss_other.go"),
     ),
+    (
+        "internal/semantic/typed.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/typed.go"),
+    ),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -399,6 +399,7 @@ mod scc_closure_provider {
             caller: FunctionId::from_raw(caller),
             target_function: Some(FunctionId::from_raw(target_func)),
             target_symbol: None,
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,

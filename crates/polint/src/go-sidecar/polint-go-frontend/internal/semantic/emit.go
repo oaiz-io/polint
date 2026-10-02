@@ -2,7 +2,6 @@ package semantic
 
 import (
 	"fmt"
-	"go/ast"
 	"go/token"
 	"go/types"
 	"io"
@@ -22,7 +21,7 @@ import (
 	"golang.org/x/tools/go/ssa/ssautil"
 )
 
-const SchemaVersion = "polint-go-semantic-3"
+const SchemaVersion = "polint-go-semantic-4"
 const XToolsVersion = "v0.49.0"
 const topologyManifestMaxBytes int64 = 1_048_576
 
@@ -173,6 +172,14 @@ type emitter struct {
 	// genuinely-distinct functions never share a key; a package without the cross-path
 	// collision never repeats one, so its rows stay byte-identical.
 	emittedFunctionKeys map[string]bool
+	// emittedTypedKeys makes the type-fact emitters idempotent per stable key: a
+	// package and its test variant declare the same types, fields and parameters.
+	emittedTypedKeys map[string]bool
+	// dynamicSites collects the interface and function-value calls whose
+	// callees the call graph resolves after every call site is emitted.
+	dynamicSites []dynamicSite
+	// callIndexes holds one call-expression index per function body.
+	callIndexes map[*ssa.Function]*callIndex
 }
 
 func Emit(config Config) ([]Row, error) {
@@ -231,6 +238,8 @@ func Emit(config Config) ([]Row, error) {
 		scopeFiles:           config.ScopeFiles,
 		emittedMethodSetKeys: make(map[string]bool),
 		emittedFunctionKeys:  make(map[string]bool),
+		emittedTypedKeys:     make(map[string]bool),
+		callIndexes:          make(map[*ssa.Function]*callIndex),
 	}
 	e.add(Row{
 		"kind":            "session_begin",
@@ -282,6 +291,10 @@ func Emit(config Config) ([]Row, error) {
 		}
 	}
 	e.addPhase(timer, "emit_rows", workload)
+	e.emitTypeFacts(pkgs)
+	e.addPhase(timer, "type_facts", workload)
+	e.emitCallEdges(prog, e.dynamicSites)
+	e.addPhase(timer, "call_graph", workload)
 	if config.EmitRTAEdges {
 		e.emitRTAEdges(ssaPkgs)
 	}
@@ -390,6 +403,11 @@ var fileAnchoredKinds = map[string]bool{
 	"method":        true,
 	"init_function": true,
 	"callsite":      true,
+	"call_edge":     true,
+	"param":         true,
+	"instantiation": true,
+	"conversion":    true,
+	"builtin_call":  true,
 }
 
 // inScope answers whether the kernel would keep this row.
@@ -473,6 +491,7 @@ func (e *emitter) emitSSAPackage(pkg *ssa.Package, instantiations []instantiatio
 	functions := ssaFunctions(pkg)
 	for _, fn := range functions {
 		e.emitFunction(pkg, fn)
+		e.emitParams(pkg, fn)
 		e.emitCallsites(pkg, fn)
 		e.emitInstantiatedTypes(pkg, fn)
 		e.emitAddressTaken(pkg, fn)
@@ -642,6 +661,11 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 	if fn == nil {
 		return
 	}
+	index := e.callIndexes[fn]
+	if index == nil {
+		index = newCallIndex(fn.Syntax())
+		e.callIndexes[fn] = index
+	}
 	for _, block := range fn.Blocks {
 		for _, instr := range block.Instrs {
 			call, ok := instr.(ssa.CallInstruction)
@@ -655,11 +679,21 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				"package_path": packagePath(pkg),
 				"caller":       fn.String(),
 			}
+			if mode := callMode(call); mode != "" {
+				row["mode"] = mode
+			}
 			dynamic := false
 			switch {
 			case common != nil && common.StaticCallee() != nil:
-				row["static_callee"] = common.StaticCallee().String()
+				callee := common.StaticCallee()
+				row["static_callee"] = callee.String()
 				row["status"] = "resolved_static"
+				if origin := callee.Origin(); origin != nil {
+					row["static_callee_origin"] = origin.String()
+				}
+				if callee.Signature != nil && callee.Signature.Recv() != nil && len(common.Args) > 0 {
+					row["receiver_type"] = canonicalTypeString(common.Args[0].Type())
+				}
 			case common != nil && isBuiltinCall(common):
 				// FINDING 4: a builtin call (`len`, `append`, `recover`, ...) has a nil
 				// StaticCallee() because its callee is a *ssa.Builtin, not an
@@ -673,9 +707,12 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				row["status"] = "unresolved_dynamic"
 				row["reason"] = "interface or func-value dynamic dispatch"
 				dynamic = true
+				if common != nil && common.IsInvoke() && common.Value != nil {
+					row["receiver_type"] = canonicalTypeString(common.Value.Type())
+				}
 			}
 			stableParts := []string{packageID(pkg), fn.String(), e.positionKey(call.Pos())}
-			if syntax := callSyntax(fn, call); syntax != nil {
+			if syntax := index.syntaxFor(call); syntax != nil {
 				if pos := e.positionSpan(syntax.Pos(), syntax.End()); pos != nil {
 					file := posFile(e.fset, syntax.Pos(), e.root)
 					row["file"] = file
@@ -697,6 +734,14 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 			e.add(row)
 			if dynamic {
 				e.emitDynamicDispatch(pkg, fn, common, callsiteKey)
+				file, _ := row["file"].(string)
+				e.dynamicSites = append(e.dynamicSites, dynamicSite{
+					pkg:    pkg,
+					caller: fn,
+					call:   call,
+					key:    callsiteKey,
+					file:   file,
+				})
 			}
 		}
 	}
@@ -873,34 +918,6 @@ func isBuiltinCall(common *ssa.CallCommon) bool {
 	}
 	_, ok := common.Value.(*ssa.Builtin)
 	return ok
-}
-
-func callSyntax(fn *ssa.Function, call ssa.CallInstruction) ast.Node {
-	if fn == nil || !call.Pos().IsValid() {
-		return nil
-	}
-	syntax := fn.Syntax()
-	if syntax == nil {
-		return nil
-	}
-	pos := call.Pos()
-	var best ast.Node
-	ast.Inspect(syntax, func(node ast.Node) bool {
-		if node == nil {
-			return true
-		}
-		expr, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		if expr.Pos() <= pos && pos < expr.End() {
-			if best == nil || expr.End()-expr.Pos() < best.End()-best.Pos() {
-				best = expr
-			}
-		}
-		return true
-	})
-	return best
 }
 
 // addMethodSet emits a single `method_set` row for `identity` (already the canonical,
@@ -1114,10 +1131,18 @@ func ssaFunctions(pkg *ssa.Package) []*ssa.Function {
 		case *ssa.Function:
 			collectWithAnon(value, seen, &functions)
 		case *ssa.Type:
-			methodSet := pkg.Prog.MethodSets.MethodSet(types.NewPointer(value.Type()))
-			for i := 0; i < methodSet.Len(); i++ {
-				if fn := pkg.Prog.MethodValue(methodSet.At(i)); fn != nil {
-					collectWithAnon(fn, seen, &functions)
+			// The value type's method set yields the declared value-receiver
+			// methods; the pointer type's yields the pointer-receiver methods and
+			// the wrappers SSA synthesizes for value methods called through a
+			// pointer. Only the declared function has the method's body, so
+			// without the first set the calls inside a value-receiver method
+			// would never be emitted.
+			for _, typ := range []types.Type{value.Type(), types.NewPointer(value.Type())} {
+				methodSet := pkg.Prog.MethodSets.MethodSet(typ)
+				for i := 0; i < methodSet.Len(); i++ {
+					if fn := pkg.Prog.MethodValue(methodSet.At(i)); fn != nil {
+						collectWithAnon(fn, seen, &functions)
+					}
 				}
 			}
 		}

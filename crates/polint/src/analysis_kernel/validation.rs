@@ -2533,6 +2533,7 @@ mod calls {
                     reason: Some(UnresolvedCallReason::DynamicProperty),
                     target_function: None,
                     target_symbol: None,
+                    synthetic_target: None,
                     stable_key: crate::core::StableKeyId(1),
                     ..target(1, CallSiteId(0), "call-target:ok")
                 },
@@ -2541,6 +2542,7 @@ mod calls {
                     status: CallTargetStatus::Unresolved,
                     target_function: None,
                     target_symbol: None,
+                    synthetic_target: None,
                     stable_key: crate::core::StableKeyId(2),
                     ..target(2, CallSiteId(0), "call-target:ok")
                 },
@@ -2601,6 +2603,7 @@ mod calls {
                 reason: Some(UnresolvedCallReason::FrameworkDispatch),
                 target_function: Some(FunctionId::from_raw(1)),
                 target_symbol: Some(SymbolId::from_raw(1)),
+                synthetic_target: None,
                 stable_key: crate::core::StableKeyId(1),
                 ..target(0, CallSiteId(0), "call-target:ok")
             }],
@@ -2807,6 +2810,7 @@ mod calls {
             caller: FunctionId::from_raw(0),
             target_function: Some(FunctionId::from_raw(1)),
             target_symbol: Some(SymbolId::from_raw(1)),
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,

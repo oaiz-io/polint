@@ -37,6 +37,11 @@ pub struct CallTargetFact {
     pub caller: FunctionId,
     pub target_function: Option<FunctionId>,
     pub target_symbol: Option<SymbolId>,
+    /// The callee's identity when it has neither an in-repository function nor a
+    /// symbol: a dependency's function or method named by the typed frontend
+    /// (`fmt.Println`), or a `go:`-prefixed label for a call expression that is a
+    /// builtin or a conversion.
+    pub synthetic_target: Option<String>,
     pub edge_kind: CallEdgeKind,
     pub algorithm: CallAlgorithm,
     pub status: CallTargetStatus,
@@ -263,6 +268,7 @@ mod tests {
             caller: site.caller,
             target_function: Some(FunctionId::from_raw(10)),
             target_symbol: Some(SymbolId::from_raw(11)),
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,

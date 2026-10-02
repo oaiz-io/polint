@@ -32,6 +32,7 @@ mod syntax_store;
 mod test_cache;
 #[cfg(all(test, feature = "lang-go"))]
 mod tests;
+pub(crate) mod typed_calls;
 
 /// Re-export for `polint::_bench::go`; production callers use the plan-aware entrypoint.
 #[cfg(feature = "lang-go")]

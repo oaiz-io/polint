@@ -35,10 +35,66 @@ pub enum GoSemanticFunctionKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticCallEdgeId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticInterfaceId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticImplementsId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticInstantiationId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticConversionId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticFieldId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticBuiltinCallId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticParamId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GoSemanticCallStatus {
     ResolvedStatic,
     UnresolvedDynamic,
     Unsupported,
+}
+
+/// How a call instruction starts its callee.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub enum GoCallMode {
+    #[default]
+    Call,
+    /// A `go` statement.
+    Go,
+    /// A `defer` statement.
+    Defer,
+}
+
+/// Which call-graph algorithm produced a dynamic call's candidate callee.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GoCallEdgeAlgorithm {
+    /// Variable type analysis: the callee's type or function value reaches the site.
+    Vta,
+    /// Class hierarchy analysis: the callee's type implements the called interface,
+    /// or its signature matches the called function value. Used only for a site
+    /// variable type analysis gives no callee.
+    Cha,
+    /// The abstract interface method an interface call invokes, for a site neither
+    /// analysis gives a callee: every implementation of the interface lives in a
+    /// dependency loaded without bodies.
+    TypeHierarchy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GoGenericKind {
+    Type,
+    Func,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,8 +132,128 @@ pub struct GoSemanticCallsiteFact {
     pub package_path: String,
     pub caller: String,
     pub static_callee: Option<String>,
+    /// The generic function a static callee instantiates (`pkg.Map` for
+    /// `pkg.Map[int string]`), which is the function that has a declaration.
+    pub static_callee_origin: Option<String>,
+    /// The static type of the receiver operand of a method call: the concrete
+    /// (possibly pointer) type for a static method, the interface for an
+    /// interface call.
+    pub receiver_type: Option<String>,
+    pub mode: GoCallMode,
     pub status: GoSemanticCallStatus,
     pub reason: Option<String>,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A candidate callee of a dynamic (interface or function-value) call site.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticCallEdgeFact {
+    pub id: GoSemanticCallEdgeId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub caller: String,
+    pub callsite_stable_key: StableKeyId,
+    pub callee: String,
+    pub callee_origin: Option<String>,
+    pub algorithm: GoCallEdgeAlgorithm,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+}
+
+/// An interface type declared in a loaded package, with its method names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticInterfaceFact {
+    pub id: GoSemanticInterfaceId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub type_name: String,
+    pub methods: Vec<String>,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A concrete type of a loaded package that implements an interface, directly
+/// or (`via_pointer`) only through a pointer to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticImplementsFact {
+    pub id: GoSemanticImplementsId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub type_name: String,
+    pub interface: String,
+    pub via_pointer: bool,
+}
+
+/// A generic type or function instantiation written in source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticInstantiationFact {
+    pub id: GoSemanticInstantiationId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub generic: String,
+    pub generic_kind: GoGenericKind,
+    pub type_args: Vec<String>,
+    pub type_name: String,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A call expression that is a type conversion, not a call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticConversionFact {
+    pub id: GoSemanticConversionId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub type_name: String,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A call expression that calls a builtin (`len`, `make`, `panic`, ...).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticBuiltinCallFact {
+    pub id: GoSemanticBuiltinCallId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub name: String,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A field of a struct type declared in a loaded package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticFieldFact {
+    pub id: GoSemanticFieldId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub owner: String,
+    pub name: String,
+    pub index: u32,
+    pub field_type: String,
+    pub embedded: bool,
+    pub tag: Option<String>,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A declared parameter of a function with source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticParamFact {
+    pub id: GoSemanticParamId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    pub function: String,
+    pub index: u32,
+    pub name: String,
+    pub type_name: String,
+    pub variadic: bool,
     pub relative_file: Option<String>,
     pub file: Option<FileId>,
     pub span: Option<Span>,

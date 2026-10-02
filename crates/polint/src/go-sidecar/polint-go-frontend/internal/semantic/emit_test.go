@@ -122,7 +122,7 @@ func main() {
 	assertKind(t, rows, "instantiated_type")
 	assertKind(t, rows, "address_taken")
 	assertKind(t, rows, "dynamic_dispatch")
-	assertSchemaVersion(t, rows, "polint-go-semantic-3")
+	assertSchemaVersion(t, rows, SchemaVersion)
 	assertDynamicDispatchJoinsCallsite(t, rows)
 }
 

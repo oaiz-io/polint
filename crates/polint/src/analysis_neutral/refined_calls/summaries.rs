@@ -60,7 +60,7 @@ fn edge_from_summary(
         caller: target.caller,
         target_function: target.target_function,
         target_symbol: target.target_symbol,
-        synthetic_target: None,
+        synthetic_target: target.synthetic_target.clone(),
         language: db
             .call_sites()
             .iter()
@@ -232,6 +232,7 @@ mod tests {
                 caller,
                 target_function: Some(callee),
                 target_symbol: Some(SymbolId::from_raw(0)),
+                synthetic_target: None,
                 edge_kind: CallEdgeKind::Direct,
                 algorithm: CallAlgorithm::DirectReference,
                 status: CallTargetStatus::Resolved,

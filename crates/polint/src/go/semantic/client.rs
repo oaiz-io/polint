@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn missing_terminator_from_fake_sidecar_is_typed_protocol_error() {
         let command = fake_stdout_command(
-            "{\"schema\":\"polint-go-semantic-3\",\"kind\":\"session_begin\"}\n",
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"session_begin\"}\n",
         );
         let stdout = run_with_timeout(command, Duration::from_secs(5), Path::new("."))
             .expect("fake sidecar exits");

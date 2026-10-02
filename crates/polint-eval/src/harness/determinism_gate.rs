@@ -331,6 +331,14 @@ fn go_rta_solver_output_is_byte_identical_under_permuted_fact_insertion_order() 
         dynamic_dispatch: output.db.go_semantic_dynamic_dispatch().to_vec(),
         rta_edges: output.db.go_semantic_rta_edges().to_vec(),
         package_errors: output.db.go_semantic_package_errors().to_vec(),
+        call_edges: output.db.go_semantic_call_edges().to_vec(),
+        interfaces: output.db.go_semantic_interfaces().to_vec(),
+        implements: output.db.go_semantic_implements().to_vec(),
+        instantiations: output.db.go_semantic_instantiations().to_vec(),
+        conversions: output.db.go_semantic_conversions().to_vec(),
+        builtin_calls: output.db.go_semantic_builtin_calls().to_vec(),
+        fields: output.db.go_semantic_fields().to_vec(),
+        params: output.db.go_semantic_params().to_vec(),
     };
     // The fixture must genuinely exercise the RTA path (a resolved interface edge), or this
     // proof would be vacuous over an empty edge set.

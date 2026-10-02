@@ -1867,6 +1867,55 @@ impl AnalysisDb {
         &self.go_semantic_store().output().package_errors
     }
 
+    pub(crate) fn go_semantic_call_edges(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticCallEdgeFact] {
+        &self.go_semantic_store().output().call_edges
+    }
+
+    pub(crate) fn go_semantic_conversions(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticConversionFact] {
+        &self.go_semantic_store().output().conversions
+    }
+
+    #[cfg(test)]
+    pub(crate) fn go_semantic_interfaces(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticInterfaceFact] {
+        &self.go_semantic_store().output().interfaces
+    }
+
+    #[cfg(test)]
+    pub(crate) fn go_semantic_implements(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticImplementsFact] {
+        &self.go_semantic_store().output().implements
+    }
+
+    #[cfg(test)]
+    pub(crate) fn go_semantic_instantiations(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticInstantiationFact] {
+        &self.go_semantic_store().output().instantiations
+    }
+
+    #[cfg(test)]
+    pub(crate) fn go_semantic_fields(&self) -> &[crate::go::semantic::facts::GoSemanticFieldFact] {
+        &self.go_semantic_store().output().fields
+    }
+
+    #[cfg(test)]
+    pub(crate) fn go_semantic_params(&self) -> &[crate::go::semantic::facts::GoSemanticParamFact] {
+        &self.go_semantic_store().output().params
+    }
+
+    pub(crate) fn go_semantic_builtin_calls(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticBuiltinCallFact] {
+        &self.go_semantic_store().output().builtin_calls
+    }
+
     #[allow(
         dead_code,
         reason = "Retained for AnalysisDb until dual accessors are removed."

@@ -207,13 +207,14 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
         if target.status == CallTargetStatus::Resolved
             && target.target_function.is_none()
             && target.target_symbol.is_none()
+            && target.synthetic_target.is_none()
         {
             push_call_diagnostic(
                 diagnostics,
                 "CallTarget",
                 &stable_key,
                 "target",
-                "resolved call target requires a function or symbol",
+                "resolved call target requires a function, a symbol or a synthetic callee",
             );
         }
         if unresolved_status(target.status) && target.reason.is_none() {
@@ -404,6 +405,7 @@ mod tests {
                     reason: Some(UnresolvedCallReason::DynamicProperty),
                     target_function: None,
                     target_symbol: None,
+                    synthetic_target: None,
                     stable_key: crate::internal_core::StableKeyId(1),
                     ..target(1, CallSiteId(0), "call-target:ok")
                 },
@@ -412,6 +414,7 @@ mod tests {
                     status: CallTargetStatus::Unresolved,
                     target_function: None,
                     target_symbol: None,
+                    synthetic_target: None,
                     stable_key: crate::internal_core::StableKeyId(2),
                     ..target(2, CallSiteId(0), "call-target:ok")
                 },
@@ -473,6 +476,7 @@ mod tests {
                 reason: Some(UnresolvedCallReason::FrameworkDispatch),
                 target_function: Some(FunctionId::from_raw(1)),
                 target_symbol: Some(SymbolId::from_raw(1)),
+                synthetic_target: None,
                 stable_key: crate::internal_core::StableKeyId(1),
                 ..target(0, CallSiteId(0), "call-target:ok")
             }],
@@ -682,6 +686,7 @@ mod tests {
             caller: FunctionId::from_raw(0),
             target_function: Some(FunctionId::from_raw(1)),
             target_symbol: Some(SymbolId::from_raw(1)),
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,
