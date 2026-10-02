@@ -85,6 +85,27 @@ pub fn derive_refined_calls_with_cache_stats(
         tracing::debug!(target: "polint::kernel::stage", provider = REFINED_CALLS_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
         started = std::time::Instant::now();
     };
+    // How many edges each tier adds, and how many of those are Go's, so a
+    // stage log can say which tiers a scan actually depends on.
+    let mut tier_edges_seen = 0_usize;
+    let mut tier_edges = |tier: &'static str, edges: &[RefinedCallEdgeFact]| {
+        let added = &edges[tier_edges_seen.min(edges.len())..];
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            provider = REFINED_CALLS_PROVIDER_ID,
+            tier,
+            added = added.len(),
+            go = added.iter().filter(|edge| edge.language == Language::Go).count(),
+            go_resolved = added
+                .iter()
+                .filter(|edge| {
+                    edge.language == Language::Go && edge.status == CallTargetStatus::Resolved
+                })
+                .count(),
+            "refined tier edges"
+        );
+        tier_edges_seen = edges.len();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, REFINED_CALLS_PROVIDER_ID);
@@ -124,18 +145,22 @@ pub fn derive_refined_calls_with_cache_stats(
         ));
     }
     checkpoint("base_targets");
+    tier_edges("base_targets", &output.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::framework::derive_framework_refinements(db).edges,
     );
     checkpoint("framework");
+    tier_edges("framework", &output.edges);
     output
         .edges
         .extend(crate::analysis_neutral::refined_calls::go::derive_go_refinements(db).edges);
     checkpoint("go");
+    tier_edges("go", &output.edges);
     output
         .edges
         .extend(crate::analysis_neutral::refined_calls::ts_js::derive_ts_js_refinements(db).edges);
     checkpoint("ts_js");
+    tier_edges("ts_js", &output.edges);
     // The typed tier runs alongside the points-to tier rather than replacing
     // it: both describe the same call sites, and a consumer picks by tier. The
     // heap tier is the fallback whenever the sidecar produced nothing.
@@ -160,20 +185,24 @@ pub fn derive_refined_calls_with_cache_stats(
     }
     output.edges.extend(ts_typed.edges);
     checkpoint("ts_types");
+    tier_edges("ts_types", &output.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::summaries::derive_summary_assisted_refinements(db)
             .edges,
     );
     checkpoint("summaries");
+    tier_edges("summaries", &output.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::extensions::derive_extension_refinements(db).edges,
     );
     checkpoint("extensions");
+    tier_edges("extensions", &output.edges);
     output.edges.extend(
         derive_solver_refinements_with_inputs(db, go_semantic_functions, go_semantic_callsites)
             .edges,
     );
     checkpoint("solver");
+    tier_edges("solver", &output.edges);
     output = finalized_output(interner, output);
     checkpoint("normalize");
 

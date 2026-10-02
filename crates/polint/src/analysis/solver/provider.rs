@@ -64,6 +64,11 @@ pub(crate) fn derive_solver_with_cache_stats(
     type_value_alias_output_digest: Digest,
     go_semantic_output_digest: Digest,
 ) -> SolverProviderRunOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = SOLVER_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, SOLVER_PROVIDER_ID);
@@ -78,7 +83,9 @@ pub(crate) fn derive_solver_with_cache_stats(
     // is the only indirect-call resolver for JavaScript and TypeScript.
     let constraints = db.semantic_constraints().to_vec();
     let engine = SolverEngine::new(solver_policies_for_db(db, &budget), budget);
+    checkpoint("policies");
     let output = engine.run_to_solver_output(interner, &constraints);
+    checkpoint("engine");
 
     // Step: digest over the stored stable KEYS + upstream digests + the budget.
     let output_digest = solver_output_digest(
@@ -106,13 +113,16 @@ pub(crate) fn derive_solver_with_cache_stats(
         diagnostics.push(budget_exceeded_diagnostic(&output.budget_reasons));
     }
 
+    checkpoint("digest_validate");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
     // Step: store (assigns dense IDs + referentially validates inside
     // from_output). On store error the db keeps its prior state and the facts the
     // digest certifies were not persisted, so return output_digest: None.
-    match db.replace_solver_facts(output) {
+    let replaced = db.replace_solver_facts(output);
+    checkpoint("store_metadata");
+    match replaced {
         Ok(()) => SolverProviderRunOutput {
             diagnostics,
             cache_stats,

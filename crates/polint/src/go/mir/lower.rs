@@ -52,12 +52,24 @@ pub fn lower_go_mir_by_file(db: &(impl AnalysisHost + Sync)) -> Vec<MirOutput> {
         .collect::<Vec<_>>();
     files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
-    files
+    // Each file lowers against its own interner overlay, and the overlays are
+    // folded back in file order, so every key gets the same id on every run and
+    // at every job count however the files were scheduled.
+    let lowered = files
         .par_iter()
         .map(|file| {
+            let overlay = interner.overlay();
             let mut lowering = GoMirLowering::default();
-            lowering.lower_file(interner, db, &index, file);
-            lowering.finish(interner)
+            lowering.lower_file(&overlay, db, &index, file);
+            (lowering.finish(&overlay), overlay)
+        })
+        .collect::<Vec<_>>();
+    lowered
+        .into_iter()
+        .map(|(mut output, overlay)| {
+            let remap = interner.absorb(&overlay);
+            output.remap_stable_keys(|id| remap.apply(id));
+            output
         })
         .collect()
 }

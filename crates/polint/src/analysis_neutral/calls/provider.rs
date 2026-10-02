@@ -45,10 +45,18 @@ pub fn derive_calls_with_cache_stats(
     upstream_syntax_output_digests: Vec<Digest>,
     typed: TypedCalls<'_>,
 ) -> CallsProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.calls", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let mut sites = extract_call_sites(db);
+    checkpoint("extract_sites");
     let mut targets = resolve_direct_call_targets(db, &sites);
+    checkpoint("direct_targets");
     let interner = db.stable_key_interner();
     let (typed_targets, typed_sites, report) = typed_call_targets(&interner, &sites, typed.inputs);
+    checkpoint("typed_join");
     if report.sites > 0 {
         tracing::debug!(
             target: "polint::kernel::stage",
@@ -110,6 +118,7 @@ pub fn derive_calls_with_cache_stats(
         unresolved,
     }
     .normalized(&db.stable_key_interner());
+    checkpoint("unresolved_normalize");
     let output_digest = calls_output_digest(
         db,
         manifest,
@@ -122,10 +131,13 @@ pub fn derive_calls_with_cache_stats(
         &typed.output_digest,
         &output,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
-    match db.replace_call_facts(output) {
+    let replaced = db.replace_call_facts(output);
+    checkpoint("store_metadata");
+    match replaced {
         Ok(()) => CallsProviderOutput {
             diagnostics: Vec::new(),
             cache_stats,

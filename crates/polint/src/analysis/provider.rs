@@ -31,19 +31,29 @@ pub(crate) fn derive_semantic_mir_with_cache_stats(
     symbol_graph_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
 ) -> SemanticMirProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.semantic_mir", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     #[cfg(feature = "lang-go")]
     let go_outputs = lower_go_mir_by_file(db);
     #[cfg(not(feature = "lang-go"))]
     let go_outputs: Vec<MirOutput> = Vec::new();
+    checkpoint("lower_go");
+    #[cfg(feature = "lang-typescript")]
+    let ts_output = lower_ts_mir(db);
+    checkpoint("lower_ts");
     let output = crate::analysis_neutral::mir_body_compose::merge_language_outputs(
         go_outputs.into_iter().chain([
             #[cfg(feature = "lang-typescript")]
-            lower_ts_mir(db),
+            ts_output,
         ]),
         interner,
     );
+    checkpoint("merge");
     let output_digest = semantic_mir_output_digest(
         manifest,
         input_snapshot,
@@ -53,10 +63,13 @@ pub(crate) fn derive_semantic_mir_with_cache_stats(
         &output,
         interner,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
-    match db.replace_semantic_mir(output) {
+    let replaced = db.replace_semantic_mir(output);
+    checkpoint("store_metadata");
+    match replaced {
         Ok(()) => SemanticMirProviderOutput {
             diagnostics: Vec::new(),
             cache_stats,

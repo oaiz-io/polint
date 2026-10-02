@@ -27,6 +27,7 @@ pub use repo_path::escapes_repository;
 pub(crate) use span::{SourceTextIndex, span_from_byte_range};
 pub use span::{Span, TextRange};
 pub use stable_key::{StableKeyId, StableKeyInterner};
+pub(crate) use stable_key::{StableKeyReadView, StableKeyRemap};
 
 #[doc(hidden)]
 pub use stable_key::{stable_key_for_test, test_stable_key_interner};

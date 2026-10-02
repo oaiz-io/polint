@@ -62,6 +62,44 @@ impl Digest {
         DigestBuilder::new(kind, label)
     }
 
+    /// Digest of `rows` in their given order, hashed in parallel.
+    ///
+    /// The rows are cut into chunks of a fixed size, each chunk is hashed on
+    /// its own, and the chunk digests are folded in chunk order behind the row
+    /// count. The value is therefore a function of the rows, their order and
+    /// what `write` feeds for each, and not of how many threads computed it.
+    ///
+    /// `task` is called once per chunk, on the thread hashing it, for state
+    /// that chunk's rows are written with — such as a stable-key read view,
+    /// which must not be held across the parallel section by the caller.
+    pub fn of_rows<T: Sync, S>(
+        kind: DigestKind,
+        label: &'static str,
+        rows: &[T],
+        task: impl Fn() -> S + Sync,
+        write: impl Fn(&mut DigestBuilder, &S, &T) + Sync,
+    ) -> Self {
+        use rayon::prelude::*;
+        const ROWS_PER_CHUNK: usize = 4096;
+        let chunks = rows
+            .par_chunks(ROWS_PER_CHUNK)
+            .map(|chunk| {
+                let state = task();
+                let mut digest = DigestBuilder::new(kind, label);
+                for row in chunk {
+                    write(&mut digest, &state, row);
+                }
+                digest.hash
+            })
+            .collect::<Vec<_>>();
+        let mut folded = DigestBuilder::new(kind, label);
+        folded.u64_field("rows", rows.len() as u64);
+        for chunk in chunks {
+            folded.bytes_field("chunk", &chunk.to_le_bytes());
+        }
+        folded.finish()
+    }
+
     pub fn from_unordered(kind: DigestKind, label: &str, mut digests: Vec<Digest>) -> Self {
         digests.sort();
         let digest_parts = digests.iter().map(ToString::to_string).collect::<Vec<_>>();

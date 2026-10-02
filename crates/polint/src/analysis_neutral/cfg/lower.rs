@@ -21,19 +21,48 @@ use crate::analysis_neutral::stable_key::semantic_stable_key;
 use crate::internal_core::Language;
 use std::collections::{BTreeMap, HashMap};
 
-pub fn lower_cfg(db: &impl AnalysisHost) -> CfgOutput {
+/// Bodies one parallel task lowers with a single builder.
+///
+/// Large enough that the per-task builder, overlay and join cost is noise,
+/// small enough that a few huge bodies do not leave the other threads idle.
+const BODIES_PER_TASK: usize = 64;
+
+pub fn lower_cfg(db: &(impl AnalysisHost + Sync)) -> CfgOutput {
+    use rayon::prelude::*;
+
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let mut lowering = CfgLowering::new(db);
-    lowering.lower(interner);
-    lowering.finish(interner)
+    let inputs = CfgInputs::new(db);
+    let mut bodies = db.mir_bodies().iter().collect::<Vec<_>>();
+    bodies.sort_by_cached_key(|body| interner.resolve(body.stable_key));
+
+    // Every body lowers on its own: a builder's only cross-body state is its
+    // id counters. Tasks therefore lower runs of bodies against interner
+    // overlays, and the parts are joined in body order, which gives every row
+    // and every key the id a single sequential lowering would have given it.
+    let parts = bodies
+        .par_chunks(BODIES_PER_TASK)
+        .map(|chunk| {
+            let overlay = interner.overlay();
+            let mut lowering = CfgLowering::new(db, &inputs);
+            for body in chunk {
+                lowering.lower_one(&overlay, body);
+            }
+            (lowering.builder.finish_unnormalized(), overlay)
+        })
+        .collect::<Vec<_>>();
+    let mut output = CfgOutput::empty();
+    for (part, overlay) in parts {
+        let remap = interner.absorb(&overlay);
+        output.append_lowered_part(part, |id| remap.apply(id));
+    }
+    finish_lowering(db, interner, output)
 }
 
-struct CfgLowering<'db, H: AnalysisHost + ?Sized> {
+struct CfgLowering<'a, 'db, H: AnalysisHost + ?Sized> {
     db: &'db H,
-    inputs: CfgInputs<'db>,
+    inputs: &'a CfgInputs<'db>,
     builder: CfgBuilder,
-    body_to_function: BTreeMap<MirBodyId, CfgFunctionId>,
 }
 
 /// Lookup-only ID indexes preserve the first matching row. Grouped inputs retain
@@ -110,41 +139,36 @@ impl<'db> CfgInputs<'db> {
     }
 }
 
-impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
-    fn new(db: &'db H) -> Self {
+impl<'a, 'db, H: AnalysisHost + ?Sized> CfgLowering<'a, 'db, H> {
+    fn new(db: &'db H, inputs: &'a CfgInputs<'db>) -> Self {
         Self {
             db,
-            inputs: CfgInputs::new(db),
+            inputs,
             builder: CfgBuilder::new(),
-            body_to_function: BTreeMap::new(),
         }
     }
 
-    fn lower(&mut self, interner: &crate::internal_core::StableKeyInterner) {
-        let mut bodies = self.db.mir_bodies().iter().collect::<Vec<_>>();
-        bodies.sort_by_cached_key(|body| interner.resolve(body.stable_key));
-
-        for body in bodies {
-            let has_exceptional_control =
-                self.inputs.terminators_for_body(body.id).any(|terminator| {
-                    matches!(
-                        terminator.kind,
-                        MirTerminatorKind::Throw { .. }
-                            | MirTerminatorKind::Call {
-                                unwind: Some(_),
-                                ..
-                            }
-                    )
-                }) || self.unsupported_for_body(body.id).any(|row| {
-                    matches!(row.construct.as_str(), "try" | "parser recovery" | "ERROR")
-                });
-            let function = self
-                .builder
-                .start_function(interner, body, has_exceptional_control);
-            self.body_to_function.insert(body.id, function);
-            self.lower_body(interner, body.id);
-            self.builder.finish_function();
-        }
+    fn lower_one(
+        &mut self,
+        interner: &crate::internal_core::StableKeyInterner,
+        body: &crate::analysis_neutral::mir_body::MirBody,
+    ) {
+        let has_exceptional_control = self.inputs.terminators_for_body(body.id).any(|terminator| {
+            matches!(
+                terminator.kind,
+                MirTerminatorKind::Throw { .. }
+                    | MirTerminatorKind::Call {
+                        unwind: Some(_),
+                        ..
+                    }
+            )
+        }) || self
+            .unsupported_for_body(body.id)
+            .any(|row| matches!(row.construct.as_str(), "try" | "parser recovery" | "ERROR"));
+        self.builder
+            .start_function(interner, body, has_exceptional_control);
+        self.lower_body(interner, body.id);
+        self.builder.finish_function();
     }
 
     fn lower_body(&mut self, interner: &crate::internal_core::StableKeyInterner, body: MirBodyId) {
@@ -552,23 +576,29 @@ impl<'db, H: AnalysisHost + ?Sized> CfgLowering<'db, H> {
             .flatten()
             .copied()
     }
+}
 
-    fn finish(self, interner: &crate::internal_core::StableKeyInterner) -> CfgOutput {
-        let body_to_function = self.body_to_function;
-        let db = self.db;
-        let mut output = self.builder.finish(interner);
-        let mut unsupported = db
-            .unsupported_semantics()
-            .iter()
-            .filter(|row| row.affected_domains.contains(&UnsupportedDomain::Cfg))
-            .enumerate()
-            .map(|(index, row)| {
-                unsupported_control_flow_fact(interner, index, row, &body_to_function)
-            })
-            .collect::<Vec<_>>();
-        output.unsupported.append(&mut unsupported);
-        output.normalized(interner)
-    }
+/// Adds the unsupported-construct rows to the joined builder rows and
+/// normalizes the whole output.
+fn finish_lowering(
+    db: &(impl AnalysisHost + ?Sized),
+    interner: &crate::internal_core::StableKeyInterner,
+    mut output: CfgOutput,
+) -> CfgOutput {
+    let body_to_function = output
+        .functions
+        .iter()
+        .map(|function| (function.body, function.id))
+        .collect::<BTreeMap<MirBodyId, CfgFunctionId>>();
+    let mut unsupported = db
+        .unsupported_semantics()
+        .iter()
+        .filter(|row| row.affected_domains.contains(&UnsupportedDomain::Cfg))
+        .enumerate()
+        .map(|(index, row)| unsupported_control_flow_fact(interner, index, row, &body_to_function))
+        .collect::<Vec<_>>();
+    output.unsupported.append(&mut unsupported);
+    output.normalized(interner)
 }
 
 struct UnsupportedShape {

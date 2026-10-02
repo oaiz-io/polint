@@ -369,9 +369,18 @@ impl CfgBuilder {
         self.next_synthetic_node_ordinal = 0;
     }
 
-    pub fn finish(mut self, interner: &crate::internal_core::StableKeyInterner) -> CfgOutput {
+    pub fn finish(self, interner: &crate::internal_core::StableKeyInterner) -> CfgOutput {
+        self.finish_unnormalized().normalized(interner)
+    }
+
+    /// The rows built so far in allocation order, block reachability filled in.
+    ///
+    /// Each id family is numbered from one and has exactly one row per id, which
+    /// is what lets [`CfgOutput::append_lowered_part`] join separately built
+    /// parts.
+    pub(crate) fn finish_unnormalized(mut self) -> CfgOutput {
         self.refresh_reachability();
-        self.output.normalized(interner)
+        self.output
     }
 
     fn refresh_reachability(&mut self) {

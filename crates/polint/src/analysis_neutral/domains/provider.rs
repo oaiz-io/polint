@@ -80,6 +80,11 @@ fn derive_abstract_domains_with_materialization(
     upstream_syntax_output_digests: Vec<Digest>,
     materialization: DomainMaterialization,
 ) -> AbstractDomainsProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.abstract_domains", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let solver = IdeDomainSolver::new(SolverPolicy::deterministic());
@@ -89,16 +94,19 @@ fn derive_abstract_domains_with_materialization(
             solver.solve_summary_inputs(SolverInput::from(&*db))
         }
     };
+    checkpoint("solve");
     let body_keys = body_stable_key_map(db);
     let block_keys = block_stable_key_map(db);
     let operation_keys = operation_stable_key_map(db);
     let place_keys = place_stable_key_map(db);
+    checkpoint("key_maps");
     let output = DomainOutput::from_results_with_materialization(
         interner,
         result.results(),
         Some(&place_keys),
         materialization,
     );
+    checkpoint("materialize");
     let output_digest = abstract_domains_output_digest(
         manifest,
         input_snapshot,
@@ -116,9 +124,11 @@ fn derive_abstract_domains_with_materialization(
         &output,
         materialization,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
     db.replace_abstract_domain_facts(output);
+    checkpoint("store_metadata");
 
     AbstractDomainsProviderOutput {
         diagnostics: Vec::new(),
