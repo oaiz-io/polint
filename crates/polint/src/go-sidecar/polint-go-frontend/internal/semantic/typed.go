@@ -99,19 +99,32 @@ type dynamicSite struct {
 	file   string
 }
 
-// emitCallEdges emits the candidate callees of every dynamic call site.
+// chaCandidateLimit is the most candidates a class-hierarchy answer lists. An
+// interface implemented across the program (an `error`, a `fmt.Stringer`) or a
+// common function signature matches hundreds of functions; listing them all
+// would make every such call reach every implementation, which is no more use
+// to a rule than the abstract callee and far more expensive downstream. Above
+// the limit the site names the abstract callee instead, with the count.
+const chaCandidateLimit = 16
+
+// emitCallEdges emits, for every dynamic call site, one `call_edges` row with
+// its candidate callees.
 //
 // Variable type analysis (VTA) propagates the concrete types and function
 // literals that reach each interface value and function value through the
-// program; a site gets one `vta` edge per callee it can reach. A site VTA gives
-// no callee (typically an interface parameter of a function nothing in the
-// program calls) falls back to class hierarchy analysis: every method of every
-// type in the program that implements the interface, or every function whose
-// signature matches the function value, as `cha` edges. Both sets are sound
-// over-approximations of the program as loaded, modulo reflection and unsafe;
-// VTA is the more precise. Dependencies are loaded from export data, so a
-// callee whose concrete type exists only inside a dependency's code is not in
-// the program and gets no edge.
+// program; a site gets every callee it can reach, labelled `vta`. A site VTA
+// gives no callee (typically an interface parameter of a function nothing in
+// the program calls) falls back to class hierarchy analysis: every method of
+// every type in the program that implements the interface, or every function
+// whose signature matches the function value, labelled `cha`. Both sets are
+// sound over-approximations of the program as loaded, modulo reflection and
+// unsafe; VTA is the more precise. Dependencies are loaded from export data,
+// so a callee whose concrete type exists only inside a dependency's code is
+// not in the program and is not listed.
+//
+// A site neither analysis gives a callee, or one whose class-hierarchy answer
+// exceeds chaCandidateLimit, is labelled `type_hierarchy` and names its
+// abstract callee: the interface method, or the function-value signature.
 func (e *emitter) emitCallEdges(prog *ssa.Program, sites []dynamicSite) {
 	if len(sites) == 0 {
 		return
@@ -136,6 +149,17 @@ func (e *emitter) emitCallEdges(prog *ssa.Program, sites []dynamicSite) {
 	}
 	var hierarchy func(ssa.CallInstruction) []*ssa.Function
 	for _, site := range sites {
+		row := Row{
+			"kind":                "call_edges",
+			"package_id":          packageID(site.pkg),
+			"package_path":        packagePath(site.pkg),
+			"caller":              site.caller.String(),
+			"callsite_stable_key": site.key,
+			"stable_key":          stableKey(packageID(site.pkg), "call_edges", site.key),
+		}
+		if site.file != "" {
+			row["file"] = site.file
+		}
 		algorithm := "vta"
 		targets := callees(site.caller, site.call)
 		if len(targets) == 0 {
@@ -145,65 +169,69 @@ func (e *emitter) emitCallEdges(prog *ssa.Program, sites []dynamicSite) {
 			algorithm = "cha"
 			targets = hierarchy(site.call)
 		}
-		if len(targets) == 0 {
-			// No implementation of the interface is in the program: every one lives
-			// in a dependency, loaded from export data without bodies. The callee is
-			// still known as the interface method itself, which is what the edge
-			// names, labelled as a type-hierarchy edge rather than a concrete one.
-			if method := interfaceMethodName(site.call); method != "" {
-				row := Row{
-					"kind":                "call_edge",
-					"package_id":          packageID(site.pkg),
-					"package_path":        packagePath(site.pkg),
-					"caller":              site.caller.String(),
-					"callsite_stable_key": site.key,
-					"callee":              method,
-					"algorithm":           "type_hierarchy",
-					"stable_key":          stableKey(packageID(site.pkg), "call_edge", site.key, method),
-				}
-				if site.file != "" {
-					row["file"] = site.file
-				}
-				e.add(row)
-			}
-			continue
-		}
-		seen := make(map[string]bool, len(targets))
-		names := make([]string, 0, len(targets))
-		origins := make(map[string]string, len(targets))
-		for _, target := range targets {
-			target = declaredCallee(prog, target)
-			name := target.String()
-			if seen[name] {
+		names, origins := declaredCalleeNames(prog, targets)
+		if len(names) == 0 || (algorithm == "cha" && len(names) > chaCandidateLimit) {
+			abstract, abstractKind := abstractCallee(site.call)
+			if abstract == "" {
 				continue
 			}
-			seen[name] = true
-			names = append(names, name)
-			if origin := target.Origin(); origin != nil {
-				origins[name] = origin.String()
-			}
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			row := Row{
-				"kind":                "call_edge",
-				"package_id":          packageID(site.pkg),
-				"package_path":        packagePath(site.pkg),
-				"caller":              site.caller.String(),
-				"callsite_stable_key": site.key,
-				"callee":              name,
-				"algorithm":           algorithm,
-				"stable_key":          stableKey(packageID(site.pkg), "call_edge", site.key, name),
-			}
-			if origin, ok := origins[name]; ok {
-				row["callee_origin"] = origin
-			}
-			if site.file != "" {
-				row["file"] = site.file
+			row["algorithm"] = "type_hierarchy"
+			row["callee"] = abstract
+			row["callee_kind"] = abstractKind
+			if len(names) > 0 {
+				row["candidates"] = len(names)
 			}
 			e.add(row)
+			continue
 		}
+		row["algorithm"] = algorithm
+		row["callees"] = names
+		row["callee_origins"] = origins
+		e.add(row)
 	}
+}
+
+// declaredCalleeNames names each target by its declared function, deduplicated
+// and sorted, with each one's generic origin ("" when it has none) at the same
+// index.
+func declaredCalleeNames(prog *ssa.Program, targets []*ssa.Function) ([]string, []string) {
+	byName := make(map[string]string, len(targets))
+	for _, target := range targets {
+		target = declaredCallee(prog, target)
+		name := target.String()
+		if _, seen := byName[name]; seen {
+			continue
+		}
+		origin := ""
+		if from := target.Origin(); from != nil {
+			origin = from.String()
+		}
+		byName[name] = origin
+	}
+	names := make([]string, 0, len(byName))
+	for name := range byName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	origins := make([]string, len(names))
+	for i, name := range names {
+		origins[i] = byName[name]
+	}
+	return names, origins
+}
+
+// abstractCallee names what a dynamic call invokes when no concrete callee is
+// listed: the interface method (`io.Writer.Write`, kind `interface_method`) or
+// the function value's signature (`func(int) error`, kind `signature`).
+func abstractCallee(call ssa.CallInstruction) (string, string) {
+	if method := interfaceMethodName(call); method != "" {
+		return method, "interface_method"
+	}
+	common := call.Common()
+	if common == nil || common.IsInvoke() || common.StaticCallee() != nil || isBuiltinCall(common) {
+		return "", ""
+	}
+	return canonicalTypeString(common.Signature()), "signature"
 }
 
 // interfaceMethodName names the abstract method an interface call invokes, as

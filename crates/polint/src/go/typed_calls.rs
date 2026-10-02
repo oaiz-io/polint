@@ -14,7 +14,7 @@ use crate::analysis_neutral::calls::typed::{TypedCallInputs, TypedCallSite, Type
 use crate::core::AnalysisDb;
 use crate::go::rta::inputs::{GoCoreIndex, matching_core_function_indexed};
 use crate::go::semantic::facts::{
-    GoCallEdgeAlgorithm, GoCallMode, GoSemanticCallEdgeFact, GoSemanticCallStatus,
+    GoAbstractCallee, GoCallEdgeAlgorithm, GoCallMode, GoSemanticCallEdgeFact, GoSemanticCallStatus,
 };
 use crate::internal_core::{FunctionId, Language, StableKeyId};
 
@@ -29,13 +29,11 @@ pub(crate) fn go_typed_call_inputs(db: &AnalysisDb) -> TypedCallInputs {
         return inputs;
     }
     let functions = GoFunctionNames::new(db);
-    let mut edges_by_site = BTreeMap::<StableKeyId, Vec<&GoSemanticCallEdgeFact>>::new();
-    for edge in db.go_semantic_call_edges() {
-        edges_by_site
-            .entry(edge.callsite_stable_key)
-            .or_default()
-            .push(edge);
-    }
+    let edges_by_site = db
+        .go_semantic_call_edges()
+        .iter()
+        .map(|edges| (edges.callsite_stable_key, edges))
+        .collect::<BTreeMap<StableKeyId, &GoSemanticCallEdgeFact>>();
 
     for callsite in db.go_semantic_callsites() {
         let (Some(file), Some(span)) = (callsite.file, callsite.span.as_ref()) else {
@@ -73,43 +71,12 @@ pub(crate) fn go_typed_call_inputs(db: &AnalysisDb) -> TypedCallInputs {
                 };
                 // The sidecar sets a receiver type on a dynamic site only for an
                 // interface call; a function-value call has none.
-                let dynamic_kind = if callsite.receiver_type.is_some() {
+                let edge_kind = started_by.unwrap_or(if callsite.receiver_type.is_some() {
                     CallEdgeKind::Method
                 } else {
                     CallEdgeKind::FunctionValue
-                };
-                edges
-                    .iter()
-                    .map(|edge| {
-                        let (algorithm, precision) = match edge.algorithm {
-                            GoCallEdgeAlgorithm::Vta => {
-                                (CallAlgorithm::GoVta, CallPrecision::SetupAware)
-                            }
-                            GoCallEdgeAlgorithm::Cha => {
-                                (CallAlgorithm::GoCha, CallPrecision::Conservative)
-                            }
-                            GoCallEdgeAlgorithm::TypeHierarchy => {
-                                (CallAlgorithm::TypeHierarchy, CallPrecision::Conservative)
-                            }
-                        };
-                        let (function, name) = match edge.algorithm {
-                            GoCallEdgeAlgorithm::TypeHierarchy => {
-                                (None, format!("go:interface-method:{}", edge.callee))
-                            }
-                            _ => (
-                                functions.resolve(&edge.callee, edge.callee_origin.as_deref()),
-                                format!("go:func:{}", edge.callee),
-                            ),
-                        };
-                        TypedCallTarget {
-                            function,
-                            name,
-                            algorithm,
-                            precision,
-                            edge_kind: started_by.unwrap_or(dynamic_kind),
-                        }
-                    })
-                    .collect()
+                });
+                dynamic_targets(edges, &functions, edge_kind)
             }
             // Builtins are described by the syntax-level builtin rows below, which
             // also cover the builtins SSA lowers to instructions other than calls.
@@ -143,6 +110,46 @@ pub(crate) fn go_typed_call_inputs(db: &AnalysisDb) -> TypedCallInputs {
         }
     }
     inputs
+}
+
+/// The typed targets of one dynamic call site: its concrete candidates, or the
+/// abstract callee a type-hierarchy answer names instead.
+fn dynamic_targets(
+    edges: &GoSemanticCallEdgeFact,
+    functions: &GoFunctionNames,
+    edge_kind: CallEdgeKind,
+) -> Vec<TypedCallTarget> {
+    let (algorithm, precision) = match edges.algorithm {
+        GoCallEdgeAlgorithm::Vta => (CallAlgorithm::GoVta, CallPrecision::SetupAware),
+        GoCallEdgeAlgorithm::Cha => (CallAlgorithm::GoCha, CallPrecision::Conservative),
+        GoCallEdgeAlgorithm::TypeHierarchy => {
+            (CallAlgorithm::TypeHierarchy, CallPrecision::Conservative)
+        }
+    };
+    if let Some(abstract_callee) = &edges.abstract_callee {
+        let name = match abstract_callee {
+            GoAbstractCallee::InterfaceMethod(method) => format!("go:interface-method:{method}"),
+            GoAbstractCallee::Signature(signature) => format!("go:func-value:{signature}"),
+        };
+        return vec![TypedCallTarget {
+            function: None,
+            name,
+            algorithm,
+            precision,
+            edge_kind,
+        }];
+    }
+    edges
+        .callees
+        .iter()
+        .map(|callee| TypedCallTarget {
+            function: functions.resolve(&callee.name, callee.origin.as_deref()),
+            name: format!("go:func:{}", callee.name),
+            algorithm,
+            precision,
+            edge_kind,
+        })
+        .collect()
 }
 
 /// The sidecar's function identities (`pkg.F`, `(*pkg.T).M`) mapped to the
@@ -201,10 +208,11 @@ mod tests {
     use crate::analysis_neutral::calls::typed::TypedCallSite;
     use crate::core::AnalysisDb;
     use crate::go::semantic::facts::{
-        GoCallEdgeAlgorithm, GoCallMode, GoSemanticBuiltinCallFact, GoSemanticBuiltinCallId,
-        GoSemanticCallEdgeFact, GoSemanticCallEdgeId, GoSemanticCallStatus, GoSemanticCallsiteFact,
-        GoSemanticCallsiteId, GoSemanticConversionFact, GoSemanticConversionId,
-        GoSemanticFunctionFact, GoSemanticFunctionId, GoSemanticFunctionKind,
+        GoAbstractCallee, GoCallEdgeAlgorithm, GoCallMode, GoSemanticBuiltinCallFact,
+        GoSemanticBuiltinCallId, GoSemanticCallEdgeFact, GoSemanticCallEdgeId,
+        GoSemanticCallStatus, GoSemanticCallsiteFact, GoSemanticCallsiteId,
+        GoSemanticConversionFact, GoSemanticConversionId, GoSemanticFunctionFact,
+        GoSemanticFunctionId, GoSemanticFunctionKind,
     };
     use crate::go::semantic::store::GoSemanticFactsOutput;
     use crate::internal_core::{FileId, FunctionId, Language, Span};
@@ -324,9 +332,12 @@ mod tests {
                 package_id: "example.com/app".to_string(),
                 caller: "example.com/app.Run".to_string(),
                 callsite_stable_key: interner.intern("cs|invoke"),
-                callee: "io.Writer.Write".to_string(),
-                callee_origin: None,
                 algorithm: GoCallEdgeAlgorithm::TypeHierarchy,
+                callees: Vec::new(),
+                abstract_callee: Some(GoAbstractCallee::InterfaceMethod(
+                    "io.Writer.Write".to_string(),
+                )),
+                candidates: None,
                 relative_file: Some("app/main.go".to_string()),
                 file: Some(file),
             }],

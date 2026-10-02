@@ -491,6 +491,7 @@ fn start_go_semantic_prefetch(
         db,
         input.cache.sidecar_cache_dir(),
         upstream.to_string(),
+        provider::go_semantic_call_graph_requested(input.plan),
     );
     if prefetch.is_some() {
         crate::analysis_kernel::host::with_provider_host_session_mut(|session| {

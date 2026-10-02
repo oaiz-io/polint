@@ -147,7 +147,7 @@ pub struct GoSemanticCallsiteFact {
     pub span: Option<Span>,
 }
 
-/// A candidate callee of a dynamic (interface or function-value) call site.
+/// The candidate callees of one dynamic (interface or function-value) call site.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GoSemanticCallEdgeFact {
     pub id: GoSemanticCallEdgeId,
@@ -155,11 +155,35 @@ pub struct GoSemanticCallEdgeFact {
     pub package_id: String,
     pub caller: String,
     pub callsite_stable_key: StableKeyId,
-    pub callee: String,
-    pub callee_origin: Option<String>,
     pub algorithm: GoCallEdgeAlgorithm,
+    /// The concrete callees a variable-type or class-hierarchy answer lists, by
+    /// the sidecar's function identity, each with its generic origin when it is
+    /// an instantiation. Empty for a type-hierarchy answer.
+    pub callees: Vec<GoSemanticCallee>,
+    /// What a type-hierarchy answer names instead of concrete callees.
+    pub abstract_callee: Option<GoAbstractCallee>,
+    /// How many concrete callees a class-hierarchy answer had when there were too
+    /// many to list.
+    pub candidates: Option<u64>,
     pub relative_file: Option<String>,
     pub file: Option<FileId>,
+}
+
+/// One concrete candidate callee of a dynamic call.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GoSemanticCallee {
+    pub name: String,
+    pub origin: Option<String>,
+}
+
+/// The abstract callee of a dynamic call no concrete callee is listed for.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GoAbstractCallee {
+    /// An interface method, as the interface type and the method name
+    /// (`io.Writer.Write`).
+    InterfaceMethod(String),
+    /// A function value's signature (`func(int) error`).
+    Signature(String),
 }
 
 /// An interface type declared in a loaded package, with its method names.

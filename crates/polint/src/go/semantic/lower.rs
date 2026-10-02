@@ -3,10 +3,10 @@ use std::collections::BTreeMap;
 use crate::analysis_api::FactDatabase;
 use crate::analysis_api::FactFamily;
 use crate::go::semantic::facts::{
-    GoCallEdgeAlgorithm, GoCallMode, GoGenericKind, GoSemanticAddressTakenFact,
+    GoAbstractCallee, GoCallEdgeAlgorithm, GoCallMode, GoGenericKind, GoSemanticAddressTakenFact,
     GoSemanticAddressTakenId, GoSemanticBuiltinCallFact, GoSemanticBuiltinCallId,
-    GoSemanticCallEdgeFact, GoSemanticCallEdgeId, GoSemanticCallStatus, GoSemanticCallsiteFact,
-    GoSemanticCallsiteId, GoSemanticConversionFact, GoSemanticConversionId,
+    GoSemanticCallEdgeFact, GoSemanticCallEdgeId, GoSemanticCallStatus, GoSemanticCallee,
+    GoSemanticCallsiteFact, GoSemanticCallsiteId, GoSemanticConversionFact, GoSemanticConversionId,
     GoSemanticDynamicDispatchFact, GoSemanticDynamicDispatchId, GoSemanticFieldFact,
     GoSemanticFieldId, GoSemanticFunctionFact, GoSemanticFunctionId, GoSemanticFunctionKind,
     GoSemanticImplementsFact, GoSemanticImplementsId, GoSemanticInstantiatedTypeFact,
@@ -98,7 +98,7 @@ pub(crate) fn lower_go_semantic(
                 .push(lower_package_error(interner, row)),
             // A call edge, parameter, instantiation or conversion belongs to the file it
             // is written in, like the call site and function it describes.
-            "call_edge" => push_in_scope(
+            "call_edges" => push_in_scope(
                 &mut lowered.call_edges,
                 lower_call_edge(interner, row, &files)?,
                 &mut out_of_scope_rows,
@@ -257,11 +257,46 @@ fn lower_call_edge(
     let Some(location) = lower_optional_file_span(row, files)? else {
         return Ok(None);
     };
-    let algorithm = match row.algorithm.as_str() {
-        "vta" => GoCallEdgeAlgorithm::Vta,
-        "cha" => GoCallEdgeAlgorithm::Cha,
-        "type_hierarchy" => GoCallEdgeAlgorithm::TypeHierarchy,
-        // An edge whose algorithm this build cannot name is dropped rather than
+    let (algorithm, callees, abstract_callee) = match row.algorithm.as_str() {
+        algorithm @ ("vta" | "cha") => {
+            let callees = row
+                .callees
+                .iter()
+                .enumerate()
+                .map(|(index, name)| GoSemanticCallee {
+                    name: name.clone(),
+                    origin: row
+                        .callee_origins
+                        .get(index)
+                        .and_then(|origin| non_empty(origin.as_str())),
+                })
+                .collect::<Vec<_>>();
+            if callees.is_empty() {
+                return Ok(None);
+            }
+            let algorithm = if algorithm == "vta" {
+                GoCallEdgeAlgorithm::Vta
+            } else {
+                GoCallEdgeAlgorithm::Cha
+            };
+            (algorithm, callees, None)
+        }
+        "type_hierarchy" => {
+            let abstract_callee = match row.callee_kind.as_str() {
+                "interface_method" => GoAbstractCallee::InterfaceMethod(row.callee.clone()),
+                "signature" => GoAbstractCallee::Signature(row.callee.clone()),
+                _ => return Ok(None),
+            };
+            if row.callee.is_empty() {
+                return Ok(None);
+            }
+            (
+                GoCallEdgeAlgorithm::TypeHierarchy,
+                Vec::new(),
+                Some(abstract_callee),
+            )
+        }
+        // A row whose algorithm this build cannot name is dropped rather than
         // given a precision it may not have.
         _ => return Ok(None),
     };
@@ -271,9 +306,10 @@ fn lower_call_edge(
         package_id: row.package_id.clone(),
         caller: row.caller.clone(),
         callsite_stable_key: interner.intern(row.callsite_stable_key_text.clone()),
-        callee: row.callee.clone(),
-        callee_origin: non_empty(row.callee_origin.as_str()),
         algorithm,
+        callees,
+        abstract_callee,
+        candidates: (row.candidates > 0).then_some(row.candidates),
         relative_file: location.relative_file,
         file: location.file,
     }))

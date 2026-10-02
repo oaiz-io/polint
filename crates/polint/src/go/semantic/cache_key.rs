@@ -64,6 +64,7 @@ pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
     // outcome from identical sources.
     let mut parts = vec![
         format!("include_tests={}", config.semantic_include_tests),
+        format!("call_graph={}", config.semantic_call_graph),
         format!("offline={}", config.offline),
         format!("rta_edges={}", config.emit_rta_edges),
         // The scan scope decides which rows the sidecar emits, so two scopes are two
@@ -254,6 +255,10 @@ mod tests {
                 ..base.clone()
             },
             GoAnalysisConfig {
+                semantic_call_graph: !base.semantic_call_graph,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
                 offline: true,
                 ..base
             },
@@ -321,6 +326,7 @@ mod tests {
             include_tests: true,
             semantic_include_tests: false,
             offline: false,
+            semantic_call_graph: false,
             semantic_timeout_ms: None,
             emit_rta_edges: false,
             symbol_rooted_patterns: vec!["./...".to_string()],

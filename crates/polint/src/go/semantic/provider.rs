@@ -105,6 +105,9 @@ pub struct GoSemanticSidecarAccess<'a> {
     pub cache_dir: Option<&'a Path>,
     /// A run started before this provider was reached.
     pub prefetch: Option<GoSemanticPrefetch>,
+    /// Whether the plan reads call targets, which is when the sidecar computes
+    /// the candidate callees of dynamic calls.
+    pub call_graph: bool,
 }
 
 pub fn derive_go_semantic_with_cache_stats(
@@ -119,6 +122,7 @@ pub fn derive_go_semantic_with_cache_stats(
     let GoSemanticSidecarAccess {
         cache_dir,
         prefetch,
+        call_graph,
     } = sidecar;
     let upstream_str = go_syntax_output_digest.to_string();
     let cache_dir = cache_dir.map(Path::to_path_buf);
@@ -130,6 +134,7 @@ pub fn derive_go_semantic_with_cache_stats(
         config_digest,
         manifest,
         go_syntax_output_digest,
+        call_graph,
         move |config| {
             // A prefetch is only ever an already-started copy of the run below,
             // and only for the config it was started with; anything else falls
@@ -149,6 +154,10 @@ pub fn derive_go_semantic_with_cache_stats(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The provider reads the plan's call-graph request beside its lifecycle inputs."
+)]
 fn derive_go_semantic_with_runner(
     db: &mut dyn FactDatabase,
     root: &Path,
@@ -156,6 +165,7 @@ fn derive_go_semantic_with_runner(
     config_digest: &str,
     manifest: &ProviderManifest,
     go_syntax_output_digest: Digest,
+    call_graph: bool,
     runner: impl FnOnce(&GoAnalysisConfig) -> Result<GoSemanticClientRun, GoSemanticClientError>,
 ) -> GoSemanticProviderRunOutput {
     debug_assert_eq!(manifest.id, "polint.go.semantic");
@@ -181,7 +191,10 @@ fn derive_go_semantic_with_runner(
     }
 
     let config = match GoAnalysisConfig::from_settings_files(root, go_settings, &files) {
-        Ok(config) => config,
+        Ok(config) => GoAnalysisConfig {
+            semantic_call_graph: call_graph,
+            ..config
+        },
         Err(error) => {
             return store_output(
                 db,
@@ -702,6 +715,7 @@ fn default_lifecycle() -> GoAnalysisConfig {
         include_tests: true,
         semantic_include_tests: false,
         offline: false,
+        semantic_call_graph: false,
         semantic_timeout_ms: None,
         emit_rta_edges: false,
         symbol_rooted_patterns: vec!["./...".to_string()],

@@ -228,6 +228,27 @@ impl AnalysisPlan {
             .collect()
     }
 
+    /// The rules matching any of `files` that name `capability` themselves, not
+    /// through another capability that depends on it: a deep analysis depends on
+    /// symbols and references, but a rule asking only for `calls` does not read
+    /// them.
+    pub(crate) fn rules_requesting_capability_directly_matching_files(
+        &self,
+        capability: &str,
+        files: &[&SourceFile],
+    ) -> Vec<String> {
+        self.rules
+            .iter()
+            .filter(|rule| {
+                rule.requested_capabilities
+                    .iter()
+                    .any(|requested| requested == capability)
+            })
+            .filter(|rule| rule_matches_any_file(rule, files))
+            .map(|rule| rule.id.clone())
+            .collect()
+    }
+
     #[allow(dead_code)]
     pub(crate) fn setup_checks(&self) -> &[SetupCheck] {
         &self.setup_checks
@@ -378,6 +399,8 @@ impl AnalysisPlan {
     pub(crate) fn full_pipeline_for_test() -> Self {
         Self::from_capability_names_for_test(&[
             "dataflow",
+            "symbols",
+            "references",
             "file_metrics",
             "function_metrics",
             "complexity_metrics",

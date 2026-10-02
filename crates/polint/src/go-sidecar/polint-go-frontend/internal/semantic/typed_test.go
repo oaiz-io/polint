@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -69,7 +70,7 @@ func emitTypedFixture(t *testing.T) []Row {
 		"go.mod":  "module example.test/typed\n\ngo 1.24\n",
 		"main.go": typedFixture,
 	})
-	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}})
+	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}, CallGraph: true})
 	if err != nil {
 		t.Fatalf("Emit failed: %v", err)
 	}
@@ -124,9 +125,11 @@ func TestCallEdgesUseVariableTypeAnalysisThenClassHierarchy(t *testing.T) {
 	rows := emitTypedFixture(t)
 	callees := map[string][]string{}
 	algorithms := map[string]string{}
-	for _, row := range rowsOfKind(rows, "call_edge") {
+	for _, row := range rowsOfKind(rows, "call_edges") {
 		caller := row["caller"].(string)
-		callees[caller] = append(callees[caller], row["callee"].(string))
+		if names, ok := row["callees"].([]string); ok {
+			callees[caller] = append(callees[caller], names...)
+		}
 		algorithms[caller] = row["algorithm"].(string)
 	}
 	for caller := range callees {
@@ -264,7 +267,7 @@ func emitValueReceiverFixture(t *testing.T) []Row {
 		"go.mod":  "module example.test/values\n\ngo 1.24\n",
 		"main.go": valueReceiverFixture,
 	})
-	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}})
+	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}, CallGraph: true})
 	if err != nil {
 		t.Fatalf("Emit failed: %v", err)
 	}
@@ -299,15 +302,75 @@ func TestValueReceiverMethodBodiesAreEmitted(t *testing.T) {
 func TestInterfaceCallWithOnlyDependencyImplementationsNamesTheInterfaceMethod(t *testing.T) {
 	rows := emitValueReceiverFixture(t)
 	var edges []Row
-	for _, row := range rowsOfKind(rows, "call_edge") {
+	for _, row := range rowsOfKind(rows, "call_edges") {
 		if row["caller"] == "example.test/values.write" {
 			edges = append(edges, row)
 		}
 	}
 	if len(edges) != 1 {
-		t.Fatalf("want one edge for the io.Writer call, got %#v", edges)
+		t.Fatalf("want one row for the io.Writer call, got %#v", edges)
 	}
-	if edges[0]["algorithm"] != "type_hierarchy" || edges[0]["callee"] != "io.Writer.Write" {
-		t.Fatalf("want a type_hierarchy edge to io.Writer.Write, got %#v", edges[0])
+	if edges[0]["algorithm"] != "type_hierarchy" || edges[0]["callee"] != "io.Writer.Write" || edges[0]["callee_kind"] != "interface_method" {
+		t.Fatalf("want a type_hierarchy row naming io.Writer.Write, got %#v", edges[0])
+	}
+}
+
+func TestCallEdgesAreEmittedOnlyWhenTheCallGraphIsAsked(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"go.mod":  "module example.test/typed\n\ngo 1.24\n",
+		"main.go": typedFixture,
+	})
+	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}})
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+	if edges := rowsOfKind(rows, "call_edges"); len(edges) != 0 {
+		t.Fatalf("a run without the call graph emitted %d call_edges rows", len(edges))
+	}
+	for _, row := range rows {
+		if row["kind"] == "phase" && row["phase"] == "call_graph" {
+			t.Fatalf("a run without the call graph timed a call_graph phase")
+		}
+	}
+}
+
+func TestAClassHierarchyAnswerAboveTheLimitNamesTheAbstractCallee(t *testing.T) {
+	var source strings.Builder
+	source.WriteString("package main\n\ntype Shape interface{ Area() int }\n\n")
+	for i := 0; i <= chaCandidateLimit; i++ {
+		source.WriteString(fmt.Sprintf("type S%d struct{}\n\nfunc (S%d) Area() int { return %d }\n\n", i, i, i))
+	}
+	source.WriteString("func measure(s Shape) int { return s.Area() }\n\n")
+	source.WriteString("func each(f func(int) int) int { return f(1) }\n\n")
+	source.WriteString("func main() {\n")
+	for i := 0; i <= chaCandidateLimit; i++ {
+		source.WriteString(fmt.Sprintf("\t_ = S%d{}\n", i))
+	}
+	source.WriteString("}\n")
+	root := writeFixture(t, map[string]string{
+		"go.mod":  "module example.test/wide\n\ngo 1.24\n",
+		"main.go": source.String(),
+	})
+	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}, CallGraph: true})
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+	byCaller := map[string]Row{}
+	for _, row := range rowsOfKind(rows, "call_edges") {
+		byCaller[row["caller"].(string)] = row
+	}
+	measure, ok := byCaller["example.test/wide.measure"]
+	if !ok {
+		t.Fatalf("no call_edges row for measure: %#v", byCaller)
+	}
+	if measure["algorithm"] != "type_hierarchy" || measure["callee"] != "example.test/wide.Shape.Area" || measure["candidates"] != chaCandidateLimit+1 {
+		t.Fatalf("measure row = %#v, want the abstract Shape.Area with %d candidates", measure, chaCandidateLimit+1)
+	}
+	if _, listed := measure["callees"]; listed {
+		t.Fatalf("a capped answer must not list callees: %#v", measure)
+	}
+	each, ok := byCaller["example.test/wide.each"]
+	if !ok || each["algorithm"] != "type_hierarchy" || each["callee_kind"] != "signature" || each["callee"] != "func(int) int" {
+		t.Fatalf("each row = %#v, want the function-value signature", each)
 	}
 }

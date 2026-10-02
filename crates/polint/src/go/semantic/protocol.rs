@@ -125,7 +125,13 @@ pub struct GoSemanticRawFrame {
     #[serde(default)]
     pub receiver_type: String,
     #[serde(default)]
-    pub callee_origin: String,
+    pub callees: Vec<String>,
+    #[serde(default)]
+    pub callee_origins: Vec<String>,
+    #[serde(default)]
+    pub callee_kind: String,
+    #[serde(default)]
+    pub candidates: u64,
     #[serde(default)]
     pub algorithm: String,
     #[serde(default)]
@@ -324,7 +330,7 @@ fn allowed_kinds() -> BTreeSet<&'static str> {
         "instantiated_type",
         "dynamic_dispatch",
         "rta_edge",
-        "call_edge",
+        "call_edges",
         "interface",
         "implements",
         "instantiation",

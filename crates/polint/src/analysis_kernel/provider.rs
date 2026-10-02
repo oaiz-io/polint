@@ -411,6 +411,7 @@ impl Provider for GoSemanticProvider {
             crate::go::semantic::provider::GoSemanticSidecarAccess {
                 cache_dir: sidecar_cache_dir.as_deref(),
                 prefetch,
+                call_graph: go_semantic_call_graph_requested(&ctx.plan),
             },
         );
         ProviderRunResult {
@@ -1050,6 +1051,12 @@ pub(crate) fn run_named_provider(id: &str, ctx: &mut ProviderCtx<'_>) -> Provide
         "polint.metrics" => MetricsProvider.run(ctx),
         other => panic!("unknown provider id {other}"),
     }
+}
+
+/// Whether a plan reads call targets, which is when the Go semantic sidecar
+/// computes the candidate callees of interface and function-value calls.
+pub(crate) fn go_semantic_call_graph_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
+    plan.requests_any_capability(&["calls", "dataflow"])
 }
 
 /// Providers always present in today's `run()` schedule (graphs + metrics).

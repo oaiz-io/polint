@@ -39,6 +39,11 @@ type Config struct {
 	// rows, and `rta.Analyze` runs once per main package, so on a repository
 	// with 8 binaries it is 76% of the run for output nobody consumes.
 	EmitRTAEdges bool
+	// CallGraph turns on the `call_edges` rows: the candidate callees of every
+	// interface and function-value call, from variable type analysis over the
+	// whole program. Only a plan that reads call targets asks for it; it is most
+	// of the sidecar's time on a large module.
+	CallGraph bool
 	// ScopeFiles is the set of repository-relative Go files this scan discovered,
 	// or nil when the caller did not narrow the scan.
 	//
@@ -175,8 +180,11 @@ type emitter struct {
 	// emittedTypedKeys makes the type-fact emitters idempotent per stable key: a
 	// package and its test variant declare the same types, fields and parameters.
 	emittedTypedKeys map[string]bool
-	// dynamicSites collects the interface and function-value calls whose
-	// callees the call graph resolves after every call site is emitted.
+	// callGraph is Config.CallGraph: whether dynamic call sites are collected
+	// and their candidate callees emitted.
+	callGraph bool
+	// dynamicSites collects the in-scope interface and function-value calls
+	// whose callees the call graph resolves after every call site is emitted.
 	dynamicSites []dynamicSite
 	// callIndexes holds one call-expression index per function body.
 	callIndexes map[*ssa.Function]*callIndex
@@ -239,6 +247,7 @@ func Emit(config Config) ([]Row, error) {
 		emittedMethodSetKeys: make(map[string]bool),
 		emittedFunctionKeys:  make(map[string]bool),
 		emittedTypedKeys:     make(map[string]bool),
+		callGraph:            config.CallGraph,
 		callIndexes:          make(map[*ssa.Function]*callIndex),
 	}
 	e.add(Row{
@@ -293,8 +302,10 @@ func Emit(config Config) ([]Row, error) {
 	e.addPhase(timer, "emit_rows", workload)
 	e.emitTypeFacts(pkgs)
 	e.addPhase(timer, "type_facts", workload)
-	e.emitCallEdges(prog, e.dynamicSites)
-	e.addPhase(timer, "call_graph", workload)
+	if config.CallGraph {
+		e.emitCallEdges(prog, e.dynamicSites)
+		e.addPhase(timer, "call_graph", workload)
+	}
 	if config.EmitRTAEdges {
 		e.emitRTAEdges(ssaPkgs)
 	}
@@ -403,7 +414,7 @@ var fileAnchoredKinds = map[string]bool{
 	"method":        true,
 	"init_function": true,
 	"callsite":      true,
-	"call_edge":     true,
+	"call_edges":    true,
 	"param":         true,
 	"instantiation": true,
 	"conversion":    true,
@@ -734,6 +745,8 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 			e.add(row)
 			if dynamic {
 				e.emitDynamicDispatch(pkg, fn, common, callsiteKey)
+			}
+			if dynamic && e.callGraph && e.inScope(row) {
 				file, _ := row["file"].(string)
 				e.dynamicSites = append(e.dynamicSites, dynamicSite{
 					pkg:    pkg,

@@ -37,6 +37,11 @@ pub struct GoAnalysisConfig {
     /// tier and the symbol sidecar, which keep loading tests by default.
     pub semantic_include_tests: bool,
     pub offline: bool,
+    /// Whether the semantic sidecar emits the candidate callees of interface and
+    /// function-value calls. Not a setting: set from the analysis plan, only for a
+    /// plan that reads call targets, because the call graph is most of the
+    /// sidecar's time on a large module.
+    pub semantic_call_graph: bool,
     /// `[languages.go] semantic_timeout_ms`, when configured.
     pub semantic_timeout_ms: Option<u64>,
     /// Whether the semantic sidecar emits `rta_edge` rows.
@@ -149,6 +154,7 @@ impl GoAnalysisConfig {
                 .get("offline")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            semantic_call_graph: false,
             semantic_timeout_ms: positive_integer_setting(settings, "semantic_timeout_ms"),
             emit_rta_edges: emit_rta_edges_setting(settings),
             files_without_module_root,

@@ -203,6 +203,9 @@ fn append_request_args(
         .arg(config.semantic_include_tests.to_string())
         .arg("--build-tags")
         .arg(config.build_tags.join(","));
+    if config.semantic_call_graph {
+        command.arg("--call-graph");
+    }
     if config.emit_rta_edges {
         command.arg("--rta-edges");
     }
