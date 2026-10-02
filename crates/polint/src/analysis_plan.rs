@@ -197,7 +197,7 @@ impl AnalysisPlan {
     }
 
     /// The same plan, asking the abstract domains for every per-point state.
-    #[cfg(test)]
+    #[cfg(all(test, feature = "lang-go"))]
     pub(crate) fn with_per_point_domain_facts(mut self) -> Self {
         self.per_point_domain_facts = true;
         self.digest = plan_digest(

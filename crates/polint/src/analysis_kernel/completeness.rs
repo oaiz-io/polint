@@ -446,6 +446,7 @@ mod tests {
         assert!(view.reason_for("file_metrics").is_some());
     }
 
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
     #[test]
     fn a_healthy_pipeline_reports_no_failure_rows() {
         let (_plan, output) = metrics_fixture();
@@ -458,6 +459,7 @@ mod tests {
         assert_eq!(rows, Vec::new());
     }
 
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
     #[test]
     fn a_failed_provider_in_the_closure_becomes_an_error_row_naming_it() {
         let (_plan, mut output) = metrics_fixture();
@@ -505,6 +507,7 @@ mod tests {
         );
     }
 
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
     #[test]
     fn setup_missing_support_a_capability_depends_on_becomes_an_error_row() {
         let (_plan, output) = metrics_fixture();
