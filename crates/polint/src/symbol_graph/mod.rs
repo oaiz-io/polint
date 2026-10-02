@@ -321,7 +321,6 @@ fn derive_requested_symbols_uncached_with_payload(
     let mut semantic_output = SemanticIndexOutput::default();
 
     let selection = SymbolGraphSelection::from_plan(db, plan);
-    let request = selection.request;
     #[cfg(feature = "lang-typescript")]
     merge_language_output(
         &mut derivation,
@@ -330,7 +329,7 @@ fn derive_requested_symbols_uncached_with_payload(
             &mut builder,
             db,
             crate::ts::symbol_graph::TsSymbolOptions {
-                request,
+                request: selection.request,
                 resolved_imports: db.resolved_imports().to_vec(),
                 module_nodes: db.module_nodes().to_vec(),
             },

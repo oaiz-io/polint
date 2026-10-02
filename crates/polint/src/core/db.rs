@@ -1918,7 +1918,7 @@ impl AnalysisDb {
         &self.go_semantic_store().output().conversions
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
     pub(crate) fn go_semantic_interfaces(
         &self,
     ) -> &[crate::go::semantic::facts::GoSemanticInterfaceFact] {
