@@ -152,6 +152,21 @@ const ALLOWED_PRELUDE: &[&str] = &[
     "TestSuiteMetrics",
     "TsClasses",
     "TsComponents",
+    // crate::sdk::facts call-graph and Go type preview vocabulary; promotion
+    // record in docs/API-VISIBILITY-PLAN.md
+    "CallEdgeAlgorithm",
+    "CallEdgePrecision",
+    "CallGraphCallee",
+    "CallGraphEdge",
+    "CallGraphReach",
+    "CallGraphWalk",
+    "GoField",
+    "GoFunctionType",
+    "GoGenericTarget",
+    "GoImplementation",
+    "GoInstantiation",
+    "GoParameter",
+    "GoTypes",
     // crate::sdk::policy preview vocabulary
     "ArgumentBinding",
     "BarrierPattern",
@@ -667,11 +682,11 @@ fn allowlist_has_no_duplicates_and_expected_count() {
         ALLOWED_PRELUDE.len(),
         "ALLOWED_PRELUDE contains duplicate entries"
     );
-    // Locked count derived from sdk/mod.rs; last bumped for the guard-outcome
-    // vocabulary and its argument-identity binding.
+    // Locked count derived from sdk/mod.rs; last bumped for the call-graph and
+    // Go type views.
     assert_eq!(
         ALLOWED_PRELUDE.len(),
-        125,
+        138,
         "ALLOWED_PRELUDE count changed — update this assertion ONLY alongside a sanctioned \
          API promotion record"
     );

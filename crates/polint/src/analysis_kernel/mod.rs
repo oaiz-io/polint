@@ -58,6 +58,8 @@ fn requested_trigger_capabilities(plan: &AnalysisPlan) -> std::collections::BTre
         "calls",
         "control_flow",
         "dataflow",
+        "call_graph",
+        "go_types",
         "file_metrics",
         "function_metrics",
         "complexity_metrics",
@@ -74,10 +76,12 @@ pub(crate) const SCOPE_RULE_ID: &str = "polint/scope";
 
 /// Capabilities whose analysis crosses file boundaries, so requesting one loads
 /// every discovered file regardless of any rule's `files` list.
-const CROSS_FILE_CAPABILITIES: [&str; 7] = [
+const CROSS_FILE_CAPABILITIES: [&str; 9] = [
     "calls",
+    "call_graph",
     "control_flow",
     "dataflow",
+    "go_types",
     "module_graph",
     "references",
     "resolved_imports",
@@ -787,6 +791,8 @@ impl AnalysisKernel {
                     | "calls"
                     | "control_flow"
                     | "dataflow"
+                    | "call_graph"
+                    | "go_types"
             )
         });
         let rule_scope = if run_cross_file_analysis {
@@ -893,9 +899,10 @@ impl AnalysisKernel {
         let provider_outcomes = provider_tracker
             .seal(&validation_downgrades)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        let (runtime_blocked_rules, capability_diagnostics) =
+        let (runtime_blocked_rules, capability_diagnostics, unavailable_capabilities) =
             Self::runtime_capability_blockers(input.plan, &db, &provider_outcomes);
         diagnostics.extend(capability_diagnostics);
+        db.set_unavailable_capabilities(unavailable_capabilities);
         db.finish_all_fact_meta_insertions();
         let store_config = store::StoreConfig::new(
             input.cache.semantic_store_path(),
@@ -1032,22 +1039,27 @@ impl AnalysisKernel {
             .unwrap_or_else(|| panic!("missing provider manifest {provider_id}"))
     }
 
+    /// The rules that cannot run because a capability they require did not
+    /// succeed, their diagnostics, and every requested capability that is not
+    /// available; a rule that requested one optionally runs without it.
     pub(crate) fn runtime_capability_blockers(
         plan: &AnalysisPlan,
         db: &AnalysisDb,
         outcomes: &[ProviderOutcome],
-    ) -> (BTreeSet<String>, Vec<Diagnostic>) {
+    ) -> (BTreeSet<String>, Vec<Diagnostic>, BTreeSet<String>) {
         let by_id = outcomes
             .iter()
             .map(|outcome| (outcome.provider_id.as_str(), outcome))
             .collect::<BTreeMap<_, _>>();
         let mut blocked_rules = BTreeSet::new();
         let mut diagnostics = Vec::new();
+        let mut unavailable = BTreeSet::new();
         for rule in plan.rules() {
             for capability in &rule.requested_capabilities {
                 if plan.support_view().status_for(capability)
                     != Some(crate::core::CapabilitySupportStatus::Supported)
                 {
+                    unavailable.insert(capability.clone());
                     continue;
                 }
                 let mut providers = Self::capability_providers(capability, db);
@@ -1071,6 +1083,17 @@ impl AnalysisKernel {
                     .filter(|outcome| outcome.status != ProviderOutcomeStatus::Succeeded)
                     .collect::<Vec<_>>();
                 if failed.is_empty() {
+                    if capability == "go_types" && provider::go_types_unloaded(db) {
+                        unavailable.insert(capability.clone());
+                        if !rule.optional_capabilities.contains(capability) {
+                            blocked_rules.insert(rule.id.clone());
+                            diagnostics.push(go_types_unloaded_diagnostic(&rule.id));
+                        }
+                    }
+                    continue;
+                }
+                unavailable.insert(capability.clone());
+                if rule.optional_capabilities.contains(capability) {
                     continue;
                 }
                 blocked_rules.insert(rule.id.clone());
@@ -1099,7 +1122,7 @@ impl AnalysisKernel {
                 );
             }
         }
-        (blocked_rules, diagnostics)
+        (blocked_rules, diagnostics, unavailable)
     }
 
     fn capability_providers(capability: &str, db: &AnalysisDb) -> Vec<&'static str> {
@@ -1114,7 +1137,9 @@ impl AnalysisKernel {
             "events" => &["polint.go.syntax", "polint.ts.syntax"],
             "resolved_imports" | "module_graph" => &["polint.module_graph"],
             "symbols" | "references" => &["polint.symbol_graph"],
-            "calls" | "control_flow" | "cfg" | "call_graph" => &["polint.refined_calls"],
+            "calls" | "control_flow" | "cfg" => &["polint.refined_calls"],
+            "call_graph" => &["polint.calls"],
+            "go_types" => &["polint.go.semantic"],
             "dataflow" => &["polint.evidence"],
             "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
             _ => &[],
@@ -1136,6 +1161,21 @@ impl AnalysisKernel {
 
 fn is_syntax_provider(provider_id: &str) -> bool {
     matches!(provider_id, "polint.go.syntax" | "polint.ts.syntax")
+}
+
+fn go_types_unloaded_diagnostic(rule_id: &str) -> Diagnostic {
+    Diagnostic::error(
+        "polint/capability",
+        "<workspace>",
+        TextRange::point(1, 1),
+        format!(
+            "Rule `{rule_id}` requested capability `go_types`, but the typed Go frontend loaded no package: Go files outside every go.mod module root are not type-checked."
+        ),
+    )
+    .with_evidence("rule", rule_id.to_string())
+    .with_evidence("capability", "go_types")
+    .with_evidence("status", ProviderOutcomeStatus::SetupMissing.label())
+    .with_evidence("blockers", "polint.go.semantic")
 }
 
 fn provider_output_summary_parts(db: &AnalysisDb, manifest: &ProviderManifest) -> Vec<String> {

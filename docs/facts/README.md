@@ -8,8 +8,8 @@ Rule authors should treat these facts as the supported building blocks for
 repo-local policies. The examples are only consumers of these facts, not special
 internal entry points.
 
-Promotion is explicit. Stable public rule-author views and Phase 55 preview
-policy views are listed below. Raw CFG, raw call graph, semantic graph,
+Promotion is explicit. Stable public rule-author views and preview policy,
+call-graph and Go type views are listed below. Raw CFG, semantic graph,
 solver/provider internals, evidence stores, effects/summaries, type/value/alias
 facts, benchmarks, and eval reports stay private or reserved until they have
 public SDK views, docs, temp-repo tests, bounded behavior, setup behavior,
@@ -37,6 +37,11 @@ Preview policy-query references:
 - [Calls](calls.md)
 - [Control-flow policies](control-flow.md)
 - [Data-flow policies](data-flow.md)
+
+Preview graph and type references:
+
+- [Call graph](call-graph.md)
+- [Go types](go-semantic-types.md)
 
 Reserved/internal references:
 

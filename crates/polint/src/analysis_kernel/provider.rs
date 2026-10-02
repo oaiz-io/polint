@@ -1126,7 +1126,7 @@ pub(crate) fn run_named_provider(id: &str, ctx: &mut ProviderCtx<'_>) -> Provide
 /// Whether a plan reads call targets, which is when the Go semantic sidecar
 /// computes the candidate callees of interface and function-value calls.
 pub(crate) fn go_semantic_call_graph_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
-    plan.requests_any_capability(&["calls", "dataflow"])
+    plan.requests_any_capability(&["calls", "dataflow", "call_graph"])
 }
 
 /// Whether the run's deep capabilities reach past call resolution.
@@ -1167,6 +1167,18 @@ pub(crate) fn go_points_to_requested(
     db: &AnalysisDb,
 ) -> bool {
     control_or_data_flow_requested(plan) || db.go_semantic_callsites().is_empty()
+}
+
+/// Whether the scan has Go sources but the typed Go frontend loaded no package
+/// for them, which is what happens when no `go.mod` module root covers them.
+/// The frontend then succeeds with no rows, and a type question answered from
+/// those rows would read "no such field" where the truth is "not analyzed".
+pub(crate) fn go_types_unloaded(db: &AnalysisDb) -> bool {
+    db.go_semantic_packages().is_empty()
+        && db
+            .files()
+            .iter()
+            .any(|file| file.language == crate::core::Language::Go)
 }
 
 /// Providers always present in today's `run()` schedule (graphs + metrics).
@@ -1225,6 +1237,18 @@ pub(crate) fn providers_enabled_by_boolean_gates(
     if requested.contains("dataflow") {
         enabled.extend(["polint.data_flow", "polint.evidence"]);
     }
+    if requested.contains("call_graph") {
+        enabled.extend([
+            "polint.module_topology",
+            "polint.semantic_mir",
+            "polint.cfg",
+            "polint.calls",
+            "polint.go.semantic",
+        ]);
+    }
+    if requested.contains("go_types") {
+        enabled.insert("polint.go.semantic");
+    }
     enabled
 }
 
@@ -1246,6 +1270,8 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
             DATAFLOW_SEEDS
         }
         "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
+        "call_graph" => &["polint.calls"],
+        "go_types" => &["polint.go.semantic"],
         _ => &[],
     }
 }
@@ -2231,6 +2257,8 @@ mod tests {
             "module_graph",
             "symbols",
             "references",
+            "call_graph",
+            "go_types",
             "calls",
             "control_flow",
             "dataflow",

@@ -258,6 +258,8 @@ pub struct AnalysisDb {
     /// Provider-owned stores keyed by primary [`FactFamily`]. Iteration stays ordered.
     pub(crate) fact_stores: BTreeMap<FactFamily, FactStoreEntry>,
     fact_view_indexes: OnceLock<FactViewIndexes>,
+    call_graph_index: OnceLock<crate::core::view_index::CallGraphIndex>,
+    go_types_index: OnceLock<crate::core::view_index::GoTypesIndex>,
     pub(crate) path_contexts: Option<crate::path_context::PathContextIndex>,
     /// Diff-to-target-ref facts, injected by the host for `polint review`.
     ///
@@ -277,6 +279,9 @@ pub struct AnalysisDb {
     /// which case no MIR was materialized: call sites keep the MIR body,
     /// operation and place ids of the run that computed them.
     call_facts_without_mir: bool,
+    /// Capabilities the rules requested that the run could not provide; a view
+    /// requested optionally is absent for them.
+    unavailable_capabilities: BTreeSet<String>,
 }
 
 impl Clone for AnalysisDb {
@@ -287,12 +292,15 @@ impl Clone for AnalysisDb {
             fact_meta: self.fact_meta.clone(),
             fact_stores: self.fact_stores.clone(),
             fact_view_indexes: self.fact_view_indexes.clone(),
+            call_graph_index: self.call_graph_index.clone(),
+            go_types_index: self.go_types_index.clone(),
             path_contexts: self.path_contexts.clone(),
             changeset: self.changeset.clone(),
             deferred_syntax_metadata: self.deferred_syntax_metadata.clone(),
             deferred_metric_metadata: self.deferred_metric_metadata,
             defer_syntax_metadata: self.defer_syntax_metadata,
             call_facts_without_mir: self.call_facts_without_mir,
+            unavailable_capabilities: self.unavailable_capabilities.clone(),
         }
     }
 }
@@ -422,12 +430,15 @@ impl Default for AnalysisDb {
             fact_meta: FactMetaStore::default(),
             fact_stores,
             fact_view_indexes: OnceLock::new(),
+            call_graph_index: OnceLock::new(),
+            go_types_index: OnceLock::new(),
             path_contexts: None,
             changeset: None,
             deferred_syntax_metadata: Vec::new(),
             deferred_metric_metadata: false,
             defer_syntax_metadata: false,
             call_facts_without_mir: false,
+            unavailable_capabilities: BTreeSet::new(),
         }
     }
 }
@@ -782,6 +793,20 @@ impl AnalysisDb {
 
     pub(crate) fn invalidate_fact_view_indexes(&mut self) {
         let _ = self.fact_view_indexes.take();
+        let _ = self.call_graph_index.take();
+        let _ = self.go_types_index.take();
+    }
+
+    /// The call-graph view's index, built on first use.
+    pub(crate) fn call_graph_index(&self) -> &crate::core::view_index::CallGraphIndex {
+        self.call_graph_index
+            .get_or_init(|| crate::core::view_index::CallGraphIndex::build(self))
+    }
+
+    /// The Go type view's index, built on first use.
+    pub(crate) fn go_types_index(&self) -> &crate::core::view_index::GoTypesIndex {
+        self.go_types_index
+            .get_or_init(|| crate::core::view_index::GoTypesIndex::build(self))
     }
 
     fn fact_view_indexes(&self) -> &FactViewIndexes {
@@ -1900,26 +1925,22 @@ impl AnalysisDb {
         &self.go_semantic_store().output().interfaces
     }
 
-    #[cfg(test)]
     pub(crate) fn go_semantic_implements(
         &self,
     ) -> &[crate::go::semantic::facts::GoSemanticImplementsFact] {
         &self.go_semantic_store().output().implements
     }
 
-    #[cfg(test)]
     pub(crate) fn go_semantic_instantiations(
         &self,
     ) -> &[crate::go::semantic::facts::GoSemanticInstantiationFact] {
         &self.go_semantic_store().output().instantiations
     }
 
-    #[cfg(test)]
     pub(crate) fn go_semantic_fields(&self) -> &[crate::go::semantic::facts::GoSemanticFieldFact] {
         &self.go_semantic_store().output().fields
     }
 
-    #[cfg(test)]
     pub(crate) fn go_semantic_params(&self) -> &[crate::go::semantic::facts::GoSemanticParamFact] {
         &self.go_semantic_store().output().params
     }
@@ -4256,6 +4277,15 @@ impl AnalysisDb {
     /// records it later for whoever does need it.
     /// Records that the call facts came from the call-resolution cache and no
     /// MIR was materialized; see `call_facts_without_mir`.
+    pub(crate) fn set_unavailable_capabilities(&mut self, capabilities: BTreeSet<String>) {
+        self.unavailable_capabilities = capabilities;
+    }
+
+    /// Whether the run provides `capability`; see `unavailable_capabilities`.
+    pub(crate) fn capability_available(&self, capability: &str) -> bool {
+        !self.unavailable_capabilities.contains(capability)
+    }
+
     pub(crate) fn mark_call_facts_restored_without_mir(&mut self) {
         self.call_facts_without_mir = true;
     }

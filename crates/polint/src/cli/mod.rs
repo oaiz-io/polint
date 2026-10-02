@@ -3120,6 +3120,7 @@ impl FactsListReport {
             public_fact_view("control_flow").unwrap(),
             public_fact_view("cfg").unwrap(),
             public_fact_view("call_graph").unwrap(),
+            public_fact_view("go_types").unwrap(),
             public_fact_view("dataflow").unwrap(),
             public_fact_view("coverage_facts").unwrap(),
             public_fact_view("test_suite_metrics").unwrap(),
@@ -3239,8 +3240,17 @@ fn public_fact_view(capability: &str) -> Option<PublicFactView> {
             capability: "call_graph",
             view_type: "CallGraph",
             canonical_path: "polint::sdk::facts::CallGraph<'_>",
-            stability: "reserved",
-            docs_path: "docs/facts/capability-plans.md",
+            stability: "preview",
+            docs_path: "docs/facts/call-graph.md",
+            sampling: false,
+            unknowns: false,
+        },
+        "go_types" => PublicFactView {
+            capability: "go_types",
+            view_type: "GoTypes",
+            canonical_path: "polint::sdk::facts::GoTypes<'_>",
+            stability: "preview",
+            docs_path: "docs/facts/go-semantic-types.md",
             sampling: false,
             unknowns: false,
         },
@@ -5402,10 +5412,13 @@ mod tests {
         );
 
         assert_eq!(public_fact_view("cfg").unwrap().stability, "reserved");
-        assert_eq!(
-            public_fact_view("call_graph").unwrap().stability,
-            "reserved"
-        );
+        for (capability, docs_path) in [
+            ("call_graph", "docs/facts/call-graph.md"),
+            ("go_types", "docs/facts/go-semantic-types.md"),
+        ] {
+            let view = public_fact_view(capability).unwrap();
+            assert_eq!((view.stability, view.docs_path), ("preview", docs_path));
+        }
     }
 
     #[test]

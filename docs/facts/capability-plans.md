@@ -81,13 +81,27 @@ Policy diagnostics share a normalized evidence header: `policy_query`,
 policy capabilities through
 `polint unknowns --cap events|calls|control_flow|dataflow --format json`.
 
+## Call Graph And Go Type Preview Facts
+
+- `CallGraph<'_>` derives capability `call_graph` ([call-graph.md](call-graph.md))
+- `GoTypes<'_>` derives capability `go_types`
+  ([go-semantic-types.md](go-semantic-types.md))
+
+Both are preview. `CallGraph<'_>` exposes the resolved call edges (for Go, the
+typed frontend's static, variable-type and class-hierarchy answers) without the
+refinement steps behind `Calls<'_>`; `GoTypes<'_>` reads only the typed Go
+frontend. A rule can request either as `Option<CallGraph<'_>>` or
+`Option<GoTypes<'_>>`: it then runs with `None` when the capability is
+unavailable, instead of being skipped with a `polint/capability` diagnostic.
+These two views are the only ones a rule can request optionally.
+
 ## Reserved Capabilities
 
-Reserved raw capabilities such as `cfg`, `call_graph`, `coverage_facts`, and
+Reserved raw capabilities such as `cfg`, `coverage_facts`, and
 `test_suite_metrics` must stay unsupported until a rule can consume real public
-SDK facts for them. `Cfg<'_>` and `CallGraph<'_>` are not aliases for
-`ControlFlow<'_>` or `Calls<'_>`. `DataFlow<'_>` is a policy query view, not a
-raw graph view.
+SDK facts for them. `Cfg<'_>` is not an alias for `ControlFlow<'_>`, and
+`CallGraph<'_>` is not an alias for `Calls<'_>`. `DataFlow<'_>` is a policy
+query view, not a raw graph view.
 
 Rules that request unsupported or setup-missing hard capabilities produce
 `polint/capability` diagnostics during `polint check` and are not executed with

@@ -116,6 +116,13 @@ fn capability_status(
         );
     }
 
+    if capability == "go_types" && super::provider::go_types_unloaded(db) {
+        return (
+            CapabilityCompletenessStatus::Unknown,
+            Some("the typed Go frontend loaded no package for the scanned Go files".to_string()),
+        );
+    }
+
     let requested = BTreeSet::from([capability]);
     let relevant_providers = super::provider::providers_enabled_by_capability_closure(&requested);
     let relevant_unknowns = unknowns

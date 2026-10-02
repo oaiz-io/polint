@@ -71,7 +71,8 @@ pub(crate) const CACHED_PROVIDERS: &[&str] = &[
 pub(crate) const KEYED_UPSTREAM: &[&str] = &["polint.go.syntax"];
 
 /// Whether a run may use the cache: it asks for call resolution and nothing
-/// that reads past it, and it scans only Go.
+/// that reads past it, and it scans only Go. An entry holds no Go type facts,
+/// so a run that reads them computes.
 pub(crate) fn eligible(
     plan: &crate::analysis_plan::AnalysisPlan,
     db: &AnalysisDb,
@@ -81,6 +82,7 @@ pub(crate) fn eligible(
         .iter()
         .all(|provider| enabled_providers.contains(provider))
         && !crate::analysis_kernel::provider::control_or_data_flow_requested(plan)
+        && !plan.requests_capability("go_types")
         && !plan.requests_per_point_domain_facts()
         && !db.files().is_empty()
         && db.files().iter().all(|file| file.language == Language::Go)

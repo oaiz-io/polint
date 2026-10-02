@@ -32,6 +32,9 @@ struct ViewParam {
     capability_method: Ident,
     capability_name: String,
     canonical_path: String,
+    /// Requested as `Option<View<'_>>`: the rule runs without the view when
+    /// the capability is unavailable.
+    optional: bool,
 }
 
 fn expand_rule(args: Vec<Meta>, input: ItemFn) -> syn::Result<proc_macro2::TokenStream> {
@@ -65,8 +68,14 @@ fn expand_rule(args: Vec<Meta>, input: ItemFn) -> syn::Result<proc_macro2::Token
         let ident = &param.ident;
         let ty = &param.ty;
         let view_type = &param.view_type;
-        quote! {
-            let #ident: #ty = <::polint::sdk::facts::#view_type<'_> as ::polint::sdk::__private::FactView<'_>>::build(db);
+        if param.optional {
+            quote! {
+                let #ident: #ty = <::polint::sdk::facts::#view_type<'_> as ::polint::sdk::__private::FactView<'_>>::build_optional(db);
+            }
+        } else {
+            quote! {
+                let #ident: #ty = <::polint::sdk::facts::#view_type<'_> as ::polint::sdk::__private::FactView<'_>>::build(db);
+            }
         }
     });
     let view_idents = view_params
@@ -310,8 +319,25 @@ fn parse_view_param(arg: &FnArg) -> syn::Result<ViewParam> {
             "fact-view parameters cannot be `mut`",
         ));
     }
+    let (view_ty, optional) = match optional_inner_type(pat_type.ty.as_ref()) {
+        Some(inner) => (inner, true),
+        None => (pat_type.ty.as_ref(), false),
+    };
     let (view_type, capability_method, capability_name, canonical_path) =
-        capability_for_type(pat_type.ty.as_ref())?;
+        capability_for_type(view_ty)?;
+    let capability_method = if optional {
+        match capability_name.as_str() {
+            "call_graph" | "go_types" => format_ident!("{}_optional", capability_name),
+            _ => {
+                return Err(syn::Error::new(
+                    pat_type.ty.span(),
+                    "only the CallGraph and GoTypes views can be requested optionally",
+                ));
+            }
+        }
+    } else {
+        capability_method
+    };
     Ok(ViewParam {
         ident: ident.clone(),
         ty: (*pat_type.ty).clone(),
@@ -319,7 +345,40 @@ fn parse_view_param(arg: &FnArg) -> syn::Result<ViewParam> {
         capability_method,
         capability_name,
         canonical_path,
+        optional,
     })
+}
+
+/// The `T` of an `Option<T>` parameter type, written as `Option`,
+/// `std::option::Option` or `core::option::Option`.
+fn optional_inner_type(ty: &Type) -> Option<&Type> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    let segments = path
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>();
+    let is_option = matches!(
+        segments
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .as_slice(),
+        ["Option"] | ["std", "option", "Option"] | ["core", "option", "Option"]
+    );
+    if !is_option || path.qself.is_some() {
+        return None;
+    }
+    let PathArguments::AngleBracketed(arguments) = &path.path.segments.last()?.arguments else {
+        return None;
+    };
+    match arguments.args.iter().collect::<Vec<_>>().as_slice() {
+        [GenericArgument::Type(inner)] => Some(inner),
+        _ => None,
+    }
 }
 
 fn capability_for_type(ty: &Type) -> syn::Result<(Ident, Ident, String, String)> {
@@ -363,6 +422,7 @@ fn capability_for_type(ty: &Type) -> syn::Result<(Ident, Ident, String, String)>
         "ControlFlow" => "control_flow",
         "Cfg" => "cfg",
         "CallGraph" => "call_graph",
+        "GoTypes" => "go_types",
         "DataFlow" => "dataflow",
         "GoTests" => "go_tests",
         "BranchObligations" => "branch_obligations",
@@ -544,6 +604,7 @@ mod tests {
         assert_eq!(capability("ControlFlow<'_>"), "control_flow");
         assert_eq!(capability("Cfg<'_>"), "cfg");
         assert_eq!(capability("CallGraph<'_>"), "call_graph");
+        assert_eq!(capability("GoTypes<'_>"), "go_types");
         assert_eq!(capability("FileMetrics<'_>"), "file_metrics");
         assert_eq!(capability("FunctionMetrics<'_>"), "function_metrics");
         assert_eq!(capability("ComplexityMetrics<'_>"), "complexity_metrics");
@@ -575,6 +636,42 @@ mod tests {
         assert_eq!(
             canonical_path("polint::sdk::prelude::ControlFlow<'_>"),
             "polint::sdk::facts::ControlFlow<'_>"
+        );
+    }
+
+    #[test]
+    fn optional_call_graph_and_go_types_views_request_their_capability_optionally() {
+        for (source, method, capability) in [
+            (
+                "graph: Option<CallGraph<'_>>",
+                "call_graph_optional",
+                "call_graph",
+            ),
+            (
+                "types: std::option::Option<GoTypes<'_>>",
+                "go_types_optional",
+                "go_types",
+            ),
+        ] {
+            let param = parse_view_param(&first_arg(source)).unwrap();
+            assert!(param.optional, "{source}");
+            assert_eq!(param.capability_method.to_string(), method);
+            assert_eq!(param.capability_name, capability);
+        }
+        let required = parse_view_param(&first_arg("graph: CallGraph<'_>")).unwrap();
+        assert!(!required.optional);
+        assert_eq!(required.capability_method.to_string(), "call_graph");
+    }
+
+    #[test]
+    fn only_call_graph_and_go_types_views_can_be_optional() {
+        let error = parse_view_param(&first_arg("calls: Option<Calls<'_>>"))
+            .err()
+            .expect("an optional Calls view is rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("only the CallGraph and GoTypes views can be requested optionally")
         );
     }
 

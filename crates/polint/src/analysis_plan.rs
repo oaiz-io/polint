@@ -47,6 +47,8 @@ pub(crate) struct PlannedRule {
     pub(crate) description: String,
     pub(crate) severity: Severity,
     pub(crate) requested_capabilities: Vec<String>,
+    /// Requested capabilities the rule runs without when they are unavailable.
+    pub(crate) optional_capabilities: Vec<String>,
     pub(crate) files: Vec<String>,
     pub(crate) allow_files: Vec<String>,
     pub(crate) options_digest: String,
@@ -146,6 +148,11 @@ impl AnalysisPlan {
                     description: input.meta.description.clone(),
                     severity: rule_options.severity.unwrap_or(input.meta.severity),
                     requested_capabilities: capabilities,
+                    optional_capabilities: input
+                        .capabilities
+                        .optional_names()
+                        .map(str::to_string)
+                        .collect(),
                     files: rule_options.files.clone(),
                     allow_files: rule_options.allow_files.clone(),
                     options_digest,
@@ -381,6 +388,7 @@ impl AnalysisPlan {
             description: "Requested capability analysis".to_string(),
             severity: Severity::Warn,
             requested_capabilities: names.iter().map(|name| (*name).to_string()).collect(),
+            optional_capabilities: Vec::new(),
             files: Vec::new(),
             allow_files: Vec::new(),
             options_digest: deterministic_rule_options(&RuleOptions::default()),
@@ -414,6 +422,7 @@ impl AnalysisPlan {
             description: "Test rule".to_string(),
             severity: Severity::Warn,
             requested_capabilities: names.iter().map(|name| (*name).to_string()).collect(),
+            optional_capabilities: Vec::new(),
             files: Vec::new(),
             allow_files: Vec::new(),
             options_digest: deterministic_rule_options(&RuleOptions::default()),
@@ -834,7 +843,7 @@ fn insert_capability_request(
 
 pub(crate) fn capability_dependencies(capability: &str) -> &'static [&'static str] {
     match capability {
-        "calls" | "control_flow" | "dataflow" => {
+        "calls" | "control_flow" | "dataflow" | "call_graph" => {
             &["resolved_imports", "module_graph", "symbols", "references"]
         }
         "references" => &["symbols"],
@@ -882,7 +891,8 @@ fn support_for(capability: &str) -> CapabilityAccumulator {
             None,
             None,
         ),
-        "cfg" | "call_graph" | "coverage_facts" => (
+        "call_graph" | "go_types" => (CapabilitySupportStatus::Supported, None, None, None),
+        "cfg" | "coverage_facts" => (
             CapabilitySupportStatus::Unsupported,
             Some("Capability is not currently supported.".to_string()),
             None,
@@ -944,6 +954,14 @@ fn plan_digest(
             "rule.capabilities={}",
             encode_str_list(&rule.requested_capabilities)
         ));
+        // Only an optional request adds a part, so every other plan keeps the
+        // digest it always had.
+        if !rule.optional_capabilities.is_empty() {
+            parts.push(format!(
+                "rule.optional_capabilities={}",
+                encode_str_list(&rule.optional_capabilities)
+            ));
+        }
     }
 
     for capability in capabilities {
@@ -1306,7 +1324,7 @@ mod tests {
 
     #[test]
     fn reserved_capabilities_remain_unsupported() {
-        let accumulator = support_for("call_graph");
+        let accumulator = support_for("cfg");
 
         assert_eq!(accumulator.status, CapabilitySupportStatus::Unsupported);
         assert_eq!(
@@ -1318,12 +1336,12 @@ mod tests {
             Some("docs/facts/capability-plans.md")
         );
 
-        let plan = AnalysisPlan::from_capability_names_for_test(&["call_graph"]);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["cfg"]);
         let capability = plan
             .capabilities()
             .iter()
-            .find(|capability| capability.capability == "call_graph")
-            .unwrap_or_else(|| panic!("expected call_graph capability row: {plan:#?}"));
+            .find(|capability| capability.capability == "cfg")
+            .unwrap_or_else(|| panic!("expected cfg capability row: {plan:#?}"));
         assert_eq!(capability.status, CapabilitySupportStatus::Unsupported);
         assert_eq!(
             capability.reason.as_deref(),
@@ -1628,6 +1646,7 @@ mod tests {
                 description: "Needs coverage".to_string(),
                 severity: Severity::Warn,
                 requested_capabilities: vec!["coverage_facts".to_string()],
+                optional_capabilities: Vec::new(),
                 files: Vec::new(),
                 allow_files: Vec::new(),
                 options_digest: "options".to_string(),

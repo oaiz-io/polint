@@ -171,6 +171,10 @@ fn dominance_budget_diagnostic(trip: DominanceBudgetTrip) -> Diagnostic {
     .with_evidence("limit", trip.limit.to_string())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The digest names every input that shapes the output, including the plan's two lowering choices."
+)]
 fn cfg_output_digest(
     manifest: &ProviderManifest,
     input_snapshot: &InputSnapshot,
@@ -487,7 +491,10 @@ fn key_text<'a>(
         .ok()
         .and_then(|index| table.get(index).copied().flatten())
         .map(|key| Cow::Borrowed(keys.text(key)))
-        .unwrap_or_else(|| Cow::Owned(format!("<missing-{family}:{id}>")))
+        // A row whose key is absent fails validation before it is stored; the
+        // placeholder names the family only, since a dense id would make the
+        // digest depend on the scanned file set.
+        .unwrap_or_else(|| Cow::Owned(format!("<missing-{family}>")))
 }
 
 fn span_part(span: &crate::internal_core::Span) -> String {

@@ -2640,11 +2640,11 @@ fn call_edge_match_candidates(
         semantic.push(symbol.name.clone());
         semantic.push(symbol.qualified_name.clone());
     }
-    if let Some(function) = edge
-        .target_function
-        .and_then(|function| function_by_id(db, function))
-    {
-        semantic.push(function.name.clone());
+    if let Some(function) = edge.target_function {
+        if let Some(fact) = function_by_id(db, function) {
+            semantic.push(fact.name.clone());
+        }
+        semantic.extend(typed_go_callee_names(db, function));
     }
     let mut syntax = Vec::new();
     if let Some(site) = site_by_id.get(&edge.site) {
@@ -2655,6 +2655,24 @@ fn call_edge_match_candidates(
     syntax.sort();
     syntax.dedup();
     CallMatchCandidates { semantic, syntax }
+}
+
+/// The names a callee the typed Go frontend resolved answers to besides its
+/// declared name. Such a callee has no symbol, so these stand in for the names
+/// a Go symbol carries — the package-qualified and bare names (`example.com/app.Save`
+/// and `Save` for a method) — beside the frontend's own qualified name
+/// (`(*example.com/app.Repo).Save`).
+fn typed_go_callee_names(db: &AnalysisDb, function: FunctionId) -> Vec<String> {
+    let Some(position) = db.go_types_index().function_by_id.get(&function) else {
+        return Vec::new();
+    };
+    let fact = &db.go_semantic_functions()[*position];
+    let bare = fact.name.rsplit('.').next().unwrap_or(&fact.name);
+    vec![
+        fact.qualified.clone(),
+        format!("{}.{bare}", fact.package_path),
+        bare.to_string(),
+    ]
 }
 
 fn synthetic_target_is_user_matchable(target: &str) -> bool {
@@ -2693,11 +2711,15 @@ fn best_call_target_label(
         }
         return symbol.name.clone();
     }
-    if let Some(function) = edge
-        .target_function
-        .and_then(|function| function_by_id(db, function))
-    {
-        return function.name.clone();
+    if let Some(function) = edge.target_function {
+        // A callee the typed Go frontend resolved has no symbol; its qualified
+        // name is the frontend's, which for a function is the symbol's form.
+        if let Some(position) = db.go_types_index().function_by_id.get(&function) {
+            return db.go_semantic_functions()[*position].qualified.clone();
+        }
+        if let Some(function) = function_by_id(db, function) {
+            return function.name.clone();
+        }
     }
     if let Some(synthetic_target) = &edge.synthetic_target
         && synthetic_target_is_user_matchable(synthetic_target)

@@ -34,8 +34,20 @@ pub struct Capabilities {
     pub control_flow: bool,
     /// Reserved for future control-flow graph facts. Branch obligations are available through [`Capabilities::branch_obligations`].
     pub cfg: bool,
-    /// Reserved for future call graph facts. Direct syntactic calls are available on function facts.
+    /// Needs resolved call edges between functions.
     pub call_graph: bool,
+    /// Needs the typed Go frontend's facts: function signatures, parameters,
+    /// struct fields, generic instantiations, method sets and interface
+    /// satisfaction.
+    pub go_types: bool,
+    /// Requests `call_graph` optionally: the rule still runs, with no view,
+    /// when the capability is unavailable.
+    #[serde(default)]
+    pub call_graph_optional: bool,
+    /// Requests `go_types` optionally: the rule still runs, with no view, when
+    /// the capability is unavailable.
+    #[serde(default)]
+    pub go_types_optional: bool,
     /// Preview policy-level data-flow queries. Bounded source/sink/barrier checks are provider-backed.
     pub dataflow: bool,
     /// Needs Go test facts harvested from `_test.go` files.
@@ -125,6 +137,33 @@ impl Capabilities {
         self
     }
 
+    pub fn go_types(mut self) -> Self {
+        self.go_types = true;
+        self
+    }
+
+    pub fn call_graph_optional(mut self) -> Self {
+        self.call_graph = true;
+        self.call_graph_optional = true;
+        self
+    }
+
+    pub fn go_types_optional(mut self) -> Self {
+        self.go_types = true;
+        self.go_types_optional = true;
+        self
+    }
+
+    /// The requested capabilities a rule runs without when they are unavailable.
+    pub(crate) fn optional_names(self) -> impl Iterator<Item = &'static str> {
+        [
+            ("call_graph", self.call_graph_optional),
+            ("go_types", self.go_types_optional),
+        ]
+        .into_iter()
+        .filter_map(|(name, optional)| optional.then_some(name))
+    }
+
     pub fn dataflow(mut self) -> Self {
         self.dataflow = true;
         self
@@ -203,6 +242,7 @@ impl Capabilities {
             ("control_flow", self.control_flow),
             ("cfg", self.cfg),
             ("call_graph", self.call_graph),
+            ("go_types", self.go_types),
             ("dataflow", self.dataflow),
             ("go_tests", self.go_tests),
             ("branch_obligations", self.branch_obligations),

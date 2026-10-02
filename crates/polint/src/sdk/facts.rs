@@ -855,12 +855,14 @@ pub struct Cfg<'a> {
     _db: &'a AnalysisDb,
 }
 
-/// Reserved call-graph fact view. Requesting this view currently maps to unsupported `call_graph`.
-#[derive(Clone, Copy)]
-#[non_exhaustive]
-pub struct CallGraph<'a> {
-    _db: &'a AnalysisDb,
-}
+pub use super::call_graph::{
+    CallEdgeAlgorithm, CallEdgePrecision, CallGraph, CallGraphCallee, CallGraphEdge,
+    CallGraphReach, CallGraphWalk,
+};
+pub use super::go_types::{
+    GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation, GoParameter,
+    GoTypes,
+};
 
 /// Preview event policy view. Requesting this view maps to lightweight `events`.
 #[derive(Clone, Copy)]
@@ -1096,6 +1098,12 @@ impl<'a> ChangedFileRef<'a> {
 pub trait FactView<'a>: Sized {
     /// Builds a view for the current analysis database.
     fn build(db: &'a AnalysisDb) -> Self;
+
+    /// Builds the view a rule requested optionally: `None` when the run could
+    /// not provide its capability.
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        Some(Self::build(db))
+    }
 }
 
 macro_rules! impl_fact_view {
@@ -1136,7 +1144,26 @@ impl_fact_view!(JsxAttributes);
 impl_fact_view!(CoverageFacts);
 impl_fact_view!(ChangedFiles);
 impl_fact_view!(Cfg, _db);
-impl_fact_view!(CallGraph, _db);
+impl<'a> FactView<'a> for CallGraph<'a> {
+    fn build(db: &'a AnalysisDb) -> Self {
+        Self { db }
+    }
+
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        db.capability_available("call_graph")
+            .then(|| Self::build(db))
+    }
+}
+
+impl<'a> FactView<'a> for GoTypes<'a> {
+    fn build(db: &'a AnalysisDb) -> Self {
+        Self { db }
+    }
+
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        db.capability_available("go_types").then(|| Self::build(db))
+    }
+}
 impl_fact_view!(Events);
 impl_fact_view!(Calls);
 impl_fact_view!(ControlFlow);

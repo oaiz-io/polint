@@ -8,9 +8,13 @@
 
 #![deny(missing_docs)]
 
+mod call_graph;
 pub mod facts;
+mod go_types;
 pub mod policy;
 pub mod scope;
+#[cfg(all(test, feature = "lang-go"))]
+mod typed_views_tests;
 
 use crate::core::{FileId, TestFact};
 use facts::GoTests;
@@ -48,11 +52,13 @@ pub mod prelude {
     pub use crate::rule_error::{RuleError, RuleResult};
     pub use crate::sdk::collect_go_tests;
     pub use crate::sdk::facts::{
-        BranchObligations, CallGraph, Calls, Cfg, ChangedFiles, ComplexityMetrics, ControlFlow,
-        CoverageFacts, DataFlow, Events, FileMetrics, FunctionMetrics, Functions, GoTests,
-        GoTypeDecls, Imports, JsxAttributes, ModuleGraphFacts, Packages, References,
-        ResolvedImports, SourceFiles, StringLiterals, Symbols, TestSuiteMetrics, TsClasses,
-        TsComponents,
+        BranchObligations, CallEdgeAlgorithm, CallEdgePrecision, CallGraph, CallGraphCallee,
+        CallGraphEdge, CallGraphReach, CallGraphWalk, Calls, Cfg, ChangedFiles, ComplexityMetrics,
+        ControlFlow, CoverageFacts, DataFlow, Events, FileMetrics, FunctionMetrics, Functions,
+        GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation, GoParameter,
+        GoTests, GoTypeDecls, GoTypes, Imports, JsxAttributes, ModuleGraphFacts, Packages,
+        References, ResolvedImports, SourceFiles, StringLiterals, Symbols, TestSuiteMetrics,
+        TsClasses, TsComponents,
     };
     pub use crate::sdk::policy::{
         ArgumentBinding, BarrierPattern, EventPattern, FlowQuery, GuardPattern, GuardQuery,

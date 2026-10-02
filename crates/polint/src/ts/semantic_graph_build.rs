@@ -154,6 +154,10 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection_and_adaptat
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The graph build takes each TS input family and the language the plan leaves out."
+)]
 fn build_semantic_graph_with_inputs<H: AnalysisHost>(
     db: &H,
     ts_direct_bindings: &[TsDirectBindingFact],

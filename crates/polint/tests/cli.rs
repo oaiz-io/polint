@@ -143,9 +143,10 @@ fn facts_list_json_is_stable_and_public_only() {
         assert_eq!(stability_for(capability), "preview");
         assert_eq!(view_for(capability)["unknowns"], true);
     }
-    for capability in ["cfg", "call_graph"] {
-        assert_eq!(stability_for(capability), "reserved");
+    for capability in ["call_graph", "go_types"] {
+        assert_eq!(stability_for(capability), "preview");
     }
+    assert_eq!(stability_for("cfg"), "reserved");
 
     for marker in [
         "polint.data_flow",
@@ -3542,7 +3543,6 @@ fn direct_calls_internals_stay_private() {
     }
     assert_direct_calls_public_surfaces_are_private();
     assert_direct_calls_cli_help_is_private();
-    assert!(!repo_root().join("docs/facts/call-graph.md").exists());
 
     let source = fs::read_to_string(temp.path().join(".polint/rules/src/main.rs")).unwrap();
     assert!(source.contains("use polint::sdk::prelude::*;"));
@@ -3639,10 +3639,25 @@ fn abstract_domain_internals_stay_private() {
     assert_abstract_domains_public_rule_source(&source);
 }
 
+/// Whether `text` mentions `marker`. A view marker such as `Types<'_>` names
+/// that view, so a longer view name ending the same way (`GoTypes<'_>`, the
+/// typed Go frontend's view) does not count as a mention.
+fn mentions_marker(text: &str, marker: &str) -> bool {
+    if !marker.ends_with("<'_>") {
+        return text.contains(marker);
+    }
+    text.match_indices(marker).any(|(at, _)| {
+        !text[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|before| before.is_alphanumeric() || before == '_')
+    })
+}
+
 fn assert_type_value_alias_public_output_is_private(output: &str) {
     for marker in TYPE_VALUE_ALIAS_INTERNAL_PUBLIC_MARKERS {
         assert!(
-            !output.contains(marker),
+            !mentions_marker(output, marker),
             "public output must not leak type/value/alias internal marker `{marker}`:\n{output}"
         );
     }
@@ -3687,7 +3702,7 @@ fn assert_type_value_alias_public_surfaces_are_private() {
 
     for marker in TYPE_VALUE_ALIAS_INTERNAL_PUBLIC_MARKERS {
         assert!(
-            !public_surface.contains(marker),
+            !mentions_marker(&public_surface, marker),
             "public README/docs/facts/CLI/SDK/runner/crate-root source must not expose type/value/alias marker `{marker}`"
         );
     }
@@ -3725,7 +3740,7 @@ fn assert_type_value_alias_cli_help_is_private() {
     for help in help_outputs {
         for marker in TYPE_VALUE_ALIAS_INTERNAL_PUBLIC_MARKERS {
             assert!(
-                !help.contains(marker),
+                !mentions_marker(&help, marker),
                 "public CLI help must not expose type/value/alias marker `{marker}`:\n{help}"
             );
         }
@@ -5189,11 +5204,7 @@ export const value = token;
     write_file(&root.join("src/token.ts"), r#"export const token = "ok";"#);
 }
 
-fn write_call_graph_capability_rule_repo(root: &Path) {
-    let polint_path = repo_root()
-        .join("crates/polint")
-        .to_string_lossy()
-        .replace('\\', "/");
+fn write_typed_go_views_rule_repo(root: &Path, with_module: bool) {
     write_file(
         &root.join(".polint.toml"),
         r#"
@@ -5205,53 +5216,161 @@ exclude = []
 paths = [".polint/rules"]
 "#,
     );
-    write_file(
-        &root.join(".polint/rules/Cargo.toml"),
-        &format!(
-            r#"[package]
-name = "polint-local-rules"
-version = "0.1.0"
-edition = "2024"
-publish = false
-
-[dependencies]
-polint = {{ path = "{polint_path}" }}
-
-[workspace]
-"#,
-        ),
-    );
-    write_file(
-        &root.join(".polint/rules/src/main.rs"),
+    if with_module {
+        write_file(
+            &root.join("go.mod"),
+            "module example.com/views\n\ngo 1.22\n",
+        );
+    }
+    write_phase41_rule_pack(
+        root,
         r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![
+        rule::handlers_reach_admin_gate(),
+        rule::db_constructors(),
+        rule::optional_types(),
+    ])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
 
-use polint::sdk::prelude::*;
+fn algorithm_name(algorithm: CallEdgeAlgorithm) -> &'static str {
+    match algorithm {
+        CallEdgeAlgorithm::Static => "static",
+        CallEdgeAlgorithm::VariableTypeAnalysis => "vta",
+        CallEdgeAlgorithm::ClassHierarchy => "cha",
+        _ => "other",
+    }
+}
 
-#[polint::rule(
-    id = "local/needs-call-graph",
-    description = "Needs call graph facts.",
-    severity = "warn"
-)]
-fn needs_call_graph(ctx: &mut RuleCtx<'_>, _call_graph: CallGraph<'_>) -> RuleResult {
+#[polint::rule(id = "local/handlers-reach-admin-gate", description = "Handlers reach the admin gate", severity = "error")]
+pub(crate) fn handlers_reach_admin_gate(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    graph: CallGraph<'_>,
+) -> RuleResult {
+    let Some(gate) = functions.iter().find(|function| function.name == "requireAdmin") else {
+        return Ok(());
+    };
+    let walk = CallGraphWalk::new(4).with_min_precision(CallEdgePrecision::SetupAware);
+    for handler in functions.iter().filter(|function| function.name.starts_with("Handle")) {
+        let range = handler.span.diagnostic_range();
+        let file = ctx.file_path(handler.file);
+        let diagnostic = match graph.reachable(handler.id, walk).path_to(gate.id) {
+            Some(path) => Diagnostic::warning(
+                ctx.rule_id(),
+                file,
+                range,
+                format!("{} reaches requireAdmin", handler.name),
+            )
+            .with_evidence(
+                "path",
+                path.iter()
+                    .map(|edge| algorithm_name(edge.algorithm))
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+            None => Diagnostic::error(
+                ctx.rule_id(),
+                file,
+                range,
+                format!("{} does not reach requireAdmin", handler.name),
+            ),
+        };
+        ctx.report(diagnostic);
+    }
+    Ok(())
+}
+
+#[polint::rule(id = "local/db-constructors", description = "Constructors that take a database", severity = "warn")]
+pub(crate) fn db_constructors(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    types: GoTypes<'_>,
+) -> RuleResult {
+    for function in functions.iter().filter(|function| function.name.starts_with("New")) {
+        for parameter in types.parameters(function.id) {
+            if !parameter.type_name.ends_with(".DB") {
+                continue;
+            }
+            let fields = types
+                .fields_of("example.com/views/src.Repo")
+                .map(|field| match field.tag {
+                    Some(tag) => format!("{}:{}:{tag}", field.name, field.type_name),
+                    None => format!("{}:{}", field.name, field.type_name),
+                })
+                .collect::<Vec<_>>()
+                .join(";");
+            let implementers = types
+                .implementers("example.com/views/src.Store")
+                .map(|implementation| implementation.type_name)
+                .collect::<Vec<_>>()
+                .join(",");
+            ctx.report(
+                Diagnostic::warning(
+                    ctx.rule_id(),
+                    ctx.file_path(function.file),
+                    function.span.diagnostic_range(),
+                    format!("{} takes {} as {}", function.name, parameter.type_name, parameter.name),
+                )
+                .with_evidence("repo_fields", fields)
+                .with_evidence("store_implementers", implementers),
+            );
+        }
+    }
+    Ok(())
+}
+
+#[polint::rule(id = "local/optional-types", description = "Optional Go types", severity = "warn")]
+pub(crate) fn optional_types(ctx: &mut RuleCtx<'_>, types: Option<GoTypes<'_>>) -> RuleResult {
+    let message = match types {
+        Some(types) => format!("go types available: {} fields", types.fields().count()),
+        None => "go types unavailable".to_string(),
+    };
     ctx.report(Diagnostic::warning(
         ctx.rule_id(),
         "<workspace>",
         DiagnosticRange::point(1, 1),
-        "this should not run while call_graph is unsupported",
+        message,
     ));
     Ok(())
-}
-
-fn main() -> ExitCode {
-    polint::runner::run_cli(vec![needs_call_graph()])
 }
 "#,
     );
     write_file(
-        &root.join("src/component.ts"),
-        r#"export function component() {
-  return "ok";
+        &root.join("src/app.go"),
+        r#"package src
+
+import "fmt"
+
+type DB struct{ dsn string }
+
+type Store interface{ Save(id string) error }
+
+type Repo struct {
+	db    *DB
+	Label string `json:"label"`
 }
+
+func NewRepo(db *DB, label string) *Repo { return &Repo{db: db, Label: label} }
+
+func (r *Repo) Save(id string) error {
+	requireAdmin(id)
+	return nil
+}
+
+func requireAdmin(id string) { fmt.Println(id) }
+
+func list() []string { return nil }
+
+func HandleSave(store Store, id string) error { return store.Save(id) }
+
+func HandleList() []string { return list() }
+
+func Wire() error { return HandleSave(NewRepo(&DB{}, "x"), "1") }
 "#,
     );
 }
@@ -10033,9 +10152,9 @@ mod capability_planning {
     }
 
     #[test]
-    fn call_graph_capability_remains_unsupported() {
+    fn call_graph_and_go_types_views_answer_an_outside_rule() {
         let temp = tempfile::tempdir().unwrap();
-        write_call_graph_capability_rule_repo(temp.path());
+        write_typed_go_views_rule_repo(temp.path(), true);
 
         let json = stdout_json(
             polint_cmd()
@@ -10045,77 +10164,80 @@ mod capability_planning {
                 .success(),
         );
 
+        let reach = diagnostics_for_rule(&json, "local/handlers-reach-admin-gate");
+        assert_eq!(reach.len(), 2, "{json:#?}");
         assert!(
-            diagnostics_for_rule(&json, "local/needs-call-graph").is_empty(),
-            "rule requesting unsupported call_graph must not execute with fabricated facts: {json:#?}"
-        );
-        let diagnostic = diagnostics(&json)
-            .iter()
-            .find(|diagnostic| diagnostic["rule_id"] == "polint/capability")
-            .unwrap_or_else(|| panic!("expected call_graph capability diagnostic: {json:#?}"));
-        assert!(
-            diagnostic["message"]
-                .as_str()
-                .is_some_and(|message| message.contains("unsupported capability `call_graph`")),
-            "{diagnostic:#?}"
+            reach.iter().any(|diagnostic| {
+                diagnostic["message"] == "HandleSave reaches requireAdmin"
+                    && diagnostic_has_evidence(diagnostic, "path", "vta,static")
+            }),
+            "the interface call should resolve by variable-type analysis: {json:#?}"
         );
         assert!(
-            diagnostic["help"]
-                .as_str()
-                .is_some_and(|help| help.contains("docs/facts/capability-plans.md")),
-            "{diagnostic:#?}"
+            reach.iter().any(|diagnostic| {
+                diagnostic["message"] == "HandleList does not reach requireAdmin"
+                    && diagnostic["severity"] == "error"
+            }),
+            "{json:#?}"
+        );
+
+        let constructors = diagnostics_for_rule(&json, "local/db-constructors");
+        assert_eq!(constructors.len(), 1, "{json:#?}");
+        assert_eq!(
+            constructors[0]["message"],
+            "NewRepo takes *example.com/views/src.DB as db"
         );
         assert!(diagnostic_has_evidence(
-            diagnostic,
-            "rule",
-            "local/needs-call-graph"
+            constructors[0],
+            "repo_fields",
+            "db:*example.com/views/src.DB;Label:string:json:\"label\""
         ));
         assert!(diagnostic_has_evidence(
-            diagnostic,
-            "capability",
-            "call_graph"
+            constructors[0],
+            "store_implementers",
+            "example.com/views/src.Repo"
         ));
-        assert!(diagnostic_has_evidence(diagnostic, "status", "unsupported"));
+
+        let optional = diagnostics_for_rule(&json, "local/optional-types");
+        assert_eq!(optional.len(), 1, "{json:#?}");
+        assert_eq!(optional[0]["message"], "go types available: 3 fields");
+
+        assert!(
+            diagnostics_for_rule(&json, "polint/capability").is_empty(),
+            "both views should be available with a go.mod: {json:#?}"
+        );
     }
 
     #[test]
-    fn reserved_cfg_and_call_graph_remain_unsupported() {
-        let cfg_temp = tempfile::tempdir().unwrap();
-        write_plan_capability_rule_repo(cfg_temp.path());
-        let cfg_json = stdout_json(
+    fn go_types_need_a_module_root_and_optional_requests_run_without_one() {
+        let temp = tempfile::tempdir().unwrap();
+        write_typed_go_views_rule_repo(temp.path(), false);
+
+        let json = stdout_json(
             polint_cmd()
-                .current_dir(cfg_temp.path())
+                .current_dir(temp.path())
                 .args(["check", "--format", "json", "--fail-on", "none"])
                 .assert()
                 .success(),
-        );
-        assert!(
-            diagnostics_for_rule(&cfg_json, "polint/capability")
-                .iter()
-                .any(
-                    |diagnostic| diagnostic_has_evidence(diagnostic, "capability", "cfg")
-                        && diagnostic_has_evidence(diagnostic, "status", "unsupported")
-                ),
-            "Cfg<'_> should stay a reserved raw capability: {cfg_json:#?}"
         );
 
-        let call_temp = tempfile::tempdir().unwrap();
-        write_call_graph_capability_rule_repo(call_temp.path());
-        let call_json = stdout_json(
-            polint_cmd()
-                .current_dir(call_temp.path())
-                .args(["check", "--format", "json", "--fail-on", "none"])
-                .assert()
-                .success(),
+        let optional = diagnostics_for_rule(&json, "local/optional-types");
+        assert_eq!(optional.len(), 1, "{json:#?}");
+        assert_eq!(optional[0]["message"], "go types unavailable");
+
+        assert!(
+            diagnostics_for_rule(&json, "local/db-constructors").is_empty(),
+            "a rule requiring GoTypes must not run on unloaded types: {json:#?}"
         );
         assert!(
-            diagnostics_for_rule(&call_json, "polint/capability")
+            diagnostics_for_rule(&json, "polint/capability")
                 .iter()
-                .any(
-                    |diagnostic| diagnostic_has_evidence(diagnostic, "capability", "call_graph")
-                        && diagnostic_has_evidence(diagnostic, "status", "unsupported")
-                ),
-            "CallGraph<'_> should stay a reserved raw capability: {call_json:#?}"
+                .any(|diagnostic| {
+                    diagnostic_has_evidence(diagnostic, "rule", "local/db-constructors")
+                        && diagnostic_has_evidence(diagnostic, "capability", "go_types")
+                        && diagnostic_has_evidence(diagnostic, "status", "setup_missing")
+                }),
+            "{json:#?}"
         );
     }
 

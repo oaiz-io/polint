@@ -348,7 +348,7 @@ fn derive_requested_symbols_uncached_with_payload(
                 root: loaded.root.clone(),
                 settings: loaded.config.languages.go.clone(),
                 request: selection.go_request,
-                reference_files: Some(selection.go_reference_files.clone()),
+                reference_files: Some(selection.go_reference_files),
             },
         ),
         db,

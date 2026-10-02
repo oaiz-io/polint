@@ -36,7 +36,8 @@ no-leak proof all exist. Broad raw graph/database APIs stay deferred.
 | `References<'_>` | stable | Documented in `docs/facts/symbols-and-references.md`; temp-repo SDK tests; status/precision-aware helpers; no raw semantic graph. |
 | Metric views | stable | `FileMetrics<'_>`, `FunctionMetrics<'_>`, and `ComplexityMetrics<'_>` are documented in `docs/facts/metrics.md`; threshold helpers are bounded over stored facts. |
 | `Cfg<'_>` | defer | Reserved capability. Needs public fact design, docs, temp-repo tests, bounded queries, setup behavior, cache/input proof, and no-leak proof before support. |
-| `CallGraph<'_>` | defer | Reserved capability. A future API must separate direct/refined/unresolved/dynamic/unsupported/budgeted results. |
+| `CallGraph<'_>` | preview | Resolved call edges under `polint::sdk::facts`; derives `call_graph`; documented in `docs/facts/call-graph.md`. Edges carry precision and resolution algorithm; unresolved sites stay in `polint unknowns --cap calls`; `Option<CallGraph<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
+| `GoTypes<'_>` | preview | Typed Go frontend facts under `polint::sdk::facts`; derives `go_types`; documented in `docs/facts/go-semantic-types.md`. Unavailable (setup missing) when the frontend loaded no package; `Option<GoTypes<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
 | `DataFlow<'_>` | preview | Policy-level view documented in `docs/facts/data-flow.md`; v1.4 backs bounded source/sink/barrier queries while raw graph APIs stay private. |
 | `Evidence<'_>` | internal | Evidence remains diagnostic rendering data, not a rule-author SDK view; see `docs/facts/evidence.md`. |
 | Effects/Summaries | internal | Private analysis substrate; no public SDK, stable CLI JSON, or docs/facts contract yet. |
@@ -76,7 +77,7 @@ source/sink/barrier policies. Raw graph internals remain private.
 | Pattern structs | preview | `EventPattern`, `SourcePattern`, `SinkPattern`, `GuardPattern`, and `BarrierPattern` live under `polint::sdk::policy` and are re-exported by the prelude. Phase 55 starts with exact strings and explicit lists. |
 | `PolicyViolation` and status enums | preview | `PolicyViolation`, `PolicyStatus`, `PolicyPrecision`, and `PolicyConfidence` are public result vocabulary; full evidence semantics are deferred to Phase 59. |
 | `Cfg<'_>` | defer | Reserved raw CFG capability `cfg`; not an alias for `ControlFlow<'_>` and still unsupported. |
-| `CallGraph<'_>` | defer | Reserved raw call-graph capability `call_graph`; not an alias for `Calls<'_>` and still unsupported. |
+| `CallGraph<'_>` | preview | Call-edge view for rules that walk the graph; not an alias for `Calls<'_>`, which keeps the event-pattern reachability queries. |
 | Raw graph, solver, provider, parser, and `AnalysisDb` internals | internal | Must remain unreachable from `polint::sdk::prelude::*`, CLI public JSON, README examples, generated skill text, and `docs/facts/`. |
 
 ## Principles (execution checklist)

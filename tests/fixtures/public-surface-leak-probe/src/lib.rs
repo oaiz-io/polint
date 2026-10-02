@@ -57,6 +57,45 @@ mod allowlist_witness {
     fn _assert_callgraph() -> ::core::marker::PhantomData<CallGraph<'static>> {
         ::core::marker::PhantomData
     }
+    fn _assert_calledgealgorithm() -> ::core::marker::PhantomData<CallEdgeAlgorithm> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_calledgeprecision() -> ::core::marker::PhantomData<CallEdgePrecision> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_callgraphcallee() -> ::core::marker::PhantomData<CallGraphCallee<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_callgraphedge() -> ::core::marker::PhantomData<CallGraphEdge<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_callgraphreach() -> ::core::marker::PhantomData<CallGraphReach<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_callgraphwalk() -> ::core::marker::PhantomData<CallGraphWalk> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_gofield() -> ::core::marker::PhantomData<GoField<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_gofunctiontype() -> ::core::marker::PhantomData<GoFunctionType<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_gogenerictarget() -> ::core::marker::PhantomData<GoGenericTarget> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_goimplementation() -> ::core::marker::PhantomData<GoImplementation<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_goinstantiation() -> ::core::marker::PhantomData<GoInstantiation<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_goparameter() -> ::core::marker::PhantomData<GoParameter<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_gotypes() -> ::core::marker::PhantomData<GoTypes<'static>> {
+        ::core::marker::PhantomData
+    }
     fn _assert_calls() -> ::core::marker::PhantomData<Calls<'static>> {
         ::core::marker::PhantomData
     }

@@ -321,9 +321,11 @@ pub(super) fn data_flow_status_metadata(
     precision: DataFlowPrecision,
 ) -> (FactPrecision, FactConfidence) {
     let fact_precision = match status {
+        // A flow is exact only through calls the call layer resolved exactly,
+        // and that layer's facts claim at most setup-aware precision; so do the
+        // flows built on them.
         DataFlowStatus::Present => match precision {
-            DataFlowPrecision::Exact => FactPrecision::Exact,
-            DataFlowPrecision::SetupAware => FactPrecision::SetupAware,
+            DataFlowPrecision::Exact | DataFlowPrecision::SetupAware => FactPrecision::SetupAware,
             DataFlowPrecision::Syntax => FactPrecision::Syntax,
             DataFlowPrecision::Conservative | DataFlowPrecision::Heuristic => {
                 FactPrecision::Heuristic

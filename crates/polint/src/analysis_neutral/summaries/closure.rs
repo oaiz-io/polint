@@ -326,7 +326,7 @@ fn process_recursive_scc(
         .members
         .iter()
         .map(|function| {
-            MemberState::from_digests(&mut parts, &summary_digests(&summary_store, *function))
+            MemberState::from_digests(&mut parts, &summary_digests(summary_store, *function))
         })
         .collect::<Vec<_>>();
     let callees = scc
@@ -349,7 +349,7 @@ fn process_recursive_scc(
                     Some(index) => callees.internal.push(*index),
                     None => callees
                         .external
-                        .push(summary_digests(&summary_store, callee)),
+                        .push(summary_digests(summary_store, callee)),
                 }
             }
             callees

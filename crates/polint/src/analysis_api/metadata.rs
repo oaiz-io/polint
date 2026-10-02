@@ -742,7 +742,7 @@ pub fn compact_part_value(value: &str) -> String {
     let mut hasher = Sha256::new();
     let mut rest = value;
     while let Some(index) = rest.find('\\') {
-        hasher.update(rest[..index].as_bytes());
+        hasher.update(&rest.as_bytes()[..index]);
         hasher.update(b"/");
         rest = &rest[index + 1..];
     }

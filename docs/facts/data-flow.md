@@ -130,5 +130,5 @@ request-to-dangerous-call checks, but it is still preview:
   SSRF URLs, file paths, analytics, PII, and outbound network clients.
 - It does not expose context-sensitivity controls.
 - Extension/model-pack authoring remains internal.
-- Raw `Cfg<'_>`, raw `CallGraph<'_>`, and raw data-flow graph APIs remain
-  reserved.
+- Raw `Cfg<'_>` and raw data-flow graph APIs remain reserved. Call edges are
+  public through the separate `CallGraph<'_>` view ([call-graph.md](call-graph.md)).
