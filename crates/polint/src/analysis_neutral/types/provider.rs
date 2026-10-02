@@ -653,11 +653,16 @@ fn record_points_to_variable_fragments(
     }
 }
 
+/// A points-to variable's identity: its fragments, length-prefixed, as a
+/// reference that every payload naming the variable embeds. A variable many
+/// constraints touch has a long identity, and each of those constraints' payloads
+/// carries it, so a long identity is embedded by digest.
 fn semantic_relation_identity(fragments: &std::collections::BTreeSet<String>) -> String {
-    fragments
+    let identity = fragments
         .iter()
         .map(|fragment| format!("{}:{fragment}", fragment.len()))
-        .collect()
+        .collect::<String>();
+    crate::analysis_api::compact_key_reference(&identity).into_owned()
 }
 
 fn type_fact_payload<H: AnalysisHost + ?Sized>(

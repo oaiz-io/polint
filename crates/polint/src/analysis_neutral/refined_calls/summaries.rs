@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::facts::{
     RefinedCallConfidence, RefinedCallEdgeFact, RefinedCallTier, RefinedCallValidation,
 };
@@ -15,6 +17,19 @@ use crate::analysis_neutral::summaries::facts::{
 pub fn derive_summary_assisted_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    // Each caller's targets in storage order, and each site's language, built once
+    // instead of scanning every target per summary and every site per edge.
+    let mut targets_by_caller = HashMap::<_, Vec<&CallTargetFact>>::new();
+    for target in db.call_targets() {
+        targets_by_caller
+            .entry(target.caller)
+            .or_default()
+            .push(target);
+    }
+    let mut site_languages = HashMap::new();
+    for site in db.call_sites() {
+        site_languages.entry(site.id).or_insert(site.language);
+    }
     let mut edges = Vec::new();
     for summary in db.summary_facts() {
         if summary.domain != SummaryDomainKind::CallEffects
@@ -22,12 +37,21 @@ pub fn derive_summary_assisted_refinements(db: &impl AnalysisHost) -> RefinedCal
         {
             continue;
         }
-        for target in db
-            .call_targets()
-            .iter()
-            .filter(|target| target.caller == summary.function)
+        for target in targets_by_caller
+            .get(&summary.function)
+            .map_or(&[][..], Vec::as_slice)
         {
-            edges.push(edge_from_summary(db, summary, target, edges.len()));
+            let language = site_languages
+                .get(&target.site)
+                .copied()
+                .unwrap_or(crate::internal_core::Language::Unknown);
+            edges.push(edge_from_summary(
+                db,
+                summary,
+                target,
+                language,
+                edges.len(),
+            ));
         }
     }
     RefinedCallOutput { edges }.normalized(interner)
@@ -37,6 +61,7 @@ fn edge_from_summary(
     db: &impl AnalysisHost,
     summary: &SummaryFact,
     target: &CallTargetFact,
+    language: crate::internal_core::Language,
     index: usize,
 ) -> RefinedCallEdgeFact {
     let interner_handle = db.stable_key_interner();
@@ -61,12 +86,7 @@ fn edge_from_summary(
         target_function: target.target_function,
         target_symbol: target.target_symbol,
         synthetic_target: target.synthetic_target.clone(),
-        language: db
-            .call_sites()
-            .iter()
-            .find(|site| site.id == target.site)
-            .map(|site| site.language)
-            .unwrap_or(crate::internal_core::Language::Unknown),
+        language,
         edge_kind: target.edge_kind,
         algorithm: CallAlgorithm::SummaryAssisted,
         tier: RefinedCallTier::SummaryAssisted,

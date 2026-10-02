@@ -341,7 +341,10 @@ struct SolverFactIndex<'a> {
     node_by_operation: BTreeMap<MirOpId, &'a CfgNodeFact>,
     blocks: Vec<&'a BasicBlockFact>,
     last_node_by_block: BTreeMap<BasicBlockId, CfgNodeId>,
+    /// Each function's own places. A function with any is also shown every
+    /// global place (`global_places`); one with none is shown nothing.
     visible_places_by_function: BTreeMap<FunctionId, BTreeSet<PlaceId>>,
+    global_places: BTreeSet<PlaceId>,
     parameters_by_function: BTreeMap<FunctionId, Vec<PlaceId>>,
     call_operation_by_site: BTreeMap<CallSiteId, &'a MirOperation>,
     return_values_by_body: BTreeMap<MirBodyId, Vec<Option<&'a MirValue>>>,
@@ -429,9 +432,7 @@ impl<'a> SolverFactIndex<'a> {
                 _ => {}
             }
         }
-        for places in visible_places_by_function.values_mut() {
-            places.extend(global_places.iter().copied());
-        }
+
         let parameters_by_function = parameters_by_function
             .into_iter()
             .map(|(function, mut parameters)| {
@@ -471,9 +472,20 @@ impl<'a> SolverFactIndex<'a> {
             blocks,
             last_node_by_block,
             visible_places_by_function,
+            global_places,
             parameters_by_function,
             call_operation_by_site,
             return_values_by_body,
+        }
+    }
+
+    /// Keeps the facts of the places `function` can see.
+    fn retain_visible(&self, function: FunctionId, state: &mut ProductState) {
+        match self.visible_places_by_function.get(&function) {
+            Some(own) => state.retain_places_where(|place| {
+                own.contains(place) || self.global_places.contains(place)
+            }),
+            None => state.retain_places_where(|_| false),
         }
     }
 
@@ -489,11 +501,7 @@ impl<'a> SolverFactIndex<'a> {
 
     fn visible_state(&self, function: FunctionId, state: &ProductState) -> ProductState {
         let mut visible = state.clone();
-        visible.retain_places(
-            self.visible_places_by_function
-                .get(&function)
-                .unwrap_or(&BTreeSet::new()),
-        );
+        self.retain_visible(function, &mut visible);
         visible
     }
 
@@ -528,11 +536,7 @@ impl<'a> SolverFactIndex<'a> {
             return;
         };
         let source = state.clone();
-        state.retain_places(
-            self.visible_places_by_function
-                .get(&caller)
-                .unwrap_or(&BTreeSet::new()),
-        );
+        self.retain_visible(caller, state);
         let values = self
             .return_values_by_body
             .get(&callee_body)
@@ -699,10 +703,17 @@ fn materialize_results(
 ) {
     for function in &facts.functions {
         let mut entry = ProductState::bottom();
-        for (point, state) in states {
-            if point.node == function.entry_node {
-                entry.join_into(&facts.visible_state(function.function, state));
-            }
+        // Points order by node first, so a node's states are one contiguous range,
+        // starting at the empty call stack, in the order a full walk visits them.
+        let from = ExplodedPoint {
+            node: function.entry_node,
+            call_stack: Vec::new(),
+        };
+        for (_, state) in states
+            .range(from..)
+            .take_while(|(point, _)| point.node == function.entry_node)
+        {
+            entry.join_into(&facts.visible_state(function.function, state));
         }
         let body_key = facts
             .body_by_id

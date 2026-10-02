@@ -117,17 +117,16 @@ impl ProductState {
     }
 
     pub fn retain_places(&mut self, places: &BTreeSet<PlaceId>) {
-        self.core.nilness.retain(|place, _| places.contains(place));
-        self.core
-            .truthiness
-            .retain(|place, _| places.contains(place));
-        self.core
-            .constants
-            .retain(|place, _| places.contains(place));
-        self.core.strings.retain(|place, _| places.contains(place));
-        self.core
-            .initializedness
-            .retain(|place, _| places.contains(place));
+        self.retain_places_where(|place| places.contains(place));
+    }
+
+    /// Keeps the facts of the places `keep` accepts.
+    pub fn retain_places_where(&mut self, keep: impl Fn(&PlaceId) -> bool) {
+        self.core.nilness.retain(|place, _| keep(place));
+        self.core.truthiness.retain(|place, _| keep(place));
+        self.core.constants.retain(|place, _| keep(place));
+        self.core.strings.retain(|place, _| keep(place));
+        self.core.initializedness.retain(|place, _| keep(place));
     }
 
     pub fn copy_place_from(&mut self, source_state: &Self, target: PlaceId, source: PlaceId) {

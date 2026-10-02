@@ -88,6 +88,11 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
     semantic_mir_output_digest: Digest,
     go_semantic_output_digest: Digest,
 ) -> SemanticGraphProviderRunOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = SEMANTIC_GRAPH_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, SEMANTIC_GRAPH_PROVIDER_ID);
@@ -99,6 +104,7 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
     // direct bindings, object-model rows, and token-source flow projection on
     // the same parse/semantic pass per TS file.
     let ts_direct_bindings = collect_ts_direct_binding_collection(db);
+    checkpoint("ts_direct_bindings");
 
     // Step: refresh private TS object-model rows. This keeps the projection's
     // consumed object/property facts deterministic and digest-visible without
@@ -118,6 +124,7 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
 
     // Step: project + normalize. The build is read-only; normalized() fixes the
     // stable-key order the digest is computed over.
+    checkpoint("ts_object_model");
     let ts_direct_binding_output_digest =
         ts_direct_binding_output_digest(ts_direct_bindings.output(), interner);
     let base_output = build_semantic_graph_with_ts_direct_binding_collection(
@@ -126,6 +133,7 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
         project_go_semantic_facts,
     )
     .normalized(interner);
+    checkpoint("build_normalize");
     let adaptation_models =
         collect_adaptation_model_input(interner, loaded, &base_output, adaptation_budget);
     let output = if adaptation_models.store.accepted().is_empty() {
@@ -140,6 +148,7 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
         .normalized(interner)
     };
 
+    checkpoint("adaptation_models");
     // Step: digest over the stored stable KEYS (never dense IDs — see
     // `semantic_graph_output_digest`), with the empty-output sentinel.
     let output_digest = semantic_graph_output_digest(
@@ -166,7 +175,10 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
     // Step: store (assigns dense IDs + referentially validates inside
     // from_output). On store error the db keeps its prior state and the facts the
     // digest certifies were not persisted, so return output_digest: None.
-    match db.replace_normalized_semantic_graph_facts(output) {
+    checkpoint("digest");
+    let stored = db.replace_normalized_semantic_graph_facts(output);
+    checkpoint("store_metadata");
+    match stored {
         Ok(()) => {
             db.replace_adaptation_model_facts(
                 adaptation_models.store.accepted().to_vec(),

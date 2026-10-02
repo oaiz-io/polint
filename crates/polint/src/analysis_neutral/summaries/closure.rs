@@ -103,6 +103,10 @@ pub fn close_summaries_by_scc(
         scc_output_digests: BTreeMap::new(),
     };
     let mut summary_metadata_dirty = false;
+    // Events are output only: no SCC reads another's events and no SCC digest
+    // covers them. Merging them once, after the last SCC, sorts the store's
+    // events once instead of once per SCC that emits any.
+    let mut pending_events = Vec::new();
 
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
@@ -128,7 +132,8 @@ pub fn close_summaries_by_scc(
             result.updated_summaries += scc_summaries.len();
 
             if !scc_summaries.is_empty() || !scc_events.is_empty() {
-                merge_updated_summaries(db, &scc_summaries, &scc_events);
+                merge_updated_summaries(db, &scc_summaries, &[]);
+                pending_events.extend(scc_events);
                 summary_metadata_dirty = true;
             }
 
@@ -160,7 +165,8 @@ pub fn close_summaries_by_scc(
             result.updated_summaries += scc_summaries.len();
 
             if !scc_summaries.is_empty() || !scc_events.is_empty() {
-                merge_updated_summaries(db, &scc_summaries, &scc_events);
+                merge_updated_summaries(db, &scc_summaries, &[]);
+                pending_events.extend(scc_events);
                 summary_metadata_dirty = true;
             }
 
@@ -188,6 +194,9 @@ pub fn close_summaries_by_scc(
         }
     }
 
+    if !pending_events.is_empty() {
+        merge_updated_summaries(db, &[], &pending_events);
+    }
     if summary_metadata_dirty {
         db.refresh_summary_metadata_after_bulk_update();
     }
@@ -491,12 +500,19 @@ fn apply_callee_effects(
     let mut callee_control_digests: Vec<String> = Vec::new();
     let mut callee_memory_digests: Vec<String> = Vec::new();
 
+    // A caller's payload names each callee's payload by reference: verbatim when
+    // short, by digest when long. Embedding the full text nested every callee's
+    // payload inside each of its callers, so payloads grew with the number of
+    // call paths below a function; the reference is a pure function of the text,
+    // so equal callee payloads still compose to equal caller payloads.
     for info in callee_info {
         if let Some(control_digest) = info.callee_digests.get(&SummaryDomainKind::ControlEffects) {
-            callee_control_digests.push(control_digest.clone());
+            callee_control_digests
+                .push(crate::analysis_api::compact_key_reference(control_digest).into_owned());
         }
         if let Some(memory_digest) = info.callee_digests.get(&SummaryDomainKind::MemoryEffects) {
-            callee_memory_digests.push(memory_digest.clone());
+            callee_memory_digests
+                .push(crate::analysis_api::compact_key_reference(memory_digest).into_owned());
         }
     }
 
@@ -668,8 +684,13 @@ fn compute_scc_digest(
         .collect();
     digest_parts.sort();
     let combined = digest_parts.join("|");
-    // Use a stable hash-like representation
-    format!("scc_digest:{}:{}", member_keys.join(","), combined)
+    // The digest is kept per SCC and stored for backdating, so the summaries'
+    // text is embedded by reference: equal text, equal digest.
+    format!(
+        "scc_digest:{}:{}",
+        member_keys.join(","),
+        crate::analysis_api::compact_key_reference(&combined)
+    )
 }
 
 fn compute_current_scc_digest(
@@ -994,8 +1015,26 @@ mod tests {
             .into_iter()
             .find(|summary| summary.domain == SummaryDomainKind::CallEffects)
             .expect("A should have call effects");
+        let b_control_effects = store
+            .summaries_by_function(FunctionId::from_raw(2))
+            .into_iter()
+            .find(|summary| summary.domain == SummaryDomainKind::ControlEffects)
+            .expect("B should have control effects");
         assert!(
-            a_call_effects.payload_digest.contains("callee_propagated:"),
+            b_control_effects
+                .payload_digest
+                .contains("callee_propagated:"),
+            "B's control summary should be closed over C, got {}",
+            b_control_effects.payload_digest
+        );
+        // A names B's control summary by reference; the reference must be the one
+        // of B's closed summary, not of B's direct one.
+        let closed_reference =
+            crate::analysis_api::compact_key_reference(&b_control_effects.payload_digest);
+        assert!(
+            a_call_effects
+                .payload_digest
+                .contains(&format!("callee_control:{closed_reference}")),
             "A should observe B's closed control summary, got {}",
             a_call_effects.payload_digest
         );

@@ -45,9 +45,15 @@ pub(crate) fn derive_direct_summaries_with_cache_stats(
     module_topology_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
 ) -> DirectSummariesProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.direct_summaries", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let output = DirectSummaryBuilder::build(interner, db);
+    checkpoint("build");
     let callable_keys = callable_stable_key_map(db);
     let output_digest = direct_summaries_output_digest(
         manifest,
@@ -63,9 +69,11 @@ pub(crate) fn derive_direct_summaries_with_cache_stats(
         &callable_keys,
         &output,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
     db.replace_summary_facts(output);
+    checkpoint("store_metadata");
 
     DirectSummariesProviderOutput {
         diagnostics: Vec::new(),
@@ -134,7 +142,7 @@ pub(crate) fn run_scc_closure_with_cache(
     let previous_scc_digests = cache
         .read_json_with_status::<SccClosureDigestCache>(&cache_key)
         .value
-        .filter(|entry| entry.schema == "summary-scc-closure-digests-v1")
+        .filter(|entry| entry.schema == "summary-scc-closure-digests-v2")
         .map(|entry| {
             entry
                 .scc_digests
@@ -152,7 +160,7 @@ pub(crate) fn run_scc_closure_with_cache(
         let _ = cache.write_json_with_status(
             &cache_key,
             &SccClosureDigestCache {
-                schema: "summary-scc-closure-digests-v1".to_string(),
+                schema: "summary-scc-closure-digests-v2".to_string(),
                 scc_digests: scc_digests
                     .into_iter()
                     .map(|(members, digest)| SccClosureDigestCacheEntry { members, digest })
@@ -228,7 +236,7 @@ fn scc_closure_cache_key(config_digest: &str, rule_digest: &str, plan_digest: &s
         config_digest,
         rule_digest,
         plan_digest,
-        "summary-scc-closure-digests-v1",
+        "summary-scc-closure-digests-v2",
         &crate::analysis_api::engine_parser_identity(),
     )
 }

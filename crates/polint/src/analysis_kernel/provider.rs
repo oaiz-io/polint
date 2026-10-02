@@ -568,6 +568,7 @@ impl Provider for DirectSummariesProvider {
         let mut diagnostics = derivation.diagnostics;
         let cache_stats = derivation.cache_stats;
 
+        let started = std::time::Instant::now();
         let scc_closure = crate::analysis::summaries::provider::run_scc_closure_with_cache(
             ctx.db,
             &ctx.cache,
@@ -575,6 +576,7 @@ impl Provider for DirectSummariesProvider {
             ctx.rule_digest,
             ctx.plan.digest(),
         );
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.direct_summaries", step = "scc_closure", elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
         diagnostics.extend(scc_closure.diagnostics.clone());
         ctx.scc_closure = Some(scc_closure);
 

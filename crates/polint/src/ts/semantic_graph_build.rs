@@ -664,6 +664,16 @@ impl GraphBuilder {
         db: &impl AnalysisHost,
         object_model: &TsObjectModelOutput,
     ) {
+        // Every projection below walks one of these lists; without any rows there
+        // is nothing to project, and the lookup context indexes every MIR place.
+        if object_model.allocations.is_empty()
+            && object_model.property_writes.is_empty()
+            && object_model.property_reads.is_empty()
+            && object_model.receiver_bindings.is_empty()
+            && object_model.prototype_links.is_empty()
+        {
+            return;
+        }
         let interner_handle = db.stable_key_interner();
         let interner = &interner_handle;
         let context = TsObjectModelNodeContext::new(interner, db, self, object_model);
