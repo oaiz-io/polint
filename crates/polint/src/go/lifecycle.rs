@@ -21,8 +21,13 @@ pub struct GoAnalysisConfig {
     pub module_roots: Vec<String>,
     pub package_patterns: Vec<String>,
     pub build_tags: Vec<String>,
-    /// Whether the symbol sidecar loads test variants. `[languages.go]
-    /// include_tests`, on unless it is set to `false`.
+    /// Whether the symbol sidecar loads test variants: `[languages.go]
+    /// include_tests` when set, otherwise whether the scan includes a `_test.go`
+    /// file.
+    ///
+    /// A scan that excludes test files reads no reference in them, and loading
+    /// the test variants anyway only costs time and makes a reference in a file
+    /// that a package shares with its test variant resolve twice.
     pub include_tests: bool,
     /// Whether the semantic sidecar loads test variants: only when `[languages.go]
     /// include_tests` is explicitly `true`.
@@ -83,6 +88,11 @@ impl GoWorkspaceEnv {
     }
 }
 
+/// Whether `file` is a Go test file, which only a test variant compiles.
+fn is_go_test_file(file: &SourceFile) -> bool {
+    file.relative_path.ends_with("_test.go")
+}
+
 impl GoAnalysisConfig {
     pub fn from_settings(
         root: &Path,
@@ -130,7 +140,7 @@ impl GoAnalysisConfig {
             include_tests: settings
                 .get("include_tests")
                 .and_then(Value::as_bool)
-                .unwrap_or(true),
+                .unwrap_or_else(|| files.iter().any(|file| is_go_test_file(file))),
             semantic_include_tests: settings
                 .get("include_tests")
                 .and_then(Value::as_bool)
@@ -809,12 +819,37 @@ mod derived_lifecycle_defaults {
     }
 
     #[test]
+    fn the_symbol_sidecar_loads_test_variants_only_for_a_scan_with_test_files() {
+        let without = config_for(&[go_file("core/app/service.go")], &[module_root("core")]);
+        assert!(
+            !without.include_tests,
+            "a scan without test files reads nothing in a test variant"
+        );
+        let with = config_for(
+            &[
+                go_file("core/app/service.go"),
+                go_file("core/app/service_test.go"),
+            ],
+            &[module_root("core")],
+        );
+        assert!(with.include_tests, "a scan with test files loads them");
+        let forced = config_for(
+            &[go_file("core/app/service.go")],
+            &[module_root("core"), ("include_tests", Value::Boolean(true))],
+        );
+        assert!(forced.include_tests, "an explicit setting wins");
+    }
+
+    #[test]
     fn test_variants_are_opt_in_for_the_semantic_sidecar_only() {
-        let files = [go_file("core/app/service.go")];
+        let files = [
+            go_file("core/app/service.go"),
+            go_file("core/app/service_test.go"),
+        ];
         let unset = config_for(&files, &[module_root("core")]);
         assert!(
             unset.include_tests,
-            "the symbol sidecar keeps loading tests"
+            "the symbol sidecar loads tests for a scan that has them"
         );
         assert!(
             !unset.semantic_include_tests,

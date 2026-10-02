@@ -19,7 +19,7 @@ mod process_runner;
 pub(crate) mod rta;
 #[cfg(feature = "lang-go")]
 #[doc(hidden)]
-pub use mir::lower_go_mir;
+pub use mir::{lower_go_mir, lower_go_mir_by_file};
 #[allow(dead_code)]
 mod repo_fs;
 pub mod semantic;

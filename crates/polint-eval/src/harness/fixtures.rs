@@ -3168,7 +3168,7 @@ mod direct_calls_core {
         DirectCallFeature {
             marker: "direct-calls/go/method-call",
             family: "CallTarget",
-            stable_key_fragment: "concreteWorker.Work",
+            stable_key_fragment: "concreteWorker).Work",
             status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
@@ -3210,7 +3210,7 @@ mod direct_calls_core {
         DirectCallFeature {
             marker: "direct-calls/ts/static-member",
             family: "CallTarget",
-            stable_key_fragment: "member:normalize",
+            stable_key_fragment: "Formatter.normalize",
             status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
@@ -3228,13 +3228,13 @@ mod direct_calls_core {
         DirectCallFeature {
             marker: "direct-calls/ts/instance-member",
             family: "UnresolvedCall",
-            stable_key_fragment: "member:render",
+            stable_key_fragment: "reason=15:DynamicProperty",
             status: ObservedStatus::Unresolved,
         },
         DirectCallFeature {
             marker: "direct-calls/ts/function-value",
             family: "UnresolvedCall",
-            stable_key_fragment: "identifier:callable",
+            stable_key_fragment: "reason=24:MissingSemanticReference",
             status: ObservedStatus::Unresolved,
         },
         DirectCallFeature {
@@ -3669,12 +3669,12 @@ mod abstract_domains_core {
             ),
             (
                 "DomainObservation",
-                "unknown",
+                "DomainObservation",
                 Some(ObservedStatus::Unknown),
             ),
             (
                 "DomainObservation",
-                "unsupported",
+                "DomainObservation",
                 Some(ObservedStatus::Unsupported),
             ),
             (

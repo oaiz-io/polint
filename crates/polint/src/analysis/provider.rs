@@ -11,7 +11,7 @@ use crate::analysis_neutral::mir_body_compose::merge_language_outputs;
 use crate::core::AnalysisDb;
 use crate::diagnostics::{Diagnostic, TextRange};
 #[cfg(feature = "lang-go")]
-use crate::go::lower_go_mir;
+use crate::go::lower_go_mir_by_file;
 #[cfg(feature = "lang-typescript")]
 use crate::ts::lower_ts_mir;
 
@@ -33,13 +33,15 @@ pub(crate) fn derive_semantic_mir_with_cache_stats(
 ) -> SemanticMirProviderOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    #[cfg(feature = "lang-go")]
+    let go_outputs = lower_go_mir_by_file(db);
+    #[cfg(not(feature = "lang-go"))]
+    let go_outputs: Vec<MirOutput> = Vec::new();
     let output = crate::analysis_neutral::mir_body_compose::merge_language_outputs(
-        [
-            #[cfg(feature = "lang-go")]
-            lower_go_mir(db),
+        go_outputs.into_iter().chain([
             #[cfg(feature = "lang-typescript")]
             lower_ts_mir(db),
-        ],
+        ]),
         interner,
     );
     let output_digest = semantic_mir_output_digest(
