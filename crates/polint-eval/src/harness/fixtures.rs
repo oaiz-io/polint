@@ -452,7 +452,11 @@ pub(crate) fn run_cfg_core_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -577,7 +581,11 @@ pub(crate) fn run_abstract_domains_core_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -652,7 +660,11 @@ pub(crate) fn run_direct_summaries_core_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -705,7 +717,11 @@ pub(crate) fn run_direct_summaries_scc_closure_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -1752,9 +1768,9 @@ mod eval_native_fixture_runner_tests {
                 ("provider_order.4", "polint.symbol_graph"),
                 ("provider_order.5", "polint.module_topology"),
                 ("provider_order.6", "polint.semantic_mir"),
-                ("provider_order.7", "polint.cfg"),
-                ("provider_order.8", "polint.calls"),
-                ("provider_order.9", "polint.go.semantic"),
+                ("provider_order.7", "polint.go.semantic"),
+                ("provider_order.8", "polint.cfg"),
+                ("provider_order.9", "polint.calls"),
                 ("provider_order.10", "polint.ts.types"),
                 ("provider_order.11", "polint.identity"),
                 ("provider_order.12", "polint.abstract_domains"),

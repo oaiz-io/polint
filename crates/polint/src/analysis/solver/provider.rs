@@ -55,6 +55,7 @@ pub(crate) struct SolverProviderRunOutput {
 ///    surface as evidence-bearing diagnostics, never silent drops,
 /// 5. `db.replace_solver_facts(...)` stores + referentially validates,
 /// 6. on store error return `output_digest: None`.
+#[cfg(test)]
 pub(crate) fn derive_solver_with_cache_stats(
     db: &mut AnalysisDb,
     input_snapshot: &InputSnapshot,
@@ -63,6 +64,31 @@ pub(crate) fn derive_solver_with_cache_stats(
     semantic_graph_output_digest: Digest,
     type_value_alias_output_digest: Digest,
     go_semantic_output_digest: Digest,
+) -> SolverProviderRunOutput {
+    derive_solver_with_go_points_to(
+        db,
+        input_snapshot,
+        manifest,
+        budget,
+        semantic_graph_output_digest,
+        type_value_alias_output_digest,
+        go_semantic_output_digest,
+        true,
+    )
+}
+
+/// [`derive_solver_with_cache_stats`], running the Go RTA policy only when
+/// `go_points_to` is set; see `analysis_kernel::provider::go_points_to_requested`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn derive_solver_with_go_points_to(
+    db: &mut AnalysisDb,
+    input_snapshot: &InputSnapshot,
+    manifest: &ProviderManifest,
+    budget: SolverBudget,
+    semantic_graph_output_digest: Digest,
+    type_value_alias_output_digest: Digest,
+    go_semantic_output_digest: Digest,
+    go_points_to: bool,
 ) -> SolverProviderRunOutput {
     let mut started = std::time::Instant::now();
     let mut checkpoint = |step: &'static str| {
@@ -82,7 +108,7 @@ pub(crate) fn derive_solver_with_cache_stats(
     // The TS policy projects the semantic graph into the shared Andersen domain and
     // is the only indirect-call resolver for JavaScript and TypeScript.
     let constraints = db.semantic_constraints().to_vec();
-    let engine = SolverEngine::new(solver_policies_for_db(db, &budget), budget);
+    let engine = SolverEngine::new(solver_policies(db, &budget, go_points_to), budget);
     checkpoint("policies");
     let output = engine.run_to_solver_output(interner, &constraints);
     checkpoint("engine");
@@ -144,16 +170,28 @@ pub(crate) fn derive_solver_with_cache_stats(
     }
 }
 
-fn solver_policies_for_db(db: &AnalysisDb, _budget: &SolverBudget) -> Vec<Box<dyn SolverPolicy>> {
+#[cfg(test)]
+fn solver_policies_for_db(db: &AnalysisDb, budget: &SolverBudget) -> Vec<Box<dyn SolverPolicy>> {
+    solver_policies(db, budget, true)
+}
+
+fn solver_policies(
+    db: &AnalysisDb,
+    _budget: &SolverBudget,
+    go_points_to: bool,
+) -> Vec<Box<dyn SolverPolicy>> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let policies: Vec<Box<dyn SolverPolicy>> = vec![
+    let mut policies: Vec<Box<dyn SolverPolicy>> = Vec::new();
+    if go_points_to {
         // The real Go RTA policy (GO-05): contributes resolved call edges.
-        Box::new(GoRtaPolicy::new(GoRtaInputs::from_db(interner, db))),
-        Box::new(TsPointsToPolicy::new(
-            super::policy::ts_points_to_inputs_from_db(db),
-        )),
-    ];
+        policies.push(Box::new(GoRtaPolicy::new(GoRtaInputs::from_db(
+            interner, db,
+        ))));
+    }
+    policies.push(Box::new(TsPointsToPolicy::new(
+        super::policy::ts_points_to_inputs_from_db(db),
+    )));
     policies
 }
 

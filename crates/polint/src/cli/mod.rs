@@ -2602,6 +2602,11 @@ fn unknowns(root: PathBuf, args: &UnknownsArgs) -> Result<u8> {
         rows,
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
+    // As at the end of a rule check: the report is written and nothing reads the
+    // fact database again, so freeing millions of facts one at a time would only
+    // delay an exit that reclaims the address space anyway. The cache handle
+    // dropped inside the analysis, so nothing with a side effect on drop is lost.
+    std::mem::forget(analysis.db);
     Ok(exit)
 }
 

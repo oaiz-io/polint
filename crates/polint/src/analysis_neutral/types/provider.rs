@@ -60,6 +60,44 @@ pub fn derive_type_value_alias_with_cache_stats(
     module_topology_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
 ) -> TypeValueAliasProviderOutput {
+    derive_type_value_alias_with_go_points_to(
+        db,
+        input_snapshot,
+        manifest,
+        semantic_mir_output_digest,
+        cfg_output_digest,
+        calls_output_digest,
+        abstract_domains_output_digest,
+        direct_summaries_output_digest,
+        entrypoints_output_digest,
+        extensions_output_digest,
+        symbol_graph_output_digest,
+        module_topology_output_digest,
+        upstream_syntax_output_digests,
+        true,
+    )
+}
+
+/// [`derive_type_value_alias_with_cache_stats`], deriving the Go place facts
+/// only when `go_points_to` is set; see
+/// `analysis_kernel::provider::go_points_to_requested` for when a run needs them.
+#[allow(clippy::too_many_arguments)]
+pub fn derive_type_value_alias_with_go_points_to(
+    db: &mut impl AnalysisHost,
+    input_snapshot: &InputSnapshot,
+    manifest: &ProviderManifest,
+    semantic_mir_output_digest: Digest,
+    cfg_output_digest: Digest,
+    calls_output_digest: Digest,
+    abstract_domains_output_digest: Digest,
+    direct_summaries_output_digest: Digest,
+    entrypoints_output_digest: Digest,
+    extensions_output_digest: Digest,
+    symbol_graph_output_digest: Digest,
+    module_topology_output_digest: Digest,
+    upstream_syntax_output_digests: Vec<Digest>,
+    go_points_to: bool,
+) -> TypeValueAliasProviderOutput {
     let mut started = std::time::Instant::now();
     let mut checkpoint = |step: &'static str| {
         tracing::debug!(target: "polint::kernel::stage", provider = TYPE_VALUE_ALIAS_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
@@ -69,7 +107,11 @@ pub fn derive_type_value_alias_with_cache_stats(
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, TYPE_VALUE_ALIAS_PROVIDER_ID);
     let mut diagnostics = Vec::new();
-    let mut output = super::go::derive_go_type_value_alias(db);
+    let mut output = if go_points_to {
+        super::go::derive_go_type_value_alias(db)
+    } else {
+        TypeValueAliasOutput::default()
+    };
     checkpoint("go_facts");
     let ts_js_output = super::ts_js::derive_ts_js_type_value_alias(db);
     checkpoint("ts_js_facts");
@@ -129,6 +171,7 @@ pub fn derive_type_value_alias_with_cache_stats(
         db,
         manifest,
         input_snapshot,
+        go_points_to,
         &semantic_mir_output_digest,
         &cfg_output_digest,
         &calls_output_digest,
@@ -176,6 +219,7 @@ fn type_value_alias_output_digest<H: AnalysisHost + ?Sized>(
     db: &H,
     manifest: &ProviderManifest,
     input_snapshot: &InputSnapshot,
+    go_points_to: bool,
     semantic_mir_output_digest: &Digest,
     cfg_output_digest: &Digest,
     calls_output_digest: &Digest,
@@ -215,6 +259,7 @@ fn type_value_alias_output_digest<H: AnalysisHost + ?Sized>(
             type_value_alias_provider_parameter_digest_for_snapshot(input_snapshot, &upstream)
         ),
         format!("config={}", input_snapshot.config.digest),
+        format!("go_points_to={go_points_to}"),
         format!("semantic_mir={semantic_mir_output_digest}"),
         format!("cfg={cfg_output_digest}"),
         format!("calls={calls_output_digest}"),
@@ -1467,6 +1512,7 @@ mod tests {
             db,
             &manifest(),
             &snapshot(),
+            true,
             &upstream,
             &upstream,
             &upstream,

@@ -18,3 +18,20 @@ pub(crate) fn run_bounded(
 ) -> Result<SubprocessOutput, GoProcessError> {
     crate::subprocess::run_bounded(command, timeout, label, GO_SUBPROCESS_TIMEOUT_CODE)
 }
+
+/// [`run_bounded`], writing standard output to `stdout_file` instead of
+/// collecting it.
+pub(crate) fn run_bounded_to_file(
+    command: Command,
+    timeout: Duration,
+    label: &str,
+    stdout_file: std::fs::File,
+) -> Result<SubprocessOutput, GoProcessError> {
+    crate::subprocess::run_bounded_to_file(
+        command,
+        timeout,
+        label,
+        GO_SUBPROCESS_TIMEOUT_CODE,
+        stdout_file,
+    )
+}

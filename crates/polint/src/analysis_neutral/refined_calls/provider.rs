@@ -65,7 +65,7 @@ pub struct RefinedCallsProviderOutput {
 
 #[allow(clippy::too_many_arguments)]
 pub fn derive_refined_calls_with_cache_stats(
-    db: &mut impl AnalysisHost,
+    db: &mut (impl AnalysisHost + Sync),
     input_snapshot: &InputSnapshot,
     manifest: &ProviderManifest,
     calls_output_digest: Digest,
@@ -756,7 +756,7 @@ pub fn stable_refined_call_key(
 
 #[allow(clippy::too_many_arguments)]
 pub fn refined_calls_output_digest(
-    db: &impl AnalysisHost,
+    db: &(impl AnalysisHost + Sync),
     interner: &StableKeyInterner,
     manifest: &ProviderManifest,
     input_snapshot: &InputSnapshot,
@@ -807,23 +807,62 @@ pub fn refined_calls_output_digest(
     extend_component_parts(&mut parts, "extension", &input_snapshot.extensions);
     extend_component_parts(&mut parts, "tool", &input_snapshot.tool_invocations);
     let relations = RelationIndex::build(db);
-    for edge in &output.edges {
-        parts.push(format!(
-            "refined_call_edge={}",
-            refined_call_edge_payload(db, interner, &relations, edge)?
-        ));
-    }
     if output.edges.is_empty() {
         parts.push("refined_calls_output=empty".to_string());
     }
+    // Every relation is checked before any edge is hashed, so a dangling one
+    // still fails the digest and the hashing itself cannot.
+    for edge in &output.edges {
+        check_edge_relations(&relations, edge)?;
+    }
+    // Edges are hashed in storage order, in parallel: `finalized_output` sorts
+    // them by stable-key text and numbers them, so the order is a function of
+    // the edges.
+    let edges = Digest::of_rows(
+        DigestKind::ProviderOutput,
+        "refined_call_edge",
+        &output.edges,
+        || (),
+        |digest, (), edge| match refined_call_edge_payload(db, interner, &relations, edge) {
+            Ok(payload) => digest.part(&payload),
+            Err(error) => digest.part(&error.to_string()),
+        },
+    );
 
     parts.sort();
     let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    Ok(Digest::from_parts(
-        DigestKind::ProviderOutput,
-        "refined_calls_output",
-        &refs,
-    ))
+    let mut digest = Digest::builder(DigestKind::ProviderOutput, "refined_calls_output");
+    for part in refs {
+        digest.part(part);
+    }
+    digest.part(&edges.value);
+    Ok(digest.finish())
+}
+
+/// Fails on the first relation of `edge` that names no fact.
+fn check_edge_relations(
+    relations: &RelationIndex<'_>,
+    edge: &RefinedCallEdgeFact,
+) -> Result<(), crate::analysis_neutral::error::AnalysisError> {
+    let related = [
+        Some((FactFamily::CallSite, edge.site.0)),
+        edge.base_target
+            .map(|target| (FactFamily::CallTarget, target.0)),
+        Some((FactFamily::Function, edge.caller.0)),
+        edge.target_function
+            .map(|function| (FactFamily::Function, function.0)),
+        edge.target_symbol
+            .map(|symbol| (FactFamily::Symbol, symbol.0)),
+    ];
+    for (family, run_id) in related.into_iter().flatten() {
+        if !relations.contains(family, run_id) {
+            return Err(crate::analysis_neutral::error::AnalysisError::InvalidFact {
+                provider: REFINED_CALLS_PROVIDER_ID,
+                reason: format!("dangling {} relation with run id {run_id}", family.label()),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[InputComponent]) {

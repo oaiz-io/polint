@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::go::lifecycle::{self, GoAnalysisConfig};
-use crate::go::process_runner::{GoProcessError, run_bounded};
+use crate::go::process_runner::GoProcessError;
 use crate::go::semantic::budget::semantic_timeout;
 use crate::go::semantic::cache_key::go_semantic_sidecar_cache_key;
 use crate::go::semantic::diagnostics::GO_SIDECAR_TIMEOUT;
@@ -78,14 +78,25 @@ impl GoSemanticClient {
         let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
         let scope_file = write_scope_file(config);
         append_request_args(&mut command, &self.root, config, scope_file.as_ref());
-        let stdout = run_with_timeout(command, self.timeout, &self.root)?;
+        let stdout = tempfile::tempfile().map_err(|error| {
+            GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
+                "could not create the go semantic frontend output file: {error}"
+            )))
+        })?;
+        let mut reader = stdout.try_clone().map_err(|error| {
+            GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
+                "could not reopen the go semantic frontend output file: {error}"
+            )))
+        })?;
+        run_with_timeout_to_file(command, self.timeout, stdout)?;
         tracing::debug!(
             target: "polint::kernel::stage",
             provider = "polint.go.semantic",
             timeout_ms = self.timeout.as_millis() as u64,
             "go semantic sidecar returned"
         );
-        let output = decode_ndjson(&stdout).map_err(GoSemanticClientError::from)?;
+        let bytes = read_from_start(&mut reader)?;
+        let output = decode_ndjson(&bytes).map_err(GoSemanticClientError::from)?;
         Ok(GoSemanticClientRun {
             output,
             frontend_digest: digest,
@@ -127,7 +138,23 @@ impl GoSemanticClient {
         let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
         let scope_file = write_scope_file(config);
         append_request_args(&mut command, &self.root, config, scope_file.as_ref());
-        let stdout = run_with_timeout(command, self.timeout, &self.root)?;
+        // The sidecar writes straight into a file next to the cache entry, which
+        // only becomes the entry once the run succeeded and decoded: a failed or
+        // truncated run never leaves an entry a later run would replay.
+        let _ = std::fs::create_dir_all(cache_dir);
+        let stdout = tempfile::NamedTempFile::new_in(cache_dir)
+            .or_else(|_| tempfile::NamedTempFile::new())
+            .map_err(|error| {
+                GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
+                    "could not create the go semantic frontend output file: {error}"
+                )))
+            })?;
+        let writer = stdout.reopen().map_err(|error| {
+            GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
+                "could not reopen the go semantic frontend output file: {error}"
+            )))
+        })?;
+        run_with_timeout_to_file(command, self.timeout, writer)?;
         tracing::debug!(
             target: "polint::kernel::stage",
             provider = "polint.go.semantic",
@@ -135,15 +162,32 @@ impl GoSemanticClient {
             "go semantic sidecar returned"
         );
 
-        let _ = std::fs::create_dir_all(cache_dir);
-        let _ = std::fs::write(&cache_path, &stdout);
-
-        let output = decode_ndjson(&stdout).map_err(GoSemanticClientError::from)?;
+        let bytes = std::fs::read(stdout.path()).map_err(|error| {
+            GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
+                "could not read the go semantic frontend output: {error}"
+            )))
+        })?;
+        let output = decode_ndjson(&bytes).map_err(GoSemanticClientError::from)?;
+        let _ = stdout.persist(&cache_path);
         Ok(GoSemanticClientRun {
             output,
             frontend_digest: digest,
         })
     }
+}
+
+/// Reads a file the sidecar wrote through another handle, from its start.
+fn read_from_start(file: &mut std::fs::File) -> Result<Vec<u8>, GoSemanticClientError> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut bytes = Vec::new();
+    file.seek(SeekFrom::Start(0))
+        .and_then(|_| file.read_to_end(&mut bytes))
+        .map_err(|error| {
+            GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
+                "could not read the go semantic frontend output: {error}"
+            )))
+        })?;
+    Ok(bytes)
 }
 
 /// Writes the discovered-file list for `--scope-files`.
@@ -243,22 +287,54 @@ fn sidecar_memory_limit_bytes(available: Option<u64>) -> Option<u64> {
     available.map(|bytes| bytes / 4).filter(|limit| *limit > 0)
 }
 
+/// Runs the sidecar with its standard output written to `stdout_file`.
+///
+/// The sidecar's NDJSON runs to hundreds of megabytes on a large module, and
+/// the run that produced it is persisted anyway. Collecting it through a pipe
+/// would hold all of it in this process while the sidecar, at its own memory
+/// peak, is still running; writing it to the file it is persisted in keeps the
+/// two peaks apart.
+fn run_with_timeout_to_file(
+    command: std::process::Command,
+    timeout: Duration,
+    stdout_file: std::fs::File,
+) -> Result<(), GoSemanticProcessError> {
+    let output = crate::go::process_runner::run_bounded_to_file(
+        command,
+        timeout,
+        "go semantic frontend",
+        stdout_file,
+    )
+    .map_err(process_error)?;
+    check_status(&output)
+}
+
+fn process_error(error: GoProcessError) -> GoSemanticProcessError {
+    match error {
+        GoProcessError::Unavailable(reason) => GoSemanticProcessError::CommandUnavailable(reason),
+        GoProcessError::Failed(reason) => GoSemanticProcessError::CommandFailed(reason),
+        GoProcessError::Timeout(reason) => {
+            GoSemanticProcessError::Timeout(format!("{GO_SIDECAR_TIMEOUT}: {reason}"))
+        }
+    }
+}
+
+#[cfg(test)]
 fn run_with_timeout(
     command: std::process::Command,
     timeout: Duration,
     root: &Path,
 ) -> Result<Vec<u8>, GoSemanticProcessError> {
     let _ = root;
-    let output =
-        run_bounded(command, timeout, "go semantic frontend").map_err(|error| match error {
-            GoProcessError::Unavailable(reason) => {
-                GoSemanticProcessError::CommandUnavailable(reason)
-            }
-            GoProcessError::Failed(reason) => GoSemanticProcessError::CommandFailed(reason),
-            GoProcessError::Timeout(reason) => {
-                GoSemanticProcessError::Timeout(format!("{GO_SIDECAR_TIMEOUT}: {reason}"))
-            }
-        })?;
+    let output = crate::go::process_runner::run_bounded(command, timeout, "go semantic frontend")
+        .map_err(process_error)?;
+    check_status(&output)?;
+    Ok(output.stdout)
+}
+
+fn check_status(
+    output: &crate::go::process_runner::SubprocessOutput,
+) -> Result<(), GoSemanticProcessError> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let reason = if stderr.is_empty() {
@@ -271,7 +347,7 @@ fn run_with_timeout(
         };
         return Err(GoSemanticProcessError::CommandFailed(reason));
     }
-    Ok(output.stdout)
+    Ok(())
 }
 
 #[cfg(test)]

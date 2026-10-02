@@ -126,89 +126,141 @@ fn semantic_mir_output_digest(
     syntax.sort();
     parts.extend(syntax);
 
-    for body in &output.bodies {
-        parts.push(format!(
-            "body={} status={:?} owner={} span={}:{} file={:?} function={:?}",
-            interner.resolve(body.stable_key),
-            body.status,
-            interner.resolve(body.owner_stable_key),
-            body.span.start_byte,
-            body.span.end_byte,
-            body.file,
-            body.function,
-        ));
-    }
-    for block in &output.blocks {
-        parts.push(format!(
-            "block={} body={:?} ordinal={} statements={:?} terminator={:?}",
-            interner.resolve(block.stable_key),
-            block.body,
-            block.ordinal,
-            block.statements,
-            block.terminator,
-        ));
-    }
-    for statement in &output.statements {
-        parts.push(format!(
-            "statement={} body={:?} ordinal={} operation={:?} status={:?}",
-            interner.resolve(statement.stable_key),
-            statement.body,
-            statement.ordinal,
-            statement.operation,
-            statement.status,
-        ));
-    }
-    for terminator in &output.terminators {
-        parts.push(format!(
-            "terminator={} body={:?} ordinal={} kind={:?} status={:?}",
-            interner.resolve(terminator.stable_key),
-            terminator.body,
-            terminator.ordinal,
-            terminator.kind,
-            terminator.status,
-        ));
-    }
-    for place in &output.places {
-        parts.push(format!(
-            "place={} status={:?} root={} projections={}",
-            interner.resolve(place.stable_key),
-            place.status,
-            place_root_fragment(&place.root),
-            place
-                .projections
-                .iter()
-                .map(place_projection_fragment)
-                .collect::<Vec<_>>()
-                .join("/")
-        ));
-    }
-    for operation in &output.operations {
-        parts.push(format!(
-            "operation={} body={:?} ordinal={} kind={} status={:?}",
-            interner.resolve(operation.stable_key),
-            operation.body,
-            operation.ordinal,
-            operation_kind_fragment(&operation.kind),
-            operation.status,
-        ));
-    }
-    for unsupported in &output.unsupported {
-        parts.push(format!(
-            "unsupported={} construct={} action={:?} status={:?}",
-            interner.resolve(unsupported.stable_key),
-            unsupported.construct,
-            unsupported.conservative_action,
-            unsupported.status,
-        ));
-    }
+    // Rows are hashed per family, in parallel, in storage order: the merge
+    // numbers every family by stable-key text, so the order is already a
+    // function of the rows. One read view per hashing task, never across the
+    // parallel section (see `StableKeyInterner::read_view`).
+    let kind = DigestKind::ProviderOutput;
+    let task = || interner.read_view();
+    let families = [
+        Digest::of_rows(
+            kind,
+            "semantic_mir_body",
+            &output.bodies,
+            task,
+            |digest, keys, body| {
+                digest.part(&format!(
+                    "body={} status={:?} owner={} span={}:{} file={:?} function={:?}",
+                    keys.text(body.stable_key),
+                    body.status,
+                    keys.text(body.owner_stable_key),
+                    body.span.start_byte,
+                    body.span.end_byte,
+                    body.file,
+                    body.function,
+                ));
+            },
+        ),
+        Digest::of_rows(
+            kind,
+            "semantic_mir_block",
+            &output.blocks,
+            task,
+            |digest, keys, block| {
+                digest.part(&format!(
+                    "block={} body={:?} ordinal={} statements={:?} terminator={:?}",
+                    keys.text(block.stable_key),
+                    block.body,
+                    block.ordinal,
+                    block.statements,
+                    block.terminator,
+                ));
+            },
+        ),
+        Digest::of_rows(
+            kind,
+            "semantic_mir_statement",
+            &output.statements,
+            task,
+            |digest, keys, statement| {
+                digest.part(&format!(
+                    "statement={} body={:?} ordinal={} operation={:?} status={:?}",
+                    keys.text(statement.stable_key),
+                    statement.body,
+                    statement.ordinal,
+                    statement.operation,
+                    statement.status,
+                ));
+            },
+        ),
+        Digest::of_rows(
+            kind,
+            "semantic_mir_terminator",
+            &output.terminators,
+            task,
+            |digest, keys, terminator| {
+                digest.part(&format!(
+                    "terminator={} body={:?} ordinal={} kind={:?} status={:?}",
+                    keys.text(terminator.stable_key),
+                    terminator.body,
+                    terminator.ordinal,
+                    terminator.kind,
+                    terminator.status,
+                ));
+            },
+        ),
+        Digest::of_rows(
+            kind,
+            "semantic_mir_place",
+            &output.places,
+            task,
+            |digest, keys, place| {
+                digest.part(&format!(
+                    "place={} status={:?} root={} projections={}",
+                    keys.text(place.stable_key),
+                    place.status,
+                    place_root_fragment(&place.root),
+                    place
+                        .projections
+                        .iter()
+                        .map(place_projection_fragment)
+                        .collect::<Vec<_>>()
+                        .join("/")
+                ));
+            },
+        ),
+        Digest::of_rows(
+            kind,
+            "semantic_mir_operation",
+            &output.operations,
+            task,
+            |digest, keys, operation| {
+                digest.part(&format!(
+                    "operation={} body={:?} ordinal={} kind={} status={:?}",
+                    keys.text(operation.stable_key),
+                    operation.body,
+                    operation.ordinal,
+                    operation_kind_fragment(&operation.kind),
+                    operation.status,
+                ));
+            },
+        ),
+        Digest::of_rows(
+            kind,
+            "semantic_mir_unsupported",
+            &output.unsupported,
+            task,
+            |digest, keys, unsupported| {
+                digest.part(&format!(
+                    "unsupported={} construct={} action={:?} status={:?}",
+                    keys.text(unsupported.stable_key),
+                    unsupported.construct,
+                    unsupported.conservative_action,
+                    unsupported.status,
+                ));
+            },
+        ),
+    ];
 
     parts.sort();
-    let digest_refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    Digest::from_parts(
-        DigestKind::ProviderOutput,
-        "semantic_mir_output",
-        &digest_refs,
-    )
+    let mut digest = Digest::builder(kind, "semantic_mir_output");
+    for part in &parts {
+        digest.part(part);
+    }
+    for family in families {
+        digest.part(&family.value);
+    }
+    digest.finish()
 }
 
 fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[InputComponent]) {

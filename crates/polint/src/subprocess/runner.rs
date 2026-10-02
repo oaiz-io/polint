@@ -49,14 +49,44 @@ impl SubprocessError {
 /// toolchain that timed out, so a Go budget and a Node budget never share a
 /// diagnostic category.
 pub(crate) fn run_bounded(
-    mut command: Command,
+    command: Command,
     timeout: Duration,
     label: &str,
     timeout_code: &str,
 ) -> Result<SubprocessOutput, SubprocessError> {
+    run_bounded_with_stdout(command, timeout, label, timeout_code, None)
+}
+
+/// [`run_bounded`], writing the child's standard output to `stdout_file`
+/// instead of collecting it; the returned output's `stdout` is then empty.
+///
+/// For a program whose output is large and is persisted anyway: the bytes go
+/// straight to the file rather than through a pipe into this process's memory
+/// while the child is still running.
+pub(crate) fn run_bounded_to_file(
+    command: Command,
+    timeout: Duration,
+    label: &str,
+    timeout_code: &str,
+    stdout_file: std::fs::File,
+) -> Result<SubprocessOutput, SubprocessError> {
+    run_bounded_with_stdout(command, timeout, label, timeout_code, Some(stdout_file))
+}
+
+fn run_bounded_with_stdout(
+    mut command: Command,
+    timeout: Duration,
+    label: &str,
+    timeout_code: &str,
+    stdout_file: Option<std::fs::File>,
+) -> Result<SubprocessOutput, SubprocessError> {
+    let stdout = match stdout_file {
+        Some(file) => Stdio::from(file),
+        None => Stdio::piped(),
+    };
     command
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
+        .stdout(stdout)
         .stderr(Stdio::piped());
     crate::jobs::apply_to_command(&mut command);
     configure_child_process_group(&mut command);

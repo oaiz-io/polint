@@ -27,13 +27,21 @@ use std::collections::{BTreeMap, HashMap};
 /// small enough that a few huge bodies do not leave the other threads idle.
 const BODIES_PER_TASK: usize = 64;
 
-pub fn lower_cfg(db: &(impl AnalysisHost + Sync)) -> CfgOutput {
+/// Lowers the control flow of every MIR body `include` accepts.
+pub fn lower_cfg(
+    db: &(impl AnalysisHost + Sync),
+    include: impl Fn(&crate::analysis_neutral::mir_body::MirBody) -> bool,
+) -> CfgOutput {
     use rayon::prelude::*;
 
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let inputs = CfgInputs::new(db);
-    let mut bodies = db.mir_bodies().iter().collect::<Vec<_>>();
+    let mut bodies = db
+        .mir_bodies()
+        .iter()
+        .filter(|body| include(body))
+        .collect::<Vec<_>>();
     bodies.sort_by_cached_key(|body| interner.resolve(body.stable_key));
 
     // Every body lowers on its own: a builder's only cross-body state is its
@@ -878,7 +886,7 @@ mod tests {
             vec![assign(&interner, 1, 1), return_op(&interner, 2, 2)],
             Vec::new(),
         );
-        let output = lower_cfg(&db);
+        let output = lower_cfg(&db, |_| true);
 
         assert!(
             output
@@ -903,7 +911,7 @@ mod tests {
             vec![assign(&interner, 1, 1)],
             Vec::new(),
         );
-        let output = lower_cfg(&db);
+        let output = lower_cfg(&db, |_| true);
         let exit = output
             .blocks
             .iter()
@@ -923,7 +931,7 @@ mod tests {
     fn cfg_lowers_go_body_without_language_dispatch() {
         let interner = crate::internal_core::StableKeyInterner::default();
         let db = db_with(Language::Go, vec![assign(&interner, 1, 1)], Vec::new());
-        let output = lower_cfg(&db);
+        let output = lower_cfg(&db, |_| true);
 
         assert_eq!(output.functions.len(), 1);
         assert_eq!(output.functions[0].language, Language::Go);

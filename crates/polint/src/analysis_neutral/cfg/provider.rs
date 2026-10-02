@@ -16,7 +16,7 @@ use crate::analysis_neutral::cfg::graph::CfgGraphIndex;
 use crate::analysis_neutral::cfg::ids::{BasicBlockId, CfgEdgeId, CfgFunctionId, CfgNodeId};
 use crate::analysis_neutral::cfg::lower::lower_cfg;
 use crate::analysis_neutral::cfg::store::CfgOutput;
-use crate::internal_core::{Diagnostic, DiagnosticRange};
+use crate::internal_core::{Diagnostic, DiagnosticRange, Language};
 
 #[derive(Debug, Clone, Default)]
 pub struct CfgProviderOutput {
@@ -32,6 +32,8 @@ pub fn derive_cfg_with_cache_stats(
     manifest: &ProviderManifest,
     semantic_mir_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
+    derived_relations: bool,
+    lower_go: bool,
 ) -> CfgProviderOutput {
     let mut started = std::time::Instant::now();
     let mut checkpoint = |step: &'static str| {
@@ -40,16 +42,27 @@ pub fn derive_cfg_with_cache_stats(
     };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let mut output = derive_cfg_output(db);
+    // A run whose Go calls are answered by the typed call layer, and that asks
+    // for nothing beyond call resolution, reads no Go control flow.
+    let mut output = lower_cfg(db, |body| lower_go || body.language != Language::Go);
     checkpoint("lower_normalize");
-    let bounded = append_derived_rows(interner, &mut output, CfgView::NormalControl);
-    let output = output.normalized(interner);
+    // Reachability, dominance and control dependence are read only by the
+    // control-flow queries and the data-flow evidence, so a run that asks for
+    // neither does not materialise them (nor the dominance budget they report).
+    let (output, bounded) = if derived_relations {
+        let bounded = append_derived_rows(interner, &mut output, CfgView::NormalControl);
+        (output.normalized(interner), bounded)
+    } else {
+        (output, None)
+    };
     checkpoint("derived_normalize");
     let output_digest = cfg_output_digest(
         manifest,
         input_snapshot,
         &semantic_mir_output_digest,
         &upstream_syntax_output_digests,
+        derived_relations,
+        lower_go,
         &output,
         interner,
     );
@@ -80,10 +93,6 @@ pub fn derive_cfg_with_cache_stats(
             },
         },
     }
-}
-
-fn derive_cfg_output(db: &(impl AnalysisHost + Sync)) -> CfgOutput {
-    lower_cfg(db)
 }
 
 /// The dominance relation a run declined to materialise in full.
@@ -167,10 +176,17 @@ fn cfg_output_digest(
     input_snapshot: &InputSnapshot,
     semantic_mir_output_digest: &Digest,
     upstream_syntax_output_digests: &[Digest],
+    derived_relations: bool,
+    lower_go: bool,
     output: &CfgOutput,
     interner: &crate::internal_core::StableKeyInterner,
 ) -> Digest {
     let mut digest = Digest::builder(DigestKind::ProviderOutput, "cfg_output");
+    digest.field(
+        "derived_relations",
+        if derived_relations { "true" } else { "false" },
+    );
+    digest.field("lower_go", if lower_go { "true" } else { "false" });
     digest.part("provider_id");
     digest.part(manifest.id);
     digest.part("provider_version");

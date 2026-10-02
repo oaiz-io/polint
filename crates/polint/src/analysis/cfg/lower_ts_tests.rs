@@ -31,7 +31,7 @@ fn ts_cfg_lowers_edges_from_production_mir_terminators() {
     db.replace_semantic_mir(mir)
         .expect("MIR output should store");
 
-    let edge_kinds = lower_cfg(&db)
+    let edge_kinds = lower_cfg(&db, |_| true)
         .edges
         .into_iter()
         .map(|edge| edge.kind)
@@ -64,7 +64,7 @@ fn ts_cfg_throw_prevents_impossible_fallthrough() {
     let mir = crate::ts::lower_ts_mir(&db);
     db.replace_semantic_mir(mir)
         .expect("MIR output should store");
-    let output = lower_cfg(&db);
+    let output = lower_cfg(&db, |_| true);
     let unreachable_blocks = output
         .blocks
         .iter()
@@ -125,7 +125,7 @@ export function* values(value) { yield value; }
     let mir = crate::ts::lower_ts_mir(&db);
     db.replace_semantic_mir(mir)
         .expect("MIR output should store");
-    let output = lower_cfg(&db);
+    let output = lower_cfg(&db, |_| true);
     let edge_kinds = output
         .edges
         .iter()

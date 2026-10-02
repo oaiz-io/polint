@@ -1644,7 +1644,15 @@ mod tests {
                 .count()
         };
 
-        for capability in ["calls", "dataflow", "control_flow"] {
+        // Call resolution reads no summary, so a calls plan materializes no
+        // domain fact unless per-point states are asked for explicitly.
+        let calls = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let calls_run = run(&calls);
+        assert!(calls_run.db.abstract_domain_observations().is_empty());
+        assert!(calls_run.db.summary_facts().is_empty());
+        assert!(per_operation(&run(&calls.with_per_point_domain_facts())) > 0);
+
+        for capability in ["dataflow", "control_flow"] {
             let plan = AnalysisPlan::from_capability_names_for_test(&[capability]);
             assert!(!plan.requests_per_point_domain_facts());
             let compact = run(&plan);
@@ -2067,8 +2075,8 @@ mod tests {
                 "polint.symbol_graph",
                 "polint.module_topology",
                 "polint.semantic_mir",
-                "polint.cfg",
                 "polint.go.semantic",
+                "polint.cfg",
                 "polint.calls",
                 "polint.ts.types",
                 "polint.identity",
@@ -2672,8 +2680,8 @@ mod tests {
 
         for provider_id in [
             "polint.semantic_mir",
-            "polint.cfg",
             "polint.go.semantic",
+            "polint.cfg",
             "polint.calls",
             "polint.ts.types",
             "polint.identity",
@@ -2728,7 +2736,10 @@ mod tests {
 
     #[cfg(feature = "lang-typescript")]
     #[test]
-    fn calls_plan_keeps_full_cfg_relation_rows() {
+    fn cfg_relations_are_derived_only_for_plans_that_read_them() {
+        // Reachability, dominance and control dependence rows are read by the
+        // control-flow queries and the data-flow evidence, never by call
+        // resolution: a calls plan lowers the CFG but derives none of them.
         let temp = tempfile::tempdir().expect("tempdir");
         std::fs::write(
             temp.path().join("app.ts"),
@@ -2737,32 +2748,36 @@ mod tests {
         .expect("write ts");
         let loaded = load_config(temp.path()).expect("default config loads");
         let cache = Cache::new("", false);
-        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let run = |capability: &str| {
+            let plan = AnalysisPlan::from_capability_names_for_test(&[capability]);
+            AnalysisKernel::run(KernelInput {
+                loaded: &loaded,
+                cache: &cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            })
+            .expect("kernel should run")
+        };
 
-        let output = AnalysisKernel::run(KernelInput {
-            loaded: &loaded,
-            cache: &cache,
-            config_digest: "config",
-            rule_digest: "rules",
-            plan: &plan,
-            parallel: false,
-        })
-        .expect("kernel should run");
-
+        let calls = run("calls");
         assert_eq!(
-            provider_output(&output, "polint.cfg")
-                .cache_stats
-                .recomputes,
+            provider_output(&calls, "polint.cfg").cache_stats.recomputes,
             1
         );
         assert!(
-            !output.db.cfg_reachability().is_empty(),
-            "calls plans should still derive full CFG relation rows"
+            !calls.db.cfg_functions().is_empty(),
+            "a calls plan still lowers the CFG"
         );
-        assert!(
-            !output.db.cfg_postdominators().is_empty(),
-            "calls plans should keep postdominator rows for downstream refinements"
-        );
+        assert!(calls.db.cfg_reachability().is_empty());
+        assert!(calls.db.cfg_dominators().is_empty());
+        assert!(calls.db.cfg_postdominators().is_empty());
+        assert!(calls.db.cfg_control_dependence().is_empty());
+
+        let control_flow = run("control_flow");
+        assert!(!control_flow.db.cfg_reachability().is_empty());
+        assert!(!control_flow.db.cfg_postdominators().is_empty());
     }
 
     #[test]
@@ -2844,8 +2859,8 @@ function cleanup(value: string) {{ return value.trim(); }}
             "polint.module_graph",
             "polint.symbol_graph",
             "polint.semantic_mir",
-            "polint.cfg",
             "polint.go.semantic",
+            "polint.cfg",
             "polint.calls",
             "polint.ts.types",
             "polint.identity",
@@ -3462,8 +3477,8 @@ function setup() {
                 "polint.symbol_graph",
                 "polint.module_topology",
                 "polint.semantic_mir",
-                "polint.cfg",
                 "polint.go.semantic",
+                "polint.cfg",
                 "polint.calls",
                 "polint.ts.types",
                 "polint.identity",
