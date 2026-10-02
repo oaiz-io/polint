@@ -31,6 +31,9 @@ pub struct SemanticGraphBuilder {
     key_by_node: Vec<StableKeyId>,
 }
 
+/// The `origin` of a constraint projected from a TypeScript direct binding.
+pub(crate) const TS_DIRECT_BINDING_ORIGIN: &str = "ts_direct_binding";
+
 impl SemanticGraphBuilder {
     pub fn intern_node(
         &mut self,
@@ -107,6 +110,26 @@ impl SemanticGraphBuilder {
         );
     }
 
+    /// A constraint projected from a fact of another analysis, with that analysis
+    /// named in the key: the identity, a fact's own key, is embedded by digest
+    /// when long, so the key would not otherwise say where the constraint came
+    /// from.
+    pub(crate) fn push_constraint_with_origin(
+        &mut self,
+        interner: &StableKeyInterner,
+        kind: ConstraintKind,
+        identity: &str,
+        origin: &'static str,
+    ) {
+        self.push_constraint_parts(
+            interner,
+            kind,
+            identity,
+            Some(origin),
+            PointsToPrecision::FlowInsensitive,
+        );
+    }
+
     pub(crate) fn push_constraint_with_precision(
         &mut self,
         interner: &StableKeyInterner,
@@ -114,16 +137,26 @@ impl SemanticGraphBuilder {
         identity: &str,
         precision: PointsToPrecision,
     ) {
-        let stable_key = interner.intern(
-            semantic_stable_key(
-                FactFamily::PointsToConstraint,
-                &[
-                    ("constraint_kind", kind.as_str().to_string()),
-                    ("identity", identity.to_string()),
-                ],
-            )
-            .into_string(),
-        );
+        self.push_constraint_parts(interner, kind, identity, None, precision);
+    }
+
+    fn push_constraint_parts(
+        &mut self,
+        interner: &StableKeyInterner,
+        kind: ConstraintKind,
+        identity: &str,
+        origin: Option<&'static str>,
+        precision: PointsToPrecision,
+    ) {
+        let mut parts = vec![
+            ("constraint_kind", kind.as_str().to_string()),
+            ("identity", identity.to_string()),
+        ];
+        if let Some(origin) = origin {
+            parts.push(("origin", origin.to_string()));
+        }
+        let stable_key = interner
+            .intern(semantic_stable_key(FactFamily::PointsToConstraint, &parts).into_string());
         self.constraints.push(ConstraintFact {
             id: Default::default(),
             kind,

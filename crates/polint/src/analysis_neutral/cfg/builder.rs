@@ -208,6 +208,11 @@ impl CfgBuilder {
                 &[
                     ("body", interner.resolve(body_stable_key).to_string()),
                     ("owner", owner_stable_key),
+                    (
+                        "language",
+                        crate::analysis_neutral::cfg::lower::language_label(body.language)
+                            .to_string(),
+                    ),
                 ],
             ),
             status: CfgStatus::Resolved,

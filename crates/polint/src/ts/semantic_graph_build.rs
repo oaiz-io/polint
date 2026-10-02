@@ -28,6 +28,7 @@ use crate::analysis_api::SourceFile;
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::store::AdaptationModelStore;
 use crate::analysis_neutral::ids::{ObjectTokenId, PlaceId, SemanticNodeId};
+use crate::analysis_neutral::semantic_graph::build::TS_DIRECT_BINDING_ORIGIN;
 use crate::analysis_neutral::semantic_graph::build::{
     function_node_key, node_key_from_identity, place_node_key,
 };
@@ -516,12 +517,13 @@ impl GraphBuilder {
             else {
                 continue;
             };
-            self.push_constraint(
+            self.inner.push_constraint_with_origin(
                 interner,
                 ConstraintKind::CallConstraint {
                     callsite: callsite_node,
                 },
                 &interner.resolve(binding.stable_key),
+                TS_DIRECT_BINDING_ORIGIN,
             );
 
             let Some(target_key) = binding
@@ -534,13 +536,14 @@ impl GraphBuilder {
                 continue;
             };
             if direct_binding_emits_copy_edge(binding.kind) {
-                self.push_constraint(
+                self.inner.push_constraint_with_origin(
                     interner,
                     ConstraintKind::CopyEdge {
                         dst: callsite_node,
                         src: target_node,
                     },
                     &interner.resolve(binding.stable_key),
+                    TS_DIRECT_BINDING_ORIGIN,
                 );
             }
         }

@@ -12,7 +12,7 @@ max_runtime_ms = 120000
 fact = { family = "CallSite", stable_key = "directFunction", mode = "partial", producer_id = "polint.calls", precision = "exact", status = "resolved" }
 
 [[expected]]
-fact = { family = "CallSite", stable_key = "handler", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
+fact = { family = "CallSite", stable_key = "identifier:localTarget", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
 
 [[expected]]
 fact = { family = "CallTarget", stable_key = "DirectReference", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }

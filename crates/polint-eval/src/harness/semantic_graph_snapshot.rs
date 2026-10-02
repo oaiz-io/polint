@@ -509,7 +509,12 @@ fn assert_ts_direct_constraint(
             row["source"] == "ts_direct_binding"
                 && row["kind"].as_str() == Some(kind)
                 && row["stable_key"].as_str().is_some_and(|stable_key| {
-                    stable_key.contains(interner.resolve(binding.stable_key).as_ref())
+                    stable_key.contains(
+                        crate::analysis_api::compact_key_reference(
+                            interner.resolve(binding.stable_key).as_ref(),
+                        )
+                        .as_ref(),
+                    )
                 })
         }),
         "missing TS direct-binding {kind} constraint for {}: {observed:#}",

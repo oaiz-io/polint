@@ -3065,7 +3065,7 @@ mod cfg_core {
                 .iter()
                 .any(|(family, key, status, precision)| {
                     *family == "UnsupportedControlFlow"
-                        && key.contains("throw")
+                        && key.contains("construct=3:try")
                         && *status == Some(ObservedStatus::Unsupported)
                         && *precision == Some("unsupported")
                 })
@@ -3300,7 +3300,11 @@ mod direct_calls_core {
 
         for required in [
             ("CallSite", "directFunction", Some(ObservedStatus::Resolved)),
-            ("CallSite", "handler", Some(ObservedStatus::Resolved)),
+            (
+                "CallSite",
+                "identifier:localTarget",
+                Some(ObservedStatus::Resolved),
+            ),
             (
                 "CallTarget",
                 "DirectReference",
@@ -3557,7 +3561,7 @@ mod abstract_domains_core {
         },
         AbstractDomainFeature {
             marker: "abstract-domains/go/unknown-call-havoc",
-            stable_key_fragment: "unknown",
+            stable_key_fragment: "DomainObservation",
             status: ObservedStatus::Unknown,
             precision: "unknown",
         },
@@ -3587,7 +3591,7 @@ mod abstract_domains_core {
         },
         AbstractDomainFeature {
             marker: "abstract-domains/ts/dynamic-write-havoc",
-            stable_key_fragment: "unsupported",
+            stable_key_fragment: "DomainObservation",
             status: ObservedStatus::Unsupported,
             precision: "unsupported",
         },

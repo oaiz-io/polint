@@ -161,6 +161,8 @@ fn lower_control_flow(
         for (step_index, step_id) in step_ids.into_iter().enumerate() {
             if let Some(operation) = body_operations.get(&step_id).copied() {
                 let operation_stable_key = interner.resolve(operation.stable_key);
+                let operation_stable_key =
+                    crate::analysis_api::compact_key_reference(&operation_stable_key);
                 let statement = MirStatement {
                     id: MirStatementId(statements.len() as u64),
                     body: body.id,
@@ -363,6 +365,7 @@ fn lower_control_flow(
             drafts[current].terminator = Some(MirTerminatorKind::Return { value: None });
         }
         let body_stable_key = interner.resolve(body.stable_key);
+        let body_stable_key = crate::analysis_api::compact_key_reference(&body_stable_key);
         for draft in drafts {
             let kind = draft
                 .terminator
@@ -2662,9 +2665,11 @@ func authorize(user User, index int) bool {
         );
 
         assert_eq!(first.bodies.len(), 1);
+        // The body key embeds its owner function key by digest; the owner key
+        // itself names the function.
         assert!(
             first_interner
-                .resolve(first.bodies[0].stable_key)
+                .resolve(first.bodies[0].owner_stable_key)
                 .contains("authorize")
         );
         assert_eq!(

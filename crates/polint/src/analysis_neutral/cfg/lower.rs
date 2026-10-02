@@ -645,7 +645,7 @@ fn cfg_precision(precision: UnsupportedPrecision) -> CfgPrecision {
     }
 }
 
-fn language_label(language: Language) -> &'static str {
+pub(super) fn language_label(language: Language) -> &'static str {
     match language {
         Language::TypeScript => "ts",
         Language::Tsx => "tsx",

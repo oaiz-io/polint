@@ -215,6 +215,82 @@ impl FactFamily {
         Self::SemanticGraph,
     ];
 
+    /// Whether this family's key texts embed long part values by digest.
+    ///
+    /// The deep-analysis families compose their keys from other keys: an
+    /// operation key carries its body key, which carries its function key; a CFG
+    /// edge carries a body, two blocks and two nodes. Embedding each parent's full
+    /// text made key text grow with nesting depth (kilobytes per key, gigabytes per
+    /// large module). These families embed a part value longer than
+    /// [`COMPACT_PART_VALUE_MAX_BYTES`] by its digest instead; see
+    /// [`compact_part_value`]. The source, syntax, module-graph, symbol and metrics
+    /// families, and the unsupported-semantic family that also orders `polint
+    /// unknowns` rows, keep their values verbatim.
+    pub fn compacts_long_part_values(self) -> bool {
+        matches!(
+            self,
+            Self::Place
+                | Self::MirBody
+                | Self::MirOperation
+                | Self::MirStatement
+                | Self::MirTerminator
+                | Self::CfgFunction
+                | Self::CfgNode
+                | Self::BasicBlock
+                | Self::CfgEdge
+                | Self::CfgReachability
+                | Self::CfgDominator
+                | Self::CfgPostDominator
+                | Self::CfgControlDependence
+                | Self::UnsupportedControlFlow
+                | Self::CallSite
+                | Self::CallTarget
+                | Self::UnresolvedCall
+                | Self::RefinedCallEdge
+                | Self::DataFlowNode
+                | Self::DataFlowEdge
+                | Self::DataFlowModel
+                | Self::DataFlowBudget
+                | Self::EvidenceNode
+                | Self::EvidenceEdge
+                | Self::EvidenceBundle
+                | Self::EvidencePath
+                | Self::EvidenceSlice
+                | Self::EvidenceUnknown
+                | Self::EvidenceOmittedRegion
+                | Self::EvidenceReplayKey
+                | Self::DomainObservation
+                | Self::DomainEvent
+                | Self::SummaryControl
+                | Self::SummaryCall
+                | Self::SummaryMemory
+                | Self::SummaryTito
+                | Self::SummaryEvent
+                | Self::ExtensionFact
+                | Self::Entrypoint
+                | Self::TrustBoundary
+                | Self::DispatchEdge
+                | Self::UnresolvedFramework
+                | Self::Type
+                | Self::NarrowedType
+                | Self::Value
+                | Self::AllocationToken
+                | Self::AccessPath
+                | Self::PointsToConstraint
+                | Self::PointsToSet
+                | Self::AliasAnswer
+                | Self::AdaptationModel
+                | Self::SolverDerivedEdge
+                | Self::TypeValueAliasEvent
+                | Self::GoSemantic
+                | Self::TsObjectModel
+                | Self::TsTypes
+                | Self::Identity
+                | Self::Reachability
+                | Self::SemanticGraph
+        )
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::SourceFile => "SourceFile",
@@ -634,11 +710,62 @@ pub fn write_stable_key_text(buffer: &mut String, family: FactFamily, parts: &mu
 
     buffer.clear();
     push_length_prefixed(buffer, family.label());
+    let compact = family.compacts_long_part_values();
     for (label, value) in parts.iter() {
         buffer.push('|');
         push_length_prefixed(buffer, label);
         buffer.push('=');
-        push_length_prefixed_path(buffer, value);
+        if compact && value.len() > COMPACT_PART_VALUE_MAX_BYTES {
+            push_length_prefixed(buffer, &compact_part_value(value));
+        } else {
+            push_length_prefixed_path(buffer, value);
+        }
+    }
+}
+
+/// The longest part value a compacting family embeds verbatim; see
+/// [`FactFamily::compacts_long_part_values`].
+pub const COMPACT_PART_VALUE_MAX_BYTES: usize = 64;
+
+/// The digest form of a long key part value: `#` followed by the first 128 bits
+/// of the SHA-256 of the value (with `\` folded to `/`, as every key value is),
+/// as lowercase hex.
+///
+/// Distinct values keep distinct keys with overwhelming probability (a
+/// collision among `n` values has probability about n²/2¹²⁹), and the form is a
+/// pure function of the value, so every builder of a key derives the same text.
+/// No value is ever parsed back out of a key, so nothing reads the digest but
+/// equality and ordering.
+pub fn compact_part_value(value: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    let mut rest = value;
+    while let Some(index) = rest.find('\\') {
+        hasher.update(rest[..index].as_bytes());
+        hasher.update(b"/");
+        rest = &rest[index + 1..];
+    }
+    hasher.update(rest.as_bytes());
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(33);
+    out.push('#');
+    for byte in &digest[..16] {
+        out.push(char::from_digit(u32::from(byte >> 4), 16).expect("a nibble is a hex digit"));
+        out.push(char::from_digit(u32::from(byte & 0x0f), 16).expect("a nibble is a hex digit"));
+    }
+    out
+}
+
+/// A key's text as another composed key embeds it: verbatim when short, by
+/// [`compact_part_value`] when longer than [`COMPACT_PART_VALUE_MAX_BYTES`].
+/// For keys composed outside [`write_stable_key_text`], such as a MIR block key
+/// built from its body key.
+pub fn compact_key_reference(key: &str) -> std::borrow::Cow<'_, str> {
+    if key.len() > COMPACT_PART_VALUE_MAX_BYTES {
+        std::borrow::Cow::Owned(compact_part_value(key))
+    } else {
+        std::borrow::Cow::Borrowed(key)
     }
 }
 
@@ -681,6 +808,66 @@ fn push_decimal(buffer: &mut String, value: usize) {
 mod tests {
     use super::*;
     use crate::internal_core::stable_key_for_test;
+
+    #[test]
+    fn deep_families_embed_long_part_values_by_digest_and_others_verbatim() {
+        let long = format!("{}/handlers.go", "core/internal/catalog/service".repeat(3));
+        assert!(long.len() > COMPACT_PART_VALUE_MAX_BYTES);
+        let deep = stable_key_text_from_parts(
+            FactFamily::MirOperation,
+            &[("body", long.as_str()), ("ordinal", "7")],
+        );
+        let digest = compact_part_value(&long);
+        assert_eq!(
+            deep,
+            format!("12:MirOperation|4:body=33:{digest}|7:ordinal=1:7")
+        );
+        assert!(!deep.contains("handlers.go"));
+
+        let syntax = stable_key_text_from_parts(FactFamily::Function, &[("path", long.as_str())]);
+        assert!(
+            syntax.contains(&long),
+            "syntax-family keys keep every value verbatim"
+        );
+
+        let at_limit = "x".repeat(COMPACT_PART_VALUE_MAX_BYTES);
+        let kept = stable_key_text_from_parts(FactFamily::CfgNode, &[("block", at_limit.as_str())]);
+        assert!(
+            kept.contains(&at_limit),
+            "a value at the limit stays verbatim"
+        );
+    }
+
+    #[test]
+    fn compact_part_values_are_fixed_width_folded_and_distinct() {
+        let value = "a".repeat(100);
+        let digest = compact_part_value(&value);
+        assert_eq!(digest.len(), 33);
+        assert!(digest.starts_with('#'));
+        assert!(
+            digest[1..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        );
+        assert_eq!(
+            digest,
+            compact_part_value(&value),
+            "a pure function of the value"
+        );
+        assert_eq!(
+            compact_part_value(&format!("dir\\{value}")),
+            compact_part_value(&format!("dir/{value}")),
+            "backslashes fold before hashing, as they do in verbatim values"
+        );
+        assert_ne!(digest, compact_part_value(&format!("{value}b")));
+    }
+
+    #[test]
+    fn a_key_reference_is_verbatim_when_short_and_a_digest_when_long() {
+        assert_eq!(compact_key_reference("short-key"), "short-key");
+        let long = "k".repeat(COMPACT_PART_VALUE_MAX_BYTES + 1);
+        assert_eq!(compact_key_reference(&long), compact_part_value(&long));
+    }
 
     /// `FactFamily::ALL` must list every variant exactly once.
     ///
