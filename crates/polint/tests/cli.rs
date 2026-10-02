@@ -1287,7 +1287,8 @@ func dangerous() {}
                     "target",
                     "example.com/policyquery/src.dangerous",
                 )
-                && diagnostic_has_evidence(diagnostic, "policy_precision", "setup_aware")
+                // The typed Go frontend resolves a call of a package function exactly.
+                && diagnostic_has_evidence(diagnostic, "policy_precision", "exact")
         }),
         "missing event diagnostic evidence: {json:#?}"
     );
