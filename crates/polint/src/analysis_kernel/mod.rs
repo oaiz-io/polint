@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[rustfmt::skip]
 #[cfg(test)] mod debug;
+pub(crate) mod call_cache;
 mod completeness;
 pub(crate) use completeness::pipeline_failure_unknowns;
 #[cfg(test)]
@@ -263,9 +264,13 @@ fn run_scheduled_providers<'a>(
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let mut provider_telemetry = Vec::with_capacity(AnalysisKernel::provider_manifests().len());
     let mut envelope = resource::ResourceEnvelope::from_env();
+    let mut call_cache = CallCacheState::Inactive;
     // Emit a provider_outputs row for every manifest entry (historical identity),
     // but only execute providers selected by capability closure.
     for provider_id in scheduled_order() {
+        if provider_id == call_cache::CACHED_PROVIDERS[0] {
+            call_cache = call_cache.restore_or_compute(db);
+        }
         let selected = enabled_providers.contains(provider_id);
         let blockers = if selected {
             tracker
@@ -297,7 +302,25 @@ fn run_scheduled_providers<'a>(
         let stage_started = std::time::Instant::now();
         let deferred_before = db.deferred_syntax_metadata_len();
         let stage_rss_before = crate::measure::current_rss_bytes();
-        let result = if ready {
+        let restored = match &call_cache {
+            CallCacheState::Restored(providers) if ready => providers.get(provider_id).cloned(),
+            _ => None,
+        };
+        let result = if let Some(restored) = restored {
+            // Restored from the call-resolution cache: the provider's facts are
+            // in the database already and it reports the digest and diagnostics
+            // the computing run recorded. It did not run, so it reports no
+            // counters.
+            let mut cache_stats = incremental::CacheStats::default();
+            cache_stats.record_hit();
+            ProviderRunResult {
+                diagnostics: restored.diagnostics,
+                cache_stats,
+                output_digest: Some(restored.output_digest),
+                execution: Default::default(),
+                counts: std::collections::BTreeMap::new(),
+            }
+        } else if ready {
             let mut ctx = ProviderCtx {
                 facts: &mut *db,
                 host: &mut host_services,
@@ -319,6 +342,7 @@ fn run_scheduled_providers<'a>(
                 counts: std::collections::BTreeMap::new(),
             }
         };
+        call_cache.observe(db, provider_id, ready, &result);
         let stage_elapsed_ms = ready.then(|| stage_started.elapsed().as_millis() as u64);
         // A provider owns the truth of whether its output is usable. Never let
         // a failed result's digest enter the dependency map or the identity
@@ -433,9 +457,17 @@ fn run_scheduled_providers<'a>(
         if provider_id == "polint.go.syntax"
             && ready
             && matches!(execution, crate::analysis_api::ProviderExecution::Succeeded)
-            && enabled_providers.contains("polint.go.semantic")
         {
-            start_go_semantic_prefetch(db, input, &upstream_digests);
+            call_cache = CallCacheState::decide(
+                db,
+                input,
+                input_snapshot,
+                enabled_providers,
+                &upstream_digests,
+            );
+            if enabled_providers.contains("polint.go.semantic") && !call_cache.will_restore() {
+                start_go_semantic_prefetch(db, input, &upstream_digests);
+            }
         }
     }
 
@@ -460,6 +492,157 @@ fn run_scheduled_providers<'a>(
         tracker,
         provider_telemetry,
     ))
+}
+
+/// Where a run stands with the call-resolution cache (see [`call_cache`]).
+enum CallCacheState {
+    /// The run cannot use the cache.
+    Inactive,
+    /// An entry is stored under the run's key; it is restored when the cached
+    /// providers' turn comes.
+    Hit {
+        directory: std::path::PathBuf,
+        key: String,
+    },
+    /// The cached providers' facts are in the database; their recorded outcomes.
+    Restored(BTreeMap<String, call_cache::CachedProvider>),
+    /// The cached providers compute; their outcomes so far.
+    Computing {
+        directory: std::path::PathBuf,
+        key: String,
+        providers: Vec<call_cache::CachedProvider>,
+        clean: bool,
+    },
+}
+
+impl CallCacheState {
+    /// Decides, once the Go syntax is known, whether the run will restore or
+    /// compute; see [`call_cache::KEYED_UPSTREAM`] for why that is enough.
+    fn decide(
+        db: &AnalysisDb,
+        input: &KernelInput<'_>,
+        input_snapshot: &incremental::InputSnapshot,
+        enabled_providers: &std::collections::BTreeSet<&'static str>,
+        upstream_digests: &BTreeMap<&'static str, crate::analysis_api::Digest>,
+    ) -> Self {
+        let Some(directory) = call_cache::cache_dir(input.cache) else {
+            return Self::Inactive;
+        };
+        if !call_cache::eligible(input.plan, db, enabled_providers) {
+            return Self::Inactive;
+        }
+        let identity = go_semantic_run_identity(db, input, upstream_digests);
+        let Some(key) = call_cache::entry_key(
+            input_snapshot,
+            upstream_digests,
+            identity.as_deref(),
+            &input.loaded.root,
+        ) else {
+            return Self::Inactive;
+        };
+        if call_cache::has_entry(&directory, &key) {
+            Self::Hit { directory, key }
+        } else {
+            Self::Computing {
+                directory,
+                key,
+                providers: Vec::new(),
+                clean: true,
+            }
+        }
+    }
+
+    fn will_restore(&self) -> bool {
+        matches!(self, Self::Hit { .. })
+    }
+
+    /// At the first cached provider's turn: restores a stored entry, or falls
+    /// back to computing when it cannot be used.
+    fn restore_or_compute(self, db: &mut AnalysisDb) -> Self {
+        let Self::Hit { directory, key } = self else {
+            return self;
+        };
+        match call_cache::restore(db, &directory, &key) {
+            Some(providers) => Self::Restored(
+                providers
+                    .into_iter()
+                    .map(|provider| (provider.id.clone(), provider))
+                    .collect(),
+            ),
+            None => Self::Computing {
+                directory,
+                key,
+                providers: Vec::new(),
+                clean: true,
+            },
+        }
+    }
+
+    /// Records a cached provider's outcome while computing, and stores the
+    /// entry after the last one when every cached provider succeeded.
+    fn observe(
+        &mut self,
+        db: &AnalysisDb,
+        provider_id: &str,
+        ready: bool,
+        result: &ProviderRunResult,
+    ) {
+        let Self::Computing {
+            directory,
+            key,
+            providers,
+            clean,
+        } = self
+        else {
+            return;
+        };
+        if !call_cache::CACHED_PROVIDERS.contains(&provider_id) {
+            return;
+        }
+        match (&result.output_digest, &result.execution) {
+            (Some(digest), crate::analysis_api::ProviderExecution::Succeeded) if ready => {
+                providers.push(call_cache::CachedProvider {
+                    id: provider_id.to_string(),
+                    output_digest: digest.clone(),
+                    diagnostics: result.diagnostics.clone(),
+                });
+            }
+            _ => {
+                if *clean {
+                    tracing::debug!(
+                        target: "polint::kernel::stage",
+                        provider = provider_id,
+                        "call-resolution cache entry not written: a cached provider did not succeed"
+                    );
+                }
+                *clean = false;
+            }
+        }
+        if Some(&provider_id) == call_cache::CACHED_PROVIDERS.last() && *clean {
+            call_cache::persist(db, directory, key, std::mem::take(providers));
+        }
+    }
+}
+
+/// The identity of the semantic sidecar run this scan would make; see
+/// [`crate::go::semantic::client::sidecar_run_identity`].
+fn go_semantic_run_identity(
+    db: &AnalysisDb,
+    input: &KernelInput<'_>,
+    upstream_digests: &BTreeMap<&'static str, crate::analysis_api::Digest>,
+) -> Option<String> {
+    let files = crate::go::lifecycle::go_files(db);
+    let config = crate::go::lifecycle::GoAnalysisConfig {
+        semantic_call_graph: provider::go_semantic_call_graph_requested(input.plan),
+        ..crate::go::lifecycle::GoAnalysisConfig::from_settings_files(
+            &input.loaded.root,
+            &input.loaded.config.languages.go,
+            &files,
+        )
+        .ok()?
+    };
+    let upstream = upstream_digests.get("polint.go.syntax")?.to_string();
+    crate::go::semantic::client::sidecar_run_identity(&config, &upstream)
 }
 
 /// Starts the Go semantic sidecar the moment `polint.go.syntax` has fixed its
@@ -1598,10 +1781,11 @@ mod tests {
         }
     }
 
-    /// Every deep capability gets the compact domain materialization: the
+    /// Control flow and data flow get the compact domain materialization: the
     /// summaries read only entry reachability, and the per-point states were most
-    /// of a calls or dataflow run's time and memory. The summaries a rule sees
-    /// must not depend on the choice.
+    /// of a dataflow run's time and memory. The summaries a rule sees must not
+    /// depend on the choice. Call resolution reads no summary and gets no domain
+    /// facts at all.
     #[cfg(feature = "lang-go")]
     #[test]
     fn deep_capabilities_get_compact_domain_facts_unless_per_point_states_are_requested() {
@@ -3528,6 +3712,123 @@ function setup() {
                 },
             ]
         );
+    }
+
+    /// A calls run over unchanged Go sources restores the call facts the first
+    /// run computed instead of running the deep providers again, and its queries
+    /// read the same facts; an edit makes the next run compute again.
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn a_calls_run_over_unchanged_go_sources_restores_its_call_facts() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        std::fs::write(
+            temp.path().join("go.mod"),
+            "module example.com/cached\n\ngo 1.22\n",
+        )
+        .expect("write go.mod");
+        let source = "package main\n\ntype speaker interface{ speak() string }\n\ntype dog struct{}\n\nfunc (dog) speak() string { return \"woof\" }\n\nfunc helper(value int) int { return value + 1 }\n\nfunc main() {\n\tvar s speaker = dog{}\n\t_ = s.speak()\n\tf := helper\n\t_ = f(helper(1))\n}\n";
+        std::fs::write(temp.path().join("main.go"), source).expect("write Go source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::default_for_repo(temp.path(), true);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let run = || {
+            AnalysisKernel::run(KernelInput {
+                loaded: &loaded,
+                cache: &cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            })
+            .expect("kernel should run")
+        };
+        // What a query can read, by stable-key text rather than run-local ids.
+        let call_facts = |output: &KernelOutput| {
+            let interner = output.db.stable_key_interner();
+            let key = |id| interner.resolve(id).to_string();
+            let mut rows = Vec::new();
+            for site in output.db.call_sites() {
+                rows.push(format!(
+                    "site {} {:?} {:?}",
+                    key(site.stable_key),
+                    site.callee,
+                    site.status
+                ));
+            }
+            for target in output.db.call_targets() {
+                rows.push(format!(
+                    "target {} {:?} {:?} {:?}",
+                    key(target.stable_key),
+                    target.target_function,
+                    target.synthetic_target,
+                    target.algorithm
+                ));
+            }
+            for edge in output.db.refined_call_edges() {
+                rows.push(format!(
+                    "edge {} {:?} {:?} {:?}",
+                    key(edge.stable_key),
+                    edge.tier,
+                    edge.status,
+                    edge.target_function
+                ));
+            }
+            for root in output.db.reachability_roots() {
+                rows.push(format!("root {} {:?}", key(root.stable_key), root.id));
+            }
+            rows
+        };
+
+        let computed = run();
+        assert!(!computed.db.refined_call_edges().is_empty());
+        assert!(
+            computed.db.call_targets().iter().any(|target| {
+                target.algorithm == crate::analysis_neutral::calls::facts::CallAlgorithm::GoVta
+            }),
+            "the typed call layer answered the interface call"
+        );
+        for provider in call_cache::CACHED_PROVIDERS {
+            assert_eq!(
+                provider_output(&computed, provider).cache_stats.hits,
+                0,
+                "{provider} computes on the first run"
+            );
+        }
+
+        let restored = run();
+        for provider in call_cache::CACHED_PROVIDERS {
+            let row = provider_output(&restored, provider);
+            assert_eq!(row.cache_stats.hits, 1, "{provider} is restored");
+            assert_eq!(
+                row.output_digest,
+                provider_output(&computed, provider).output_digest,
+                "{provider} reports the digest the computing run recorded"
+            );
+        }
+        assert!(
+            restored.db.mir_bodies().is_empty(),
+            "nothing below the call facts ran"
+        );
+        assert_eq!(call_facts(&restored), call_facts(&computed));
+        assert_eq!(
+            restored.diagnostics, computed.diagnostics,
+            "a restored run reports what the computing run reported"
+        );
+
+        std::fs::write(
+            temp.path().join("main.go"),
+            source.replace("value + 1", "value + 2"),
+        )
+        .expect("edit Go source");
+        let edited = run();
+        assert_eq!(
+            provider_output(&edited, "polint.semantic_mir")
+                .cache_stats
+                .hits,
+            0,
+            "an edit computes again"
+        );
+        assert!(!edited.db.mir_bodies().is_empty());
     }
 
     fn provider_output<'a>(

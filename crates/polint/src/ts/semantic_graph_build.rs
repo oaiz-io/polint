@@ -77,6 +77,7 @@ pub(crate) fn build_semantic_graph(db: &impl AnalysisHost) -> SemanticGraphOutpu
         db,
         &ts_direct_bindings,
         no_additional_projection,
+        None,
     )
 }
 
@@ -87,12 +88,14 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection<H: Analysis
         &H,
         &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
     ),
+    excluded_language: Option<crate::internal_core::Language>,
 ) -> SemanticGraphOutput {
     build_semantic_graph_with_ts_direct_binding_collection_and_adaptation_models(
         db,
         ts_direct_bindings,
         &AdaptationModelStore::default(),
         project_additional_facts,
+        excluded_language,
     )
 }
 
@@ -122,6 +125,7 @@ pub(crate) fn build_semantic_graph_with_ts_direct_bindings_and_adaptation_models
         None,
         &[],
         no_additional_projection,
+        None,
     )
 }
 
@@ -135,6 +139,7 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection_and_adaptat
         &H,
         &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
     ),
+    excluded_language: Option<crate::internal_core::Language>,
 ) -> SemanticGraphOutput {
     let object_model = ts_direct_bindings.object_model_output();
     build_semantic_graph_with_inputs(
@@ -145,6 +150,7 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection_and_adaptat
         Some(ts_direct_bindings.analyses.as_slice()),
         &ts_direct_bindings.callable_flows,
         project_additional_facts,
+        excluded_language,
     )
 }
 
@@ -159,10 +165,14 @@ fn build_semantic_graph_with_inputs<H: AnalysisHost>(
         &H,
         &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
     ),
+    excluded_language: Option<crate::internal_core::Language>,
 ) -> SemanticGraphOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut builder = GraphBuilder::default();
+    if let Some(language) = excluded_language {
+        builder.inner.exclude_language(language);
+    }
 
     builder.project_nodes(db);
     builder.project_call_edges_and_constraints(db);
@@ -1316,6 +1326,7 @@ mod tests {
             None,
             &[],
             no_additional_projection,
+            None,
         )
     }
 

@@ -29,6 +29,10 @@ pub struct SemanticGraphBuilder {
     /// pre-sort SemanticNodeId (as index) -> node stable key, the O(1) reverse of
     /// `node_by_key` so `node_key_for` (called twice per edge) never linear-scans.
     key_by_node: Vec<StableKeyId>,
+    /// A language whose functions, packages, call sites, scopes and values the
+    /// projections leave out: a run that derives no points-to facts for it has
+    /// no reader for them.
+    excluded_language: Option<crate::internal_core::Language>,
 }
 
 /// The `origin` of a constraint projected from a TypeScript direct binding.
@@ -188,22 +192,43 @@ impl SemanticGraphBuilder {
 
     // -- node projection ----------------------------------------------------
 
+    /// Leaves `language` out of every projection; see `excluded_language`.
+    pub fn exclude_language(&mut self, language: crate::internal_core::Language) {
+        self.excluded_language = Some(language);
+    }
+
+    fn projects(&self, language: crate::internal_core::Language) -> bool {
+        self.excluded_language != Some(language)
+    }
+
     pub fn project_nodes(&mut self, db: &impl AnalysisHost) {
         let interner_handle = db.stable_key_interner();
         let interner = &interner_handle;
         for function in db.functions() {
+            if !self.projects(function.language) {
+                continue;
+            }
             let key = function_node_key(db, function);
             self.intern_node(interner, NodeKind::Function(function.id), key);
         }
         for package in db.packages() {
+            if !self.projects(package.language) {
+                continue;
+            }
             let key = package_node_key(db, package);
             self.intern_node(interner, NodeKind::Package(package.id), key);
         }
         for site in db.call_sites() {
+            if !self.projects(site.language) {
+                continue;
+            }
             let key = node_key_from_identity("callsite", &interner.resolve(site.stable_key));
             self.intern_node(interner, NodeKind::Callsite(site.id), key);
         }
         for scope in db.semantic_scopes() {
+            if !self.projects(scope.language) {
+                continue;
+            }
             let key = node_key_from_identity("scope", &interner.resolve(scope.stable_key));
             self.intern_node(interner, NodeKind::Scope(ScopeId(scope.id.0)), key);
         }
@@ -236,6 +261,9 @@ impl SemanticGraphBuilder {
             .collect();
 
         for site in db.call_sites() {
+            if !self.projects(site.language) {
+                continue;
+            }
             let site_key = node_key_from_identity("callsite", &interner.resolve(site.stable_key));
             let Some(&callsite_node) = self.node_by_key.get(&interner.intern(site_key)) else {
                 continue;
@@ -300,6 +328,9 @@ impl SemanticGraphBuilder {
             .collect();
 
         for scope in db.semantic_scopes() {
+            if !self.projects(scope.language) {
+                continue;
+            }
             let Some(package) = scope.package else {
                 continue;
             };

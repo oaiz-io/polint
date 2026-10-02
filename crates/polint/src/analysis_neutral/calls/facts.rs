@@ -5,7 +5,7 @@ use crate::internal_core::{
     FileId, FunctionId, Language, ReferenceId, Span, StableKeyId, SymbolId,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallSiteFact {
     pub id: CallSiteId,
     pub language: Language,
@@ -30,7 +30,7 @@ pub struct CallSiteFact {
     pub stable_key: StableKeyId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallTargetFact {
     pub id: CallTargetId,
     pub site: CallSiteId,
@@ -51,7 +51,7 @@ pub struct CallTargetFact {
     pub stable_key: StableKeyId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnresolvedCallFact {
     pub site: CallSiteId,
     pub caller: FunctionId,

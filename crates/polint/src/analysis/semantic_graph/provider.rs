@@ -150,6 +150,10 @@ pub(crate) fn derive_semantic_graph_with_go_points_to(
     } else {
         skip_go_semantic_facts
     };
+    // Without Go points-to facts nothing reads the Go part of the graph: its
+    // call constraints would only feed the solver edges the typed call layer
+    // already answers.
+    let excluded_language = (!go_points_to).then_some(crate::internal_core::Language::Go);
     let mut started = std::time::Instant::now();
     let mut checkpoint = |step: &'static str| {
         tracing::debug!(target: "polint::kernel::stage", provider = SEMANTIC_GRAPH_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
@@ -189,9 +193,13 @@ pub(crate) fn derive_semantic_graph_with_go_points_to(
     checkpoint("ts_object_model");
     let ts_direct_binding_output_digest =
         ts_direct_binding_output_digest(ts_direct_bindings.output(), interner);
-    let base_output =
-        build_semantic_graph_with_ts_direct_binding_collection(db, &ts_direct_bindings, project_go)
-            .normalized(interner);
+    let base_output = build_semantic_graph_with_ts_direct_binding_collection(
+        db,
+        &ts_direct_bindings,
+        project_go,
+        excluded_language,
+    )
+    .normalized(interner);
     checkpoint("build_normalize");
     let adaptation_models =
         collect_adaptation_model_input(interner, loaded, &base_output, adaptation_budget);
@@ -203,6 +211,7 @@ pub(crate) fn derive_semantic_graph_with_go_points_to(
             &ts_direct_bindings,
             &adaptation_models.store,
             project_go,
+            excluded_language,
         )
         .normalized(interner)
     };

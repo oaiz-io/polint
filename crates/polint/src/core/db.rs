@@ -273,6 +273,10 @@ pub struct AnalysisDb {
     /// their metadata is not recorded yet.
     deferred_metric_metadata: bool,
     defer_syntax_metadata: bool,
+    /// Whether the call facts were restored from the call-resolution cache, in
+    /// which case no MIR was materialized: call sites keep the MIR body,
+    /// operation and place ids of the run that computed them.
+    call_facts_without_mir: bool,
 }
 
 impl Clone for AnalysisDb {
@@ -288,6 +292,7 @@ impl Clone for AnalysisDb {
             deferred_syntax_metadata: self.deferred_syntax_metadata.clone(),
             deferred_metric_metadata: self.deferred_metric_metadata,
             defer_syntax_metadata: self.defer_syntax_metadata,
+            call_facts_without_mir: self.call_facts_without_mir,
         }
     }
 }
@@ -422,6 +427,7 @@ impl Default for AnalysisDb {
             deferred_syntax_metadata: Vec::new(),
             deferred_metric_metadata: false,
             defer_syntax_metadata: false,
+            call_facts_without_mir: false,
         }
     }
 }
@@ -4248,6 +4254,12 @@ impl AnalysisDb {
     /// metadata is most of the cost of restoring facts from the analysis cache,
     /// and all of it is wasted. [`AnalysisDb::record_deferred_syntax_metadata`]
     /// records it later for whoever does need it.
+    /// Records that the call facts came from the call-resolution cache and no
+    /// MIR was materialized; see `call_facts_without_mir`.
+    pub(crate) fn mark_call_facts_restored_without_mir(&mut self) {
+        self.call_facts_without_mir = true;
+    }
+
     pub(crate) fn defer_syntax_fact_metadata(&mut self) {
         self.defer_syntax_metadata = true;
     }
@@ -6446,6 +6458,10 @@ impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
 
     fn replace_call_facts(&mut self, output: CallOutput) -> Result<(), AnalysisError> {
         AnalysisDb::replace_call_facts(self, output)
+    }
+
+    fn call_facts_without_mir(&self) -> bool {
+        self.call_facts_without_mir
     }
 
     fn replace_cfg_facts(&mut self, output: CfgOutput) -> Result<(), AnalysisError> {

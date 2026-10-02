@@ -113,6 +113,12 @@ pub trait AnalysisHost: FactDatabase {
         self.stable_key_interner().resolve(id)
     }
 
+    /// Whether the call facts were restored without the MIR they were lowered
+    /// from, so their MIR ids name facts of the run that computed them.
+    fn call_facts_without_mir(&self) -> bool {
+        false
+    }
+
     fn replace_symbol_graph_facts(
         &mut self,
         symbols: Vec<crate::analysis_api::SymbolFact>,

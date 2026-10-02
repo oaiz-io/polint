@@ -60,6 +60,9 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
             .map(|row| db.resolve_stable_key(row.stable_key)),
     );
 
+    // Call facts restored from the call-resolution cache come without the MIR
+    // they were lowered from; their MIR ids are not references into this run.
+    let check_mir = !db.call_facts_without_mir();
     for site in db.call_sites() {
         let stable_key = db.resolve_stable_key(site.stable_key);
         check_ref(
@@ -80,24 +83,26 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
             "caller",
             "dangling call caller function reference",
         );
-        check_ref(
-            diagnostics,
-            &bodies,
-            site.body,
-            "CallSite",
-            &stable_key,
-            "body",
-            "dangling call MIR body reference",
-        );
-        check_ref(
-            diagnostics,
-            &operations,
-            site.operation,
-            "CallSite",
-            &stable_key,
-            "operation",
-            "dangling call MIR operation reference",
-        );
+        if check_mir {
+            check_ref(
+                diagnostics,
+                &bodies,
+                site.body,
+                "CallSite",
+                &stable_key,
+                "body",
+                "dangling call MIR body reference",
+            );
+            check_ref(
+                diagnostics,
+                &operations,
+                site.operation,
+                "CallSite",
+                &stable_key,
+                "operation",
+                "dangling call MIR operation reference",
+            );
+        }
         if let Some(owner_symbol) = site.owner_symbol {
             check_ref(
                 diagnostics,
@@ -109,7 +114,7 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
                 "dangling call owner symbol reference",
             );
         }
-        if let Some(receiver) = site.receiver {
+        if let Some(receiver) = site.receiver.filter(|_| check_mir) {
             check_ref(
                 diagnostics,
                 &places,
@@ -120,7 +125,7 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
                 "dangling call receiver place reference",
             );
         }
-        for argument in &site.arguments {
+        for argument in site.arguments.iter().filter(|_| check_mir) {
             check_ref(
                 diagnostics,
                 &places,
@@ -131,7 +136,7 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
                 "dangling call argument place reference",
             );
         }
-        if let Some(result) = site.result {
+        if let Some(result) = site.result.filter(|_| check_mir) {
             check_ref(
                 diagnostics,
                 &places,

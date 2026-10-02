@@ -9,7 +9,7 @@ use crate::internal_core::{FileId, FunctionId, Language, Span, StableKeyId, Symb
 // EntrypointFact
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntrypointFact {
     pub id: EntrypointId,
     pub language: Language,
@@ -29,7 +29,7 @@ pub struct EntrypointFact {
     pub stable_key: StableKeyId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggerMetadata {
     pub method: Option<String>,
     pub path: Option<String>,
@@ -103,7 +103,7 @@ pub enum EntrypointStatus {
 // TrustBoundaryFact
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrustBoundaryFact {
     pub id: TrustBoundaryId,
     pub entrypoint_stable_key: StableKeyId,
@@ -142,7 +142,7 @@ pub enum TrustBoundarySourceKind {
 // FrameworkDispatchEdgeFact
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FrameworkDispatchEdgeFact {
     pub id: DispatchEdgeId,
     pub from_source: String,
@@ -174,7 +174,7 @@ pub enum DispatchEdgeKind {
 // UnresolvedFrameworkFact
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnresolvedFrameworkFact {
     pub id: UnresolvedFrameworkId,
     pub language: Language,

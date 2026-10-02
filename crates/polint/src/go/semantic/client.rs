@@ -190,6 +190,25 @@ fn read_from_start(file: &mut std::fs::File) -> Result<Vec<u8>, GoSemanticClient
     Ok(bytes)
 }
 
+/// The identity of the sidecar run `config` describes over sources whose Go
+/// syntax has `upstream_digest`: the key its output is cached under, which
+/// changes with the frontend, the Go toolchain, the lifecycle configuration
+/// and the sources.
+pub(crate) fn sidecar_run_identity(
+    config: &GoAnalysisConfig,
+    upstream_digest: &str,
+) -> Option<String> {
+    let frontend = resolve_go_semantic_frontend().ok()?;
+    let digest = frontend_digest(&frontend).ok()?;
+    let go_version = local_go_toolchain_version().unwrap_or_default();
+    Some(go_semantic_sidecar_cache_key(
+        &digest,
+        &go_version,
+        upstream_digest,
+        config,
+    ))
+}
+
 /// Writes the discovered-file list for `--scope-files`.
 ///
 /// The returned handle must outlive the sidecar process: dropping it deletes the file
@@ -265,8 +284,9 @@ fn append_request_args(
 const GO_MEMORY_LIMIT_ENV: &str = "GOMEMLIMIT";
 
 /// Starts the sidecar with a soft memory limit of a quarter of the memory
-/// available to polint, unless polint's own environment already sets one, which
-/// the sidecar then inherits unchanged.
+/// available to polint, and at most [`SIDECAR_MEMORY_LIMIT_CEILING`], unless
+/// polint's own environment already sets one, which the sidecar then inherits
+/// unchanged.
 ///
 /// Without a limit the sidecar's collector paces itself on heap growth alone,
 /// and the kernel's memory ceiling cannot see the child: it samples polint's own
@@ -283,8 +303,22 @@ fn apply_sidecar_memory_limit(command: &mut std::process::Command) {
     }
 }
 
+/// The ceiling on the sidecar's soft memory limit.
+///
+/// Paced on heap growth alone, the collector lets the heap reach about twice
+/// what is live before it runs, and the sidecar runs while polint lowers the
+/// same sources, so on a large machine that headroom is mostly garbage held at
+/// the moment the two processes together peak. On a module of about four
+/// hundred packages the sidecar's live heap is 1.3 to 1.6 GB: under a 2 GiB
+/// limit its resident set peaks near 2 GB instead of 2.6 GB at no measurable
+/// cost in CPU, and a larger module whose live heap exceeds the limit only
+/// makes the collector run more often.
+const SIDECAR_MEMORY_LIMIT_CEILING: u64 = 2 * 1024 * 1024 * 1024;
+
 fn sidecar_memory_limit_bytes(available: Option<u64>) -> Option<u64> {
-    available.map(|bytes| bytes / 4).filter(|limit| *limit > 0)
+    available
+        .map(|bytes| (bytes / 4).min(SIDECAR_MEMORY_LIMIT_CEILING))
+        .filter(|limit| *limit > 0)
 }
 
 /// Runs the sidecar with its standard output written to `stdout_file`.
@@ -360,10 +394,14 @@ mod tests {
     static FAKE_STDOUT_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
     #[test]
-    fn sidecar_memory_limit_is_a_quarter_of_available_memory() {
+    fn sidecar_memory_limit_is_a_quarter_of_available_memory_up_to_its_ceiling() {
+        assert_eq!(
+            sidecar_memory_limit_bytes(Some(4 * 1024 * 1024 * 1024)),
+            Some(1024 * 1024 * 1024)
+        );
         assert_eq!(
             sidecar_memory_limit_bytes(Some(22 * 1024 * 1024 * 1024)),
-            Some(5_905_580_032)
+            Some(SIDECAR_MEMORY_LIMIT_CEILING)
         );
         assert_eq!(sidecar_memory_limit_bytes(Some(3)), None);
         assert_eq!(sidecar_memory_limit_bytes(None), None);
