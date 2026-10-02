@@ -354,7 +354,14 @@ impl Provider for CallsProvider {
         // call sites; when it did not run, the inputs are empty and every site keeps
         // the name-based resolution.
         #[cfg(feature = "lang-go")]
-        let typed_inputs = crate::go::typed_calls::go_typed_call_inputs(ctx.db);
+        let typed_inputs = crate::go::typed_calls::go_typed_call_inputs(
+            ctx.db,
+            ctx.loaded
+                .config
+                .solver
+                .to_go_sub_budget()
+                .max_candidates_per_callsite,
+        );
         #[cfg(not(feature = "lang-go"))]
         let typed_inputs = crate::analysis_neutral::calls::typed::TypedCallInputs::default();
         // Capability-closure only schedules this provider when the deep stack runs;

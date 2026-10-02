@@ -86,14 +86,16 @@ pub fn derive_calls_with_cache_stats(
         })
         .map(|target| target.site)
         .collect::<BTreeSet<_>>();
-    // A typed site is as precise as its least precise candidate: an exact static
-    // callee, a variable-type-analysis candidate set, or a class-hierarchy one.
+    // A typed site is as precise as its least precise listed candidate: an exact
+    // static callee, a variable-type-analysis candidate set, or a class-hierarchy
+    // one. A budget stop for candidates past the limit lists none; it makes the
+    // analysis incomplete rather than the listed candidates less precise.
     let mut typed_precision =
         BTreeMap::<CallSiteId, crate::analysis_neutral::calls::facts::CallPrecision>::new();
-    for target in targets
-        .iter()
-        .filter(|target| typed_sites.contains(&target.site))
-    {
+    for target in targets.iter().filter(|target| {
+        typed_sites.contains(&target.site)
+            && target.status == crate::analysis_neutral::calls::facts::CallTargetStatus::Resolved
+    }) {
         typed_precision
             .entry(target.site)
             .and_modify(|precision| *precision = (*precision).max(target.precision))

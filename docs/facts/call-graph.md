@@ -129,6 +129,10 @@ limits:
   algorithm and at most `SetupAware` precision.
 - Calls into code reached through a framework (a router invoking a handler)
   are not call edges of the caller.
+- A dynamic call lists at most `[solver.go] max_candidates_per_callsite`
+  candidates (default 128). A call with more keeps the first ones in label
+  order and records a `budget_exceeded` unknown for the rest, so the calls
+  analysis reports itself incomplete.
 
 `ctx.completeness().status_for("call_graph")` reports whether the run
 finished, hit a budget, or left unknown call sites.

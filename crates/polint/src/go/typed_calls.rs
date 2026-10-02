@@ -18,10 +18,12 @@ use crate::go::semantic::facts::{
 };
 use crate::internal_core::{FunctionId, Language, StableKeyId};
 
-/// The typed inputs for every Go call expression the sidecar described.
-/// Empty when the sidecar did not run or described nothing.
-pub(crate) fn go_typed_call_inputs(db: &AnalysisDb) -> TypedCallInputs {
-    let mut inputs = TypedCallInputs::new(Language::Go);
+/// The typed inputs for every Go call expression the sidecar described, each
+/// call keeping at most `candidate_limit` candidates (the configured
+/// `[solver.go] max_candidates_per_callsite`). Empty when the sidecar did not
+/// run or described nothing.
+pub(crate) fn go_typed_call_inputs(db: &AnalysisDb, candidate_limit: usize) -> TypedCallInputs {
+    let mut inputs = TypedCallInputs::new(Language::Go).with_candidate_limit(candidate_limit);
     if db.go_semantic_callsites().is_empty()
         && db.go_semantic_builtin_calls().is_empty()
         && db.go_semantic_conversions().is_empty()
@@ -378,7 +380,7 @@ mod tests {
         db.replace_go_semantic_facts(output)
             .expect("go semantic facts store");
 
-        let inputs = go_typed_call_inputs(&db);
+        let inputs = go_typed_call_inputs(&db, usize::MAX);
 
         let Some(TypedCallSite::Targets(static_call)) = inputs.answer_at(file, 20, 30) else {
             panic!("the static call has typed targets");

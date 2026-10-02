@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::analysis_api::FactFamily;
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact, CallTargetFact,
-    CallTargetStatus,
+    CallTargetStatus, UnresolvedCallReason,
 };
 use crate::analysis_neutral::ids::{CallSiteId, CallTargetId};
 use crate::analysis_neutral::stable_key::semantic_stable_key;
@@ -31,6 +31,9 @@ use crate::internal_core::{FileId, FunctionId, Language, StableKeyId, StableKeyI
 pub struct TypedCallInputs {
     language: Option<Language>,
     sites: BTreeMap<(FileId, u32, u32), TypedCallSite>,
+    /// The most candidates one call keeps, when the language's configuration
+    /// bounds the fan-out of a dynamic call.
+    candidate_limit: Option<usize>,
 }
 
 /// What the frontend knows about one call expression.
@@ -69,7 +72,17 @@ impl TypedCallInputs {
         Self {
             language: Some(language),
             sites: BTreeMap::new(),
+            candidate_limit: None,
         }
+    }
+
+    /// Bounds the candidates one call keeps at `limit` (at least one). A call
+    /// with more keeps the first `limit` in label order and records that its
+    /// answer exceeded the budget, so the run reports the calls analysis as
+    /// incomplete instead of silently listing a partial fan-out.
+    pub fn with_candidate_limit(mut self, limit: usize) -> Self {
+        self.candidate_limit = Some(limit.max(1));
+        self
     }
 
     /// Records what the frontend knows about the call expression at `span`.
@@ -161,7 +174,14 @@ pub fn typed_call_targets(
                     continue;
                 }
                 covered.insert(site.id);
-                for target in targets {
+                let limit = typed.candidate_limit.unwrap_or(usize::MAX);
+                let mut kept = targets.iter().collect::<Vec<_>>();
+                if kept.len() > limit {
+                    kept.sort_by(|left, right| left.name.cmp(&right.name));
+                    rows.push(over_limit_target(interner, site, &kept[limit..]));
+                    kept.truncate(limit);
+                }
+                for target in kept {
                     rows.push(CallTargetFact {
                         id: CallTargetId(0),
                         site: site.id,
@@ -206,6 +226,38 @@ pub fn typed_call_targets(
     }
     report.targets = rows.len();
     (rows, covered, report)
+}
+
+/// The row a call whose candidates exceeded the limit carries for the ones it
+/// does not list: a budget stop, which makes the run's calls analysis
+/// incomplete, named by how many candidates it leaves out.
+fn over_limit_target(
+    interner: &StableKeyInterner,
+    site: &CallSiteFact,
+    dropped: &[&TypedCallTarget],
+) -> CallTargetFact {
+    let first = dropped[0];
+    let label = format!("candidates-over-limit:{}", dropped.len());
+    CallTargetFact {
+        id: CallTargetId(0),
+        site: site.id,
+        caller: site.caller,
+        target_function: None,
+        target_symbol: None,
+        stable_key: typed_target_stable_key(
+            interner,
+            site,
+            algorithm_label(first.algorithm),
+            &label,
+        ),
+        synthetic_target: Some(label),
+        edge_kind: first.edge_kind,
+        algorithm: first.algorithm,
+        status: CallTargetStatus::BudgetExceeded,
+        reason: Some(UnresolvedCallReason::BudgetExceeded),
+        provenance: CallProvenance::Native,
+        precision: CallPrecision::Unknown,
+    }
 }
 
 /// The target of a call expression that is a builtin or a conversion: exact,
@@ -479,6 +531,66 @@ mod tests {
             Some("go:conversion:a.Kind")
         );
         assert_eq!(conversion.edge_kind, CallEdgeKind::Synthetic);
+    }
+
+    #[test]
+    fn a_call_over_the_candidate_limit_keeps_the_first_and_records_a_budget_stop() {
+        let interner = StableKeyInterner::default();
+        let sites = [
+            site(&interner, 0, Language::Go, 10, 20),
+            site(&interner, 1, Language::Go, 30, 40),
+        ];
+        let vta =
+            |name: &str| candidate(name, None, CallAlgorithm::GoVta, CallPrecision::SetupAware);
+        let mut typed = TypedCallInputs::new(Language::Go).with_candidate_limit(2);
+        typed.insert(
+            FILE,
+            10,
+            20,
+            TypedCallSite::Targets(vec![
+                vta("go:func:a.C"),
+                vta("go:func:a.A"),
+                vta("go:func:a.D"),
+                vta("go:func:a.B"),
+            ]),
+        );
+        typed.insert(
+            FILE,
+            30,
+            40,
+            TypedCallSite::Targets(vec![vta("go:func:a.E"), vta("go:func:a.F")]),
+        );
+
+        let (rows, covered, _) = typed_call_targets(&interner, &sites, &typed);
+
+        assert_eq!(covered.len(), 2, "both sites keep their typed answer");
+        let over = rows
+            .iter()
+            .filter(|row| row.site == CallSiteId(0))
+            .collect::<Vec<_>>();
+        let kept = over
+            .iter()
+            .filter(|row| row.status == CallTargetStatus::Resolved)
+            .map(|row| row.synthetic_target.as_deref().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(kept, ["go:func:a.A", "go:func:a.B"], "first in label order");
+        let stops = over
+            .iter()
+            .filter(|row| row.status == CallTargetStatus::BudgetExceeded)
+            .collect::<Vec<_>>();
+        assert_eq!(stops.len(), 1);
+        assert_eq!(stops[0].reason, Some(UnresolvedCallReason::BudgetExceeded));
+        assert_eq!(
+            stops[0].synthetic_target.as_deref(),
+            Some("candidates-over-limit:2")
+        );
+        assert!(stops[0].target_function.is_none());
+        assert!(
+            rows.iter()
+                .filter(|row| row.site == CallSiteId(1))
+                .all(|row| row.status == CallTargetStatus::Resolved),
+            "a call at the limit is complete"
+        );
     }
 
     #[test]
