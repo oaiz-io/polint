@@ -1826,103 +1826,154 @@ mod tests {
         }
     }
 
-    /// Control flow and data flow get the compact domain materialization: the
-    /// summaries read only entry reachability, and the per-point states were most
-    /// of a dataflow run's time and memory. The summaries a rule sees must not
-    /// depend on the choice. Call resolution reads no summary and gets no domain
-    /// facts at all.
+    /// Runs the kernel over a temporary tree holding `files`.
+    #[cfg(feature = "lang-go")]
+    fn run_tree_for_domain_test(files: &[(&str, &str)], plan: &AnalysisPlan) -> KernelOutput {
+        let temp = tempfile::tempdir().expect("temp directory");
+        for (path, text) in files {
+            std::fs::write(temp.path().join(path), text).expect("write source");
+        }
+        let loaded = load_config(temp.path()).expect("default config loads");
+        AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &Cache::new("", false),
+            config_digest: "config",
+            rule_digest: "rules",
+            plan,
+            parallel: false,
+        })
+        .expect("kernel should run")
+    }
+
+    #[cfg(feature = "lang-go")]
+    const DOMAIN_TEST_GO: &[(&str, &str)] = &[
+        ("go.mod", "module example.com/domains\n\ngo 1.22\n"),
+        (
+            "main.go",
+            "package main\n\nfunc sink(value int) int { return value + 1 }\n\nfunc branch(ready bool) int {\n\tif ready {\n\t\treturn sink(1)\n\t}\n\tpanic(\"never\")\n}\n\nfunc main() { branch(true) }\n",
+        ),
+    ];
+
+    #[cfg(feature = "lang-go")]
+    fn per_operation_domain_facts(output: &KernelOutput) -> usize {
+        use crate::analysis_neutral::domains::facts::DomainLocation;
+        output
+            .db
+            .abstract_domain_observations()
+            .iter()
+            .filter(|row| {
+                matches!(
+                    row.location,
+                    DomainLocation::BeforeOperation | DomainLocation::AfterOperation
+                )
+            })
+            .count()
+    }
+
+    /// A summary as the domain test compares it: keys as text, then its fields.
+    #[cfg(feature = "lang-go")]
+    type SummaryRow = (
+        String,
+        String,
+        crate::analysis_neutral::summaries::facts::SummaryDomainKind,
+        crate::analysis_neutral::summaries::facts::SummaryStatus,
+        crate::analysis_neutral::summaries::facts::SummaryPrecision,
+        crate::analysis_neutral::summaries::facts::SummaryProvenance,
+        String,
+        Vec<crate::analysis_neutral::summaries::facts::SummaryFlowEdge>,
+    );
+
+    #[cfg(feature = "lang-go")]
+    fn summary_rows(output: &KernelOutput) -> Vec<SummaryRow> {
+        let interner = output.db.stable_key_interner();
+        output
+            .db
+            .summary_facts()
+            .iter()
+            .map(|fact| {
+                (
+                    interner.resolve(fact.callable_stable_key).to_string(),
+                    interner.resolve(fact.stable_key).to_string(),
+                    fact.domain,
+                    fact.status,
+                    fact.precision,
+                    fact.provenance,
+                    fact.payload_digest.clone(),
+                    fact.tito_flows.clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// Asserts the compact domain materialization for `plan` over `files`: no
+    /// per-operation states unless asked for, and the same summaries either way.
+    #[cfg(feature = "lang-go")]
+    fn assert_compact_domains(files: &[(&str, &str)], plan: AnalysisPlan, capability: &str) {
+        assert!(!plan.requests_per_point_domain_facts());
+        let compact = run_tree_for_domain_test(files, &plan);
+        let full = run_tree_for_domain_test(files, &plan.with_per_point_domain_facts());
+        assert_eq!(
+            per_operation_domain_facts(&compact),
+            0,
+            "`{capability}` must not materialize per-operation domain states"
+        );
+        assert!(
+            per_operation_domain_facts(&full) > 0,
+            "an explicit per-point request must still get per-operation states"
+        );
+        assert!(!compact.db.summary_facts().is_empty());
+        assert_eq!(
+            summary_rows(&compact),
+            summary_rows(&full),
+            "`{capability}` summaries must not depend on the domain materialization"
+        );
+    }
+
+    /// Control flow gets the compact domain materialization: the summaries read
+    /// only entry reachability, and the per-point states were most of a deep
+    /// run's time and memory. The summaries a rule sees must not depend on the
+    /// choice. Call resolution reads no summary and gets no domain facts at all,
+    /// and neither does data flow over Go alone, which the taint solver answers
+    /// over the typed frontend's flow programs.
     #[cfg(feature = "lang-go")]
     #[test]
     fn deep_capabilities_get_compact_domain_facts_unless_per_point_states_are_requested() {
-        use crate::analysis_neutral::domains::facts::DomainLocation;
-
-        let temp = tempfile::tempdir().expect("temp directory");
-        std::fs::write(
-            temp.path().join("go.mod"),
-            "module example.com/domains\n\ngo 1.22\n",
-        )
-        .expect("write go.mod");
-        std::fs::write(
-            temp.path().join("main.go"),
-            "package main\n\nfunc sink(value int) int { return value + 1 }\n\nfunc branch(ready bool) int {\n\tif ready {\n\t\treturn sink(1)\n\t}\n\tpanic(\"never\")\n}\n\nfunc main() { branch(true) }\n",
-        )
-        .expect("write Go source");
-        let loaded = load_config(temp.path()).expect("default config loads");
-        let run = |plan: &AnalysisPlan| {
-            AnalysisKernel::run(KernelInput {
-                loaded: &loaded,
-                cache: &Cache::new("", false),
-                config_digest: "config",
-                rule_digest: "rules",
-                plan,
-                parallel: false,
-            })
-            .expect("kernel should run")
-        };
-        let per_operation = |output: &KernelOutput| {
-            output
-                .db
-                .abstract_domain_observations()
-                .iter()
-                .filter(|row| {
-                    matches!(
-                        row.location,
-                        DomainLocation::BeforeOperation | DomainLocation::AfterOperation
-                    )
-                })
-                .count()
-        };
-
-        // Call resolution reads no summary, so a calls plan materializes no
-        // domain fact unless per-point states are asked for explicitly.
         let calls = AnalysisPlan::from_capability_names_for_test(&["calls"]);
-        let calls_run = run(&calls);
+        let calls_run = run_tree_for_domain_test(DOMAIN_TEST_GO, &calls);
         assert!(calls_run.db.abstract_domain_observations().is_empty());
         assert!(calls_run.db.summary_facts().is_empty());
-        assert!(per_operation(&run(&calls.with_per_point_domain_facts())) > 0);
+        assert!(
+            per_operation_domain_facts(&run_tree_for_domain_test(
+                DOMAIN_TEST_GO,
+                &calls.with_per_point_domain_facts()
+            )) > 0
+        );
 
-        for capability in ["dataflow", "control_flow"] {
-            let plan = AnalysisPlan::from_capability_names_for_test(&[capability]);
-            assert!(!plan.requests_per_point_domain_facts());
-            let compact = run(&plan);
-            let full = run(&plan.with_per_point_domain_facts());
+        let control = AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
+        assert_compact_domains(DOMAIN_TEST_GO, control, "control_flow");
 
-            assert_eq!(
-                per_operation(&compact),
-                0,
-                "`{capability}` must not materialize per-operation domain states"
-            );
-            assert!(
-                per_operation(&full) > 0,
-                "an explicit per-point request must still get per-operation states"
-            );
-            let summaries = |output: &KernelOutput| {
-                let interner = output.db.stable_key_interner();
-                output
-                    .db
-                    .summary_facts()
-                    .iter()
-                    .map(|fact| {
-                        (
-                            interner.resolve(fact.callable_stable_key).to_string(),
-                            interner.resolve(fact.stable_key).to_string(),
-                            fact.domain,
-                            fact.status,
-                            fact.precision,
-                            fact.provenance,
-                            fact.payload_digest.clone(),
-                            fact.tito_flows.clone(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            };
-            assert!(!compact.db.summary_facts().is_empty());
-            assert_eq!(
-                summaries(&compact),
-                summaries(&full),
-                "`{capability}` summaries must not depend on the domain materialization"
-            );
-        }
+        let dataflow = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        let go_only = run_tree_for_domain_test(DOMAIN_TEST_GO, &dataflow);
+        assert!(go_only.db.abstract_domain_observations().is_empty());
+        assert!(go_only.db.summary_facts().is_empty());
+        assert!(
+            go_only.db.go_flow_program().is_some(),
+            "Go data flow reads the typed frontend's flow programs"
+        );
+    }
+
+    /// Data flow over a language the taint solver does not answer still builds
+    /// the value-flow graph from compact domains and summaries.
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
+    #[test]
+    fn graph_data_flow_gets_compact_domain_facts_unless_per_point_states_are_requested() {
+        let mut files = DOMAIN_TEST_GO.to_vec();
+        files.push((
+            "app.ts",
+            "export function handler(token: string): string {\n  return token;\n}\n",
+        ));
+        let dataflow = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        assert_compact_domains(&files, dataflow, "dataflow");
     }
 
     #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]

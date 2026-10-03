@@ -317,7 +317,7 @@ impl Provider for CfgProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
-        let derived_relations = control_or_data_flow_requested(&ctx.plan);
+        let derived_relations = control_or_data_flow_requested(&ctx.plan, ctx.db);
         let lower_go = go_control_flow_requested(&ctx.plan, ctx.db);
         let derivation = crate::analysis::cfg::provider::derive_cfg_with_cache_stats(
             ctx.db,
@@ -526,7 +526,7 @@ impl Provider for AbstractDomainsProvider {
                     ctx.dependency_digest("polint.ts.syntax"),
                 ],
             )
-        } else if !control_or_data_flow_requested(&ctx.plan) {
+        } else if !control_or_data_flow_requested(&ctx.plan, ctx.db) {
             crate::analysis::domains::provider::derive_skipped_abstract_domains_with_cache_stats(
                 ctx.db,
                 &ctx.input_snapshot,
@@ -575,7 +575,7 @@ impl Provider for DirectSummariesProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let mut ctx = CtxHandle::from_ctx(ctx);
-        if !control_or_data_flow_requested(&ctx.plan) {
+        if !control_or_data_flow_requested(&ctx.plan, ctx.db) {
             return skipped_summaries(&mut ctx, self.manifest());
         }
         let derivation =
@@ -932,6 +932,7 @@ impl Provider for DataFlowProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
+        let graph = graph_data_flow_requested(&ctx.plan, ctx.db);
         let derivation = crate::analysis::data_flow::provider::derive_data_flow_with_cache_stats(
             ctx.db,
             &ctx.input_snapshot,
@@ -944,6 +945,7 @@ impl Provider for DataFlowProvider {
             ctx.dependency_digest("polint.type_value_alias"),
             ctx.dependency_digest("polint.entrypoints"),
             ctx.dependency_digest("polint.extensions"),
+            graph,
         );
         ProviderRunResult {
             counts: Default::default(),
@@ -1170,22 +1172,40 @@ pub(crate) fn go_semantic_dataflow_requested(plan: &crate::analysis_plan::Analys
 /// Whether the run's deep capabilities reach past call resolution.
 ///
 /// Control-flow guard queries read the CFG, its dominance relations and alias
-/// answers, and data flow reads the summaries and the domains they are built
-/// from. Call resolution reads none of these: its queries walk call edges, and
-/// the only refinement the summaries add to a call edge is a second copy of it.
-pub(crate) fn control_or_data_flow_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
-    plan.requests_any_capability(&["control_flow", "dataflow"])
+/// answers, and data flow over the value-flow graph reads the summaries and the
+/// domains they are built from. Call resolution reads none of these: its
+/// queries walk call edges, and the only refinement the summaries add to a call
+/// edge is a second copy of it. Neither do Go data-flow questions, which the
+/// taint solver answers over the typed frontend's flow programs.
+pub(crate) fn control_or_data_flow_requested(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    plan.requests_capability("control_flow") || graph_data_flow_requested(plan, db)
 }
 
-/// Whether the CFG lowers Go bodies: always for control and data flow and for
-/// an explicit request for per-point domain states, which are computed over
-/// the CFG, and for call resolution only when no typed Go call facts answer it
-/// (see [`go_points_to_requested`]).
+/// Whether the run's data-flow questions read the value-flow graph: a plan that
+/// reads data flow over sources in a language other than Go.
+pub(crate) fn graph_data_flow_requested(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    plan.requests_capability("dataflow")
+        && db
+            .files()
+            .iter()
+            .any(|file| file.language != crate::core::Language::Go)
+}
+
+/// Whether the CFG lowers Go bodies: always for control flow and for data flow
+/// over the value-flow graph, for an explicit request for per-point domain
+/// states, which are computed over the CFG, and for call resolution only when
+/// no typed Go call facts answer it (see [`go_points_to_requested`]).
 pub(crate) fn go_control_flow_requested(
     plan: &crate::analysis_plan::AnalysisPlan,
     db: &AnalysisDb,
 ) -> bool {
-    control_or_data_flow_requested(plan)
+    control_or_data_flow_requested(plan, db)
         || plan.requests_per_point_domain_facts()
         || db.go_semantic_callsites().is_empty()
 }
@@ -1204,7 +1224,7 @@ pub(crate) fn go_points_to_requested(
     plan: &crate::analysis_plan::AnalysisPlan,
     db: &AnalysisDb,
 ) -> bool {
-    control_or_data_flow_requested(plan) || db.go_semantic_callsites().is_empty()
+    control_or_data_flow_requested(plan, db) || db.go_semantic_callsites().is_empty()
 }
 
 /// Whether the scan has Go sources but the typed Go frontend loaded no package

@@ -81,7 +81,8 @@ pub(crate) fn eligible(
     CACHED_PROVIDERS
         .iter()
         .all(|provider| enabled_providers.contains(provider))
-        && !crate::analysis_kernel::provider::control_or_data_flow_requested(plan)
+        && !crate::analysis_kernel::provider::control_or_data_flow_requested(plan, db)
+        && !plan.requests_capability("dataflow")
         && !plan.requests_capability("go_types")
         && !plan.requests_capability("routes")
         && !plan.requests_per_point_domain_facts()

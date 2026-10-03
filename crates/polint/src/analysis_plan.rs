@@ -407,6 +407,9 @@ impl AnalysisPlan {
     pub(crate) fn full_pipeline_for_test() -> Self {
         Self::from_capability_names_for_test(&[
             "dataflow",
+            // Go data flow is answered by the taint solver alone; control flow
+            // keeps the Go CFG, points-to, domains and summaries in the plan.
+            "control_flow",
             "symbols",
             "references",
             "file_metrics",
