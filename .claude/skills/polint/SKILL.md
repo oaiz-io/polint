@@ -267,7 +267,7 @@ allow_files = ["src/theme/**"]
 ## Agent Rules
 
 - Do not add project policies to the polint CLI as built-ins.
-- Treat raw `Cfg<'_>`, `Evidence<'_>`, model packs, provider extensions, and `polint eval` as reserved/preview/internal unless public docs and temp-repo tests explicitly promote them. The policy query views `Events<'_>`, `Calls<'_>`, `ControlFlow<'_>`, and `DataFlow<'_>` are preview SDK views backed by the v1.4 policy query surface; `CallGraph<'_>` and `GoTypes<'_>` are preview views over call edges and Go type facts.
+- Treat raw `Cfg<'_>`, `Evidence<'_>`, model packs, provider extensions, and `polint eval` as reserved/preview/internal unless public docs and temp-repo tests explicitly promote them. The policy query views `Events<'_>`, `Calls<'_>`, `ControlFlow<'_>`, and `DataFlow<'_>` are preview SDK views backed by the v1.4 policy query surface; `CallGraph<'_>`, `GoTypes<'_>` and `Routes<'_>` are preview views over call edges, Go type facts and framework routes.
 - Document only stable, supported CLI workflows; keep debug helpers, exploratory analysis surfaces, and future/TBD behavior out of generated skills until they are intentionally promoted.
 - Keep rules small and specific to the repository convention they enforce.
 - State when a rule is heuristic, especially for test evidence or branch coverage.
@@ -276,7 +276,7 @@ allow_files = ["src/theme/**"]
 - Compose `FileMetrics<'_>`, `FunctionMetrics<'_>`, and `ComplexityMetrics<'_>` for higher-level quality rules instead of making rules depend on other rules.
 - For architecture rules, compose `ResolvedImports<'_>` and `ModuleGraphFacts<'_>` instead of parsing import strings yourself.
 - For identity rules, compose `Symbols<'_>` and `References<'_>` and inspect precision/status fields before assuming a reference is exact.
-- For call-graph rules, find roots and targets in `Functions<'_>` and walk `CallGraph<'_>` with a `CallGraphWalk` depth bound and a minimum `CallEdgePrecision`; for Go type rules, ask `GoTypes<'_>` for parameters, struct fields and tags, generic instantiations, and implementations. Request `Option<CallGraph<'_>>` or `Option<GoTypes<'_>>` when the rule can run without them.
+- For call-graph rules, find roots and targets in `Functions<'_>` and walk `CallGraph<'_>` with a `CallGraphWalk` depth bound and a minimum `CallEdgePrecision`; for Go type rules, ask `GoTypes<'_>` for parameters, struct fields and tags, generic instantiations, and implementations. For route rules, read `Routes<'_>`: each route's method, path, handlers and middleware chain, with completeness flags to check before trusting a missing middleware. Request `Option<CallGraph<'_>>`, `Option<GoTypes<'_>>` or `Option<Routes<'_>>` when the rule can run without them.
 - Do not implement `Rule` manually or write handwritten capability declarations.
 - For custom config, prefer explicit fields in `[[rules.config]]` and read them through `ctx.options().settings`.
 - Add the smallest real fixture that demonstrates the policy violation.

@@ -21,7 +21,12 @@ pub enum ModelLoadError {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ModelFileToml {
+    #[serde(default)]
     facts: Vec<ModelFactToml>,
+    /// Route models live in the same files; the Go route-model loader reads
+    /// and validates them.
+    #[serde(default)]
+    go_route: Vec<toml::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,7 +50,10 @@ pub fn load_model_file(
         toml::from_str(contents).map_err(|error| ModelLoadError::Parse(error.to_string()))?;
 
     if parsed.facts.is_empty() {
-        return Err(ModelLoadError::Empty);
+        if parsed.go_route.is_empty() {
+            return Err(ModelLoadError::Empty);
+        }
+        return Ok(Vec::new());
     }
 
     let mut facts = Vec::with_capacity(parsed.facts.len());

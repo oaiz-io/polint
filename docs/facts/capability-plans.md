@@ -81,19 +81,21 @@ Policy diagnostics share a normalized evidence header: `policy_query`,
 policy capabilities through
 `polint unknowns --cap events|calls|control_flow|dataflow --format json`.
 
-## Call Graph And Go Type Preview Facts
+## Call Graph, Go Type And Route Preview Facts
 
 - `CallGraph<'_>` derives capability `call_graph` ([call-graph.md](call-graph.md))
 - `GoTypes<'_>` derives capability `go_types`
   ([go-semantic-types.md](go-semantic-types.md))
+- `Routes<'_>` derives capability `routes` ([routes.md](routes.md))
 
-Both are preview. `CallGraph<'_>` exposes the resolved call edges (for Go, the
-typed frontend's static, variable-type and class-hierarchy answers) without the
-refinement steps behind `Calls<'_>`; `GoTypes<'_>` reads only the typed Go
-frontend. A rule can request either as `Option<CallGraph<'_>>` or
-`Option<GoTypes<'_>>`: it then runs with `None` when the capability is
-unavailable, instead of being skipped with a `polint/capability` diagnostic.
-These two views are the only ones a rule can request optionally.
+All three are preview. `CallGraph<'_>` exposes the resolved call edges (for Go,
+the typed frontend's static, variable-type and class-hierarchy answers) without
+the refinement steps behind `Calls<'_>`; `GoTypes<'_>` and `Routes<'_>` read
+only the typed Go frontend. A rule can request any of them as
+`Option<CallGraph<'_>>`, `Option<GoTypes<'_>>` or `Option<Routes<'_>>`: it then
+runs with `None` when the capability is unavailable, instead of being skipped
+with a `polint/capability` diagnostic. These three views are the only ones a
+rule can request optionally.
 
 ## Reserved Capabilities
 

@@ -97,6 +97,10 @@ fn is_call_graph_edge(target: &CallTargetFact) -> bool {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GoTypesIndex {
     pub(crate) function_by_id: HashMap<FunctionId, usize>,
+    /// The syntax function each typed function identity (`pkg.F`,
+    /// `(*pkg.T).M`) names, and back.
+    pub(crate) function_by_qualified: HashMap<String, FunctionId>,
+    pub(crate) qualified_by_function: HashMap<FunctionId, String>,
     pub(crate) params_by_function: HashMap<String, Vec<usize>>,
     pub(crate) fields_by_owner: HashMap<String, Vec<usize>>,
     pub(crate) instantiations_by_generic: HashMap<String, Vec<usize>>,
@@ -138,6 +142,14 @@ impl GoTypesIndex {
                 continue;
             };
             index.function_by_id.entry(syntax.id).or_insert(position);
+            index
+                .function_by_qualified
+                .entry(function.qualified.clone())
+                .or_insert(syntax.id);
+            index
+                .qualified_by_function
+                .entry(syntax.id)
+                .or_insert_with(|| function.qualified.clone());
         }
         for (position, param) in db.go_semantic_params().iter().enumerate() {
             index

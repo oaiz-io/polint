@@ -96,6 +96,39 @@ fn phase_counts(output: &crate::go::semantic::protocol::GoSemanticOutput) -> BTr
     counts
 }
 
+/// What an analysis plan asks the semantic sidecar for beyond the rows it
+/// always emits.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GoSemanticRequest {
+    /// Whether the plan reads call targets, which is when the sidecar computes
+    /// the candidate callees of dynamic calls.
+    pub call_graph: bool,
+    /// Whether the plan reads routes, which is when the sidecar interprets the
+    /// program's route registrations.
+    pub routes: bool,
+    /// The repository's route models as the sidecar's JSON document.
+    pub route_models: Option<String>,
+    /// Route-model files or tables that could not be used, reported once by
+    /// the provider.
+    pub route_model_problems: Vec<String>,
+}
+
+impl GoSemanticRequest {
+    /// The lifecycle config of a sidecar run that answers this request.
+    pub fn apply(&self, config: GoAnalysisConfig) -> GoAnalysisConfig {
+        GoAnalysisConfig {
+            semantic_call_graph: self.call_graph,
+            semantic_routes: self.routes,
+            route_models: if self.routes {
+                self.route_models.clone()
+            } else {
+                None
+            },
+            ..config
+        }
+    }
+}
+
 /// The two ways this run can reach a sidecar result without starting one here:
 /// the file a previous identical run left behind, and a run this run already
 /// started. Both are optional and neither can change what the sidecar answers.
@@ -105,9 +138,8 @@ pub struct GoSemanticSidecarAccess<'a> {
     pub cache_dir: Option<&'a Path>,
     /// A run started before this provider was reached.
     pub prefetch: Option<GoSemanticPrefetch>,
-    /// Whether the plan reads call targets, which is when the sidecar computes
-    /// the candidate callees of dynamic calls.
-    pub call_graph: bool,
+    /// What the plan asks the sidecar for.
+    pub request: GoSemanticRequest,
 }
 
 pub fn derive_go_semantic_with_cache_stats(
@@ -122,7 +154,7 @@ pub fn derive_go_semantic_with_cache_stats(
     let GoSemanticSidecarAccess {
         cache_dir,
         prefetch,
-        call_graph,
+        request,
     } = sidecar;
     let upstream_str = go_syntax_output_digest.to_string();
     let cache_dir = cache_dir.map(Path::to_path_buf);
@@ -134,7 +166,7 @@ pub fn derive_go_semantic_with_cache_stats(
         config_digest,
         manifest,
         go_syntax_output_digest,
-        call_graph,
+        &request,
         move |config| {
             // A prefetch is only ever an already-started copy of the run below,
             // and only for the config it was started with; anything else falls
@@ -156,7 +188,7 @@ pub fn derive_go_semantic_with_cache_stats(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "The provider reads the plan's call-graph request beside its lifecycle inputs."
+    reason = "The provider reads the plan's sidecar request beside its lifecycle inputs."
 )]
 fn derive_go_semantic_with_runner(
     db: &mut dyn FactDatabase,
@@ -165,7 +197,7 @@ fn derive_go_semantic_with_runner(
     config_digest: &str,
     manifest: &ProviderManifest,
     go_syntax_output_digest: Digest,
-    call_graph: bool,
+    request: &GoSemanticRequest,
     runner: impl FnOnce(&GoAnalysisConfig) -> Result<GoSemanticClientRun, GoSemanticClientError>,
 ) -> GoSemanticProviderRunOutput {
     debug_assert_eq!(manifest.id, "polint.go.semantic");
@@ -191,10 +223,7 @@ fn derive_go_semantic_with_runner(
     }
 
     let config = match GoAnalysisConfig::from_settings_files(root, go_settings, &files) {
-        Ok(config) => GoAnalysisConfig {
-            semantic_call_graph: call_graph,
-            ..config
-        },
+        Ok(config) => request.apply(config),
         Err(error) => {
             return store_output(
                 db,
@@ -314,7 +343,18 @@ fn derive_go_semantic_with_runner(
             };
         }
     };
-    let diagnostics = package_error_diagnostics(&lowered);
+    let mut diagnostics = package_error_diagnostics(&lowered);
+    if request.routes {
+        diagnostics.extend(
+            request
+                .route_model_problems
+                .iter()
+                .map(|problem| route_model_diagnostic(problem)),
+        );
+        if let Some(steps) = lowered.route_budget_steps {
+            diagnostics.push(route_budget_diagnostic(steps));
+        }
+    }
     let digest_inputs = DigestInputs {
         sidecar_digest: run.frontend_digest,
         go_version: run.output.go_version,
@@ -698,6 +738,30 @@ fn category_diagnostic(category: GoSemanticDiagnosticCategory, message: String) 
     )
 }
 
+/// A route-model file or table the run could not use; the other models apply.
+fn route_model_diagnostic(problem: &str) -> Diagnostic {
+    Diagnostic::warning(
+        "polint/route-model",
+        "<workspace>",
+        TextRange::point(1, 1),
+        format!("route model not used: {problem}"),
+    )
+}
+
+/// The route interpreter stopped before it finished; the routes it found are
+/// kept and the routes capability reports itself incomplete.
+fn route_budget_diagnostic(steps: u64) -> Diagnostic {
+    Diagnostic::warning(
+        "polint/go-semantic",
+        "<workspace>",
+        TextRange::point(1, 1),
+        format!(
+            "route interpretation stopped at its step budget after {steps} steps; the routes \
+             listed are the ones found before it stopped."
+        ),
+    )
+}
+
 fn provider_error_diagnostic(message: String) -> Diagnostic {
     Diagnostic::error(
         "polint/internal",
@@ -716,6 +780,8 @@ fn default_lifecycle() -> GoAnalysisConfig {
         semantic_include_tests: false,
         offline: false,
         semantic_call_graph: false,
+        semantic_routes: false,
+        route_models: None,
         semantic_timeout_ms: None,
         emit_rta_edges: false,
         symbol_rooted_patterns: vec!["./...".to_string()],

@@ -96,6 +96,21 @@ mod allowlist_witness {
     fn _assert_gotypes() -> ::core::marker::PhantomData<GoTypes<'static>> {
         ::core::marker::PhantomData
     }
+    fn _assert_route() -> ::core::marker::PhantomData<Route<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_routefunction() -> ::core::marker::PhantomData<RouteFunction<'static>> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_routefunctionkind() -> ::core::marker::PhantomData<RouteFunctionKind> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_routetransport() -> ::core::marker::PhantomData<RouteTransport> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_routes() -> ::core::marker::PhantomData<Routes<'static>> {
+        ::core::marker::PhantomData
+    }
     fn _assert_calls() -> ::core::marker::PhantomData<Calls<'static>> {
         ::core::marker::PhantomData
     }

@@ -167,6 +167,13 @@ const ALLOWED_PRELUDE: &[&str] = &[
     "GoInstantiation",
     "GoParameter",
     "GoTypes",
+    // crate::sdk::facts route preview vocabulary; promotion record in
+    // docs/API-VISIBILITY-PLAN.md
+    "Route",
+    "RouteFunction",
+    "RouteFunctionKind",
+    "RouteTransport",
+    "Routes",
     // crate::sdk::policy preview vocabulary
     "ArgumentBinding",
     "BarrierPattern",
@@ -682,11 +689,10 @@ fn allowlist_has_no_duplicates_and_expected_count() {
         ALLOWED_PRELUDE.len(),
         "ALLOWED_PRELUDE contains duplicate entries"
     );
-    // Locked count derived from sdk/mod.rs; last bumped for the call-graph and
-    // Go type views.
+    // Locked count derived from sdk/mod.rs; last bumped for the route view.
     assert_eq!(
         ALLOWED_PRELUDE.len(),
-        138,
+        143,
         "ALLOWED_PRELUDE count changed — update this assertion ONLY alongside a sanctioned \
          API promotion record"
     );

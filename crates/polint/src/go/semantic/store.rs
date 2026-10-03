@@ -10,7 +10,7 @@ use crate::go::semantic::facts::{
     GoSemanticFieldFact, GoSemanticFunctionFact, GoSemanticImplementsFact,
     GoSemanticInstantiatedTypeFact, GoSemanticInstantiationFact, GoSemanticInterfaceFact,
     GoSemanticMethodSetFact, GoSemanticPackageErrorFact, GoSemanticPackageFact,
-    GoSemanticParamFact, GoSemanticRtaEdgeFact,
+    GoSemanticParamFact, GoSemanticRouteFact, GoSemanticRouteServeFact, GoSemanticRtaEdgeFact,
 };
 use crate::go::semantic::validate::validate_go_semantic_output;
 
@@ -72,6 +72,11 @@ pub struct GoSemanticFactsOutput {
     pub builtin_calls: Vec<GoSemanticBuiltinCallFact>,
     pub fields: Vec<GoSemanticFieldFact>,
     pub params: Vec<GoSemanticParamFact>,
+    pub routes: Vec<GoSemanticRouteFact>,
+    pub route_serves: Vec<GoSemanticRouteServeFact>,
+    /// Set when the route interpreter stopped at its step budget: the routes are
+    /// the ones found before it stopped.
+    pub route_budget_steps: Option<u64>,
 }
 
 /// Sorts a typed family by stable-key text, keeps the first row of each key (a
@@ -205,6 +210,16 @@ impl GoSemanticFactsOutput {
             self.params,
             interner,
             crate::go::semantic::facts::GoSemanticParamId
+        );
+        normalize_keyed_family!(
+            self.routes,
+            interner,
+            crate::go::semantic::facts::GoSemanticRouteId
+        );
+        normalize_keyed_family!(
+            self.route_serves,
+            interner,
+            crate::go::semantic::facts::GoSemanticRouteServeId
         );
         self
     }

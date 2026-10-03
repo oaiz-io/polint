@@ -60,6 +60,7 @@ fn requested_trigger_capabilities(plan: &AnalysisPlan) -> std::collections::BTre
         "dataflow",
         "call_graph",
         "go_types",
+        "routes",
         "file_metrics",
         "function_metrics",
         "complexity_metrics",
@@ -76,7 +77,7 @@ pub(crate) const SCOPE_RULE_ID: &str = "polint/scope";
 
 /// Capabilities whose analysis crosses file boundaries, so requesting one loads
 /// every discovered file regardless of any rule's `files` list.
-const CROSS_FILE_CAPABILITIES: [&str; 9] = [
+const CROSS_FILE_CAPABILITIES: [&str; 10] = [
     "calls",
     "call_graph",
     "control_flow",
@@ -85,6 +86,7 @@ const CROSS_FILE_CAPABILITIES: [&str; 9] = [
     "module_graph",
     "references",
     "resolved_imports",
+    "routes",
     "symbols",
 ];
 
@@ -636,15 +638,14 @@ fn go_semantic_run_identity(
     upstream_digests: &BTreeMap<&'static str, crate::analysis_api::Digest>,
 ) -> Option<String> {
     let files = crate::go::lifecycle::go_files(db);
-    let config = crate::go::lifecycle::GoAnalysisConfig {
-        semantic_call_graph: provider::go_semantic_call_graph_requested(input.plan),
-        ..crate::go::lifecycle::GoAnalysisConfig::from_settings_files(
+    let config = provider::go_semantic_request(input.plan, &input.loaded.root).apply(
+        crate::go::lifecycle::GoAnalysisConfig::from_settings_files(
             &input.loaded.root,
             &input.loaded.config.languages.go,
             &files,
         )
-        .ok()?
-    };
+        .ok()?,
+    );
     let upstream = upstream_digests.get("polint.go.syntax")?.to_string();
     crate::go::semantic::client::sidecar_run_identity(&config, &upstream)
 }
@@ -678,7 +679,7 @@ fn start_go_semantic_prefetch(
         db,
         input.cache.sidecar_cache_dir(),
         upstream.to_string(),
-        provider::go_semantic_call_graph_requested(input.plan),
+        &provider::go_semantic_request(input.plan, &input.loaded.root),
     );
     if prefetch.is_some() {
         crate::analysis_kernel::host::with_provider_host_session_mut(|session| {
@@ -793,6 +794,7 @@ impl AnalysisKernel {
                     | "dataflow"
                     | "call_graph"
                     | "go_types"
+                    | "routes"
             )
         });
         let rule_scope = if run_cross_file_analysis {
@@ -1083,11 +1085,14 @@ impl AnalysisKernel {
                     .filter(|outcome| outcome.status != ProviderOutcomeStatus::Succeeded)
                     .collect::<Vec<_>>();
                 if failed.is_empty() {
-                    if capability == "go_types" && provider::go_types_unloaded(db) {
+                    if provider::reads_typed_go_frontend(capability)
+                        && provider::go_types_unloaded(db)
+                    {
                         unavailable.insert(capability.clone());
                         if !rule.optional_capabilities.contains(capability) {
                             blocked_rules.insert(rule.id.clone());
-                            diagnostics.push(go_types_unloaded_diagnostic(&rule.id));
+                            diagnostics
+                                .push(typed_go_frontend_unloaded_diagnostic(&rule.id, capability));
                         }
                     }
                     continue;
@@ -1139,7 +1144,7 @@ impl AnalysisKernel {
             "symbols" | "references" => &["polint.symbol_graph"],
             "calls" | "control_flow" | "cfg" => &["polint.refined_calls"],
             "call_graph" => &["polint.calls"],
-            "go_types" => &["polint.go.semantic"],
+            "go_types" | "routes" => &["polint.go.semantic"],
             "dataflow" => &["polint.evidence"],
             "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
             _ => &[],
@@ -1163,17 +1168,17 @@ fn is_syntax_provider(provider_id: &str) -> bool {
     matches!(provider_id, "polint.go.syntax" | "polint.ts.syntax")
 }
 
-fn go_types_unloaded_diagnostic(rule_id: &str) -> Diagnostic {
+fn typed_go_frontend_unloaded_diagnostic(rule_id: &str, capability: &str) -> Diagnostic {
     Diagnostic::error(
         "polint/capability",
         "<workspace>",
         TextRange::point(1, 1),
         format!(
-            "Rule `{rule_id}` requested capability `go_types`, but the typed Go frontend loaded no package: Go files outside every go.mod module root are not type-checked."
+            "Rule `{rule_id}` requested capability `{capability}`, but the typed Go frontend loaded no package: Go files outside every go.mod module root are not type-checked."
         ),
     )
     .with_evidence("rule", rule_id.to_string())
-    .with_evidence("capability", "go_types")
+    .with_evidence("capability", capability.to_string())
     .with_evidence("status", ProviderOutcomeStatus::SetupMissing.label())
     .with_evidence("blockers", "polint.go.semantic")
 }

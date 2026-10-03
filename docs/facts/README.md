@@ -42,6 +42,7 @@ Preview graph and type references:
 
 - [Call graph](call-graph.md)
 - [Go types](go-semantic-types.md)
+- [Routes](routes.md)
 
 Reserved/internal references:
 

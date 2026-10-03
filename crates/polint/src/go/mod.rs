@@ -16,6 +16,7 @@ mod local_db;
 mod mir;
 pub mod module_graph;
 mod process_runner;
+pub(crate) mod route_models;
 pub(crate) mod rta;
 #[cfg(feature = "lang-go")]
 #[doc(hidden)]

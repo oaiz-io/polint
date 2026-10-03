@@ -1937,6 +1937,22 @@ impl AnalysisDb {
         &self.go_semantic_store().output().instantiations
     }
 
+    pub(crate) fn go_semantic_routes(&self) -> &[crate::go::semantic::facts::GoSemanticRouteFact] {
+        &self.go_semantic_store().output().routes
+    }
+
+    pub(crate) fn go_semantic_route_serves(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticRouteServeFact] {
+        &self.go_semantic_store().output().route_serves
+    }
+
+    /// The steps the route interpreter took before its budget stopped it, when it
+    /// did.
+    pub(crate) fn go_semantic_route_budget_steps(&self) -> Option<u64> {
+        self.go_semantic_store().output().route_budget_steps
+    }
+
     pub(crate) fn go_semantic_fields(&self) -> &[crate::go::semantic::facts::GoSemanticFieldFact] {
         &self.go_semantic_store().output().fields
     }

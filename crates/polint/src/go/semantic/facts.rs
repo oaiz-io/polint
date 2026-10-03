@@ -59,6 +59,94 @@ pub struct GoSemanticBuiltinCallId(pub u64);
 pub struct GoSemanticParamId(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticRouteId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticRouteServeId(pub u64);
+
+/// How a route's handler or middleware was identified.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GoRouteFunctionKind {
+    /// A declared function or method, passed by name or as a method value.
+    Function,
+    /// A function literal.
+    Literal,
+    /// The value a call returned; named by the function that produced it.
+    Factory,
+    /// A value read from a struct field nothing visible stored a function in.
+    Field,
+    /// A value the route interpreter could not identify.
+    Unknown,
+}
+
+/// One handler or middleware of a route, as the route interpreter named it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoRouteFunction {
+    pub name: String,
+    pub kind: GoRouteFunctionKind,
+    /// The struct field the value was read from (`pkg.Type.Field`), if any.
+    pub field: Option<String>,
+}
+
+/// What a route serves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GoRouteTransport {
+    /// An HTTP route: a method and a path.
+    Http,
+    /// A message subscription: a topic and a handler name.
+    Message,
+}
+
+/// A route the program registers with a modelled framework: where it is
+/// registered, what it serves, its handler, and the middleware a request
+/// passes through first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticRouteFact {
+    pub id: GoSemanticRouteId,
+    pub stable_key: StableKeyId,
+    pub framework: String,
+    pub transport: GoRouteTransport,
+    /// The HTTP method, `*` for any, `?` when it is not a constant; empty for a
+    /// message route.
+    pub method: String,
+    /// The full path (with every group and mount prefix) or the topic; parts
+    /// the interpreter could not read are `{?}`.
+    pub path: String,
+    pub path_complete: bool,
+    /// The path the registration call itself names, without the prefixes of
+    /// the groups and mounts above it.
+    pub registered_path: String,
+    /// A message handler's registered name.
+    pub name: Option<String>,
+    pub handlers: Vec<GoRouteFunction>,
+    pub middleware: Vec<GoRouteFunction>,
+    pub middleware_complete: bool,
+    /// The routers the registration acted on (one per calling context that
+    /// reached it with the same result), and the routers they derive from.
+    pub routers: Vec<String>,
+    pub router_roots: Vec<String>,
+    /// The function the registration call is written in.
+    pub function: String,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A call that dispatches requests to a router (an `http.Handler` serve call,
+/// a test server): every route below one of `router_roots` is reachable from
+/// `function`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticRouteServeFact {
+    pub id: GoSemanticRouteServeId,
+    pub stable_key: StableKeyId,
+    pub function: String,
+    pub router_roots: Vec<String>,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GoSemanticCallStatus {
     ResolvedStatic,
     UnresolvedDynamic,

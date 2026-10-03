@@ -6,7 +6,7 @@ use crate::cache::Cache;
 use crate::config::load_config;
 use crate::sdk::facts::{
     CallEdgeAlgorithm, CallEdgePrecision, CallGraph, CallGraphCallee, CallGraphWalk, FactView,
-    GoGenericTarget, GoTypes,
+    GoGenericTarget, GoTypes, RouteFunctionKind, Routes,
 };
 use crate::sdk::prelude::FunctionId;
 
@@ -336,4 +336,224 @@ func Open(t *Tx) error { return t.Run(func() error { return nil }) }
             "go:func:example.com/typed.Open$1"
         ]
     );
+}
+
+const GIN_STUB: &str = r#"package gin
+
+import "net/http"
+
+type Context struct{}
+
+type HandlerFunc func(*Context)
+
+type IRoutes interface {
+	Use(...HandlerFunc) IRoutes
+	GET(string, ...HandlerFunc) IRoutes
+	POST(string, ...HandlerFunc) IRoutes
+}
+
+type RouterGroup struct{ Handlers []HandlerFunc }
+
+func (group *RouterGroup) Use(middleware ...HandlerFunc) IRoutes { return group }
+
+func (group *RouterGroup) Group(path string, handlers ...HandlerFunc) *RouterGroup { return group }
+
+func (group *RouterGroup) GET(path string, handlers ...HandlerFunc) IRoutes { return group }
+
+func (group *RouterGroup) POST(path string, handlers ...HandlerFunc) IRoutes { return group }
+
+type Engine struct{ RouterGroup }
+
+func New() *Engine { return &Engine{} }
+
+func (engine *Engine) Use(middleware ...HandlerFunc) IRoutes { return engine }
+
+func (engine *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {}
+"#;
+
+const ROUTED_APP: &str = r#"package app
+
+import "github.com/gin-gonic/gin"
+
+type Server struct {
+	Router *gin.Engine
+	Auth   gin.HandlerFunc
+}
+
+func Authenticate() gin.HandlerFunc { return func(*gin.Context) {} }
+
+func NewServer() *Server {
+	router := gin.New()
+	return &Server{Router: router, Auth: Authenticate()}
+}
+
+func (s *Server) Routes() {
+	s.Router.GET("/health", health)
+	api := s.Router.Group("/api")
+	api.Use(s.Auth)
+	api.POST("/items", decorate(s.create))
+}
+
+func decorate(handler gin.HandlerFunc) gin.HandlerFunc { return handler }
+
+func health(c *gin.Context) {}
+
+func (s *Server) create(c *gin.Context) {}
+
+func Exercise() {
+	s := NewServer()
+	s.Routes()
+	s.Router.ServeHTTP(nil, nil)
+}
+"#;
+
+const ROUTED_MAIN: &str = r#"package main
+
+import "example.com/routed/app"
+
+func main() {
+	s := app.NewServer()
+	s.Routes()
+}
+"#;
+
+fn run_routed(models: Option<&str>) -> (tempfile::TempDir, KernelOutput) {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let files = [
+        (
+            "go.mod",
+            "module example.com/routed\n\ngo 1.22\n\nrequire github.com/gin-gonic/gin v1.0.0\n\nreplace github.com/gin-gonic/gin => ./stubs/gin\n",
+        ),
+        (
+            "stubs/gin/go.mod",
+            "module github.com/gin-gonic/gin\n\ngo 1.22\n",
+        ),
+        ("stubs/gin/gin.go", GIN_STUB),
+        ("app/app.go", ROUTED_APP),
+        ("cmd/server/main.go", ROUTED_MAIN),
+    ];
+    for (path, contents) in files
+        .into_iter()
+        .chain(models.map(|models| (".polint/models/routes.toml", models)))
+    {
+        let path = temp.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).expect("create directory");
+        std::fs::write(path, contents).expect("write file");
+    }
+    let loaded = load_config(temp.path()).expect("default config loads");
+    let plan = AnalysisPlan::from_capability_names_for_test(&["routes"]);
+    let output = AnalysisKernel::run(KernelInput {
+        loaded: &loaded,
+        cache: &Cache::new("", false),
+        config_digest: "config",
+        rule_digest: "rules",
+        plan: &plan,
+        parallel: false,
+    })
+    .expect("kernel should run");
+    (temp, output)
+}
+
+#[test]
+fn routes_name_their_handlers_middleware_and_serve_calls_by_function() {
+    let (_temp, output) = run_routed(Some(
+        r#"
+[[go_route]]
+framework = "local"
+role = "passthrough"
+function = "example.com/routed/app.decorate"
+argument = 0
+"#,
+    ));
+    let routes = Routes::build(&output.db);
+    assert!(routes.complete());
+    let mut table = routes
+        .http()
+        .map(|route| {
+            (
+                route.method.to_string(),
+                route.path.to_string(),
+                route.path_complete && route.middleware_complete,
+                route
+                    .handlers()
+                    .map(|handler| handler.function)
+                    .collect::<Vec<_>>(),
+                route
+                    .middleware()
+                    .map(|middleware| (middleware.kind, middleware.name.to_string()))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    table.sort_by(|left, right| left.1.cmp(&right.1));
+    assert_eq!(
+        table,
+        [
+            (
+                "POST".to_string(),
+                "/api/items".to_string(),
+                true,
+                vec![Some(function(&output, "Server.create"))],
+                vec![(
+                    RouteFunctionKind::Factory,
+                    "example.com/routed/app.Authenticate".to_string()
+                )],
+            ),
+            (
+                "GET".to_string(),
+                "/health".to_string(),
+                true,
+                vec![Some(function(&output, "health"))],
+                Vec::new(),
+            ),
+        ]
+    );
+    let auth = routes
+        .http()
+        .find(|route| route.path == "/api/items")
+        .and_then(|route| route.middleware().next())
+        .expect("the group's middleware");
+    assert_eq!(auth.field, Some("example.com/routed/app.Server.Auth"));
+    assert_eq!(
+        routes
+            .http()
+            .find(|route| route.path == "/api/items")
+            .map(|route| route.registered_path),
+        Some("/items"),
+        "the registration's own path, without the group's prefix"
+    );
+    assert_eq!(auth.function, Some(function(&output, "Authenticate")));
+    assert_eq!(
+        routes
+            .handled_by(function(&output, "Server.create"))
+            .map(|route| route.path)
+            .collect::<Vec<_>>(),
+        ["/api/items"]
+    );
+    let mut served = routes
+        .served_from(function(&output, "Exercise"))
+        .map(|route| route.path)
+        .collect::<Vec<_>>();
+    served.sort_unstable();
+    assert_eq!(served, ["/api/items", "/health"]);
+    assert_eq!(
+        routes
+            .http()
+            .find(|route| route.path == "/health")
+            .and_then(|route| route.registered_in),
+        Some(function(&output, "Server.Routes"))
+    );
+}
+
+#[test]
+fn without_a_passthrough_model_a_wrapped_handler_is_named_by_its_wrapper() {
+    let (_temp, output) = run_routed(None);
+    let routes = Routes::build(&output.db);
+    let handler = routes
+        .http()
+        .find(|route| route.path == "/api/items")
+        .and_then(|route| route.handlers().next())
+        .expect("the wrapped route");
+    assert_eq!(handler.kind, RouteFunctionKind::Factory);
+    assert_eq!(handler.function, Some(function(&output, "decorate")));
 }

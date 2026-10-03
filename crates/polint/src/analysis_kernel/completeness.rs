@@ -116,7 +116,9 @@ fn capability_status(
         );
     }
 
-    if capability == "go_types" && super::provider::go_types_unloaded(db) {
+    if super::provider::reads_typed_go_frontend(capability)
+        && super::provider::go_types_unloaded(db)
+    {
         return (
             CapabilityCompletenessStatus::Unknown,
             Some("the typed Go frontend loaded no package for the scanned Go files".to_string()),
@@ -129,8 +131,9 @@ fn capability_status(
         .iter()
         .filter(|row| {
             row.capability.as_deref() == Some(capability)
-                || row.provider == "polint.kernel"
-                || relevant_providers.contains(row.provider.as_str())
+                || (!scoped_to_another_capability(row, capability)
+                    && (row.provider == "polint.kernel"
+                        || relevant_providers.contains(row.provider.as_str())))
         })
         .collect::<Vec<_>>();
 
@@ -151,6 +154,16 @@ fn capability_status(
     }
 
     (CapabilityCompletenessStatus::Complete, None)
+}
+
+/// Unknown rows that describe one capability's answer only: a route
+/// interpretation budget stop says nothing about the call or type facts the
+/// same provider produced.
+fn scoped_to_another_capability(row: &UnknownRow, capability: &str) -> bool {
+    const SCOPED_CAPABILITIES: &[&str] = &["routes"];
+    row.capability
+        .as_deref()
+        .is_some_and(|scoped| scoped != capability && SCOPED_CAPABILITIES.contains(&scoped))
 }
 
 /// The part of `capabilities`' analysis pipeline that did not run, as one error
@@ -418,6 +431,77 @@ mod tests {
             CapabilityCompletenessStatus::BudgetExceeded
         );
         assert!(view.budget_exceeded());
+    }
+
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn a_route_budget_stop_marks_routes_incomplete_and_nothing_else() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("go.mod"),
+            "module example.com/m\n\ngo 1.22\n",
+        )
+        .expect("go.mod");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nfunc main() {}\n",
+        )
+        .expect("source");
+        let loaded = load_config(temp.path()).expect("config");
+        let rule = Rule::from_parts(
+            || RuleMeta {
+                id: "test/routes".to_string(),
+                description: "routes".to_string(),
+                severity: Severity::Warn,
+                kind: RuleKind::Check,
+            },
+            || Capabilities::new().routes().go_types(),
+            |_, _| Ok(()),
+        );
+        let plan = AnalysisPlan::from_rules(&[rule], None, &BTreeMap::new());
+        let mut output = AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &Cache::new("", false),
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel");
+        let view = |output: &crate::analysis_kernel::KernelOutput| {
+            view_from_run(
+                &plan,
+                &output.db,
+                &output.run_report.provider_outcomes,
+                &output.diagnostics,
+            )
+        };
+        assert_eq!(
+            view(&output).status_for("routes"),
+            CapabilityCompletenessStatus::Complete
+        );
+
+        let facts = crate::go::semantic::store::GoSemanticFactsOutput {
+            packages: output.db.go_semantic_packages().to_vec(),
+            functions: output.db.go_semantic_functions().to_vec(),
+            route_budget_steps: Some(5_000_001),
+            ..Default::default()
+        };
+        output
+            .db
+            .replace_go_semantic_facts(facts)
+            .expect("facts store");
+
+        let stopped = view(&output);
+        assert_eq!(
+            stopped.status_for("routes"),
+            CapabilityCompletenessStatus::BudgetExceeded
+        );
+        assert_eq!(
+            stopped.status_for("go_types"),
+            CapabilityCompletenessStatus::Complete,
+            "a route budget stop says nothing about the type facts"
+        );
     }
 
     #[test]

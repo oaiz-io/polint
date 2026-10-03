@@ -38,6 +38,7 @@ no-leak proof all exist. Broad raw graph/database APIs stay deferred.
 | `Cfg<'_>` | defer | Reserved capability. Needs public fact design, docs, temp-repo tests, bounded queries, setup behavior, cache/input proof, and no-leak proof before support. |
 | `CallGraph<'_>` | preview | Resolved call edges under `polint::sdk::facts`; derives `call_graph`; documented in `docs/facts/call-graph.md`. Edges carry precision and resolution algorithm; unresolved sites stay in `polint unknowns --cap calls`; `Option<CallGraph<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
 | `GoTypes<'_>` | preview | Typed Go frontend facts under `polint::sdk::facts`; derives `go_types`; documented in `docs/facts/go-semantic-types.md`. Unavailable (setup missing) when the frontend loaded no package; `Option<GoTypes<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
+| `Routes<'_>` | preview | Framework routes from the typed Go frontend under `polint::sdk::facts`; derives `routes`; documented in `docs/facts/routes.md`. Built-in models for gin, chi, net/http and Watermill, repository models in `.polint/models/*.toml` (`[[go_route]]`); every route carries path and middleware completeness flags; an interpretation budget stop is a `budget_exceeded` completeness. Unavailable (setup missing) when the frontend loaded no package; `Option<Routes<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
 | `DataFlow<'_>` | preview | Policy-level view documented in `docs/facts/data-flow.md`; v1.4 backs bounded source/sink/barrier queries while raw graph APIs stay private. |
 | `Evidence<'_>` | internal | Evidence remains diagnostic rendering data, not a rule-author SDK view; see `docs/facts/evidence.md`. |
 | Effects/Summaries | internal | Private analysis substrate; no public SDK, stable CLI JSON, or docs/facts contract yet. |
@@ -213,3 +214,21 @@ depending on provider, run-report, solver, or unknown-taxonomy internals.
 
 The `ALLOWED_PRELUDE` count moved `119 -> 122`. No provider graph, solver row,
 run-report type, or unknown-taxonomy type is promoted.
+
+## Route view promotion (sanctioned prelude addition)
+
+Endpoint and subscriber policies need the route table a program builds, with the
+handler and the effective middleware of each route, instead of re-deriving it
+from registration text. The view and its four small value types are promoted;
+the framework model vocabulary is data (`[[go_route]]` tables), not Rust API.
+
+| Surface | Disposition | Required gates and notes |
+|---|---|---|
+| `Routes<'_>` | preview | Derives `routes`; `iter`, `http`, `messages`, `handled_by`, `served_from`, `complete`. Probe witness `_assert_routes`. |
+| `Route<'_>` | preview | Read-only route: framework, transport, method, path with completeness, name, middleware completeness, location, registering function; `handlers()` and `middleware()` iterators. Probe witness `_assert_route`. |
+| `RouteFunction<'_>` | preview | A handler or middleware: name, kind, field, joinable `FunctionId`. Probe witness `_assert_routefunction`. |
+| `RouteFunctionKind` | preview | Non-exhaustive: function, literal, factory, field, unknown. Probe witness `_assert_routefunctionkind`. |
+| `RouteTransport` | preview | Non-exhaustive: HTTP or message. Probe witness `_assert_routetransport`. |
+
+The `ALLOWED_PRELUDE` count moved `138 -> 143` for these additions. Route-interpreter
+internals (router objects, calling contexts, serve-call rows) stay crate-private.

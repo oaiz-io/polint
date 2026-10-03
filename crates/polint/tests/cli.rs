@@ -5205,6 +5205,184 @@ export const value = token;
     write_file(&root.join("src/token.ts"), r#"export const token = "ok";"#);
 }
 
+fn write_routes_rule_repo(root: &Path) {
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["app/**", "cmd/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_file(
+        &root.join("go.mod"),
+        "module example.com/routed\n\ngo 1.22\n\nrequire github.com/gin-gonic/gin v1.0.0\n\nreplace github.com/gin-gonic/gin => ./stubs/gin\n",
+    );
+    write_file(
+        &root.join("stubs/gin/go.mod"),
+        "module github.com/gin-gonic/gin\n\ngo 1.22\n",
+    );
+    write_file(
+        &root.join("stubs/gin/gin.go"),
+        r#"package gin
+
+type Context struct{}
+
+type HandlerFunc func(*Context)
+
+type IRoutes interface {
+	Use(...HandlerFunc) IRoutes
+	GET(string, ...HandlerFunc) IRoutes
+	POST(string, ...HandlerFunc) IRoutes
+}
+
+type RouterGroup struct{ Handlers []HandlerFunc }
+
+func (group *RouterGroup) Use(middleware ...HandlerFunc) IRoutes { return group }
+
+func (group *RouterGroup) Group(path string, handlers ...HandlerFunc) *RouterGroup { return group }
+
+func (group *RouterGroup) GET(path string, handlers ...HandlerFunc) IRoutes { return group }
+
+func (group *RouterGroup) POST(path string, handlers ...HandlerFunc) IRoutes { return group }
+
+type Engine struct{ RouterGroup }
+
+func New() *Engine { return &Engine{} }
+"#,
+    );
+    write_file(
+        &root.join("app/app.go"),
+        r#"package app
+
+import "github.com/gin-gonic/gin"
+
+type Server struct {
+	Router *gin.Engine
+	Auth   gin.HandlerFunc
+}
+
+func Authenticate() gin.HandlerFunc { return func(*gin.Context) {} }
+
+func NewServer() *Server {
+	return &Server{Router: gin.New(), Auth: Authenticate()}
+}
+
+func (s *Server) Routes() {
+	s.Router.POST("/webhook", s.webhook)
+	api := s.Router.Group("/api")
+	api.Use(s.Auth)
+	api.POST("/items", decorate(s.create))
+	api.GET("/items", s.list)
+}
+
+func decorate(handler gin.HandlerFunc) gin.HandlerFunc { return handler }
+
+func (s *Server) webhook(c *gin.Context) {}
+
+func (s *Server) create(c *gin.Context) {}
+
+func (s *Server) list(c *gin.Context) {}
+"#,
+    );
+    write_file(
+        &root.join("cmd/server/main.go"),
+        r#"package main
+
+import "example.com/routed/app"
+
+func main() {
+	s := app.NewServer()
+	s.Routes()
+}
+"#,
+    );
+    write_file(
+        &root.join(".polint/models/routes.toml"),
+        r#"
+[[go_route]]
+framework = "local"
+role = "passthrough"
+function = "example.com/routed/app.decorate"
+argument = 0
+"#,
+    );
+    write_phase41_rule_pack(
+        root,
+        r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::mutating_routes_require_auth(), rule::optional_routes()])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
+
+#[polint::rule(id = "local/mutating-routes-require-auth", description = "Mutating routes require authentication", severity = "error")]
+pub(crate) fn mutating_routes_require_auth(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    routes: Routes<'_>,
+) -> RuleResult {
+    for route in routes.http().filter(|route| route.method != "GET") {
+        let (Some(file), Some(span)) = (route.file, route.span) else {
+            continue;
+        };
+        let handler = route
+            .handlers()
+            .filter_map(|handler| handler.function)
+            .filter_map(|id| functions.iter().find(|function| function.id == id))
+            .map(|function| function.name.clone())
+            .collect::<Vec<_>>()
+            .join(",");
+        let auth = route
+            .middleware()
+            .find(|middleware| middleware.name.ends_with(".Authenticate"));
+        let diagnostic = match auth {
+            Some(auth) => Diagnostic::warning(
+                ctx.rule_id(),
+                ctx.file_path(file),
+                span.diagnostic_range(),
+                format!("{} {} is authenticated", route.method, route.path),
+            )
+            .with_evidence("auth_field", auth.field.unwrap_or("")),
+            None => Diagnostic::error(
+                ctx.rule_id(),
+                ctx.file_path(file),
+                span.diagnostic_range(),
+                format!("{} {} does not require authentication", route.method, route.path),
+            ),
+        };
+        ctx.report(
+            diagnostic
+                .with_evidence("handler", handler)
+                .with_evidence("complete", (route.path_complete && route.middleware_complete).to_string()),
+        );
+    }
+    Ok(())
+}
+
+#[polint::rule(id = "local/optional-routes", description = "Optional routes", severity = "warn")]
+pub(crate) fn optional_routes(ctx: &mut RuleCtx<'_>, routes: Option<Routes<'_>>) -> RuleResult {
+    let message = match routes {
+        Some(routes) => format!("routes available: {}", routes.http().count()),
+        None => "routes unavailable".to_string(),
+    };
+    ctx.report(Diagnostic::warning(
+        ctx.rule_id(),
+        "<workspace>",
+        DiagnosticRange::point(1, 1),
+        message,
+    ));
+    Ok(())
+}
+"#,
+    );
+}
+
 fn write_typed_go_views_rule_repo(root: &Path, with_module: bool) {
     write_file(
         &root.join(".polint.toml"),
@@ -10206,6 +10384,57 @@ mod capability_planning {
         assert!(
             diagnostics_for_rule(&json, "polint/capability").is_empty(),
             "both views should be available with a go.mod: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn routes_view_answers_an_outside_rule_with_repository_models() {
+        let temp = tempfile::tempdir().unwrap();
+        write_routes_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let routes = diagnostics_for_rule(&json, "local/mutating-routes-require-auth");
+        assert_eq!(routes.len(), 2, "{json:#?}");
+        assert!(
+            routes.iter().any(|diagnostic| {
+                diagnostic["message"] == "POST /api/items is authenticated"
+                    && diagnostic["severity"] == "warn"
+                    && diagnostic_has_evidence(diagnostic, "handler", "Server.create")
+                    && diagnostic_has_evidence(
+                        diagnostic,
+                        "auth_field",
+                        "example.com/routed/app.Server.Auth",
+                    )
+                    && diagnostic_has_evidence(diagnostic, "complete", "true")
+            }),
+            "the group's middleware and the repository's pass-through model apply: {json:#?}"
+        );
+        assert!(
+            routes.iter().any(|diagnostic| {
+                diagnostic["message"] == "POST /webhook does not require authentication"
+                    && diagnostic["severity"] == "error"
+                    && diagnostic_has_evidence(diagnostic, "handler", "Server.webhook")
+            }),
+            "a route registered before the group has none of its middleware: {json:#?}"
+        );
+
+        let optional = diagnostics_for_rule(&json, "local/optional-routes");
+        assert_eq!(optional.len(), 1, "{json:#?}");
+        assert_eq!(optional[0]["message"], "routes available: 3");
+        assert!(
+            diagnostics_for_rule(&json, "polint/capability").is_empty(),
+            "{json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "polint/route-model").is_empty(),
+            "{json:#?}"
         );
     }
 

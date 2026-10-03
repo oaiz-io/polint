@@ -12,6 +12,7 @@ mod call_graph;
 pub mod facts;
 mod go_types;
 pub mod policy;
+mod routes;
 pub mod scope;
 #[cfg(all(test, feature = "lang-go"))]
 mod typed_views_tests;
@@ -57,8 +58,8 @@ pub mod prelude {
         ControlFlow, CoverageFacts, DataFlow, Events, FileMetrics, FunctionMetrics, Functions,
         GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation, GoParameter,
         GoTests, GoTypeDecls, GoTypes, Imports, JsxAttributes, ModuleGraphFacts, Packages,
-        References, ResolvedImports, SourceFiles, StringLiterals, Symbols, TestSuiteMetrics,
-        TsClasses, TsComponents,
+        References, ResolvedImports, Route, RouteFunction, RouteFunctionKind, RouteTransport,
+        Routes, SourceFiles, StringLiterals, Symbols, TestSuiteMetrics, TsClasses, TsComponents,
     };
     pub use crate::sdk::policy::{
         ArgumentBinding, BarrierPattern, EventPattern, FlowQuery, GuardPattern, GuardQuery,

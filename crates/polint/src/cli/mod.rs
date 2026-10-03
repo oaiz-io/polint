@@ -3121,6 +3121,7 @@ impl FactsListReport {
             public_fact_view("cfg").unwrap(),
             public_fact_view("call_graph").unwrap(),
             public_fact_view("go_types").unwrap(),
+            public_fact_view("routes").unwrap(),
             public_fact_view("dataflow").unwrap(),
             public_fact_view("coverage_facts").unwrap(),
             public_fact_view("test_suite_metrics").unwrap(),
@@ -3251,6 +3252,15 @@ fn public_fact_view(capability: &str) -> Option<PublicFactView> {
             canonical_path: "polint::sdk::facts::GoTypes<'_>",
             stability: "preview",
             docs_path: "docs/facts/go-semantic-types.md",
+            sampling: false,
+            unknowns: false,
+        },
+        "routes" => PublicFactView {
+            capability: "routes",
+            view_type: "Routes",
+            canonical_path: "polint::sdk::facts::Routes<'_>",
+            stability: "preview",
+            docs_path: "docs/facts/routes.md",
             sampling: false,
             unknowns: false,
         },
@@ -5415,6 +5425,7 @@ mod tests {
         for (capability, docs_path) in [
             ("call_graph", "docs/facts/call-graph.md"),
             ("go_types", "docs/facts/go-semantic-types.md"),
+            ("routes", "docs/facts/routes.md"),
         ] {
             let view = public_fact_view(capability).unwrap();
             assert_eq!((view.stability, view.docs_path), ("preview", docs_path));

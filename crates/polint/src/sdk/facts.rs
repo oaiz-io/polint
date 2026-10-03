@@ -863,6 +863,7 @@ pub use super::go_types::{
     GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation, GoParameter,
     GoTypes,
 };
+pub use super::routes::{Route, RouteFunction, RouteFunctionKind, RouteTransport, Routes};
 
 /// Preview event policy view. Requesting this view maps to lightweight `events`.
 #[derive(Clone, Copy)]
@@ -1162,6 +1163,16 @@ impl<'a> FactView<'a> for GoTypes<'a> {
 
     fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
         db.capability_available("go_types").then(|| Self::build(db))
+    }
+}
+
+impl<'a> FactView<'a> for Routes<'a> {
+    fn build(db: &'a AnalysisDb) -> Self {
+        Self { db }
+    }
+
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        db.capability_available("routes").then(|| Self::build(db))
     }
 }
 impl_fact_view!(Events);

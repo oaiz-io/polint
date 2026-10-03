@@ -154,6 +154,49 @@ pub struct GoSemanticRawFrame {
     pub via_pointer: bool,
     #[serde(default)]
     pub variadic: bool,
+    #[serde(default)]
+    pub framework: String,
+    #[serde(default)]
+    pub transport: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub path_complete: bool,
+    #[serde(default)]
+    pub registered_path: String,
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub handlers: Vec<GoSemanticRouteFunctionFrame>,
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub middleware: Vec<GoSemanticRouteFunctionFrame>,
+    #[serde(default)]
+    pub middleware_complete: bool,
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub routers: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_empty")]
+    pub router_roots: Vec<String>,
+    #[serde(default)]
+    pub steps: u64,
+}
+
+/// Reads a list the sidecar may write as `null` when it is empty (Go encodes a
+/// nil slice that way).
+fn null_as_empty<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+/// A handler or middleware entry of a `route` row.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct GoSemanticRouteFunctionFrame {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub field: String,
 }
 
 /// One stage of the Go semantic sidecar, with the workload it saw.
@@ -338,6 +381,9 @@ fn allowed_kinds() -> BTreeSet<&'static str> {
         "builtin_call",
         "field",
         "param",
+        "route",
+        "route_serve",
+        "route_budget",
     ]
     .into_iter()
     .collect()

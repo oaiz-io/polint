@@ -422,7 +422,7 @@ impl Provider for GoSemanticProvider {
             crate::go::semantic::provider::GoSemanticSidecarAccess {
                 cache_dir: sidecar_cache_dir.as_deref(),
                 prefetch,
-                call_graph: go_semantic_call_graph_requested(&ctx.plan),
+                request: go_semantic_request(&ctx.plan, &root),
             },
         );
         ProviderRunResult {
@@ -1132,6 +1132,27 @@ pub(crate) fn run_named_provider(id: &str, ctx: &mut ProviderCtx<'_>) -> Provide
 
 /// Whether a plan reads call targets, which is when the Go semantic sidecar
 /// computes the candidate callees of interface and function-value calls.
+/// What `plan` asks the semantic sidecar for: the call graph for plans that read
+/// call targets, and routes (with the repository's route models) for plans that
+/// read routes.
+pub(crate) fn go_semantic_request(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    root: &std::path::Path,
+) -> crate::go::semantic::provider::GoSemanticRequest {
+    let routes = plan.requests_capability("routes");
+    let models = if routes {
+        crate::go::route_models::load_repository_route_models(root)
+    } else {
+        crate::go::route_models::RepositoryRouteModels::default()
+    };
+    crate::go::semantic::provider::GoSemanticRequest {
+        call_graph: go_semantic_call_graph_requested(plan),
+        routes,
+        route_models: models.json,
+        route_model_problems: models.problems,
+    }
+}
+
 pub(crate) fn go_semantic_call_graph_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
     plan.requests_any_capability(&["calls", "dataflow", "call_graph"])
 }
@@ -1180,6 +1201,12 @@ pub(crate) fn go_points_to_requested(
 /// for them, which is what happens when no `go.mod` module root covers them.
 /// The frontend then succeeds with no rows, and a type question answered from
 /// those rows would read "no such field" where the truth is "not analyzed".
+/// Whether `capability` is answered from the typed Go frontend alone, so it is
+/// unavailable when that frontend loaded no package.
+pub(crate) fn reads_typed_go_frontend(capability: &str) -> bool {
+    matches!(capability, "go_types" | "routes")
+}
+
 pub(crate) fn go_types_unloaded(db: &AnalysisDb) -> bool {
     db.go_semantic_packages().is_empty()
         && db
@@ -1253,7 +1280,7 @@ pub(crate) fn providers_enabled_by_boolean_gates(
             "polint.go.semantic",
         ]);
     }
-    if requested.contains("go_types") {
+    if requested.contains("go_types") || requested.contains("routes") {
         enabled.insert("polint.go.semantic");
     }
     enabled
@@ -1278,7 +1305,7 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
         }
         "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
         "call_graph" => &["polint.calls"],
-        "go_types" => &["polint.go.semantic"],
+        "go_types" | "routes" => &["polint.go.semantic"],
         _ => &[],
     }
 }
@@ -2266,6 +2293,7 @@ mod tests {
             "references",
             "call_graph",
             "go_types",
+            "routes",
             "calls",
             "control_flow",
             "dataflow",

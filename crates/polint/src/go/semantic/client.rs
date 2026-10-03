@@ -76,8 +76,8 @@ impl GoSemanticClient {
         let frontend = resolve_go_semantic_frontend()?;
         let digest = frontend_digest(&frontend)?;
         let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
-        let scope_file = write_scope_file(config);
-        append_request_args(&mut command, &self.root, config, scope_file.as_ref());
+        let request_files = RequestFiles::write(config)?;
+        append_request_args(&mut command, &self.root, config, &request_files);
         let stdout = tempfile::tempfile().map_err(|error| {
             GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
                 "could not create the go semantic frontend output file: {error}"
@@ -136,8 +136,8 @@ impl GoSemanticClient {
         }
 
         let mut command = command_for_frontend(&frontend, &self.root, config.offline)?;
-        let scope_file = write_scope_file(config);
-        append_request_args(&mut command, &self.root, config, scope_file.as_ref());
+        let request_files = RequestFiles::write(config)?;
+        append_request_args(&mut command, &self.root, config, &request_files);
         // The sidecar writes straight into a file next to the cache entry, which
         // only becomes the entry once the run succeeded and decoded: a failed or
         // truncated run never leaves an entry a later run would replay.
@@ -248,11 +248,53 @@ fn write_scope_file_inner(config: &GoAnalysisConfig) -> std::io::Result<tempfile
     Ok(file)
 }
 
+/// The temporary files a sidecar run reads its inputs from. They must outlive
+/// the process: dropping one deletes a file the child is about to read.
+struct RequestFiles {
+    scope: Option<tempfile::NamedTempFile>,
+    route_models: Option<tempfile::NamedTempFile>,
+}
+
+impl RequestFiles {
+    fn write(config: &GoAnalysisConfig) -> Result<Self, GoSemanticClientError> {
+        Ok(Self {
+            scope: write_scope_file(config),
+            route_models: write_route_models_file(config)?,
+        })
+    }
+}
+
+/// Writes the repository's route models for `--route-models`. Unlike the scope
+/// list, the models change what the sidecar emits, so a file that cannot be
+/// written fails the run instead of silently dropping them.
+fn write_route_models_file(
+    config: &GoAnalysisConfig,
+) -> Result<Option<tempfile::NamedTempFile>, GoSemanticClientError> {
+    let Some(models) = config.route_models.as_deref() else {
+        return Ok(None);
+    };
+    let write = || -> std::io::Result<tempfile::NamedTempFile> {
+        use std::io::Write;
+        let mut file = tempfile::Builder::new()
+            .prefix("polint-go-route-models-")
+            .suffix(".json")
+            .tempfile()?;
+        file.write_all(models.as_bytes())?;
+        file.flush()?;
+        Ok(file)
+    };
+    write().map(Some).map_err(|error| {
+        GoSemanticClientError::Process(GoSemanticProcessError::CommandFailed(format!(
+            "could not write the route models for the go semantic frontend: {error}"
+        )))
+    })
+}
+
 fn append_request_args(
     command: &mut std::process::Command,
     root: &Path,
     config: &GoAnalysisConfig,
-    scope_file: Option<&tempfile::NamedTempFile>,
+    files: &RequestFiles,
 ) {
     command
         .arg("semantic")
@@ -269,10 +311,16 @@ fn append_request_args(
     if config.semantic_call_graph {
         command.arg("--call-graph");
     }
+    if config.semantic_routes {
+        command.arg("--routes");
+        if let Some(models) = &files.route_models {
+            command.arg("--route-models").arg(models.path());
+        }
+    }
     if config.emit_rta_edges {
         command.arg("--rta-edges");
     }
-    if let Some(scope_file) = scope_file {
+    if let Some(scope_file) = &files.scope {
         command.arg("--scope-files").arg(scope_file.path());
     }
     command.arg("--ndjson");
@@ -416,7 +464,11 @@ mod tests {
         )
         .expect("default lifecycle");
         let mut command = std::process::Command::new("true");
-        append_request_args(&mut command, Path::new("/repo"), &config, None);
+        let files = RequestFiles {
+            scope: None,
+            route_models: None,
+        };
+        append_request_args(&mut command, Path::new("/repo"), &config, &files);
         let limit = command
             .get_envs()
             .find(|(key, _)| *key == GO_MEMORY_LIMIT_ENV)

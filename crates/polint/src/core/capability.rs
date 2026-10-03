@@ -40,6 +40,10 @@ pub struct Capabilities {
     /// struct fields, generic instantiations, method sets and interface
     /// satisfaction.
     pub go_types: bool,
+    /// Needs the routes the program registers with a modelled framework, with
+    /// their handlers and middleware.
+    #[serde(default)]
+    pub routes: bool,
     /// Requests `call_graph` optionally: the rule still runs, with no view,
     /// when the capability is unavailable.
     #[serde(default)]
@@ -48,6 +52,10 @@ pub struct Capabilities {
     /// the capability is unavailable.
     #[serde(default)]
     pub go_types_optional: bool,
+    /// Requests `routes` optionally: the rule still runs, with no view, when
+    /// the capability is unavailable.
+    #[serde(default)]
+    pub routes_optional: bool,
     /// Preview policy-level data-flow queries. Bounded source/sink/barrier checks are provider-backed.
     pub dataflow: bool,
     /// Needs Go test facts harvested from `_test.go` files.
@@ -154,11 +162,23 @@ impl Capabilities {
         self
     }
 
+    pub fn routes(mut self) -> Self {
+        self.routes = true;
+        self
+    }
+
+    pub fn routes_optional(mut self) -> Self {
+        self.routes = true;
+        self.routes_optional = true;
+        self
+    }
+
     /// The requested capabilities a rule runs without when they are unavailable.
     pub(crate) fn optional_names(self) -> impl Iterator<Item = &'static str> {
         [
             ("call_graph", self.call_graph_optional),
             ("go_types", self.go_types_optional),
+            ("routes", self.routes_optional),
         ]
         .into_iter()
         .filter_map(|(name, optional)| optional.then_some(name))
@@ -243,6 +263,7 @@ impl Capabilities {
             ("cfg", self.cfg),
             ("call_graph", self.call_graph),
             ("go_types", self.go_types),
+            ("routes", self.routes),
             ("dataflow", self.dataflow),
             ("go_tests", self.go_tests),
             ("branch_obligations", self.branch_obligations),

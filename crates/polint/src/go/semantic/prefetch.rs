@@ -55,16 +55,14 @@ impl GoSemanticPrefetch {
         db: &dyn FactDatabase,
         sidecar_cache_dir: Option<PathBuf>,
         upstream_digest: String,
-        call_graph: bool,
+        request: &crate::go::semantic::provider::GoSemanticRequest,
     ) -> Option<Self> {
         let files = go_files(db);
         if files.is_empty() {
             return None;
         }
-        let config = GoAnalysisConfig {
-            semantic_call_graph: call_graph,
-            ..GoAnalysisConfig::from_settings_files(root, go_settings, &files).ok()?
-        };
+        let config =
+            request.apply(GoAnalysisConfig::from_settings_files(root, go_settings, &files).ok()?);
         if !config.files_without_module_root.is_empty()
             || !config.missing_module_roots(root).is_empty()
         {
@@ -138,7 +136,7 @@ mod tests {
             &db,
             None,
             "upstream".to_string(),
-            false,
+            &crate::go::semantic::provider::GoSemanticRequest::default(),
         );
 
         assert!(
@@ -160,7 +158,7 @@ mod tests {
             &db,
             None,
             "upstream".to_string(),
-            false,
+            &crate::go::semantic::provider::GoSemanticRequest::default(),
         );
 
         assert!(

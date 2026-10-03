@@ -891,7 +891,9 @@ fn support_for(capability: &str) -> CapabilityAccumulator {
             None,
             None,
         ),
-        "call_graph" | "go_types" => (CapabilitySupportStatus::Supported, None, None, None),
+        "call_graph" | "go_types" | "routes" => {
+            (CapabilitySupportStatus::Supported, None, None, None)
+        }
         "cfg" | "coverage_facts" => (
             CapabilitySupportStatus::Unsupported,
             Some("Capability is not currently supported.".to_string()),

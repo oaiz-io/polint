@@ -65,6 +65,16 @@ pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
     let mut parts = vec![
         format!("include_tests={}", config.semantic_include_tests),
         format!("call_graph={}", config.semantic_call_graph),
+        format!("routes={}", config.semantic_routes),
+        // The repository's route models decide which calls register routes.
+        format!(
+            "route_models={}",
+            config
+                .route_models
+                .as_deref()
+                .map(|models| crate::go::hash::stable_hash(&[models]))
+                .unwrap_or_default()
+        ),
         format!("offline={}", config.offline),
         format!("rta_edges={}", config.emit_rta_edges),
         // The scan scope decides which rows the sidecar emits, so two scopes are two
@@ -259,6 +269,14 @@ mod tests {
                 ..base.clone()
             },
             GoAnalysisConfig {
+                semantic_routes: !base.semantic_routes,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                route_models: Some("{\"models\":[]}".to_string()),
+                ..base.clone()
+            },
+            GoAnalysisConfig {
                 offline: true,
                 ..base
             },
@@ -327,6 +345,8 @@ mod tests {
             semantic_include_tests: false,
             offline: false,
             semantic_call_graph: false,
+            semantic_routes: false,
+            route_models: None,
             semantic_timeout_ms: None,
             emit_rta_edges: false,
             symbol_rooted_patterns: vec!["./...".to_string()],

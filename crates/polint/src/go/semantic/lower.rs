@@ -13,10 +13,14 @@ use crate::go::semantic::facts::{
     GoSemanticInstantiatedTypeId, GoSemanticInstantiationFact, GoSemanticInstantiationId,
     GoSemanticInterfaceFact, GoSemanticInterfaceId, GoSemanticMethodSetFact, GoSemanticMethodSetId,
     GoSemanticPackageErrorFact, GoSemanticPackageErrorId, GoSemanticPackageFact,
-    GoSemanticPackageId, GoSemanticParamFact, GoSemanticParamId, GoSemanticRtaEdgeFact,
+    GoSemanticPackageId, GoSemanticParamFact, GoSemanticParamId, GoSemanticRouteFact,
+    GoSemanticRouteId, GoSemanticRouteServeFact, GoSemanticRouteServeId, GoSemanticRtaEdgeFact,
     GoSemanticRtaEdgeId,
 };
-use crate::go::semantic::protocol::{GoSemanticOutput, GoSemanticRawFrame, GoSemanticSpan};
+use crate::go::semantic::facts::{GoRouteFunction, GoRouteFunctionKind, GoRouteTransport};
+use crate::go::semantic::protocol::{
+    GoSemanticOutput, GoSemanticRawFrame, GoSemanticRouteFunctionFrame, GoSemanticSpan,
+};
 use crate::go::semantic::store::GoSemanticFactsOutput;
 use crate::go::semantic::validate::validate_relative_path;
 use crate::go::stable_key::semantic_stable_key;
@@ -130,6 +134,18 @@ pub(crate) fn lower_go_semantic(
                 .push(lower_interface(interner, row, &files)),
             "implements" => lowered.implements.push(lower_implements(interner, row)),
             "field" => lowered.fields.push(lower_field(interner, row, &files)),
+            // A route belongs to the file its registration is written in.
+            "route" => push_in_scope(
+                &mut lowered.routes,
+                lower_route(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "route_serve" => push_in_scope(
+                &mut lowered.route_serves,
+                lower_route_serve(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "route_budget" => lowered.route_budget_steps = Some(row.steps),
             "receiver_type" | "unsupported" | "type_fact" => {}
             _ => {}
         }
@@ -332,6 +348,73 @@ fn lower_param(
         name: row.name.clone(),
         type_name: row.type_name.clone(),
         variadic: row.variadic,
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_route(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticRouteFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticRouteFact {
+        id: GoSemanticRouteId(0),
+        stable_key: harvest_stable_key(interner, row),
+        framework: row.framework.clone(),
+        transport: if row.transport == "message" {
+            GoRouteTransport::Message
+        } else {
+            GoRouteTransport::Http
+        },
+        method: row.method.clone(),
+        path: row.path.clone(),
+        path_complete: row.path_complete,
+        registered_path: row.registered_path.clone(),
+        name: non_empty(row.name.as_str()),
+        handlers: row.handlers.iter().map(lower_route_function).collect(),
+        middleware: row.middleware.iter().map(lower_route_function).collect(),
+        middleware_complete: row.middleware_complete,
+        routers: row.routers.clone(),
+        router_roots: row.router_roots.clone(),
+        function: row.function.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_route_function(frame: &GoSemanticRouteFunctionFrame) -> GoRouteFunction {
+    GoRouteFunction {
+        name: frame.name.clone(),
+        kind: match frame.kind.as_str() {
+            "function" => GoRouteFunctionKind::Function,
+            "literal" => GoRouteFunctionKind::Literal,
+            "factory" => GoRouteFunctionKind::Factory,
+            "field" => GoRouteFunctionKind::Field,
+            _ => GoRouteFunctionKind::Unknown,
+        },
+        field: non_empty(frame.field.as_str()),
+    }
+}
+
+fn lower_route_serve(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticRouteServeFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticRouteServeFact {
+        id: GoSemanticRouteServeId(0),
+        stable_key: harvest_stable_key(interner, row),
+        function: row.function.clone(),
+        router_roots: row.router_roots.clone(),
         relative_file: location.relative_file,
         file: location.file,
         span: location.span,

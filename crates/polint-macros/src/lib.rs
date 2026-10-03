@@ -327,11 +327,13 @@ fn parse_view_param(arg: &FnArg) -> syn::Result<ViewParam> {
         capability_for_type(view_ty)?;
     let capability_method = if optional {
         match capability_name.as_str() {
-            "call_graph" | "go_types" => format_ident!("{}_optional", capability_name),
+            "call_graph" | "go_types" | "routes" => {
+                format_ident!("{}_optional", capability_name)
+            }
             _ => {
                 return Err(syn::Error::new(
                     pat_type.ty.span(),
-                    "only the CallGraph and GoTypes views can be requested optionally",
+                    "only the CallGraph, GoTypes and Routes views can be requested optionally",
                 ));
             }
         }
@@ -423,6 +425,7 @@ fn capability_for_type(ty: &Type) -> syn::Result<(Ident, Ident, String, String)>
         "Cfg" => "cfg",
         "CallGraph" => "call_graph",
         "GoTypes" => "go_types",
+        "Routes" => "routes",
         "DataFlow" => "dataflow",
         "GoTests" => "go_tests",
         "BranchObligations" => "branch_obligations",
@@ -605,6 +608,7 @@ mod tests {
         assert_eq!(capability("Cfg<'_>"), "cfg");
         assert_eq!(capability("CallGraph<'_>"), "call_graph");
         assert_eq!(capability("GoTypes<'_>"), "go_types");
+        assert_eq!(capability("Routes<'_>"), "routes");
         assert_eq!(capability("FileMetrics<'_>"), "file_metrics");
         assert_eq!(capability("FunctionMetrics<'_>"), "function_metrics");
         assert_eq!(capability("ComplexityMetrics<'_>"), "complexity_metrics");
@@ -640,7 +644,7 @@ mod tests {
     }
 
     #[test]
-    fn optional_call_graph_and_go_types_views_request_their_capability_optionally() {
+    fn optional_call_graph_go_types_and_routes_views_request_their_capability_optionally() {
         for (source, method, capability) in [
             (
                 "graph: Option<CallGraph<'_>>",
@@ -652,6 +656,7 @@ mod tests {
                 "go_types_optional",
                 "go_types",
             ),
+            ("routes: Option<Routes<'_>>", "routes_optional", "routes"),
         ] {
             let param = parse_view_param(&first_arg(source)).unwrap();
             assert!(param.optional, "{source}");
@@ -664,14 +669,14 @@ mod tests {
     }
 
     #[test]
-    fn only_call_graph_and_go_types_views_can_be_optional() {
+    fn only_call_graph_go_types_and_routes_views_can_be_optional() {
         let error = parse_view_param(&first_arg("calls: Option<Calls<'_>>"))
             .err()
             .expect("an optional Calls view is rejected");
         assert!(
-            error
-                .to_string()
-                .contains("only the CallGraph and GoTypes views can be requested optionally")
+            error.to_string().contains(
+                "only the CallGraph, GoTypes and Routes views can be requested optionally"
+            )
         );
     }
 
