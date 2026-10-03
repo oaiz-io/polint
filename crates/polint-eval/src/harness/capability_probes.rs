@@ -522,6 +522,15 @@ fn related_places(
     }
 }
 
+/// Whether a function is the one a probe names: by its name, or, for a method
+/// (named `Type.method`), by the method's own name.
+fn names_function(name: &str, wanted: &str) -> bool {
+    name == wanted
+        || name
+            .rsplit_once('.')
+            .is_some_and(|(_, method)| method == wanted)
+}
+
 fn refined_must_edge(
     db: &crate::core::AnalysisDb,
     scope: &str,
@@ -533,13 +542,13 @@ fn refined_must_edge(
             && edge.confidence == RefinedCallConfidence::High
             && db.functions().iter().any(|function| {
                 function.id == edge.caller
-                    && function.name == caller_name
+                    && names_function(&function.name, caller_name)
                     && file_is_in_scope(db, function.file, scope)
             })
             && edge.target_function.is_some_and(|target| {
                 db.functions().iter().any(|function| {
                     function.id == target
-                        && function.name == target_name
+                        && names_function(&function.name, target_name)
                         && file_is_in_scope(db, function.file, scope)
                 })
             })
