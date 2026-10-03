@@ -409,3 +409,95 @@ func TestRouteModelsRejectUnknownRolesAndUnnamedCalls(t *testing.T) {
 		t.Fatalf("built-in models: %v", err)
 	}
 }
+
+// A program that reaches its route setup only through a function value read
+// from a table (a run mode) or through an interface call still registers
+// complete routes: the setup is interpreted from `main`, not left open.
+func TestRoutesReachedThroughFunctionValuesAndInterfaceCalls(t *testing.T) {
+	fixture := map[string]string{}
+	for path, contents := range routeFixture {
+		fixture[path] = contents
+	}
+	fixture["cmd/app/main.go"] = `package main
+
+import (
+	"context"
+
+	"example.test/routes/catalog"
+	"example.test/routes/server"
+)
+
+type mode struct {
+	name string
+	run  func(context.Context) error
+}
+
+var modes = []mode{
+	{name: "serve", run: serve},
+	{name: "noop", run: func(context.Context) error { return nil }},
+}
+
+func lookup(name string) mode {
+	for _, m := range modes {
+		if m.name == name {
+			return m
+		}
+	}
+	return mode{}
+}
+
+func serve(ctx context.Context) error {
+	base := server.NewBase()
+	catalog.New("catalog", *base)
+	return nil
+}
+
+func main() {
+	_ = lookup("serve").run(context.Background())
+}
+`
+	fixture["cmd/plugins/main.go"] = `package main
+
+import (
+	"example.test/routes/catalog"
+	"example.test/routes/server"
+)
+
+type app interface{ Mount(base server.Base) }
+
+type shop struct{}
+
+func (shop) Mount(base server.Base) { catalog.New("shop", base) }
+
+func apps() []app { return []app{shop{}} }
+
+func main() {
+	base := server.NewBase()
+	for _, application := range apps() {
+		application.Mount(*base)
+	}
+}
+`
+	models, err := WithBuiltinRouteModels(nil)
+	if err != nil {
+		t.Fatalf("route models: %v", err)
+	}
+	rows, err := Emit(Config{Root: writeFixture(t, fixture), ModuleRoots: []string{"."}, Patterns: []string{"./..."}, RouteModels: models})
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+	table := strings.Join(routeTable(rows), "\n")
+	budget := "factory example.test/routes/server.Budget"
+	auth := "factory example.test/routes/server.Authenticate via example.test/routes/server.Base.Auth"
+	for _, want := range []string{
+		"http POST /catalog/items path_complete=true middleware_complete=true handlers=[function (example.test/routes/catalog.HTTP).create] middleware=[" + budget + " | " + auth + "]",
+		"http POST /shop/items path_complete=true middleware_complete=true handlers=[function (example.test/routes/catalog.HTTP).create] middleware=[" + budget + " | " + auth + "]",
+	} {
+		if !strings.Contains(table, want) {
+			t.Fatalf("missing %q in routes:\n%s", want, table)
+		}
+	}
+	if strings.Contains(table, "/{?}/items") || strings.Contains(table, "http POST /items ") {
+		t.Fatalf("the setup was left open:\n%s", table)
+	}
+}

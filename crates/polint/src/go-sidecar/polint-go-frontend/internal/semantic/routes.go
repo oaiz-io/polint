@@ -480,14 +480,28 @@ func (e *emitter) emitRoutes(prog *ssa.Program, roots []*ssa.Package, models *Ro
 }
 
 // index finds the functions with model calls, the functions that reach them
-// through static calls or closures they create, and the concrete methods an
-// interface call could enter.
+// through static calls, closures they create, calls of function values and
+// interface calls, and the concrete methods an interface call could enter.
+//
+// A call of a function value may enter any function the program uses as a
+// value with the same signature (a run mode's function read from a table, a
+// callback); an interface call may enter any method of that name whose
+// receiver implements the interface. Both only decide which functions are
+// worth interpreting; the interpreter still enters a function value only
+// when it knows the value.
 func (engine *routeEngine) index(functions []*ssa.Function) {
 	callers := make(map[*ssa.Function][]*ssa.Function)
 	inProgram := make(map[*ssa.Function]bool, len(functions))
 	for _, fn := range functions {
 		inProgram[fn] = true
 	}
+	type dynamicCall struct {
+		caller *ssa.Function
+		common *ssa.CallCommon
+	}
+	var dynamicCalls []dynamicCall
+	var valueTaken []*ssa.Function
+	taken := make(map[*ssa.Function]bool)
 	for _, fn := range functions {
 		if fn.Signature.Recv() != nil && fn.Synthetic == "" {
 			engine.implementers[fn.Name()] = append(engine.implementers[fn.Name()], fn)
@@ -499,24 +513,60 @@ func (engine *routeEngine) index(functions []*ssa.Function) {
 		}
 		for _, block := range fn.Blocks {
 			for _, instr := range block.Instrs {
+				var callValue ssa.Value
 				if call, ok := instr.(ssa.CallInstruction); ok {
 					common := call.Common()
+					callValue = common.Value
 					if model, _ := engine.models.match(common, common.StaticCallee()); model != nil {
 						engine.direct[fn] = true
 					}
 					if callee := common.StaticCallee(); callee != nil && inProgram[callee] {
 						callers[callee] = append(callers[callee], fn)
+					} else if _, builtin := common.Value.(*ssa.Builtin); !builtin && common.StaticCallee() == nil {
+						dynamicCalls = append(dynamicCalls, dynamicCall{caller: fn, common: common})
 					}
 				}
 				for _, operand := range instr.Operands(nil) {
 					if operand == nil {
 						continue
 					}
-					if function, ok := (*operand).(*ssa.Function); ok && inProgram[function] {
+					function, ok := (*operand).(*ssa.Function)
+					if !ok {
+						continue
+					}
+					if inProgram[function] {
 						callers[function] = append(callers[function], fn)
+					}
+					if function == callValue {
+						continue
+					}
+					// A bound method value is a synthetic wrapper; the value it
+					// stands for is the method.
+					if function.Synthetic != "" {
+						function = declaredCallee(engine.prog, function)
+					}
+					if inProgram[function] && !taken[function] {
+						taken[function] = true
+						valueTaken = append(valueTaken, function)
 					}
 				}
 			}
+		}
+	}
+	byShape := make(map[string][]*ssa.Function)
+	for _, function := range valueTaken {
+		shape := signatureShape(function.Signature)
+		byShape[shape] = append(byShape[shape], function)
+	}
+	for _, call := range dynamicCalls {
+		var targets []*ssa.Function
+		if call.common.IsInvoke() {
+			targets = engine.implementations(call.common)
+		} else {
+			targets = byShape[signatureShape(call.common.Signature())]
+		}
+		for _, target := range targets {
+			callers[target] = append(callers[target], call.caller)
 		}
 	}
 	var work []*ssa.Function
@@ -884,8 +934,9 @@ func (fr *frame) call(instr ssa.CallInstruction, common *ssa.CallCommon) absValu
 	case common.IsInvoke():
 		args := append([]ssa.Value{common.Value}, common.Args...)
 		var out absValue
-		if fr.carriesRouter(args) {
-			for _, method := range fr.engine.implementations(common) {
+		carries := fr.carriesRouter(args)
+		for _, method := range fr.engine.implementations(common) {
+			if carries || fr.engine.relevant[method] {
 				out = out.join(fr.engine.interpret(method, fr.values(args), nil, childCtx))
 			}
 		}
@@ -898,7 +949,7 @@ func (fr *frame) call(instr ssa.CallInstruction, common *ssa.CallCommon) absValu
 	default:
 		var out absValue
 		for _, function := range fr.value(common.Value).funcs {
-			if function.fn != nil && len(function.fn.Blocks) > 0 && (fr.engine.relevant[function.fn] || fr.carriesRouter(common.Args)) {
+			if function.fn != nil && len(function.fn.Blocks) > 0 && (fr.engine.worthEntering(function.fn) || fr.carriesRouter(common.Args)) {
 				out = out.join(fr.engine.interpret(function.fn, fr.values(common.Args), function.bindings, childCtx))
 			}
 		}
@@ -933,6 +984,26 @@ func (fr *frame) carriesRouter(values []ssa.Value) bool {
 		}
 	}
 	return false
+}
+
+// worthEntering answers whether a function value reaches a model call: the
+// function itself, or the method a bound method value stands for.
+func (engine *routeEngine) worthEntering(fn *ssa.Function) bool {
+	return engine.relevant[fn] || engine.relevant[declaredCallee(engine.prog, fn)]
+}
+
+// signatureShape is a signature without its receiver and parameter names, so
+// a method, a bound value of it and a function-typed field it is stored in
+// have the same shape.
+func signatureShape(signature *types.Signature) string {
+	unnamed := func(tuple *types.Tuple) *types.Tuple {
+		vars := make([]*types.Var, tuple.Len())
+		for i := range vars {
+			vars[i] = types.NewParam(token.NoPos, nil, "", tuple.At(i).Type())
+		}
+		return types.NewTuple(vars...)
+	}
+	return types.TypeString(types.NewSignatureType(nil, nil, nil, unnamed(signature.Params()), unnamed(signature.Results()), signature.Variadic()), nil)
 }
 
 // implementations are the program's concrete methods an interface call could
