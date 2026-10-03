@@ -733,7 +733,8 @@ fn confidence_for_target(target: &CallTargetFact) -> RefinedCallConfidence {
         | CallTargetStatus::Unsupported
         | CallTargetStatus::SetupMissing
         | CallTargetStatus::BudgetExceeded
-        | CallTargetStatus::Rejected => RefinedCallConfidence::Low,
+        | CallTargetStatus::Rejected
+        | CallTargetStatus::Unreachable => RefinedCallConfidence::Low,
     }
 }
 

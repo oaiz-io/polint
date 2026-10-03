@@ -242,6 +242,7 @@ func Emit(config Config) ([]Row, error) {
 	sort.Slice(ssaPkgs, func(i, j int) bool {
 		return packageID(ssaPkgs[i]) < packageID(ssaPkgs[j])
 	})
+	pruned := pruneProgram(prog, ssaPkgs)
 	timer.finish("ssa_build", workload)
 
 	e := &emitter{
@@ -267,6 +268,7 @@ func Emit(config Config) ([]Row, error) {
 		e.emitPackage(pkg)
 		e.emitPackageErrors(pkg)
 	}
+	e.emitDeadCalls(pruned)
 	// `prog.MethodValue` inside the instantiation walk BUILDS a wrapper, and a built
 	// wrapper can register new `MakeInterface` types, so the program's runtime type set
 	// grows while this loop runs. The per-package version hid that behind 349 fresh
@@ -429,6 +431,7 @@ var fileAnchoredKinds = map[string]bool{
 	"builtin_call":  true,
 	"route":         true,
 	"route_serve":   true,
+	"dead_call":     true,
 }
 
 // inScope answers whether the kernel would keep this row.

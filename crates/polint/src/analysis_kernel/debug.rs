@@ -2332,6 +2332,7 @@ fn call_status_label(status: CallTargetStatus) -> &'static str {
         CallTargetStatus::SetupMissing => "SetupMissing",
         CallTargetStatus::BudgetExceeded => "BudgetExceeded",
         CallTargetStatus::Rejected => "Rejected",
+        CallTargetStatus::Unreachable => "Unreachable",
     }
 }
 

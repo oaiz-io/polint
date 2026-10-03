@@ -399,7 +399,7 @@ fn refined_call_unknown(
         CallTargetStatus::SetupMissing => UnknownCategory::SetupMissing,
         CallTargetStatus::Unsupported => UnknownCategory::UnsupportedSemantic,
         CallTargetStatus::BudgetExceeded => UnknownCategory::BudgetExceeded,
-        CallTargetStatus::Rejected => UnknownCategory::Rejected,
+        CallTargetStatus::Rejected | CallTargetStatus::Unreachable => UnknownCategory::Rejected,
         CallTargetStatus::Unresolved | CallTargetStatus::Ambiguous => UnknownCategory::MissingFact,
         CallTargetStatus::Resolved => UnknownCategory::MissingFact,
     };

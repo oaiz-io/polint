@@ -1918,6 +1918,13 @@ impl AnalysisDb {
         &self.go_semantic_store().output().conversions
     }
 
+    /// The call expressions a constant branch condition rules out.
+    pub(crate) fn go_semantic_dead_calls(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticDeadCallFact] {
+        &self.go_semantic_store().output().dead_calls
+    }
+
     #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
     pub(crate) fn go_semantic_interfaces(
         &self,

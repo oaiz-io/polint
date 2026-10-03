@@ -271,7 +271,8 @@ fn call_status_to_observed(
         crate::analysis::calls::facts::CallTargetStatus::BudgetExceeded => {
             ObservedStatus::BudgetExceeded
         }
-        crate::analysis::calls::facts::CallTargetStatus::Rejected => ObservedStatus::Rejected,
+        crate::analysis::calls::facts::CallTargetStatus::Rejected
+        | crate::analysis::calls::facts::CallTargetStatus::Unreachable => ObservedStatus::Rejected,
     }
 }
 

@@ -379,6 +379,7 @@ fn allowed_kinds() -> BTreeSet<&'static str> {
         "instantiation",
         "conversion",
         "builtin_call",
+        "dead_call",
         "field",
         "param",
         "route",

@@ -7,15 +7,15 @@ use crate::go::semantic::facts::{
     GoSemanticAddressTakenId, GoSemanticBuiltinCallFact, GoSemanticBuiltinCallId,
     GoSemanticCallEdgeFact, GoSemanticCallEdgeId, GoSemanticCallStatus, GoSemanticCallee,
     GoSemanticCallsiteFact, GoSemanticCallsiteId, GoSemanticConversionFact, GoSemanticConversionId,
-    GoSemanticDynamicDispatchFact, GoSemanticDynamicDispatchId, GoSemanticFieldFact,
-    GoSemanticFieldId, GoSemanticFunctionFact, GoSemanticFunctionId, GoSemanticFunctionKind,
-    GoSemanticImplementsFact, GoSemanticImplementsId, GoSemanticInstantiatedTypeFact,
-    GoSemanticInstantiatedTypeId, GoSemanticInstantiationFact, GoSemanticInstantiationId,
-    GoSemanticInterfaceFact, GoSemanticInterfaceId, GoSemanticMethodSetFact, GoSemanticMethodSetId,
-    GoSemanticPackageErrorFact, GoSemanticPackageErrorId, GoSemanticPackageFact,
-    GoSemanticPackageId, GoSemanticParamFact, GoSemanticParamId, GoSemanticRouteFact,
-    GoSemanticRouteId, GoSemanticRouteServeFact, GoSemanticRouteServeId, GoSemanticRtaEdgeFact,
-    GoSemanticRtaEdgeId,
+    GoSemanticDeadCallFact, GoSemanticDeadCallId, GoSemanticDynamicDispatchFact,
+    GoSemanticDynamicDispatchId, GoSemanticFieldFact, GoSemanticFieldId, GoSemanticFunctionFact,
+    GoSemanticFunctionId, GoSemanticFunctionKind, GoSemanticImplementsFact, GoSemanticImplementsId,
+    GoSemanticInstantiatedTypeFact, GoSemanticInstantiatedTypeId, GoSemanticInstantiationFact,
+    GoSemanticInstantiationId, GoSemanticInterfaceFact, GoSemanticInterfaceId,
+    GoSemanticMethodSetFact, GoSemanticMethodSetId, GoSemanticPackageErrorFact,
+    GoSemanticPackageErrorId, GoSemanticPackageFact, GoSemanticPackageId, GoSemanticParamFact,
+    GoSemanticParamId, GoSemanticRouteFact, GoSemanticRouteId, GoSemanticRouteServeFact,
+    GoSemanticRouteServeId, GoSemanticRtaEdgeFact, GoSemanticRtaEdgeId,
 };
 use crate::go::semantic::facts::{GoRouteFunction, GoRouteFunctionKind, GoRouteTransport};
 use crate::go::semantic::protocol::{
@@ -125,6 +125,11 @@ pub(crate) fn lower_go_semantic(
             "builtin_call" => push_in_scope(
                 &mut lowered.builtin_calls,
                 lower_builtin_call(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "dead_call" => push_in_scope(
+                &mut lowered.dead_calls,
+                lower_dead_call(interner, row, &files)?,
                 &mut out_of_scope_rows,
             ),
             // Declarations describe types other files use, so they are kept whatever
@@ -459,6 +464,25 @@ fn lower_conversion(
         stable_key: harvest_stable_key(interner, row),
         package_id: row.package_id.clone(),
         type_name: row.type_name.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_dead_call(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticDeadCallFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticDeadCallFact {
+        id: GoSemanticDeadCallId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        caller: row.caller.clone(),
         relative_file: location.relative_file,
         file: location.file,
         span: location.span,

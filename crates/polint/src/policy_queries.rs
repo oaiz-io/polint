@@ -2481,9 +2481,10 @@ fn control_policy_status(status: CallTargetStatus, precision: CallPrecision) -> 
             | CallPrecision::Heuristic
             | CallPrecision::Ambiguous => PolicyStatus::Heuristic,
         },
-        CallTargetStatus::Resolved | CallTargetStatus::Ambiguous | CallTargetStatus::Rejected => {
-            PolicyStatus::Heuristic
-        }
+        CallTargetStatus::Resolved
+        | CallTargetStatus::Ambiguous
+        | CallTargetStatus::Rejected
+        | CallTargetStatus::Unreachable => PolicyStatus::Heuristic,
     }
 }
 
@@ -2828,7 +2829,9 @@ fn policy_status_from_call_status_and_precision(
                 PolicyStatus::Heuristic
             }
         }
-        CallTargetStatus::Ambiguous | CallTargetStatus::Rejected => PolicyStatus::Heuristic,
+        CallTargetStatus::Ambiguous
+        | CallTargetStatus::Rejected
+        | CallTargetStatus::Unreachable => PolicyStatus::Heuristic,
         CallTargetStatus::BudgetExceeded => PolicyStatus::BudgetExceeded,
         CallTargetStatus::Unsupported => PolicyStatus::Unsupported,
         CallTargetStatus::Unresolved | CallTargetStatus::SetupMissing => PolicyStatus::Unknown,
@@ -2913,6 +2916,7 @@ fn call_status_label(status: CallTargetStatus) -> &'static str {
         CallTargetStatus::SetupMissing => "setup_missing",
         CallTargetStatus::BudgetExceeded => "budget_exceeded",
         CallTargetStatus::Rejected => "rejected",
+        CallTargetStatus::Unreachable => "unreachable",
     }
 }
 

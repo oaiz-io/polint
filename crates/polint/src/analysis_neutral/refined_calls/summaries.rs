@@ -136,7 +136,8 @@ fn summary_confidence(
         | CallTargetStatus::Unsupported
         | CallTargetStatus::SetupMissing
         | CallTargetStatus::BudgetExceeded
-        | CallTargetStatus::Rejected => RefinedCallConfidence::Low,
+        | CallTargetStatus::Rejected
+        | CallTargetStatus::Unreachable => RefinedCallConfidence::Low,
     }
 }
 

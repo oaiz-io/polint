@@ -6,11 +6,12 @@ use crate::internal_core::{StableKeyId, StableKeyInterner};
 use crate::go::error::AnalysisError;
 use crate::go::semantic::facts::{
     GoSemanticAddressTakenFact, GoSemanticBuiltinCallFact, GoSemanticCallEdgeFact,
-    GoSemanticCallsiteFact, GoSemanticConversionFact, GoSemanticDynamicDispatchFact,
-    GoSemanticFieldFact, GoSemanticFunctionFact, GoSemanticImplementsFact,
-    GoSemanticInstantiatedTypeFact, GoSemanticInstantiationFact, GoSemanticInterfaceFact,
-    GoSemanticMethodSetFact, GoSemanticPackageErrorFact, GoSemanticPackageFact,
-    GoSemanticParamFact, GoSemanticRouteFact, GoSemanticRouteServeFact, GoSemanticRtaEdgeFact,
+    GoSemanticCallsiteFact, GoSemanticConversionFact, GoSemanticDeadCallFact,
+    GoSemanticDynamicDispatchFact, GoSemanticFieldFact, GoSemanticFunctionFact,
+    GoSemanticImplementsFact, GoSemanticInstantiatedTypeFact, GoSemanticInstantiationFact,
+    GoSemanticInterfaceFact, GoSemanticMethodSetFact, GoSemanticPackageErrorFact,
+    GoSemanticPackageFact, GoSemanticParamFact, GoSemanticRouteFact, GoSemanticRouteServeFact,
+    GoSemanticRtaEdgeFact,
 };
 use crate::go::semantic::validate::validate_go_semantic_output;
 
@@ -69,6 +70,7 @@ pub struct GoSemanticFactsOutput {
     pub implements: Vec<GoSemanticImplementsFact>,
     pub instantiations: Vec<GoSemanticInstantiationFact>,
     pub conversions: Vec<GoSemanticConversionFact>,
+    pub dead_calls: Vec<GoSemanticDeadCallFact>,
     pub builtin_calls: Vec<GoSemanticBuiltinCallFact>,
     pub fields: Vec<GoSemanticFieldFact>,
     pub params: Vec<GoSemanticParamFact>,
@@ -195,6 +197,11 @@ impl GoSemanticFactsOutput {
             self.conversions,
             interner,
             crate::go::semantic::facts::GoSemanticConversionId
+        );
+        normalize_keyed_family!(
+            self.dead_calls,
+            interner,
+            crate::go::semantic::facts::GoSemanticDeadCallId
         );
         normalize_keyed_family!(
             self.builtin_calls,

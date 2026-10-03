@@ -154,6 +154,9 @@ pub enum CallTargetStatus {
     SetupMissing,
     BudgetExceeded,
     Rejected,
+    /// A call that cannot run in the analysed build: a constant condition rules
+    /// out the branch it is written in. It has no targets and is not unresolved.
+    Unreachable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

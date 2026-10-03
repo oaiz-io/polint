@@ -1753,9 +1753,11 @@ fn call_status_metadata(
         }
         CallTargetStatus::Unsupported | CallTargetStatus::Rejected => FactPrecision::Unsupported,
         CallTargetStatus::SetupMissing => FactPrecision::SetupMissing,
+        // Known not to run: the branch it is in is ruled out by a constant.
+        CallTargetStatus::Unreachable => FactPrecision::SetupAware,
     };
     let confidence = match status {
-        CallTargetStatus::Resolved => FactConfidence::High,
+        CallTargetStatus::Resolved | CallTargetStatus::Unreachable => FactConfidence::High,
         CallTargetStatus::Ambiguous => FactConfidence::Medium,
         CallTargetStatus::Unresolved
         | CallTargetStatus::Unsupported
@@ -1775,6 +1777,7 @@ fn call_status_label(status: CallTargetStatus) -> &'static str {
         CallTargetStatus::SetupMissing => "setup_missing",
         CallTargetStatus::BudgetExceeded => "budget_exceeded",
         CallTargetStatus::Rejected => "rejected",
+        CallTargetStatus::Unreachable => "unreachable",
     }
 }
 

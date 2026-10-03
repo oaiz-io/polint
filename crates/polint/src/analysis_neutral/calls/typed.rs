@@ -48,6 +48,9 @@ pub enum TypedCallSite {
     /// A type conversion written with call syntax, such as `Kind(raw)`, named by
     /// the frontend's label for the target type.
     Conversion(String),
+    /// A call written where a constant condition rules it out, such as inside
+    /// `if false { ... }`: it cannot run, so it calls nothing.
+    Dead,
 }
 
 /// One candidate callee of a call.
@@ -103,6 +106,9 @@ impl TypedCallInputs {
                 }
                 (TypedCallSite::Targets(_), _) => {}
                 (current, TypedCallSite::Targets(more)) => *current = TypedCallSite::Targets(more),
+                // A call some body can run is not dead because another copy of the
+                // same source (a generic body and its instance) is.
+                (current, live) if *current == TypedCallSite::Dead => *current = live,
                 _ => {}
             },
         }
@@ -136,12 +142,15 @@ impl TypedCallInputs {
     }
 }
 
-/// How many of a language's call sites typed facts covered, for the run report.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// How many of a language's call sites typed facts covered, for the run report,
+/// and which of them cannot run.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TypedCallJoinReport {
     pub sites: usize,
     pub joined: usize,
     pub targets: usize,
+    /// The sites a constant condition rules out: they call nothing.
+    pub dead: BTreeSet<CallSiteId>,
 }
 
 /// Replaces the targets of every site the typed inputs cover with typed
@@ -221,6 +230,10 @@ pub fn typed_call_targets(
                     label.clone(),
                     CallEdgeKind::Synthetic,
                 ));
+            }
+            TypedCallSite::Dead => {
+                covered.insert(site.id);
+                report.dead.insert(site.id);
             }
         }
     }
@@ -377,6 +390,60 @@ mod tests {
         }
     }
 
+    /// A call a constant condition rules out is covered, so no same-named symbol
+    /// resolves it, and it calls nothing.
+    #[test]
+    fn a_dead_site_is_covered_with_no_targets() {
+        let interner = StableKeyInterner::default();
+        let sites = [
+            site(&interner, 0, Language::Go, 10, 20),
+            site(&interner, 1, Language::Go, 30, 40),
+        ];
+        let mut typed = TypedCallInputs::new(Language::Go);
+        typed.insert(FILE, 10, 20, TypedCallSite::Dead);
+
+        let (rows, covered, report) = typed_call_targets(&interner, &sites, &typed);
+
+        assert!(rows.is_empty());
+        assert_eq!(covered, BTreeSet::from([CallSiteId(0)]));
+        assert_eq!(report.dead, BTreeSet::from([CallSiteId(0)]));
+    }
+
+    /// The same source call can be dead in one body and live in another (a
+    /// generic body and an instance): a live answer wins whichever comes first.
+    #[test]
+    fn a_live_answer_for_the_same_span_wins_over_dead() {
+        let live = || {
+            TypedCallSite::Targets(vec![candidate(
+                "go:func:a.F",
+                None,
+                CallAlgorithm::GoStatic,
+                CallPrecision::Exact,
+            )])
+        };
+        let mut dead_first = TypedCallInputs::new(Language::Go);
+        dead_first.insert(FILE, 10, 20, TypedCallSite::Dead);
+        dead_first.insert(FILE, 10, 20, live());
+        let mut live_first = TypedCallInputs::new(Language::Go);
+        live_first.insert(FILE, 10, 20, live());
+        live_first.insert(FILE, 10, 20, TypedCallSite::Dead);
+        let mut builtin = TypedCallInputs::new(Language::Go);
+        builtin.insert(FILE, 10, 20, TypedCallSite::Dead);
+        builtin.insert(
+            FILE,
+            10,
+            20,
+            TypedCallSite::Builtin("go:builtin:len".to_string()),
+        );
+
+        assert_eq!(dead_first.answer_at(FILE, 10, 20), Some(&live()));
+        assert_eq!(live_first.answer_at(FILE, 10, 20), Some(&live()));
+        assert_eq!(
+            builtin.answer_at(FILE, 10, 20),
+            Some(&TypedCallSite::Builtin("go:builtin:len".to_string()))
+        );
+    }
+
     #[test]
     fn a_covered_site_takes_every_typed_candidate_and_others_are_left_alone() {
         let interner = StableKeyInterner::default();
@@ -417,7 +484,8 @@ mod tests {
             TypedCallJoinReport {
                 sites: 2,
                 joined: 1,
-                targets: 2
+                targets: 2,
+                dead: BTreeSet::new(),
             }
         );
     }

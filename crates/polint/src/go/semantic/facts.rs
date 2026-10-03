@@ -50,6 +50,9 @@ pub struct GoSemanticInstantiationId(pub u64);
 pub struct GoSemanticConversionId(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GoSemanticDeadCallId(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GoSemanticFieldId(pub u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -321,6 +324,21 @@ pub struct GoSemanticConversionFact {
     pub stable_key: StableKeyId,
     pub package_id: String,
     pub type_name: String,
+    pub relative_file: Option<String>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
+}
+
+/// A call expression written in a branch a constant condition rules out
+/// (`if false { ... }`, `if debug { ... }` with `const debug = false`): it
+/// cannot run in the analysed build, so it calls nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoSemanticDeadCallFact {
+    pub id: GoSemanticDeadCallId,
+    pub stable_key: StableKeyId,
+    pub package_id: String,
+    /// The function the call is written in.
+    pub caller: String,
     pub relative_file: Option<String>,
     pub file: Option<FileId>,
     pub span: Option<Span>,

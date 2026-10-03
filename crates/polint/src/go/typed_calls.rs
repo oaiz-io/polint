@@ -27,6 +27,7 @@ pub(crate) fn go_typed_call_inputs(db: &AnalysisDb, candidate_limit: usize) -> T
     if db.go_semantic_callsites().is_empty()
         && db.go_semantic_builtin_calls().is_empty()
         && db.go_semantic_conversions().is_empty()
+        && db.go_semantic_dead_calls().is_empty()
     {
         return inputs;
     }
@@ -109,6 +110,13 @@ pub(crate) fn go_typed_call_inputs(db: &AnalysisDb, candidate_limit: usize) -> T
                 span.end_byte,
                 TypedCallSite::Conversion(format!("go:conversion:{}", conversion.type_name)),
             );
+        }
+    }
+    for dead in db.go_semantic_dead_calls() {
+        if let (Some(file), Some(span)) = (dead.file, dead.span.as_ref())
+            && span.start_byte < span.end_byte
+        {
+            inputs.insert(file, span.start_byte, span.end_byte, TypedCallSite::Dead);
         }
     }
     inputs

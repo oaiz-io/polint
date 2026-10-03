@@ -102,6 +102,10 @@ pub fn derive_calls_with_cache_stats(
             .or_insert(target.precision);
     }
     for site in &mut sites {
+        if report.dead.contains(&site.id) {
+            site.status = crate::analysis_neutral::calls::facts::CallTargetStatus::Unreachable;
+            continue;
+        }
         if resolved_sites.contains(&site.id) {
             site.status = crate::analysis_neutral::calls::facts::CallTargetStatus::Resolved;
             site.precision = typed_precision
@@ -112,7 +116,7 @@ pub fn derive_calls_with_cache_stats(
     }
     let unresolved = derive_unresolved_calls(db, &sites)
         .into_iter()
-        .filter(|row| !resolved_sites.contains(&row.site))
+        .filter(|row| !resolved_sites.contains(&row.site) && !report.dead.contains(&row.site))
         .collect();
     let output = CallOutput {
         sites,

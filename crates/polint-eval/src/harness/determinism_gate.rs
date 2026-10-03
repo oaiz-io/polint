@@ -336,6 +336,7 @@ fn go_rta_solver_output_is_byte_identical_under_permuted_fact_insertion_order() 
         implements: output.db.go_semantic_implements().to_vec(),
         instantiations: output.db.go_semantic_instantiations().to_vec(),
         conversions: output.db.go_semantic_conversions().to_vec(),
+        dead_calls: output.db.go_semantic_dead_calls().to_vec(),
         builtin_calls: output.db.go_semantic_builtin_calls().to_vec(),
         fields: output.db.go_semantic_fields().to_vec(),
         params: output.db.go_semantic_params().to_vec(),
