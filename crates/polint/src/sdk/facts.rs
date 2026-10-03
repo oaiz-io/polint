@@ -859,6 +859,10 @@ pub use super::call_graph::{
     CallEdgeAlgorithm, CallEdgePrecision, CallGraph, CallGraphCallee, CallGraphEdge,
     CallGraphReach, CallGraphWalk,
 };
+pub use super::dataflow::{
+    Flow, FlowAnswer, FlowPrecision, FlowSink, FlowSource, FlowSpec, FlowStep, FlowUnknown,
+    FlowValueKind,
+};
 pub use super::go_types::{
     GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation, GoParameter,
     GoTypes,
@@ -959,6 +963,27 @@ impl<'a> DataFlow<'a> {
     /// facts without exposing raw graph nodes, edges, or solver internals.
     pub fn forbidden(self, query: FlowQuery) -> Vec<PolicyViolation> {
         crate::policy_queries::forbidden_flows(self.db, query)
+    }
+
+    /// Answers a data-flow question: every sink the tracked values reach, each
+    /// with its path from a source, its precision, and what limited the
+    /// analysis of the functions it passes.
+    ///
+    /// Go programs are answered from the typed frontend's SSA: summaries of
+    /// each function per entering value, reused across its callers; access
+    /// paths of two field steps (three with [`FlowSpec::deeper_paths`]);
+    /// candidate callees from variable-type analysis, then the class
+    /// hierarchy; models of library functions as data, the built-in ones and a
+    /// repository's `[[go_flow_*]]` tables in `.polint/models/*.toml`. A
+    /// library function without a model is assumed to pass its arguments to
+    /// its result, and flows through such a step are
+    /// [`FlowPrecision::Conservative`]. Memory is not flow-sensitive: a
+    /// struct field or element that once held a tracked value keeps it. Each
+    /// package has a step budget and each question a deadline; what they cut
+    /// is in [`FlowAnswer::unknowns`] and on the flows they affect.
+    /// TypeScript programs get no flows yet. See `docs/facts/data-flow.md`.
+    pub fn flows(self, spec: &FlowSpec) -> FlowAnswer {
+        crate::flow_queries::flows(self.db, spec)
     }
 }
 

@@ -111,6 +111,9 @@ pub struct GoSemanticRequest {
     /// Whether the plan reads data flow, which is when the sidecar emits each
     /// function body's flow program.
     pub dataflow: bool,
+    /// The data-flow models (the built-in ones and the repository's), when the
+    /// plan reads data flow.
+    pub flow_models: Option<std::sync::Arc<crate::go::flow_models::GoFlowModels>>,
     /// Route-model files or tables that could not be used, reported once by
     /// the provider.
     pub route_model_problems: Vec<String>,
@@ -361,6 +364,15 @@ fn derive_go_semantic_with_runner(
     }
     if request.dataflow {
         lowered.flow = run.output.flow.clone();
+        lowered.flow_models = request.flow_models.clone();
+        if let Some(models) = &request.flow_models {
+            diagnostics.extend(
+                models
+                    .problems
+                    .iter()
+                    .map(|problem| flow_model_diagnostic(problem)),
+            );
+        }
     }
     let digest_inputs = DigestInputs {
         sidecar_digest: run.frontend_digest,
@@ -622,6 +634,9 @@ fn go_semantic_output_digest(
     if let Some(flow) = &output.flow {
         parts.push(format!("flow_program={}", flow.digest()));
     }
+    if let Some(models) = &output.flow_models {
+        parts.push(format!("flow_models={}", models.digest));
+    }
     if output.packages.is_empty()
         && output.functions.is_empty()
         && output.callsites.is_empty()
@@ -761,6 +776,17 @@ fn route_model_diagnostic(problem: &str) -> Diagnostic {
         "<workspace>",
         TextRange::point(1, 1),
         format!("route model not used: {problem}"),
+    )
+}
+
+/// A data-flow model file or table the run could not use; the other models
+/// apply.
+fn flow_model_diagnostic(problem: &str) -> Diagnostic {
+    Diagnostic::warning(
+        "polint/flow-model",
+        "<workspace>",
+        TextRange::point(1, 1),
+        format!("data-flow model not used: {problem}"),
     )
 }
 

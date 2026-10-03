@@ -32,6 +32,7 @@ pub(crate) mod diagnostics;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 #[path = "../../polint-eval/src/harness/mod.rs"]
 pub(crate) mod eval;
+pub(crate) mod flow_queries;
 pub(crate) mod frontend;
 #[allow(dead_code, unreachable_pub, unused_imports)]
 pub(crate) mod frontend_api;

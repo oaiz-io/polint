@@ -174,6 +174,17 @@ const ALLOWED_PRELUDE: &[&str] = &[
     "RouteFunctionKind",
     "RouteTransport",
     "Routes",
+    // crate::sdk::facts data-flow question vocabulary; promotion record in
+    // docs/API-VISIBILITY-PLAN.md
+    "Flow",
+    "FlowAnswer",
+    "FlowPrecision",
+    "FlowSink",
+    "FlowSource",
+    "FlowSpec",
+    "FlowStep",
+    "FlowUnknown",
+    "FlowValueKind",
     // crate::sdk::policy preview vocabulary
     "ArgumentBinding",
     "BarrierPattern",
@@ -689,10 +700,11 @@ fn allowlist_has_no_duplicates_and_expected_count() {
         ALLOWED_PRELUDE.len(),
         "ALLOWED_PRELUDE contains duplicate entries"
     );
-    // Locked count derived from sdk/mod.rs; last bumped for the route view.
+    // Locked count derived from sdk/mod.rs; last bumped for the data-flow
+    // question types.
     assert_eq!(
         ALLOWED_PRELUDE.len(),
-        143,
+        152,
         "ALLOWED_PRELUDE count changed — update this assertion ONLY alongside a sanctioned \
          API promotion record"
     );

@@ -9,6 +9,7 @@
 #![deny(missing_docs)]
 
 mod call_graph;
+pub(crate) mod dataflow;
 pub mod facts;
 mod go_types;
 pub mod policy;
@@ -55,11 +56,13 @@ pub mod prelude {
     pub use crate::sdk::facts::{
         BranchObligations, CallEdgeAlgorithm, CallEdgePrecision, CallGraph, CallGraphCallee,
         CallGraphEdge, CallGraphReach, CallGraphWalk, Calls, Cfg, ChangedFiles, ComplexityMetrics,
-        ControlFlow, CoverageFacts, DataFlow, Events, FileMetrics, FunctionMetrics, Functions,
-        GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation, GoParameter,
-        GoTests, GoTypeDecls, GoTypes, Imports, JsxAttributes, ModuleGraphFacts, Packages,
-        References, ResolvedImports, Route, RouteFunction, RouteFunctionKind, RouteTransport,
-        Routes, SourceFiles, StringLiterals, Symbols, TestSuiteMetrics, TsClasses, TsComponents,
+        ControlFlow, CoverageFacts, DataFlow, Events, FileMetrics, Flow, FlowAnswer, FlowPrecision,
+        FlowSink, FlowSource, FlowSpec, FlowStep, FlowUnknown, FlowValueKind, FunctionMetrics,
+        Functions, GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation,
+        GoParameter, GoTests, GoTypeDecls, GoTypes, Imports, JsxAttributes, ModuleGraphFacts,
+        Packages, References, ResolvedImports, Route, RouteFunction, RouteFunctionKind,
+        RouteTransport, Routes, SourceFiles, StringLiterals, Symbols, TestSuiteMetrics, TsClasses,
+        TsComponents,
     };
     pub use crate::sdk::policy::{
         ArgumentBinding, BarrierPattern, EventPattern, FlowQuery, GuardPattern, GuardQuery,

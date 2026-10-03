@@ -5383,6 +5383,128 @@ pub(crate) fn optional_routes(ctx: &mut RuleCtx<'_>, routes: Option<Routes<'_>>)
     );
 }
 
+fn write_dataflow_rule_repo(root: &Path) {
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["app/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_file(
+        &root.join("go.mod"),
+        "module example.com/flows\n\ngo 1.22\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.0.0\n\tgorm.io/gorm v1.0.0\n)\n\nreplace github.com/gin-gonic/gin => ./stubs/gin\n\nreplace gorm.io/gorm => ./stubs/gorm\n",
+    );
+    write_file(
+        &root.join("stubs/gin/go.mod"),
+        "module github.com/gin-gonic/gin\n\ngo 1.22\n",
+    );
+    write_file(
+        &root.join("stubs/gin/gin.go"),
+        r#"package gin
+
+type Context struct{}
+
+func (c *Context) Query(key string) string { return "" }
+"#,
+    );
+    write_file(
+        &root.join("stubs/gorm/go.mod"),
+        "module gorm.io/gorm\n\ngo 1.22\n",
+    );
+    write_file(
+        &root.join("stubs/gorm/gorm.go"),
+        r#"package gorm
+
+type DB struct{}
+
+func (db *DB) Raw(sql string, values ...interface{}) *DB { return db }
+"#,
+    );
+    write_file(
+        &root.join("app/store.go"),
+        r#"package app
+
+import (
+	"fmt"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+type Store struct{ db *gorm.DB }
+
+func (s *Store) find(name string) {
+	s.db.Raw(fmt.Sprintf("SELECT * FROM items WHERE name = '%s'", name))
+}
+
+func (s *Store) findBound(name string) {
+	s.db.Raw("SELECT * FROM items WHERE name = ?", name)
+}
+
+func (s *Store) findEscaped(name string) {
+	s.db.Raw("SELECT * FROM items WHERE name = '" + name + "'")
+}
+
+func escape(value string) string { return value }
+
+func (s *Store) Search(c *gin.Context) {
+	name := c.Query("name")
+	s.find(name)
+	s.findBound(name)
+	s.findEscaped(escape(name))
+}
+"#,
+    );
+    write_file(
+        &root.join(".polint/models/flows.toml"),
+        r#"
+[[go_flow_sanitizer]]
+function = "example.com/flows/app.escape"
+"#,
+    );
+    write_phase41_rule_pack(
+        root,
+        r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::request_to_sql()])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
+
+#[polint::rule(id = "local/request-to-sql", description = "Request data must not build SQL text", severity = "error")]
+pub(crate) fn request_to_sql(ctx: &mut RuleCtx<'_>, flow: DataFlow<'_>) -> RuleResult {
+    let spec = FlowSpec::new()
+        .source(FlowSource::model("http_request"))
+        .sink(FlowSink::model("sql"))
+        .untracked(FlowValueKind::Context)
+        .untracked(FlowValueKind::Number);
+    let answer = flow.flows(&spec);
+    for found in &answer.flows {
+        ctx.report(
+            found
+                .diagnostic(ctx.rule_id(), format!("request data builds SQL text in {}", found.sink.function))
+                .with_evidence("source_function", found.source.function.clone()),
+        );
+    }
+    ctx.report(Diagnostic::warning(
+        ctx.rule_id(),
+        "<workspace>",
+        DiagnosticRange::point(1, 1),
+        format!("complete: {}", answer.is_complete()),
+    ));
+    Ok(())
+}
+"#,
+    );
+}
+
 fn write_typed_go_views_rule_repo(root: &Path, with_module: bool) {
     write_file(
         &root.join(".polint.toml"),
@@ -10436,6 +10558,88 @@ mod capability_planning {
             diagnostics_for_rule(&json, "polint/route-model").is_empty(),
             "{json:#?}"
         );
+    }
+
+    #[test]
+    fn dataflow_flows_answer_an_outside_rule_with_repository_models() {
+        let temp = tempfile::tempdir().unwrap();
+        write_dataflow_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let flows = diagnostics_for_rule(&json, "local/request-to-sql")
+            .into_iter()
+            .filter(|diagnostic| diagnostic["severity"] == "error")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            flows.len(),
+            1,
+            "only the formatted query is a flow: {json:#?}"
+        );
+        assert_eq!(
+            flows[0]["message"],
+            "request data builds SQL text in (*example.com/flows/app.Store).find"
+        );
+        assert!(diagnostic_has_evidence(
+            flows[0],
+            "source_function",
+            "(*example.com/flows/app.Store).Search"
+        ));
+        assert!(
+            diagnostic_has_evidence(flows[0], "flow_precision", "conservative"),
+            "fmt.Sprintf has no model, so the flow is conservative: {json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "local/request-to-sql")
+                .iter()
+                .any(|diagnostic| diagnostic["message"] == "complete: true"),
+            "{json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "polint/capability").is_empty(),
+            "{json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "polint/flow-model").is_empty(),
+            "{json:#?}"
+        );
+
+        let sarif = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "sarif", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+        let located = sarif["runs"][0]["results"]
+            .as_array()
+            .expect("sarif results")
+            .iter()
+            .filter(|result| {
+                result["ruleId"] == "local/request-to-sql" && result["level"] == "error"
+            })
+            .flat_map(|result| {
+                result["codeFlows"][0]["threadFlows"][0]["locations"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            located.len() >= 2,
+            "the flow's path is a code flow from the request read to the query: {sarif:#?}"
+        );
+        assert!(located.iter().all(|location| {
+            location["location"]["physicalLocation"]["artifactLocation"]["uri"]
+                .as_str()
+                .is_some_and(|uri| uri.ends_with("app/store.go"))
+        }));
     }
 
     #[test]

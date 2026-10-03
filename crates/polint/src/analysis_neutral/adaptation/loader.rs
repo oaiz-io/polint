@@ -27,6 +27,30 @@ struct ModelFileToml {
     /// and validates them.
     #[serde(default)]
     go_route: Vec<toml::Value>,
+    /// So do data-flow models; the Go flow-model loader reads and validates
+    /// them.
+    #[serde(default)]
+    go_flow_source: Vec<toml::Value>,
+    #[serde(default)]
+    go_flow_sink: Vec<toml::Value>,
+    #[serde(default)]
+    go_flow_sanitizer: Vec<toml::Value>,
+    #[serde(default)]
+    go_flow_opaque: Vec<toml::Value>,
+    #[serde(default)]
+    go_flow_propagator: Vec<toml::Value>,
+}
+
+impl ModelFileToml {
+    /// Whether the file holds tables other loaders read.
+    fn has_other_models(&self) -> bool {
+        !(self.go_route.is_empty()
+            && self.go_flow_source.is_empty()
+            && self.go_flow_sink.is_empty()
+            && self.go_flow_sanitizer.is_empty()
+            && self.go_flow_opaque.is_empty()
+            && self.go_flow_propagator.is_empty())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,7 +74,7 @@ pub fn load_model_file(
         toml::from_str(contents).map_err(|error| ModelLoadError::Parse(error.to_string()))?;
 
     if parsed.facts.is_empty() {
-        if parsed.go_route.is_empty() {
+        if !parsed.has_other_models() {
             return Err(ModelLoadError::Empty);
         }
         return Ok(Vec::new());

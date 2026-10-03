@@ -1948,6 +1948,18 @@ impl AnalysisDb {
         &self.go_semantic_store().output().routes
     }
 
+    /// The Go program's flow bodies, when the run's plan reads data flow and the
+    /// semantic sidecar loaded the program.
+    pub(crate) fn go_flow_program(&self) -> Option<&crate::go::flow::GoFlowProgram> {
+        self.go_semantic_store().output().flow.as_deref()
+    }
+
+    /// The data-flow models the run's Go queries use, when its plan reads data
+    /// flow.
+    pub(crate) fn go_flow_models(&self) -> Option<&crate::go::flow_models::GoFlowModels> {
+        self.go_semantic_store().output().flow_models.as_deref()
+    }
+
     pub(crate) fn go_semantic_route_serves(
         &self,
     ) -> &[crate::go::semantic::facts::GoSemanticRouteServeFact] {

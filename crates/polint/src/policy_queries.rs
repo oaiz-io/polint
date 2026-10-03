@@ -113,6 +113,138 @@ fn forbidden_data_flows(
         return Vec::new();
     }
 
+    // With the Go program's flow bodies loaded, the taint solver answers for Go
+    // and the value-flow graph for every other language.
+    let mut results = if db.go_flow_program().is_some() {
+        go_forbidden_data_flows(db, query, query_digest)
+    } else {
+        Vec::new()
+    };
+    let go_answered = db.go_flow_program().is_some();
+    let other_results = graph_forbidden_data_flows(db, query, query_digest)
+        .into_iter()
+        .filter(|violation| !(go_answered && is_go_file(db, violation.file())));
+    for violation in other_results {
+        if results.len() >= query.max_paths {
+            break;
+        }
+        results.push(violation);
+    }
+    results
+}
+
+fn is_go_file(db: &AnalysisDb, path: &str) -> bool {
+    db.files()
+        .iter()
+        .find(|file| file.relative_path == path)
+        .map_or(path.ends_with(".go"), |file| {
+            file.language == crate::core::Language::Go
+        })
+}
+
+/// The forbidden flows the taint solver finds in the Go program, one per sink
+/// reached, most precise first up to the query's path limit.
+fn go_forbidden_data_flows(
+    db: &AnalysisDb,
+    query: &FlowQuery,
+    query_digest: &str,
+) -> Vec<PolicyViolation> {
+    let mut spec = crate::sdk::facts::FlowSpec::new();
+    spec = match query.source.kind() {
+        SourcePatternKind::HttpRequest => {
+            spec.source(crate::sdk::facts::FlowSource::model("http_request"))
+        }
+        SourcePatternKind::SecretLike => spec.source(crate::sdk::facts::FlowSource::named(
+            query.source.values().iter().cloned(),
+        )),
+    };
+    for target in query.sink.values() {
+        spec = match (query.sink.kind(), query.sink.argument_position()) {
+            (SinkPatternKind::Call, Some(position)) => {
+                spec.sink(crate::sdk::facts::FlowSink::call_argument(target, position))
+            }
+            (SinkPatternKind::Call, None) => spec.sink(crate::sdk::facts::FlowSink::call(target)),
+            (SinkPatternKind::Logger, _) => spec,
+        };
+    }
+    if query.sink.kind() == SinkPatternKind::Logger {
+        spec = spec.sink(crate::sdk::facts::FlowSink::model("log"));
+    }
+    if query.barriers.kind() == BarrierPatternKind::CallAny {
+        for barrier in query.barriers.values() {
+            spec = spec.sanitizer(barrier);
+        }
+    }
+    let answer = crate::flow_queries::flows(db, &spec);
+    let mut results = Vec::new();
+    for flow in &answer.flows {
+        let precision = match flow.precision {
+            crate::sdk::facts::FlowPrecision::Exact => PolicyPrecision::Exact,
+            crate::sdk::facts::FlowPrecision::SetupAware => PolicyPrecision::SetupAware,
+            crate::sdk::facts::FlowPrecision::Conservative => PolicyPrecision::Conservative,
+            crate::sdk::facts::FlowPrecision::Heuristic => PolicyPrecision::Heuristic,
+        };
+        let status = if matches!(
+            precision,
+            PolicyPrecision::Exact | PolicyPrecision::SetupAware
+        ) {
+            PolicyStatus::Exact
+        } else {
+            PolicyStatus::Heuristic
+        };
+        let barrier_status = match query.barriers.kind() {
+            BarrierPatternKind::None => "not_configured",
+            BarrierPatternKind::CallAny => "uncovered",
+        };
+        let mut evidence = vec![
+            ("policy".to_string(), "forbidden_flow".to_string()),
+            (
+                "source".to_string(),
+                format!(
+                    "{}:{}:{}",
+                    flow.source.path, flow.source.line, flow.source.column
+                ),
+            ),
+            ("sink".to_string(), flow.sink.function.clone()),
+            ("path_status".to_string(), "found".to_string()),
+            ("path_step_count".to_string(), flow.steps.len().to_string()),
+            ("barrier_status".to_string(), barrier_status.to_string()),
+            (
+                "supported_scope".to_string(),
+                "go_interprocedural_taint".to_string(),
+            ),
+            (
+                "minimum_precision".to_string(),
+                policy_precision_label(query.minimum_precision).to_string(),
+            ),
+        ];
+        if !flow.unknowns.is_empty() {
+            evidence.push(("flow_unknowns".to_string(), flow.unknowns.len().to_string()));
+        }
+        let violation = PolicyViolation::new(
+            PolicyOperation::DataFlowForbidden,
+            query_digest,
+            flow.sink.path.clone(),
+            crate::diagnostics::TextRange::point(flow.sink.line.max(1), flow.sink.column.max(1)),
+            status,
+            precision,
+            evidence,
+        )
+        .with_structured_evidence(crate::sdk::dataflow::flow_evidence(flow));
+        if data_flow_violation_meets_minimum(&violation, query.minimum_precision) {
+            results.push(violation);
+        }
+    }
+    results.sort_by_key(|violation| std::cmp::Reverse(precision_rank(violation.precision())));
+    results.truncate(query.max_paths);
+    results
+}
+
+fn graph_forbidden_data_flows(
+    db: &AnalysisDb,
+    query: &FlowQuery,
+    query_digest: &str,
+) -> Vec<PolicyViolation> {
     let Some(store) = db.data_flow_store() else {
         return Vec::new();
     };

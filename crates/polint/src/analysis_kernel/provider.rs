@@ -1152,6 +1152,8 @@ pub(crate) fn go_semantic_request(
         route_models: models.json,
         route_model_problems: models.problems,
         dataflow,
+        flow_models: dataflow
+            .then(|| std::sync::Arc::new(crate::go::flow_models::load_flow_models(root))),
     }
 }
 

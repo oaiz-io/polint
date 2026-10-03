@@ -111,6 +111,33 @@ mod allowlist_witness {
     fn _assert_routes() -> ::core::marker::PhantomData<Routes<'static>> {
         ::core::marker::PhantomData
     }
+    fn _assert_flow() -> ::core::marker::PhantomData<Flow> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowanswer() -> ::core::marker::PhantomData<FlowAnswer> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowprecision() -> ::core::marker::PhantomData<FlowPrecision> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowsink() -> ::core::marker::PhantomData<FlowSink> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowsource() -> ::core::marker::PhantomData<FlowSource> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowspec() -> ::core::marker::PhantomData<FlowSpec> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowstep() -> ::core::marker::PhantomData<FlowStep> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowunknown() -> ::core::marker::PhantomData<FlowUnknown> {
+        ::core::marker::PhantomData
+    }
+    fn _assert_flowvaluekind() -> ::core::marker::PhantomData<FlowValueKind> {
+        ::core::marker::PhantomData
+    }
     fn _assert_calls() -> ::core::marker::PhantomData<Calls<'static>> {
         ::core::marker::PhantomData
     }

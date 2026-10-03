@@ -81,6 +81,8 @@ pub struct GoSemanticFactsOutput {
     pub route_budget_steps: Option<u64>,
     /// The program's flow bodies, when the plan reads data flow.
     pub flow: Option<std::sync::Arc<crate::go::flow::GoFlowProgram>>,
+    /// The data-flow models the plan's queries use, when it reads data flow.
+    pub flow_models: Option<std::sync::Arc<crate::go::flow_models::GoFlowModels>>,
 }
 
 /// Sorts a typed family by stable-key text, keeps the first row of each key (a
