@@ -48,7 +48,7 @@ pub(crate) use crate::analysis_api::LayerKind;
 
 pub(crate) use crate::analysis_api::PrecisionTier;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct LayerKey {
     pub(crate) layer_kind: LayerKind,
     pub(crate) provider_id: String,
@@ -61,6 +61,49 @@ pub(crate) struct LayerKey {
     pub(crate) input_digests: Arc<Vec<Digest>>,
     pub(crate) dependency_layer_digests: Arc<Vec<Digest>>,
     pub(crate) extension_digests: Arc<Vec<Digest>>,
+}
+
+// The order is field by field, as a derived order would be. A key's digest lists
+// can hold one digest per input file, and every dependency edge of a layer
+// carries a clone of its key that shares those lists. Comparing two shared lists
+// answers without walking them, so sorting a layer's edges stays O(n log n)
+// instead of walking tens of thousands of digests per comparison. (Equality
+// already short-circuits on shared lists: `Arc` equality checks the pointer
+// first when the contents implement `Eq`.)
+impl Ord for LayerKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.layer_kind
+            .cmp(&other.layer_kind)
+            .then_with(|| self.provider_id.cmp(&other.provider_id))
+            .then_with(|| self.provider_version.cmp(&other.provider_version))
+            .then_with(|| self.schema_version.cmp(&other.schema_version))
+            .then_with(|| self.parameter_digest.cmp(&other.parameter_digest))
+            .then_with(|| self.lifecycle_digest.cmp(&other.lifecycle_digest))
+            .then_with(|| self.config_digest.cmp(&other.config_digest))
+            .then_with(|| self.toolchain_digest.cmp(&other.toolchain_digest))
+            .then_with(|| shared_digests_cmp(&self.input_digests, &other.input_digests))
+            .then_with(|| {
+                shared_digests_cmp(
+                    &self.dependency_layer_digests,
+                    &other.dependency_layer_digests,
+                )
+            })
+            .then_with(|| shared_digests_cmp(&self.extension_digests, &other.extension_digests))
+    }
+}
+
+impl PartialOrd for LayerKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn shared_digests_cmp(left: &Arc<Vec<Digest>>, right: &Arc<Vec<Digest>>) -> std::cmp::Ordering {
+    if Arc::ptr_eq(left, right) {
+        std::cmp::Ordering::Equal
+    } else {
+        left.cmp(right)
+    }
 }
 
 pub(crate) use crate::analysis_api::QueryKey;
