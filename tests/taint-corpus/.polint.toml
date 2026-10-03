@@ -1,0 +1,4 @@
+# The corpus is one Go module; the framework stubs under stubs/ are its
+# dependencies (go.mod replace directives), not module roots of their own.
+[languages.go]
+module_roots = ["."]
