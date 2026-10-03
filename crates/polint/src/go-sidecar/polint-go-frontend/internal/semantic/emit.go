@@ -44,6 +44,10 @@ type Config struct {
 	// whole program. Only a plan that reads call targets asks for it; it is most
 	// of the sidecar's time on a large module.
 	CallGraph bool
+	// RouteModels, when set, turns on the `route` and `route_serve` rows: the
+	// routes the program registers with the frameworks the models describe
+	// (the built-in defaults and the repository's own).
+	RouteModels *RouteModels
 	// ScopeFiles is the set of repository-relative Go files this scan discovered,
 	// or nil when the caller did not narrow the scan.
 	//
@@ -302,6 +306,10 @@ func Emit(config Config) ([]Row, error) {
 	e.addPhase(timer, "emit_rows", workload)
 	e.emitTypeFacts(pkgs)
 	e.addPhase(timer, "type_facts", workload)
+	if config.RouteModels != nil {
+		e.emitRoutes(prog, ssaPkgs, config.RouteModels)
+		e.addPhase(timer, "routes", workload)
+	}
 	if config.CallGraph {
 		e.emitCallEdges(prog, e.dynamicSites)
 		e.addPhase(timer, "call_graph", workload)
@@ -419,6 +427,8 @@ var fileAnchoredKinds = map[string]bool{
 	"instantiation": true,
 	"conversion":    true,
 	"builtin_call":  true,
+	"route":         true,
+	"route_serve":   true,
 }
 
 // inScope answers whether the kernel would keep this row.

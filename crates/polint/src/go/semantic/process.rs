@@ -44,6 +44,14 @@ const EMBEDDED_GO_FRONTEND_FILES: &[(&str, &str)] = &[
         "internal/semantic/typed.go",
         include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/typed.go"),
     ),
+    (
+        "internal/semantic/routes.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/routes.go"),
+    ),
+    (
+        "internal/semantic/route_models.json",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/route_models.json"),
+    ),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -230,11 +238,16 @@ fn skip_frontend_digest_dir(path: &Path) -> bool {
     )
 }
 
+/// Files that decide what a frontend source directory builds: its module
+/// files, its Go sources, and the JSON data files it embeds.
 fn is_frontend_digest_source(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|name| name.to_str()),
         Some("go.mod" | "go.sum")
-    ) || path.extension().and_then(|extension| extension.to_str()) == Some("go")
+    ) || matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("go" | "json")
+    )
 }
 
 fn stable_bytes_hash(bytes: &[u8]) -> String {
@@ -898,8 +911,9 @@ mod tests {
         }
     }
 
-    /// The embedded list is what a release build compiles; a source file missing
-    /// from it builds in the workspace and fails only at a user's first deep run.
+    /// The embedded list is what a release build compiles; a source or embedded
+    /// data file missing from it builds in the workspace and fails only at a
+    /// user's first deep run.
     #[test]
     fn every_workspace_frontend_source_is_embedded() {
         let workspace_frontend =
@@ -917,7 +931,9 @@ mod tests {
                     .file_name()
                     .and_then(|name| name.to_str())
                     .unwrap_or("");
-                if name.ends_with(".go") && !name.ends_with("_test.go") {
+                // `go:embed` data files are compiled in like sources.
+                if (name.ends_with(".go") && !name.ends_with("_test.go")) || name.ends_with(".json")
+                {
                     let relative = path
                         .strip_prefix(&workspace_frontend)
                         .expect("under the frontend")
@@ -931,7 +947,7 @@ mod tests {
         let mut embedded = EMBEDDED_GO_FRONTEND_FILES
             .iter()
             .map(|(relative, _)| (*relative).to_string())
-            .filter(|relative| relative.ends_with(".go"))
+            .filter(|relative| relative.ends_with(".go") || relative.ends_with(".json"))
             .collect::<Vec<_>>();
         embedded.sort();
         assert_eq!(sources, embedded);
