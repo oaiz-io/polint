@@ -53,6 +53,10 @@ const EMBEDDED_GO_FRONTEND_FILES: &[(&str, &str)] = &[
         include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/prune.go"),
     ),
     (
+        "internal/semantic/flow.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/flow.go"),
+    ),
+    (
         "internal/semantic/route_models.json",
         include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/route_models.json"),
     ),

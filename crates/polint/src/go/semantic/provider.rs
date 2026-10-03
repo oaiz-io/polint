@@ -108,6 +108,9 @@ pub struct GoSemanticRequest {
     pub routes: bool,
     /// The repository's route models as the sidecar's JSON document.
     pub route_models: Option<String>,
+    /// Whether the plan reads data flow, which is when the sidecar emits each
+    /// function body's flow program.
+    pub dataflow: bool,
     /// Route-model files or tables that could not be used, reported once by
     /// the provider.
     pub route_model_problems: Vec<String>,
@@ -119,6 +122,7 @@ impl GoSemanticRequest {
         GoAnalysisConfig {
             semantic_call_graph: self.call_graph,
             semantic_routes: self.routes,
+            semantic_dataflow: self.dataflow,
             route_models: if self.routes {
                 self.route_models.clone()
             } else {
@@ -328,7 +332,7 @@ fn derive_go_semantic_with_runner(
     };
 
     let counts = phase_counts(&run.output);
-    let lowered = match lower_go_semantic(db, &run.output) {
+    let mut lowered = match lower_go_semantic(db, &run.output) {
         Ok(output) => output,
         Err(error) => {
             return GoSemanticProviderRunOutput {
@@ -354,6 +358,9 @@ fn derive_go_semantic_with_runner(
         if let Some(steps) = lowered.route_budget_steps {
             diagnostics.push(route_budget_diagnostic(steps));
         }
+    }
+    if request.dataflow {
+        lowered.flow = run.output.flow.clone();
     }
     let digest_inputs = DigestInputs {
         sidecar_digest: run.frontend_digest,
@@ -606,6 +613,9 @@ fn go_semantic_output_digest(
             package_error.message
         )
     }));
+    if let Some(flow) = &output.flow {
+        parts.push(format!("flow_program={}", flow.digest()));
+    }
     if output.packages.is_empty()
         && output.functions.is_empty()
         && output.callsites.is_empty()
@@ -781,6 +791,7 @@ fn default_lifecycle() -> GoAnalysisConfig {
         offline: false,
         semantic_call_graph: false,
         semantic_routes: false,
+        semantic_dataflow: false,
         route_models: None,
         semantic_timeout_ms: None,
         emit_rta_edges: false,

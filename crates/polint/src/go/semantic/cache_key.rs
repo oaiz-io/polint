@@ -94,6 +94,11 @@ pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
             crate::go::semantic::budget::semantic_timeout(config.semantic_timeout_ms).as_millis()
         ),
     ];
+    // Present only when asked for, so every run that reads no data flow keeps
+    // the key it had before flow programs existed.
+    if config.semantic_dataflow {
+        parts.push("dataflow=true".to_string());
+    }
     parts.extend(
         config
             .module_roots
@@ -273,6 +278,10 @@ mod tests {
                 ..base.clone()
             },
             GoAnalysisConfig {
+                semantic_dataflow: !base.semantic_dataflow,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
                 route_models: Some("{\"models\":[]}".to_string()),
                 ..base.clone()
             },
@@ -346,6 +355,7 @@ mod tests {
             offline: false,
             semantic_call_graph: false,
             semantic_routes: false,
+            semantic_dataflow: false,
             route_models: None,
             semantic_timeout_ms: None,
             emit_rta_edges: false,

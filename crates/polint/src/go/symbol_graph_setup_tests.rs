@@ -113,6 +113,7 @@ include_tests = false
                 offline: false,
                 semantic_call_graph: false,
                 semantic_routes: false,
+                semantic_dataflow: false,
                 route_models: None,
                 semantic_timeout_ms: None,
                 emit_rta_edges: false,

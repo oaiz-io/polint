@@ -6,6 +6,7 @@
 mod adapter;
 mod embedded_cache;
 pub mod error;
+pub(crate) mod flow;
 mod frontend;
 #[cfg(feature = "lang-go")]
 mod grammar;

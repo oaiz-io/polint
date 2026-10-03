@@ -13,7 +13,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "semantic" {
-		fmt.Fprintln(os.Stderr, "usage: polint-go-frontend semantic --root <path> --module-roots <comma-list> --patterns <comma-list> --tests <bool> --build-tags <comma-list> [--rta-edges] [--call-graph] [--scope-files <path>] [--routes [--route-models <path>]] --ndjson")
+		fmt.Fprintln(os.Stderr, "usage: polint-go-frontend semantic --root <path> --module-roots <comma-list> --patterns <comma-list> --tests <bool> --build-tags <comma-list> [--rta-edges] [--call-graph] [--scope-files <path>] [--routes [--route-models <path>]] [--dataflow] --ndjson")
 		os.Exit(2)
 	}
 
@@ -27,6 +27,7 @@ func main() {
 	callGraph := flags.Bool("call-graph", false, "emit the candidate callees of interface and function-value calls")
 	scopeFiles := flags.String("scope-files", "", "path to a newline-delimited list of repository-relative Go files this scan discovered")
 	routes := flags.Bool("routes", false, "emit the routes the program registers with the frameworks the route models describe")
+	dataflow := flags.Bool("dataflow", false, "emit a flow program per function body for the data-flow solver (implies --call-graph)")
 	routeModels := flags.String("route-models", "", "path to a JSON document of repository route models, used before the built-in ones")
 	ndjson := flags.Bool("ndjson", false, "emit newline-delimited JSON")
 	if err := flags.Parse(os.Args[2:]); err != nil {
@@ -76,6 +77,7 @@ func main() {
 		CallGraph:    *callGraph,
 		ScopeFiles:   scope,
 		RouteModels:  models,
+		Dataflow:     *dataflow,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "emit Go semantics: %v\n", err)

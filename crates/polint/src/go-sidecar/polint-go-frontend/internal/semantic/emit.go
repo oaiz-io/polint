@@ -44,6 +44,9 @@ type Config struct {
 	// whole program. Only a plan that reads call targets asks for it; it is most
 	// of the sidecar's time on a large module.
 	CallGraph bool
+	// Dataflow turns on the `flow_body` rows: one flow program per function body,
+	// for the data-flow solver. It implies the call graph.
+	Dataflow bool
 	// RouteModels, when set, turns on the `route` and `route_serve` rows: the
 	// routes the program registers with the frameworks the models describe
 	// (the built-in defaults and the repository's own).
@@ -187,6 +190,8 @@ type emitter struct {
 	// callGraph is Config.CallGraph: whether dynamic call sites are collected
 	// and their candidate callees emitted.
 	callGraph bool
+	// callGraphResult is the program's call graph, computed on first use.
+	callGraphResult *callGraphAnalysis
 	// dynamicSites collects the in-scope interface and function-value calls
 	// whose callees the call graph resolves after every call site is emitted.
 	dynamicSites []dynamicSite
@@ -252,7 +257,7 @@ func Emit(config Config) ([]Row, error) {
 		emittedMethodSetKeys: make(map[string]bool),
 		emittedFunctionKeys:  make(map[string]bool),
 		emittedTypedKeys:     make(map[string]bool),
-		callGraph:            config.CallGraph,
+		callGraph:            config.CallGraph || config.Dataflow,
 		callIndexes:          make(map[*ssa.Function]*callIndex),
 	}
 	e.add(Row{
@@ -312,9 +317,13 @@ func Emit(config Config) ([]Row, error) {
 		e.emitRoutes(prog, ssaPkgs, config.RouteModels)
 		e.addPhase(timer, "routes", workload)
 	}
-	if config.CallGraph {
+	if config.CallGraph || config.Dataflow {
 		e.emitCallEdges(prog, e.dynamicSites)
 		e.addPhase(timer, "call_graph", workload)
+	}
+	if config.Dataflow {
+		e.emitFlowBodies(prog)
+		e.addPhase(timer, "flow_bodies", workload)
 	}
 	if config.EmitRTAEdges {
 		e.emitRTAEdges(ssaPkgs)

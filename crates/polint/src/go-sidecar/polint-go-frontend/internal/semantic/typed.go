@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"golang.org/x/tools/go/callgraph"
 	"golang.org/x/tools/go/callgraph/vta"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
@@ -129,25 +130,7 @@ func (e *emitter) emitCallEdges(prog *ssa.Program, sites []dynamicSite) {
 	if len(sites) == 0 {
 		return
 	}
-	funcs := ssautil.AllFunctions(prog)
-	graph := vta.CallGraph(funcs, nil)
-	byCaller := make(map[*ssa.Function]map[ssa.CallInstruction][]*ssa.Function)
-	callees := func(caller *ssa.Function, call ssa.CallInstruction) []*ssa.Function {
-		bySite, ok := byCaller[caller]
-		if !ok {
-			bySite = make(map[ssa.CallInstruction][]*ssa.Function)
-			if node := graph.Nodes[caller]; node != nil {
-				for _, edge := range node.Out {
-					if edge.Site != nil && edge.Callee != nil && edge.Callee.Func != nil {
-						bySite[edge.Site] = append(bySite[edge.Site], edge.Callee.Func)
-					}
-				}
-			}
-			byCaller[caller] = bySite
-		}
-		return bySite[call]
-	}
-	var hierarchy func(ssa.CallInstruction) []*ssa.Function
+	cg := e.callGraphAnalysis(prog)
 	for _, site := range sites {
 		row := Row{
 			"kind":                "call_edges",
@@ -161,13 +144,10 @@ func (e *emitter) emitCallEdges(prog *ssa.Program, sites []dynamicSite) {
 			row["file"] = site.file
 		}
 		algorithm := "vta"
-		targets := callees(site.caller, site.call)
+		targets := cg.callees(site.caller, site.call)
 		if len(targets) == 0 {
-			if hierarchy == nil {
-				hierarchy = hierarchyCallees(funcs)
-			}
 			algorithm = "cha"
-			targets = hierarchy(site.call)
+			targets = cg.hierarchyCallees(site.call)
 		}
 		names, origins := declaredCalleeNames(prog, targets)
 		if len(names) == 0 || (algorithm == "cha" && len(names) > chaCandidateLimit) {
@@ -189,6 +169,53 @@ func (e *emitter) emitCallEdges(prog *ssa.Program, sites []dynamicSite) {
 		row["callee_origins"] = origins
 		e.add(row)
 	}
+}
+
+// callGraphAnalysis is the program's variable-type-analysis call graph over
+// every function SSA built, computed once per run and shared by the call-edge
+// rows and the flow bodies, with the class-hierarchy answer built on demand.
+type callGraphAnalysis struct {
+	funcs     map[*ssa.Function]bool
+	graph     *callgraph.Graph
+	byCaller  map[*ssa.Function]map[ssa.CallInstruction][]*ssa.Function
+	hierarchy func(ssa.CallInstruction) []*ssa.Function
+}
+
+func (e *emitter) callGraphAnalysis(prog *ssa.Program) *callGraphAnalysis {
+	if e.callGraphResult == nil {
+		funcs := ssautil.AllFunctions(prog)
+		e.callGraphResult = &callGraphAnalysis{
+			funcs:    funcs,
+			graph:    vta.CallGraph(funcs, nil),
+			byCaller: make(map[*ssa.Function]map[ssa.CallInstruction][]*ssa.Function),
+		}
+	}
+	return e.callGraphResult
+}
+
+// callees are the candidates variable-type analysis gives a call of caller.
+func (cg *callGraphAnalysis) callees(caller *ssa.Function, call ssa.CallInstruction) []*ssa.Function {
+	bySite, ok := cg.byCaller[caller]
+	if !ok {
+		bySite = make(map[ssa.CallInstruction][]*ssa.Function)
+		if node := cg.graph.Nodes[caller]; node != nil {
+			for _, edge := range node.Out {
+				if edge.Site != nil && edge.Callee != nil && edge.Callee.Func != nil {
+					bySite[edge.Site] = append(bySite[edge.Site], edge.Callee.Func)
+				}
+			}
+		}
+		cg.byCaller[caller] = bySite
+	}
+	return bySite[call]
+}
+
+// hierarchyCallees are the class-hierarchy candidates of a dynamic call.
+func (cg *callGraphAnalysis) hierarchyCallees(call ssa.CallInstruction) []*ssa.Function {
+	if cg.hierarchy == nil {
+		cg.hierarchy = hierarchyCallees(cg.funcs)
+	}
+	return cg.hierarchy(call)
 }
 
 // declaredCalleeNames names each target by its declared function, deduplicated

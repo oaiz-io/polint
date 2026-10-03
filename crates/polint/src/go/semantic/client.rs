@@ -311,6 +311,9 @@ fn append_request_args(
     if config.semantic_call_graph {
         command.arg("--call-graph");
     }
+    if config.semantic_dataflow {
+        command.arg("--dataflow");
+    }
     if config.semantic_routes {
         command.arg("--routes");
         if let Some(models) = &files.route_models {

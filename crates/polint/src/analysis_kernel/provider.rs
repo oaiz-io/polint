@@ -1140,6 +1140,7 @@ pub(crate) fn go_semantic_request(
     root: &std::path::Path,
 ) -> crate::go::semantic::provider::GoSemanticRequest {
     let routes = plan.requests_capability("routes");
+    let dataflow = go_semantic_dataflow_requested(plan);
     let models = if routes {
         crate::go::route_models::load_repository_route_models(root)
     } else {
@@ -1150,11 +1151,18 @@ pub(crate) fn go_semantic_request(
         routes,
         route_models: models.json,
         route_model_problems: models.problems,
+        dataflow,
     }
 }
 
 pub(crate) fn go_semantic_call_graph_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
     plan.requests_any_capability(&["calls", "dataflow", "call_graph"])
+}
+
+/// Whether the semantic sidecar emits flow programs: for a plan that reads data
+/// flow, whose Go queries the taint solver answers over them.
+pub(crate) fn go_semantic_dataflow_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
+    plan.requests_capability("dataflow")
 }
 
 /// Whether the run's deep capabilities reach past call resolution.

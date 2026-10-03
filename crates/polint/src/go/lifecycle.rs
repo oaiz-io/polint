@@ -45,6 +45,10 @@ pub struct GoAnalysisConfig {
     /// Whether the semantic sidecar emits the routes the program registers. Not a
     /// setting: set from the analysis plan, only for a plan that reads routes.
     pub semantic_routes: bool,
+    /// Whether the semantic sidecar emits each function body's flow program. Not
+    /// a setting: set from the analysis plan, only for a plan that reads data
+    /// flow.
+    pub semantic_dataflow: bool,
     /// The repository's route models (`[[go_route]]` tables under
     /// `.polint/models`) as the JSON document the sidecar reads, when there are
     /// any and the plan reads routes.
@@ -163,6 +167,7 @@ impl GoAnalysisConfig {
                 .unwrap_or(false),
             semantic_call_graph: false,
             semantic_routes: false,
+            semantic_dataflow: false,
             route_models: None,
             semantic_timeout_ms: positive_integer_setting(settings, "semantic_timeout_ms"),
             emit_rta_edges: emit_rta_edges_setting(settings),

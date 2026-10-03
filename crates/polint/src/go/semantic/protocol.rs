@@ -1,5 +1,8 @@
 use serde::Deserialize;
 use std::collections::BTreeSet;
+use std::sync::Arc;
+
+use crate::go::flow::{GoFlowProgram, GoFlowProgramBuilder, GoFlowRowFrame};
 
 pub const GO_SEMANTIC_SCHEMA: &str = "polint-go-semantic-4";
 
@@ -254,6 +257,8 @@ pub struct GoSemanticOutput {
     pub phases: Vec<GoSemanticPhase>,
     /// Session totals from `session_end`.
     pub totals: GoSemanticPhase,
+    /// The program's flow bodies, when the sidecar emitted `flow_body` rows.
+    pub flow: Option<Arc<GoFlowProgram>>,
 }
 
 #[derive(Debug, Clone)]
@@ -279,8 +284,28 @@ pub fn decode_ndjson_str(text: &str) -> Result<GoSemanticOutput, GoSemanticProto
     let mut rows = Vec::new();
     let mut phases = Vec::new();
     let mut totals = GoSemanticPhase::default();
+    let mut flow = GoFlowProgramBuilder::default();
 
     for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        // A flow body is lowered as it is read: the rows are most of a large
+        // program's output, and only their flow program is kept.
+        if line.contains(FLOW_BODY_KIND) {
+            let row: GoFlowRowFrame = serde_json::from_str(line)
+                .map_err(|error| GoSemanticProtocolError::InvalidJson(error.to_string()))?;
+            if row.kind == "flow_body" {
+                if row.schema != GO_SEMANTIC_SCHEMA {
+                    return Err(GoSemanticProtocolError::UnsupportedSchema(row.schema));
+                }
+                if !saw_begin {
+                    return Err(GoSemanticProtocolError::RowBeforeBegin(row.kind));
+                }
+                if saw_end {
+                    return Err(GoSemanticProtocolError::RowAfterEnd(row.kind));
+                }
+                flow.add(&row, line);
+                continue;
+            }
+        }
         let frame: GoSemanticRawFrame = serde_json::from_str(line)
             .map_err(|error| GoSemanticProtocolError::InvalidJson(error.to_string()))?;
         if frame.schema != GO_SEMANTIC_SCHEMA {
@@ -342,8 +367,13 @@ pub fn decode_ndjson_str(text: &str) -> Result<GoSemanticOutput, GoSemanticProto
         rows,
         phases,
         totals,
+        flow: flow.finish().map(Arc::new),
     })
 }
+
+/// How a `flow_body` row's kind is written; any line holding it is checked
+/// for being one.
+const FLOW_BODY_KIND: &str = "\"kind\":\"flow_body\"";
 
 fn classify_frame(frame: GoSemanticRawFrame) -> Result<GoSemanticFrame, GoSemanticProtocolError> {
     match frame.kind.as_str() {
@@ -385,6 +415,7 @@ fn allowed_kinds() -> BTreeSet<&'static str> {
         "route",
         "route_serve",
         "route_budget",
+        "flow_body",
     ]
     .into_iter()
     .collect()
@@ -450,6 +481,41 @@ mod tests {
         assert!(output.phases.is_empty());
         assert_eq!(output.totals.elapsed_ms, 0);
         assert_eq!(output.totals.packages, 0);
+    }
+
+    #[test]
+    fn decode_ndjson_lowers_flow_bodies_into_a_program_not_rows() {
+        let output = decode_ndjson_str(&framed(
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"flow_body\",\"function\":\"p.F\",\
+             \"package_path\":\"p\",\"flow\":{\"params\":[0],\"slots\":1,\"stmts\":[{\"o\":\"ret\",\"args\":[0]}]}}",
+        ))
+        .expect("flow rows decode");
+
+        assert!(output.rows.is_empty());
+        let flow = output.flow.expect("a flow program");
+        assert_eq!(flow.program().functions.len(), 1);
+        assert_eq!(flow.program().functions[0].name, "p.F");
+    }
+
+    #[test]
+    fn decode_ndjson_has_no_flow_program_without_flow_rows() {
+        let output = decode_ndjson_str(&framed(
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"package\",\"package_id\":\"p\"}",
+        ))
+        .expect("framed output decodes");
+        assert!(output.flow.is_none());
+    }
+
+    #[test]
+    fn decode_ndjson_rejects_flow_rows_outside_the_session() {
+        let err = decode_ndjson_str(
+            "{\"schema\":\"polint-go-semantic-4\",\"kind\":\"flow_body\",\"function\":\"p.F\"}\n",
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            GoSemanticProtocolError::RowBeforeBegin("flow_body".to_string())
+        );
     }
 
     #[test]

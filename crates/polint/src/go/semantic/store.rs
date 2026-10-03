@@ -79,6 +79,8 @@ pub struct GoSemanticFactsOutput {
     /// Set when the route interpreter stopped at its step budget: the routes are
     /// the ones found before it stopped.
     pub route_budget_steps: Option<u64>,
+    /// The program's flow bodies, when the plan reads data flow.
+    pub flow: Option<std::sync::Arc<crate::go::flow::GoFlowProgram>>,
 }
 
 /// Sorts a typed family by stable-key text, keeps the first row of each key (a
