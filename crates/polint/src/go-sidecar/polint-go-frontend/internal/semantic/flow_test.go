@@ -178,12 +178,13 @@ func TestFlowBodiesDescribeEachValueMove(t *testing.T) {
 			"t3 = t2",
 			"return t3",
 		},
-		// A captured parameter moves to a heap cell the closure binds.
+		// A captured parameter moves to a heap cell the closure binds; calling
+		// the closure through its variable is value flow.
 		"example.test/flow.closures": {
 			"t1 = alloc",
 			"*t1 <- token",
 			"t2 = closure example.test/flow.closures$1 [t1]",
-			"t3 = call static example.test/flow.closures$1() fv=t2",
+			"t3 = call vta example.test/flow.closures$1() fv=t2",
 			"return ",
 		},
 		"example.test/flow.dispatch": {
@@ -314,5 +315,76 @@ func use(o outer) func() string {
 	}
 	if synthesized == 0 {
 		t.Fatalf("the fixture has no synthesized body: %v", rowsOfKind(rows, "flow_body"))
+	}
+}
+
+// A call through a function value whose one value SSA knows is resolved by value
+// flow: its callsite row says so, and its flow statement is `vta`. A call that
+// names its function or method is `static`.
+func TestCallsThroughFunctionValuesAreMarked(t *testing.T) {
+	root := writeFixture(t, map[string]string{
+		"go.mod": "module example.test/values\n\ngo 1.24\n",
+		"values.go": `package values
+
+type holder struct{}
+
+func (holder) method() {}
+
+func target() {}
+
+func direct() { target() }
+
+func viaVariable() {
+	run := target
+	run()
+}
+
+func viaMethodValue() {
+	run := holder{}.method
+	run()
+}
+
+func viaMethod() { holder{}.method() }
+`,
+	})
+	rows, err := Emit(Config{Root: root, ModuleRoots: []string{"."}, Patterns: []string{"./..."}, Dataflow: true})
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+	viaValue := make(map[string]bool)
+	for _, row := range rowsOfKind(rows, "callsite") {
+		if row["status"] != "resolved_static" {
+			continue
+		}
+		caller := row["caller"].(string)
+		marked, _ := row["via_value"].(bool)
+		viaValue[caller] = viaValue[caller] || marked
+	}
+	want := map[string]bool{
+		"example.test/values.direct":         false,
+		"example.test/values.viaVariable":    true,
+		"example.test/values.viaMethodValue": true,
+		"example.test/values.viaMethod":      false,
+	}
+	for caller, marked := range want {
+		got, ok := viaValue[caller]
+		if !ok {
+			t.Fatalf("no static callsite row for %s: %v", caller, viaValue)
+		}
+		if got != marked {
+			t.Errorf("%s via_value = %v, want %v", caller, got, marked)
+		}
+	}
+	algorithms := make(map[string]string)
+	for _, row := range rowsOfKind(rows, "flow_body") {
+		body := row["flow"].(*flowBody)
+		for _, stmt := range body.Stmts {
+			if stmt.Op == "call" && stmt.Algorithm != "" {
+				algorithms[row["function"].(string)] = stmt.Algorithm
+			}
+		}
+	}
+	if algorithms["example.test/values.viaVariable"] != "vta" || algorithms["example.test/values.direct"] != "static" {
+		t.Errorf("flow call algorithms: %v", algorithms)
 	}
 }

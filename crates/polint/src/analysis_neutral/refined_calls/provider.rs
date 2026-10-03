@@ -725,9 +725,24 @@ fn validation_for_target(target: &CallTargetFact) -> RefinedCallValidation {
     }
 }
 
+/// The most any refined edge built on `target` may claim. A candidate the Go
+/// frontend's variable-type, class-hierarchy or rapid-type analysis found for a
+/// call through an interface or a function value may be called there; only a
+/// callee the call names must be.
+pub(crate) fn target_confidence_ceiling(target: &CallTargetFact) -> RefinedCallConfidence {
+    if matches!(
+        target.algorithm,
+        CallAlgorithm::GoVta | CallAlgorithm::GoCha | CallAlgorithm::GoRta
+    ) {
+        RefinedCallConfidence::Medium
+    } else {
+        RefinedCallConfidence::High
+    }
+}
+
 fn confidence_for_target(target: &CallTargetFact) -> RefinedCallConfidence {
     match target.status {
-        CallTargetStatus::Resolved => RefinedCallConfidence::High,
+        CallTargetStatus::Resolved => target_confidence_ceiling(target),
         CallTargetStatus::Ambiguous => RefinedCallConfidence::Medium,
         CallTargetStatus::Unresolved
         | CallTargetStatus::Unsupported
@@ -1409,6 +1424,52 @@ mod tests {
         })
         .expect("complete call graph");
         db
+    }
+
+    /// A candidate the Go frontend found for an interface or function-value
+    /// call by analysing which values reach it may be called; a callee the call
+    /// names must be.
+    #[test]
+    fn analysis_found_go_targets_are_may_edges_and_named_callees_must_edges() {
+        use crate::analysis_neutral::calls::facts::{
+            CallEdgeKind, CallPrecision, CallProvenance, CallTargetStatus,
+        };
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let target = |algorithm, status| CallTargetFact {
+            id: CallTargetId(0),
+            site: CallSiteId(0),
+            caller: FunctionId::from_raw(0),
+            target_function: Some(FunctionId::from_raw(1)),
+            target_symbol: None,
+            synthetic_target: None,
+            edge_kind: CallEdgeKind::Direct,
+            algorithm,
+            status,
+            reason: None,
+            provenance: CallProvenance::Native,
+            precision: CallPrecision::SetupAware,
+            stable_key: interner.intern("call-target"),
+        };
+        for algorithm in [
+            CallAlgorithm::GoVta,
+            CallAlgorithm::GoCha,
+            CallAlgorithm::GoRta,
+        ] {
+            assert_eq!(
+                confidence_for_target(&target(algorithm, CallTargetStatus::Resolved)),
+                RefinedCallConfidence::Medium
+            );
+        }
+        for algorithm in [CallAlgorithm::GoStatic, CallAlgorithm::DirectReference] {
+            assert_eq!(
+                confidence_for_target(&target(algorithm, CallTargetStatus::Resolved)),
+                RefinedCallConfidence::High
+            );
+        }
+        assert_eq!(
+            confidence_for_target(&target(CallAlgorithm::GoVta, CallTargetStatus::Unreachable)),
+            RefinedCallConfidence::Low
+        );
     }
 
     #[test]

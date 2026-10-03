@@ -56,11 +56,18 @@ pub(crate) fn go_typed_call_inputs(db: &AnalysisDb, candidate_limit: usize) -> T
                 let Some(callee) = callsite.static_callee.as_deref() else {
                     continue;
                 };
+                // A call through a function value is resolved by value flow:
+                // the one candidate variable-type analysis would give it.
+                let (algorithm, precision) = if callsite.via_value {
+                    (CallAlgorithm::GoVta, CallPrecision::SetupAware)
+                } else {
+                    (CallAlgorithm::GoStatic, CallPrecision::Exact)
+                };
                 vec![TypedCallTarget {
                     function: functions.resolve(callee, callsite.static_callee_origin.as_deref()),
                     name: format!("go:func:{callee}"),
-                    algorithm: CallAlgorithm::GoStatic,
-                    precision: CallPrecision::Exact,
+                    algorithm,
+                    precision,
                     edge_kind: started_by.unwrap_or(if callsite.receiver_type.is_some() {
                         CallEdgeKind::MethodDirect
                     } else {
@@ -263,6 +270,7 @@ mod tests {
             static_callee: static_callee.map(str::to_string),
             static_callee_origin: None,
             receiver_type: receiver_type.map(str::to_string),
+            via_value: false,
             mode,
             status: if static_callee.is_some() {
                 GoSemanticCallStatus::ResolvedStatic
@@ -349,6 +357,18 @@ mod tests {
                     None,
                     GoCallMode::Call,
                 ),
+                GoSemanticCallsiteFact {
+                    via_value: true,
+                    ..callsite(
+                        &db,
+                        file,
+                        "cs|through-value",
+                        (100, 110),
+                        Some("example.com/app.helper"),
+                        None,
+                        GoCallMode::Call,
+                    )
+                },
             ],
             call_edges: vec![GoSemanticCallEdgeFact {
                 id: GoSemanticCallEdgeId(0),
@@ -398,6 +418,14 @@ mod tests {
         assert_eq!(static_call[0].algorithm, CallAlgorithm::GoStatic);
         assert_eq!(static_call[0].precision, CallPrecision::Exact);
         assert_eq!(static_call[0].edge_kind, CallEdgeKind::Direct);
+
+        // The same callee called through a function value is value flow.
+        let Some(TypedCallSite::Targets(through_value)) = inputs.answer_at(file, 100, 110) else {
+            panic!("the call through a value has typed targets");
+        };
+        assert_eq!(through_value[0].function, Some(helper));
+        assert_eq!(through_value[0].algorithm, CallAlgorithm::GoVta);
+        assert_eq!(through_value[0].precision, CallPrecision::SetupAware);
 
         let Some(TypedCallSite::Targets(spawn)) = inputs.answer_at(file, 40, 50) else {
             panic!("the go statement has typed targets");

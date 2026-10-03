@@ -253,6 +253,7 @@ fn lower_callsite(
         static_callee: non_empty(row.static_callee.as_str()),
         static_callee_origin: non_empty(row.static_callee_origin.as_str()),
         receiver_type: non_empty(row.receiver_type.as_str()),
+        via_value: row.via_value,
         mode: match row.mode.as_str() {
             "go" => GoCallMode::Go,
             "defer" => GoCallMode::Defer,

@@ -31,10 +31,11 @@ import (
 //     free variables in order.
 //   - call:    d is the result (a tuple when the callee has several results) of
 //     calling the candidates in callees with args; alg says how they were found:
-//     `static` (the call names its callee), `vta` (variable-type analysis),
-//     `cha` (class hierarchy) or `unknown`; for a call of a closure value fv is
-//     that value, whose bindings are the callee's free variables; for an
-//     interface call iface names the interface method.
+//     `static` (the call names its callee), `vta` (variable-type analysis, or
+//     SSA knowing the one value a call through a function value calls), `cha`
+//     (class hierarchy) or `unknown`; for a call of a closure value fv is that
+//     value, whose bindings are the callee's free variables; for an interface
+//     call iface names the interface method.
 //   - ret:     the body returns args (one per result).
 //
 // Path steps: `f:Name` a struct field, `[]` an element of a slice, array, map,
@@ -445,6 +446,11 @@ func (b *flowBuilder) call(call ssa.CallInstruction) {
 		if callee := common.StaticCallee(); callee != nil {
 			stmt.Callees = []string{functionName(callee)}
 			stmt.Algorithm = "static"
+			// A call through a function value whose one value SSA knows is
+			// resolved by value flow, not by the call naming its callee.
+			if b.e.callsThroughValue(b.fn.Pkg, b.index.syntaxFor(call)) {
+				stmt.Algorithm = "vta"
+			}
 			if _, ok := common.Value.(*ssa.MakeClosure); ok {
 				stmt.FV = slotRef(b.slot(common.Value))
 			}

@@ -998,6 +998,7 @@ mod tests {
                     static_callee: Some("example.com/app.run".to_string()),
                     static_callee_origin: None,
                     receiver_type: None,
+                    via_value: false,
                     mode: crate::go::semantic::facts::GoCallMode::Call,
                     status: GoSemanticCallStatus::ResolvedStatic,
                     reason: None,

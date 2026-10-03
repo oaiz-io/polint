@@ -539,7 +539,7 @@ fn go_semantic_output_digest(
         )
     }));
     parts.extend(output.callsites.iter().map(|callsite| {
-        format!(
+        let part = format!(
             "callsite={} package={} caller={} static={} status={:?} file={} span={}",
             interner.resolve(callsite.stable_key),
             callsite.package_path,
@@ -548,7 +548,13 @@ fn go_semantic_output_digest(
             callsite.status,
             callsite.relative_file.as_deref().unwrap_or(""),
             option_span_part(callsite.span.as_ref())
-        )
+        );
+        // Marked only when set, so every other call keeps its part.
+        if callsite.via_value {
+            part + " via_value"
+        } else {
+            part
+        }
     }));
     parts.extend(output.method_sets.iter().map(|method_set| {
         format!(

@@ -230,6 +230,10 @@ pub struct GoSemanticCallsiteFact {
     /// (possibly pointer) type for a static method, the interface for an
     /// interface call.
     pub receiver_type: Option<String>,
+    /// Whether a static callee is called through a function value (a variable, a
+    /// field, a call's result): SSA knows the one value, but the call does not
+    /// name its callee.
+    pub via_value: bool,
     pub mode: GoCallMode,
     pub status: GoSemanticCallStatus,
     pub reason: Option<String>,

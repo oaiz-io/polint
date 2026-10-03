@@ -126,6 +126,8 @@ pub struct GoSemanticRawFrame {
     #[serde(default)]
     pub static_callee_origin: String,
     #[serde(default)]
+    pub via_value: bool,
+    #[serde(default)]
     pub receiver_type: String,
     #[serde(default)]
     pub callees: Vec<String>,

@@ -95,7 +95,8 @@ fn edge_from_summary(
         provenance: CallProvenance::Native,
         precision: summary_precision(summary.precision),
         validation: RefinedCallValidation::ReferentiallyValidated,
-        confidence: summary_confidence(summary.precision, target.status),
+        confidence: summary_confidence(summary.precision, target.status)
+            .weaker(super::provider::target_confidence_ceiling(target)),
         evidence: vec![
             "summary_call_effect".to_string(),
             format!("summary={summary_key}"),
@@ -195,7 +196,37 @@ mod tests {
         assert!(output.edges.is_empty());
     }
 
+    /// A summary refines a call; it does not make a candidate that may be called
+    /// one that must be.
+    #[test]
+    fn a_summary_assisted_edge_is_no_more_certain_than_its_base_target() {
+        for (algorithm, expected) in [
+            (CallAlgorithm::DirectReference, RefinedCallConfidence::High),
+            (CallAlgorithm::GoStatic, RefinedCallConfidence::High),
+            (CallAlgorithm::GoVta, RefinedCallConfidence::Medium),
+            (CallAlgorithm::GoCha, RefinedCallConfidence::Medium),
+        ] {
+            let mut db = db_with_call_target_found_by(algorithm);
+            db.replace_summary_facts(SummaryOutput {
+                summaries: vec![summary(
+                    SummaryStatus::Present,
+                    SummaryDomainKind::CallEffects,
+                )],
+                events: Vec::new(),
+            });
+
+            let output = derive_summary_assisted_refinements(&db);
+
+            assert_eq!(output.edges.len(), 1);
+            assert_eq!(output.edges[0].confidence, expected);
+        }
+    }
+
     fn db_with_call_target() -> LocalAnalysisDb {
+        db_with_call_target_found_by(CallAlgorithm::DirectReference)
+    }
+
+    fn db_with_call_target_found_by(algorithm: CallAlgorithm) -> LocalAnalysisDb {
         let mut db = LocalAnalysisDb::new();
         let file = db.add_file(
             "src/app.ts".into(),
@@ -255,7 +286,7 @@ mod tests {
                 target_symbol: Some(SymbolId::from_raw(0)),
                 synthetic_target: None,
                 edge_kind: CallEdgeKind::Direct,
-                algorithm: CallAlgorithm::DirectReference,
+                algorithm,
                 status: CallTargetStatus::Resolved,
                 reason: None,
                 provenance: CallProvenance::NativeDirect,

@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"fmt"
+	"go/ast"
 	"go/token"
 	"go/types"
 	"io"
@@ -197,6 +198,9 @@ type emitter struct {
 	dynamicSites []dynamicSite
 	// callIndexes holds one call-expression index per function body.
 	callIndexes map[*ssa.Function]*callIndex
+	// typesInfo holds each loaded package's type information, for questions
+	// about the syntax a call is written with.
+	typesInfo map[*types.Package]*types.Info
 }
 
 func Emit(config Config) ([]Row, error) {
@@ -259,6 +263,12 @@ func Emit(config Config) ([]Row, error) {
 		emittedTypedKeys:     make(map[string]bool),
 		callGraph:            config.CallGraph || config.Dataflow,
 		callIndexes:          make(map[*ssa.Function]*callIndex),
+		typesInfo:            make(map[*types.Package]*types.Info, len(pkgs)),
+	}
+	for _, pkg := range pkgs {
+		if pkg.Types != nil && pkg.TypesInfo != nil {
+			e.typesInfo[pkg.Types] = pkg.TypesInfo
+		}
 	}
 	e.add(Row{
 		"kind":            "session_begin",
@@ -721,6 +731,9 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				callee := common.StaticCallee()
 				row["static_callee"] = functionName(callee)
 				row["status"] = "resolved_static"
+				if e.callsThroughValue(pkg, index.syntaxFor(call)) {
+					row["via_value"] = true
+				}
 				if origin := callee.Origin(); origin != nil {
 					row["static_callee_origin"] = functionName(origin)
 				}
@@ -779,6 +792,37 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				})
 			}
 		}
+	}
+}
+
+// callsThroughValue reports whether a call's syntax calls a function value (a
+// variable, a struct field, a call's result) rather than naming a function or a
+// method, so that SSA knowing its one callee is value flow, not the call naming
+// it: `run := handler; run()` is through a value, `handler()` and `x.Method()`
+// are not.
+func (e *emitter) callsThroughValue(pkg *ssa.Package, syntax ast.Node) bool {
+	call, ok := syntax.(*ast.CallExpr)
+	if !ok || pkg == nil {
+		return false
+	}
+	info := e.typesInfo[pkg.Pkg]
+	if info == nil {
+		return false
+	}
+	switch fun := ast.Unparen(call.Fun).(type) {
+	case *ast.Ident:
+		_, isVar := info.Uses[fun].(*types.Var)
+		return isVar
+	case *ast.SelectorExpr:
+		if selection, ok := info.Selections[fun]; ok {
+			return selection.Kind() == types.FieldVal
+		}
+		_, isVar := info.Uses[fun.Sel].(*types.Var)
+		return isVar
+	case *ast.CallExpr:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -407,6 +407,7 @@ mod tests {
                 static_callee: None,
                 static_callee_origin: None,
                 receiver_type: None,
+                via_value: false,
                 mode: crate::go::semantic::facts::GoCallMode::Call,
                 status: GoSemanticCallStatus::UnresolvedDynamic,
                 reason: None,

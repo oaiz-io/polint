@@ -311,6 +311,7 @@ mod tests {
                 static_callee: static_callee.map(str::to_string),
                 static_callee_origin: None,
                 receiver_type: None,
+                via_value: false,
                 mode: crate::go::semantic::facts::GoCallMode::Call,
                 status,
                 reason: None,
