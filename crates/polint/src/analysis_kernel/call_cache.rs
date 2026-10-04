@@ -7,7 +7,10 @@
 //! function of the scanned sources, the configuration, the plan, the engine and
 //! the toolchains it runs, so on a second run over unchanged inputs the stack
 //! would recompute exactly what the first run stored. This module stores those
-//! facts once and restores them in place of the stack.
+//! facts once and restores them in place of the stack. A plan that reads data
+//! flow over Go alone reads the same call facts plus the flow programs of the
+//! semantic sidecar, so it restores the same entry and still runs that one
+//! provider (see [`restores`]).
 //!
 //! An entry is keyed on every input the stack reads: the input snapshot (every
 //! scanned file's content digest, the configuration, the Go lifecycle, rules
@@ -44,7 +47,7 @@ const CALL_CACHE_SCHEMA: &str = "polint-call-resolution-cache-1";
 const ENTRIES_KEPT: usize = 2;
 
 /// The providers an entry stands in for, in schedule order. A run that
-/// restores an entry runs none of them.
+/// restores an entry runs none of them that [`restores`] covers.
 pub(crate) const CACHED_PROVIDERS: &[&str] = &[
     "polint.semantic_mir",
     "polint.go.semantic",
@@ -65,14 +68,15 @@ pub(crate) const CACHED_PROVIDERS: &[&str] = &[
 
 /// The providers whose outputs are part of an entry's key. The key is formed
 /// as soon as the Go syntax is known, before the semantic sidecar would be
-/// started, so a run that will restore never starts it; the providers that run
-/// in between derive from inputs the input snapshot already pins (the scanned
-/// files, the module and workspace files, the configuration).
+/// started, so a run that will restore starts it only when it reads flow
+/// programs; the providers that run in between derive from inputs the input
+/// snapshot already pins (the scanned files, the module and workspace files,
+/// the configuration).
 pub(crate) const KEYED_UPSTREAM: &[&str] = &["polint.go.syntax"];
 
-/// Whether a run may use the cache: it asks for call resolution and nothing
-/// that reads past it, and it scans only Go. An entry holds no Go type facts,
-/// so a run that reads them computes.
+/// Whether a run may use the cache: it asks for call resolution, or for data
+/// flow over Go alone, and nothing that reads past them, and it scans only Go.
+/// An entry holds no Go type facts, so a run that reads them computes.
 pub(crate) fn eligible(
     plan: &crate::analysis_plan::AnalysisPlan,
     db: &AnalysisDb,
@@ -82,13 +86,22 @@ pub(crate) fn eligible(
         .iter()
         .all(|provider| enabled_providers.contains(provider))
         && !crate::analysis_kernel::provider::control_or_data_flow_requested(plan, db)
-        && !plan.requests_capability("dataflow")
         && !plan.requests_capability("go_types")
         && !plan.requests_capability("routes")
         && !plan.requests_per_point_domain_facts()
         && !db.files().is_empty()
         && db.files().iter().all(|file| file.language == Language::Go)
 }
+
+/// Whether a run that restores an entry restores `provider` rather than running
+/// it. A plan that reads data flow still runs the semantic sidecar's provider:
+/// the taint solver reads the flow programs it loads, which an entry does not
+/// hold, and on unchanged sources the sidecar's own cache answers it.
+pub(crate) fn restores(provider: &str, plan: &crate::analysis_plan::AnalysisPlan) -> bool {
+    !(provider == GO_SEMANTIC && plan.requests_capability("dataflow"))
+}
+
+const GO_SEMANTIC: &str = "polint.go.semantic";
 
 /// The key of the entry a run with these inputs would read or write.
 ///

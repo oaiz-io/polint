@@ -309,7 +309,11 @@ fn run_scheduled_providers<'a>(
         let deferred_before = db.deferred_syntax_metadata_len();
         let stage_rss_before = crate::measure::current_rss_bytes();
         let restored = match &call_cache {
-            CallCacheState::Restored(providers) if ready => providers.get(provider_id).cloned(),
+            CallCacheState::Restored(providers)
+                if ready && call_cache::restores(provider_id, input.plan) =>
+            {
+                providers.get(provider_id).cloned()
+            }
             _ => None,
         };
         let result = if let Some(restored) = restored {
@@ -471,7 +475,10 @@ fn run_scheduled_providers<'a>(
                 enabled_providers,
                 &upstream_digests,
             );
-            if enabled_providers.contains("polint.go.semantic") && !call_cache.will_restore() {
+            if enabled_providers.contains("polint.go.semantic")
+                && (!call_cache.will_restore()
+                    || !call_cache::restores("polint.go.semantic", input.plan))
+            {
                 start_go_semantic_prefetch(db, input, &upstream_digests);
             }
         }
@@ -3925,6 +3932,92 @@ function setup() {
             "an edit computes again"
         );
         assert!(!edited.db.mir_bodies().is_empty());
+    }
+
+    /// A data-flow run over unchanged Go sources restores the call facts too,
+    /// but still runs the semantic sidecar's provider for the flow programs an
+    /// entry does not hold, and its questions get the computing run's answers.
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn a_go_data_flow_run_over_unchanged_sources_restores_call_facts_and_reads_flow_programs() {
+        use crate::sdk::dataflow::{FlowSink, FlowSource, FlowSpec};
+
+        let temp = tempfile::tempdir().expect("temp directory");
+        std::fs::write(
+            temp.path().join("go.mod"),
+            "module example.com/cachedflow\n\ngo 1.22\n",
+        )
+        .expect("write go.mod");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nfunc source() string { return \"secret\" }\n\nfunc pass(value string) string { return value }\n\nfunc sink(value string) {}\n\nfunc main() {\n\tsink(pass(source()))\n}\n",
+        )
+        .expect("write Go source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::default_for_repo(temp.path(), true);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        let run = || {
+            AnalysisKernel::run(KernelInput {
+                loaded: &loaded,
+                cache: &cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            })
+            .expect("kernel should run")
+        };
+        let spec = FlowSpec::new()
+            .source(FlowSource::call_result("source"))
+            .sink(FlowSink::call_argument("sink", 0));
+
+        let computed = run();
+        for provider in call_cache::CACHED_PROVIDERS {
+            assert_eq!(
+                provider_output(&computed, provider).cache_stats.hits,
+                0,
+                "{provider} computes on the first run"
+            );
+        }
+        let computed_answer = crate::flow_queries::flows(&computed.db, &spec);
+        assert_eq!(
+            computed_answer.flows.len(),
+            1,
+            "the source reaches the sink through pass"
+        );
+
+        let restored = run();
+        for provider in call_cache::CACHED_PROVIDERS {
+            let row = provider_output(&restored, provider);
+            if call_cache::restores(provider, &plan) {
+                assert_eq!(row.cache_stats.hits, 1, "{provider} is restored");
+            }
+            assert_eq!(
+                row.output_digest,
+                provider_output(&computed, provider).output_digest,
+                "{provider} reports the computing run's digest"
+            );
+        }
+        assert!(
+            restored.db.mir_bodies().is_empty(),
+            "nothing below the call facts ran"
+        );
+        assert_eq!(
+            restored
+                .db
+                .go_flow_program()
+                .map(|program| program.digest()),
+            computed
+                .db
+                .go_flow_program()
+                .map(|program| program.digest()),
+            "the restoring run loads the same flow programs"
+        );
+        assert_eq!(
+            crate::flow_queries::flows(&restored.db, &spec),
+            computed_answer
+        );
+        assert_eq!(restored.diagnostics, computed.diagnostics);
     }
 
     fn provider_output<'a>(
