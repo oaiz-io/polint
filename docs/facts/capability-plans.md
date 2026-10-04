@@ -51,7 +51,7 @@ checks and bounded source/sink/barrier data-flow checks. For Go sources,
 `DataFlow<'_>` reads the typed frontend's flow programs instead of the
 value-flow graph: on a scan with only Go sources a data-flow plan builds no
 value-flow graph, and, when the typed frontend resolved the calls, no Go CFG
-bodies, points-to sets, domains or summaries unless `control_flow` needs them
+bodies, alias facts, domains or summaries unless `control_flow` needs them
 (see [data-flow.md](data-flow.md#flows)). A rule can compile,
 appear in
 `polint inspect rule --format json`, show derived fact views, and execute
