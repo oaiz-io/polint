@@ -123,6 +123,30 @@ new and change two of 12's findings:
   passes. The typed middle layer of 12 becomes the first two steps of that pipeline rather than a
   detour before it.
 
+## Post-deep-analysis update (2026-10-04): are route models the right layer?
+
+The owner asked whether framework route models belong in each repository's own rules, or whether a
+smarter engine would make them unnecessary. [`14-eval-route-models.md`](14-eval-route-models.md)
+measures both alternatives against the shipped design on `perf/deep-analysis` (`ebeee581`).
+
+**Verdict: KEEP BUT MOVE.**
+
+- **Without built-ins, the OAIZ route inventory collapses, and nothing warns.**
+  - HTTP routes: 305 → 0. Subscriptions: 26 → 0.
+  - Endpoint-authority loses its 4 true findings and reports 81 false ones instead.
+- **Shape-based inference is either imprecise or blind.**
+  - The loose form is 48% precise.
+  - The strict form misses every subscription and every `Use`.
+  - Neither can tell gin `Use` from chi `With`.
+- **The shipped roles carry gin's semantics.** As a result:
+  - 9 of 26 OAIZ subscriptions report an empty middleware chain marked complete;
+  - echo and gorilla cannot be modeled correctly;
+  - no repository model can fix either.
+- **What moves:**
+  - framework-specific semantics into model parameters;
+  - the built-in table into the `[[go_route]]` TOML format on the Rust side;
+  - plus shadowing and unmodeled-framework diagnostics.
+
 ## Files
 
 | File | Lever | One line |
@@ -140,6 +164,7 @@ new and change two of 12's findings:
 | [11-next-after-metrics-cliff.md](11-next-after-metrics-cliff.md) | — | After the metrics-cliff fix (#131, v0.4.3): state-of-the-union table, a new rules-dispatch scheduling finding, re-ranked candidates, the pick (cost-ordered rule dispatch) and its spike plan. |
 | [12-next-direction.md](12-next-direction.md) | — | After v0.4.4, under the owner's runtime-or-capability constraint: what runtime is left (A), what capability is missing (B), three new measurements (a warm CPU profile, the layer read-limit A/B, a package-scope deep scan), and the pick (B: the typed middle layer first) with a three-step plan. |
 | [13-deep-analysis.md](13-deep-analysis.md) | — | Full-application dataflow and control flow: the failure chain at v0.4.4 (load mode, thrown-away resolution, a silent symbols-sidecar failure, the `calls` materialization cliff, solvers that are not what their names say), the missing-component inventory, the design decisions (sidecar boundary, middle layer inside the deep stack, per-unit shards), a gated build plan with named OAIZ rules per step, the honest budgets, and the recommendation with its first three steps. |
+| [14-eval-route-models.md](14-eval-route-models.md) | — | Adversarial evaluation of framework route models as data (built-ins + repository `[[go_route]]` tables): custom-rules-only, engine-smarter inference and the status quo, measured on OAIZ and a five-framework fixture. Verdict KEEP BUT MOVE: keep shipped built-ins, repository extension and engine-owned roles; move framework-specific middleware semantics into model parameters and the built-in table into the shared TOML format; add model diagnostics. |
 
 ## What each lever is
 
