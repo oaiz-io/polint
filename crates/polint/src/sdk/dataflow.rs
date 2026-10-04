@@ -378,14 +378,9 @@ pub(crate) fn flow_evidence(flow: &Flow) -> Result<StructuredEvidenceV1, String>
         FlowPrecision::Conservative => "Conservative",
         FlowPrecision::Heuristic => "Heuristic",
     };
-    let status = if matches!(
-        flow.precision,
-        FlowPrecision::Exact | FlowPrecision::SetupAware
-    ) {
-        "Exact"
-    } else {
-        "Heuristic"
-    };
+    // A reported flow is a path that was found; how certain each step is lives
+    // in `precision` and `confidence`.
+    let status = "Present";
     let confidence = match flow.precision {
         FlowPrecision::Exact => "High",
         FlowPrecision::SetupAware | FlowPrecision::Conservative => "Medium",
@@ -477,4 +472,48 @@ pub(crate) fn flow_evidence(flow: &Flow) -> Result<StructuredEvidenceV1, String>
         },
     });
     StructuredEvidenceV1::try_from_value(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn step(line: u32, function: &str) -> FlowStep {
+        FlowStep {
+            file: None,
+            path: "app/store.go".to_string(),
+            line,
+            column: 2,
+            function: function.to_string(),
+        }
+    }
+
+    #[test]
+    fn a_flow_diagnostic_carries_its_path_as_a_sarif_code_flow() {
+        let flow = Flow {
+            source: step(5, "Search"),
+            sink: step(13, "find"),
+            sink_argument: Some(0),
+            steps: vec![step(5, "Search"), step(9, "Search"), step(13, "find")],
+            precision: FlowPrecision::Conservative,
+            unknowns: Vec::new(),
+        };
+
+        flow_evidence(&flow).expect("the flow's evidence satisfies the evidence schema");
+        let diagnostic = flow.diagnostic("local/request-to-sql", "request data builds SQL text");
+        let evidence = diagnostic
+            .evidence_v1
+            .as_ref()
+            .expect("the diagnostic carries structured evidence");
+        let steps = crate::analysis::evidence::render::sarif_thread_flow_steps(evidence.as_value());
+        let lines = steps
+            .iter()
+            .map(|step| {
+                step.location
+                    .as_ref()
+                    .map(|location| location.range.start_line)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(lines, vec![Some(5), Some(9), Some(13)]);
+    }
 }
