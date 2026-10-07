@@ -52,3 +52,14 @@ public_surface_leak, rule_host_store), other crates, MSRV 1.95.0, the Go sidecar
 The cli tests on the changed surfaces found the new outside-user test over-strict (it counted one capability
 diagnostic where the dependency capabilities add their own setup rows without a module root); fixed in `00029e34`
 and green with the existing data-flow cli test. The 192-test cli batch suite is left to CI.
+
+## CI on the pull request (#133)
+The first CI run on the branch (none had run before the PR) failed two jobs: the language-feature matrix runs the
+library suite without a Go toolchain, where ten new typed-frontend tests failed instead of skipping and the warm-restore
+symbol test expected a layer-cache hit for a setup-missing graph that this branch deliberately never caches; and the
+macOS lib job, where the subprocess drain test's 2.5 s bound was under the hosted runner's writer time (2.8 s) while the
+fixed-sleep behaviour it guards against needs at least 5.12 s. Fixed in `bd696dbc` (expect the recompute, bound 4.5 s) and
+`6c62513c` (the hosted runner has a Go toolchain but cannot build the embedded frontend, so the skip reads the
+kernel's result: a run whose typed frontend loaded no package skips with a note, the sidecar-backed symbol tests'
+convention). Locally the Go-only suite passes 2,222 tests without a toolchain, the guarded tests skipping (10) or
+passing (4).
