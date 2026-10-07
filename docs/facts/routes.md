@@ -170,6 +170,17 @@ files are part of the cache key: changing one recomputes the routes.
 - Dependencies are loaded from export data: the frontend sees calls into a
   framework, not the framework's own code, which is why frameworks are modelled
   rather than analyzed.
+- The `use` role applies gin's semantics for every framework: middleware
+  covers the registrations that come after it on that router, not the ones
+  before. Frameworks whose router-level middleware covers every route whenever
+  it was added (Watermill's `Router.AddMiddleware` among them) can list a
+  route's middleware as incomplete-but-marked-complete when the middleware was
+  added after the registration.
+- Middleware attached to one registration after the fact, such as Watermill's
+  `(*Handler).AddMiddleware` on the handler `AddHandler` returns, is not
+  modelled: such a route lists the router's middleware only, with
+  `middleware_complete` true. A rule should treat an empty Watermill
+  middleware chain as unknown rather than absent.
 - `_test.go` files are interpreted only when `[languages.go] include_tests` is
   `true`; serve calls in tests (`served_from`) need it.
 - The interpretation is bounded (a step budget and a call depth); a budget stop
