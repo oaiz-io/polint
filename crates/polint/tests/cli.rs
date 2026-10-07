@@ -10582,7 +10582,13 @@ mod capability_planning {
             diagnostics_for_rule(&json, "local/request-to-sql").is_empty(),
             "a blocked rule reports nothing: {json:#?}"
         );
-        let capability = diagnostics_for_rule(&json, "polint/capability");
+        // The dependency capabilities (`module_graph`, `resolved_imports`)
+        // report their own setup rows without a module root; the data-flow
+        // row is the one this test is about.
+        let capability = diagnostics_for_rule(&json, "polint/capability")
+            .into_iter()
+            .filter(|diagnostic| diagnostic_has_evidence(diagnostic, "capability", "dataflow"))
+            .collect::<Vec<_>>();
         assert_eq!(capability.len(), 1, "{json:#?}");
         assert!(
             capability[0]["message"]
