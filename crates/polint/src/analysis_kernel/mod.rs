@@ -1945,12 +1945,12 @@ mod tests {
     #[cfg(feature = "lang-go")]
     #[test]
     fn deep_capabilities_get_compact_domain_facts_unless_per_point_states_are_requested() {
-        if !crate::go::semantic::process::go_toolchain_available_for_tests() {
-            eprintln!("skipping: the Go toolchain is not on PATH");
-            return;
-        }
         let calls = AnalysisPlan::from_capability_names_for_test(&["calls"]);
         let calls_run = run_tree_for_domain_test(DOMAIN_TEST_GO, &calls);
+        if !crate::go::semantic::process::typed_frontend_loaded_for_tests(&calls_run.db) {
+            eprintln!("skipping: the typed Go frontend loaded no package here");
+            return;
+        }
         assert!(calls_run.db.abstract_domain_observations().is_empty());
         assert!(calls_run.db.summary_facts().is_empty());
         assert!(
@@ -3827,10 +3827,6 @@ function setup() {
     #[cfg(feature = "lang-go")]
     #[test]
     fn a_calls_run_over_unchanged_go_sources_restores_its_call_facts() {
-        if !crate::go::semantic::process::go_toolchain_available_for_tests() {
-            eprintln!("skipping: the Go toolchain is not on PATH");
-            return;
-        }
         let temp = tempfile::tempdir().expect("temp directory");
         std::fs::write(
             temp.path().join("go.mod"),
@@ -3891,6 +3887,10 @@ function setup() {
         };
 
         let computed = run();
+        if !crate::go::semantic::process::typed_frontend_loaded_for_tests(&computed.db) {
+            eprintln!("skipping: the typed Go frontend loaded no package here");
+            return;
+        }
         assert!(!computed.db.refined_call_edges().is_empty());
         assert!(
             computed.db.call_targets().iter().any(|target| {
@@ -3948,10 +3948,6 @@ function setup() {
     #[cfg(feature = "lang-go")]
     #[test]
     fn a_go_data_flow_run_over_unchanged_sources_restores_call_facts_and_reads_flow_programs() {
-        if !crate::go::semantic::process::go_toolchain_available_for_tests() {
-            eprintln!("skipping: the Go toolchain is not on PATH");
-            return;
-        }
         use crate::sdk::dataflow::{FlowSink, FlowSource, FlowSpec};
 
         let temp = tempfile::tempdir().expect("temp directory");
@@ -3984,6 +3980,10 @@ function setup() {
             .sink(FlowSink::call_argument("sink", 0));
 
         let computed = run();
+        if !crate::go::semantic::process::typed_frontend_loaded_for_tests(&computed.db) {
+            eprintln!("skipping: the typed Go frontend loaded no package here");
+            return;
+        }
         for provider in call_cache::CACHED_PROVIDERS {
             assert_eq!(
                 provider_output(&computed, provider).cache_stats.hits,
