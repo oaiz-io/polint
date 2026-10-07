@@ -757,6 +757,15 @@ pub fn local_go_toolchain_version() -> Result<String, GoSemanticProcessError> {
     local_go_toolchain_version_with_program(OsStr::new("go"))
 }
 
+/// Whether a test that needs the typed Go frontend can run here: the Go
+/// toolchain is on `PATH`. Tests that need it skip with a note otherwise, as
+/// the sidecar-backed symbol tests do, so a build without Go (the
+/// language-feature CI matrix) checks everything else.
+#[cfg(test)]
+pub(crate) fn go_toolchain_available_for_tests() -> bool {
+    local_go_toolchain_version().is_ok()
+}
+
 fn local_go_toolchain_version_with_program(
     go_program: &OsStr,
 ) -> Result<String, GoSemanticProcessError> {

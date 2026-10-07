@@ -2602,7 +2602,6 @@ mod semantic_cache_restore {
         let cold = run_kernel(temp.path(), &cache, &plan);
         let warm = run_kernel(temp.path(), &cache, &plan);
 
-        assert_warm_symbol_graph_reuse(&warm);
         let cold_keys = stable_export_keys(&cold);
         let warm_keys = stable_export_keys(&warm);
         if cold_keys.is_empty() {
@@ -2618,7 +2617,13 @@ mod semantic_cache_restore {
                         .message
                         .contains("symbol graph provider support is setup_missing")
             }));
+            // A setup-missing graph records a failure of the environment, so
+            // it is never layer-cached: the warm run recomputes it.
+            let telemetry = symbol_graph_telemetry(&warm);
+            assert_eq!(telemetry.cache_stats.hits, 0);
+            assert_eq!(telemetry.cache_stats.recomputes, 1);
         } else {
+            assert_warm_symbol_graph_reuse(&warm);
             assert_eq!(cold_keys, warm_keys);
         }
     }

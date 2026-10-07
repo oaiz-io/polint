@@ -436,6 +436,10 @@ mod tests {
     #[cfg(feature = "lang-go")]
     #[test]
     fn a_route_budget_stop_marks_routes_incomplete_and_nothing_else() {
+        if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+            eprintln!("skipping: the Go toolchain is not on PATH");
+            return;
+        }
         let temp = tempfile::tempdir().expect("tempdir");
         std::fs::write(
             temp.path().join("go.mod"),

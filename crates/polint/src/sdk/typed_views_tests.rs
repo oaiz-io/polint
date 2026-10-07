@@ -96,6 +96,10 @@ fn function(output: &KernelOutput, name: &str) -> FunctionId {
 
 #[test]
 fn the_call_graph_reaches_through_interface_calls_and_names_dependency_callees() {
+    if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+        eprintln!("skipping: the Go toolchain is not on PATH");
+        return;
+    }
     let (_temp, output) = run();
     let graph = CallGraph::build(&output.db);
     let handle = function(&output, "Handle");
@@ -149,6 +153,10 @@ fn the_call_graph_reaches_through_interface_calls_and_names_dependency_callees()
 
 #[test]
 fn go_types_answer_fields_parameters_instantiations_and_implementations() {
+    if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+        eprintln!("skipping: the Go toolchain is not on PATH");
+        return;
+    }
     let (_temp, output) = run();
     let types = GoTypes::build(&output.db);
 
@@ -311,6 +319,10 @@ fn flows_report_no_program_when_a_mixed_scan_loaded_no_go_package() {
 
 #[test]
 fn data_flow_through_exactly_resolved_calls_stays_within_its_precision_ceiling() {
+    if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+        eprintln!("skipping: the Go toolchain is not on PATH");
+        return;
+    }
     use crate::sdk::prelude::{
         BarrierPattern, DataFlow, FlowQuery, PolicyPrecision, SinkPattern, SourcePattern,
     };
@@ -353,6 +365,10 @@ fn data_flow_through_exactly_resolved_calls_stays_within_its_precision_ceiling()
 
 #[test]
 fn a_function_literal_passed_to_a_helper_is_not_reached_by_the_helpers_other_callers() {
+    if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+        eprintln!("skipping: the Go toolchain is not on PATH");
+        return;
+    }
     const CALLBACKS: &str = r#"package typed
 
 type Tx struct{}
@@ -522,6 +538,10 @@ fn run_routed(models: Option<&str>) -> (tempfile::TempDir, KernelOutput) {
 
 #[test]
 fn routes_name_their_handlers_middleware_and_serve_calls_by_function() {
+    if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+        eprintln!("skipping: the Go toolchain is not on PATH");
+        return;
+    }
     let (_temp, output) = run_routed(Some(
         r#"
 [[go_route]]
@@ -613,6 +633,10 @@ argument = 0
 
 #[test]
 fn without_a_passthrough_model_a_wrapped_handler_is_named_by_its_wrapper() {
+    if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+        eprintln!("skipping: the Go toolchain is not on PATH");
+        return;
+    }
     let (_temp, output) = run_routed(None);
     let routes = Routes::build(&output.db);
     let handler = routes

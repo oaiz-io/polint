@@ -562,8 +562,11 @@ mod tests {
 
         assert_eq!(output.stdout.len(), 33_554_432);
         let elapsed = started.elapsed();
+        // 32 MiB is 512 pipe buffers, so the fixed 10 ms sleep per empty read
+        // took at least 5.12 s before the writer's own time; a hosted macOS
+        // runner needs about 3 s for the writer alone.
         assert!(
-            elapsed < Duration::from_millis(2_500),
+            elapsed < Duration::from_millis(4_500),
             "draining 32 MiB took {} ms",
             elapsed.as_millis()
         );

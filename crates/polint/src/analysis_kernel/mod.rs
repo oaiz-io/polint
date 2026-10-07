@@ -1945,6 +1945,10 @@ mod tests {
     #[cfg(feature = "lang-go")]
     #[test]
     fn deep_capabilities_get_compact_domain_facts_unless_per_point_states_are_requested() {
+        if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+            eprintln!("skipping: the Go toolchain is not on PATH");
+            return;
+        }
         let calls = AnalysisPlan::from_capability_names_for_test(&["calls"]);
         let calls_run = run_tree_for_domain_test(DOMAIN_TEST_GO, &calls);
         assert!(calls_run.db.abstract_domain_observations().is_empty());
@@ -3823,6 +3827,10 @@ function setup() {
     #[cfg(feature = "lang-go")]
     #[test]
     fn a_calls_run_over_unchanged_go_sources_restores_its_call_facts() {
+        if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+            eprintln!("skipping: the Go toolchain is not on PATH");
+            return;
+        }
         let temp = tempfile::tempdir().expect("temp directory");
         std::fs::write(
             temp.path().join("go.mod"),
@@ -3940,6 +3948,10 @@ function setup() {
     #[cfg(feature = "lang-go")]
     #[test]
     fn a_go_data_flow_run_over_unchanged_sources_restores_call_facts_and_reads_flow_programs() {
+        if !crate::go::semantic::process::go_toolchain_available_for_tests() {
+            eprintln!("skipping: the Go toolchain is not on PATH");
+            return;
+        }
         use crate::sdk::dataflow::{FlowSink, FlowSource, FlowSpec};
 
         let temp = tempfile::tempdir().expect("temp directory");
