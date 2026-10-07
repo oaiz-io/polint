@@ -22,10 +22,23 @@ const UNIT_BUDGET: u64 = 2_000_000;
 /// How long one question may take.
 const DEADLINE: Duration = Duration::from_secs(120);
 
-/// Answers `spec` over the run's Go flow program; no program, no flows.
+/// Answers `spec` over the run's Go flow program. Without one, a scan that has
+/// Go files answers no flows and one [`FlowUnknown::NoProgram`], so the empty
+/// answer is visibly not a proof; a scan without Go files answers nothing.
 pub(crate) fn flows(db: &AnalysisDb, spec: &FlowSpec) -> FlowAnswer {
     let Some(program) = db.go_flow_program() else {
-        return FlowAnswer::default();
+        let has_go_files = db
+            .files()
+            .iter()
+            .any(|file| file.language == crate::core::Language::Go);
+        return FlowAnswer {
+            flows: Vec::new(),
+            unknowns: if has_go_files {
+                vec![FlowUnknown::NoProgram]
+            } else {
+                Vec::new()
+            },
+        };
     };
     let models = db.go_flow_models().map(|loaded| &loaded.models);
     let query = query(spec, models, Instant::now() + DEADLINE);

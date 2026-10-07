@@ -252,6 +252,9 @@ pub enum FlowUnknown {
         /// The call's line.
         line: u32,
     },
+    /// The typed Go frontend loaded no package for the scan's Go files (none
+    /// lies under a `go.mod` module root), so no Go function was analyzed.
+    NoProgram,
 }
 
 /// A place on a flow's path.
@@ -319,7 +322,8 @@ impl Flow {
 
 /// A [`DataFlow::flows`](crate::sdk::facts::DataFlow::flows) answer: the flows,
 /// and what limited the search anywhere in the program. A flow a budget or the
-/// deadline cut off is missing from `flows`, and its cause is in `unknowns`.
+/// deadline cut off is missing from `flows`, and its cause is in `unknowns`;
+/// so is every flow of a program the frontend did not load.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct FlowAnswer {
@@ -330,8 +334,8 @@ pub struct FlowAnswer {
 }
 
 impl FlowAnswer {
-    /// Whether nothing limited the search, so the absence of a flow is an
-    /// answer.
+    /// Whether nothing limited the search of the program the frontend loaded,
+    /// so the absence of a flow is an answer.
     pub fn is_complete(&self) -> bool {
         !self.unknowns.iter().any(|unknown| {
             matches!(
@@ -339,6 +343,7 @@ impl FlowAnswer {
                 FlowUnknown::UnitBudget { .. }
                     | FlowUnknown::Deadline
                     | FlowUnknown::CallDepth { .. }
+                    | FlowUnknown::NoProgram
             )
         })
     }
@@ -365,6 +370,7 @@ fn unknown_label(unknown: &FlowUnknown) -> String {
         FlowUnknown::UnresolvedCall { function, line } => {
             format!("unresolved call: {function} line {line}")
         }
+        FlowUnknown::NoProgram => "no program: the typed Go frontend loaded no package".to_string(),
     }
 }
 

@@ -10560,6 +10560,49 @@ mod capability_planning {
         );
     }
 
+    /// Go data flow is answered from the typed frontend's flow programs. A
+    /// Go-only repository without a `go.mod` loads no package, so the rule is
+    /// blocked with the setup diagnostic instead of running against no
+    /// program and reporting nothing.
+    #[test]
+    fn dataflow_rules_need_a_module_root_on_a_go_only_scan() {
+        let temp = tempfile::tempdir().unwrap();
+        write_dataflow_rule_repo(temp.path());
+        std::fs::remove_file(temp.path().join("go.mod")).unwrap();
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        assert!(
+            diagnostics_for_rule(&json, "local/request-to-sql").is_empty(),
+            "a blocked rule reports nothing: {json:#?}"
+        );
+        let capability = diagnostics_for_rule(&json, "polint/capability");
+        assert_eq!(capability.len(), 1, "{json:#?}");
+        assert!(
+            capability[0]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("`dataflow`")
+                    && message.contains("loaded no package")),
+            "{json:#?}"
+        );
+        assert!(diagnostic_has_evidence(
+            capability[0],
+            "status",
+            "setup_missing"
+        ));
+        assert!(diagnostic_has_evidence(
+            capability[0],
+            "rule",
+            "local/request-to-sql"
+        ));
+    }
+
     #[test]
     fn dataflow_flows_answer_an_outside_rule_with_repository_models() {
         let temp = tempfile::tempdir().unwrap();

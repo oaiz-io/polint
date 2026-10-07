@@ -210,10 +210,11 @@ SARIF output renders as a code flow.
 `FlowAnswer::unknowns` and `Flow::unknowns` name what limited the search: a
 package's step budget (`UnitBudget`), the question's deadline (`Deadline`),
 calls nested too deep or a recursive cycle that did not settle (`CallDepth`),
-and dynamic calls with no known callee (`UnresolvedCall`). A flow a budget cut
-off is missing from the answer; `is_complete()` is false whenever a budget, the
-deadline or the depth limit cut anything, so an empty answer is then "not
-proved", not "no flow".
+dynamic calls with no known callee (`UnresolvedCall`), and a typed Go frontend
+that loaded no package for the scan's Go files (`NoProgram`). A flow a budget
+cut off is missing from the answer; `is_complete()` is false whenever a budget,
+the deadline or the depth limit cut anything, or no program was loaded, so an
+empty answer is then "not proved", not "no flow".
 
 ### How Go is analysed
 
@@ -246,6 +247,19 @@ program of hundreds of packages; each package has a step budget of two million
 facts per question and each question a two-minute deadline.
 
 TypeScript programs get no flows from `flows` yet.
+
+### Setup
+
+Go flows need the Go toolchain and a `go.mod` module root for the scanned Go
+files, like `GoTypes<'_>` ([Go types](go-semantic-types.md#setup)). On a scan
+of Go sources only, when the frontend loaded no package, `dataflow` is
+unavailable: a rule that requests `DataFlow<'_>` is not run and `polint check`
+reports a `polint/capability` diagnostic with status `setup_missing`. On a scan
+that also has other languages the rule runs (`forbidden` still answers from the
+value-flow graph) and `flows` answers no flows with a `NoProgram` unknown.
+Go files the frontend did not load inside a loaded program — files outside
+every module root, files excluded by build tags, `_test.go` files without
+`[languages.go] include_tests` — have no flows and add no unknown.
 
 ### Models
 

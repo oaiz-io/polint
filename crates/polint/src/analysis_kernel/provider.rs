@@ -1237,6 +1237,22 @@ pub(crate) fn reads_typed_go_frontend(capability: &str) -> bool {
     matches!(capability, "go_types" | "routes")
 }
 
+/// Whether `capability` has nothing to answer it when the typed Go frontend
+/// loaded no package: the capabilities answered from that frontend alone, and
+/// data flow on a scan of Go sources only, whose questions the taint solver
+/// answers over the frontend's flow programs. A scan with other languages still
+/// builds the value-flow graph, which answers `forbidden` for every file, so
+/// data flow stays available there and `flows` reports the missing program as
+/// an unknown instead.
+pub(crate) fn unanswerable_without_typed_go_frontend(
+    capability: &str,
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    reads_typed_go_frontend(capability)
+        || (capability == "dataflow" && !graph_data_flow_requested(plan, db))
+}
+
 pub(crate) fn go_types_unloaded(db: &AnalysisDb) -> bool {
     db.go_semantic_packages().is_empty()
         && db

@@ -254,7 +254,7 @@ propagators beyond the built-in ones are data (`[[go_flow_*]]` tables in
 | `Flow` | preview | Source, sink, sink argument, steps, precision, unknowns; `diagnostic` with located path evidence (SARIF code flows). Probe witness `_assert_flow`. |
 | `FlowStep` | preview | File, path, line, column, function. Probe witness `_assert_flowstep`. |
 | `FlowPrecision` | preview | Non-exhaustive: exact, setup-aware, conservative, heuristic. Probe witness `_assert_flowprecision`. |
-| `FlowUnknown` | preview | Non-exhaustive: unit budget, deadline, call depth, unresolved call. Probe witness `_assert_flowunknown`. |
+| `FlowUnknown` | preview | Non-exhaustive: unit budget, deadline, call depth, unresolved call, no program (the typed Go frontend loaded no package). Probe witness `_assert_flowunknown`. |
 
 The `ALLOWED_PRELUDE` count moved `143 -> 152` for these additions. Go is
 answered today; TypeScript programs get no flows from `flows` yet.

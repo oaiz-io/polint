@@ -1092,7 +1092,7 @@ impl AnalysisKernel {
                     .filter(|outcome| outcome.status != ProviderOutcomeStatus::Succeeded)
                     .collect::<Vec<_>>();
                 if failed.is_empty() {
-                    if provider::reads_typed_go_frontend(capability)
+                    if provider::unanswerable_without_typed_go_frontend(capability, plan, db)
                         && provider::go_types_unloaded(db)
                     {
                         unavailable.insert(capability.clone());

@@ -55,13 +55,23 @@ fn run_with_module(module: Option<&str>) -> (tempfile::TempDir, KernelOutput) {
 }
 
 fn run_source(module: Option<&str>, source: &str) -> (tempfile::TempDir, KernelOutput) {
+    run_files(module, &[("typed.go", source)], &["call_graph", "go_types"])
+}
+
+fn run_files(
+    module: Option<&str>,
+    files: &[(&str, &str)],
+    capabilities: &[&str],
+) -> (tempfile::TempDir, KernelOutput) {
     let temp = tempfile::tempdir().expect("temp directory");
     if let Some(module) = module {
         std::fs::write(temp.path().join("go.mod"), module).expect("write go.mod");
     }
-    std::fs::write(temp.path().join("typed.go"), source).expect("write Go source");
+    for (name, source) in files {
+        std::fs::write(temp.path().join(name), source).expect("write source");
+    }
     let loaded = load_config(temp.path()).expect("default config loads");
-    let plan = AnalysisPlan::from_capability_names_for_test(&["call_graph", "go_types"]);
+    let plan = AnalysisPlan::from_capability_names_for_test(capabilities);
     let output = AnalysisKernel::run(KernelInput {
         loaded: &loaded,
         cache: &Cache::new("", false),
@@ -241,6 +251,62 @@ fn go_types_are_unavailable_when_no_module_root_covers_the_go_files() {
         edge.precision == CallEdgePrecision::Heuristic
             && edge.algorithm == CallEdgeAlgorithm::Syntactic
     }));
+}
+
+/// Go data flow is answered from the typed frontend's flow programs, and a
+/// scan of Go sources only builds no value-flow graph to fall back on. With no
+/// package loaded a data-flow rule must be blocked with the setup diagnostic,
+/// not run against no program and read "no flow" where the truth is "not
+/// analyzed".
+#[test]
+fn data_flow_is_unavailable_on_a_go_only_scan_without_a_module_root() {
+    let (_temp, output) = run_files(None, &[("typed.go", SOURCE)], &["dataflow"]);
+
+    assert!(!output.db.capability_available("dataflow"));
+    assert!(
+        output
+            .runtime_blocked_rules
+            .contains("test/requested-capabilities")
+    );
+    assert!(output.diagnostics.iter().any(|diagnostic| {
+        diagnostic.rule_id == "polint/capability"
+            && diagnostic.message.contains("`dataflow`")
+            && diagnostic
+                .evidence
+                .iter()
+                .any(|evidence| evidence.label == "status" && evidence.value == "setup_missing")
+    }));
+}
+
+/// A scan with other languages keeps data flow available (the value-flow graph
+/// answers `forbidden` for every file), so `flows` must say that no Go program
+/// was loaded instead of answering an empty, complete answer.
+#[cfg(feature = "lang-typescript")]
+#[test]
+fn flows_report_no_program_when_a_mixed_scan_loaded_no_go_package() {
+    use crate::sdk::facts::{DataFlow, FlowSink, FlowSource, FlowSpec, FlowUnknown};
+
+    let (_temp, output) = run_files(
+        None,
+        &[
+            ("typed.go", SOURCE),
+            (
+                "app.ts",
+                "export function handler(token: string): string {\n  return token;\n}\n",
+            ),
+        ],
+        &["dataflow"],
+    );
+
+    assert!(output.db.capability_available("dataflow"));
+    assert!(output.runtime_blocked_rules.is_empty());
+    let spec = FlowSpec::new()
+        .source(FlowSource::call_result("NewRepo"))
+        .sink(FlowSink::call("requireAdmin"));
+    let answer = DataFlow::build(&output.db).flows(&spec);
+    assert!(answer.flows.is_empty());
+    assert_eq!(answer.unknowns, vec![FlowUnknown::NoProgram]);
+    assert!(!answer.is_complete());
 }
 
 #[test]

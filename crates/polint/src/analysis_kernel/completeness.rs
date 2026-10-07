@@ -116,7 +116,7 @@ fn capability_status(
         );
     }
 
-    if super::provider::reads_typed_go_frontend(capability)
+    if super::provider::unanswerable_without_typed_go_frontend(capability, plan, db)
         && super::provider::go_types_unloaded(db)
     {
         return (
