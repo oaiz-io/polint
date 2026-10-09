@@ -113,6 +113,12 @@ pub trait AnalysisHost: FactDatabase {
         self.stable_key_interner().resolve(id)
     }
 
+    /// Whether the call facts were restored without the MIR they were lowered
+    /// from, so their MIR ids name facts of the run that computed them.
+    fn call_facts_without_mir(&self) -> bool {
+        false
+    }
+
     fn replace_symbol_graph_facts(
         &mut self,
         symbols: Vec<crate::analysis_api::SymbolFact>,
@@ -1747,9 +1753,11 @@ fn call_status_metadata(
         }
         CallTargetStatus::Unsupported | CallTargetStatus::Rejected => FactPrecision::Unsupported,
         CallTargetStatus::SetupMissing => FactPrecision::SetupMissing,
+        // Known not to run: the branch it is in is ruled out by a constant.
+        CallTargetStatus::Unreachable => FactPrecision::SetupAware,
     };
     let confidence = match status {
-        CallTargetStatus::Resolved => FactConfidence::High,
+        CallTargetStatus::Resolved | CallTargetStatus::Unreachable => FactConfidence::High,
         CallTargetStatus::Ambiguous => FactConfidence::Medium,
         CallTargetStatus::Unresolved
         | CallTargetStatus::Unsupported
@@ -1769,6 +1777,7 @@ fn call_status_label(status: CallTargetStatus) -> &'static str {
         CallTargetStatus::SetupMissing => "setup_missing",
         CallTargetStatus::BudgetExceeded => "budget_exceeded",
         CallTargetStatus::Rejected => "rejected",
+        CallTargetStatus::Unreachable => "unreachable",
     }
 }
 
@@ -1916,6 +1925,7 @@ mod tests {
             caller: site.caller,
             target_function: None,
             target_symbol: None,
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Unknown,
             algorithm: crate::analysis_neutral::calls::facts::CallAlgorithm::Unsupported,
             status: CallTargetStatus::SetupMissing,

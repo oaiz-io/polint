@@ -28,8 +28,12 @@ pub(crate) const LAYER_CACHE_MANIFEST_SCHEMA: &str = "polint-layer-cache-manifes
 // manifest above it is treated as unreadable and evicted, which silently makes
 // its layer miss on every subsequent run. It therefore tracks the payload
 // ceiling rather than sitting below it.
-const LAYER_CACHE_MANIFEST_MAX_BYTES: u64 = 64 * 1_048_576;
-const LAYER_CACHE_PAYLOAD_MAX_BYTES: u64 = 64 * 1_048_576;
+const LAYER_CACHE_MANIFEST_MAX_BYTES: u64 = LAYER_CACHE_PAYLOAD_MAX_BYTES;
+// The writer has no ceiling, so a payload above this one is written, rejected on
+// the next read, evicted and rebuilt from its per-file entries on every warm run.
+// A Go syntax layer for a repository of about five thousand Go files is close to
+// 100 MB of JSON, so the ceiling sits well above that.
+const LAYER_CACHE_PAYLOAD_MAX_BYTES: u64 = 256 * 1_048_576;
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 const MANIFEST_LAYER_DEPENDENCY_SOURCE: &str = "__manifest_layer__";
 
@@ -908,11 +912,18 @@ fn changed_digest_or_fallback(
     requested: &[Digest],
     manifest: &LayerCacheManifest,
 ) -> Digest {
-    if let Some(digest) = cached.iter().find(|digest| !requested.contains(digest)) {
+    if let Some(digest) = first_digest_not_in(cached, requested) {
         digest.clone()
     } else {
         layer_key_change_digest(&manifest.key, &manifest.key)
     }
+}
+
+/// The first digest of `cached` that `requested` does not hold. Both lists can
+/// hold one digest per input file, so membership goes through a set.
+fn first_digest_not_in<'a>(cached: &'a [Digest], requested: &[Digest]) -> Option<&'a Digest> {
+    let requested = requested.iter().collect::<std::collections::HashSet<_>>();
+    cached.iter().find(|digest| !requested.contains(digest))
 }
 
 fn layer_key_change_digest(cached: &LayerKey, requested: &LayerKey) -> Digest {
@@ -924,22 +935,17 @@ fn layer_key_change_digest(cached: &LayerKey, requested: &LayerKey) -> Digest {
         cached.lifecycle_digest.clone()
     } else if cached.toolchain_digest != requested.toolchain_digest {
         cached.toolchain_digest.clone()
-    } else if let Some(digest) = cached
-        .input_digests
-        .iter()
-        .find(|digest| !requested.input_digests.contains(digest))
+    } else if let Some(digest) =
+        first_digest_not_in(&cached.input_digests, &requested.input_digests)
     {
         digest.clone()
-    } else if let Some(digest) = cached
-        .dependency_layer_digests
-        .iter()
-        .find(|digest| !requested.dependency_layer_digests.contains(digest))
-    {
+    } else if let Some(digest) = first_digest_not_in(
+        &cached.dependency_layer_digests,
+        &requested.dependency_layer_digests,
+    ) {
         digest.clone()
-    } else if let Some(digest) = cached
-        .extension_digests
-        .iter()
-        .find(|digest| !requested.extension_digests.contains(digest))
+    } else if let Some(digest) =
+        first_digest_not_in(&cached.extension_digests, &requested.extension_digests)
     {
         digest.clone()
     } else {
@@ -1144,6 +1150,39 @@ mod tests {
         assert!(
             manifest_bytes > 4 * 1_048_576,
             "fixture manifest is {manifest_bytes} bytes, too small to exercise the ceiling"
+        );
+        assert_eq!(outcome.status, LayerCacheReadStatus::Hit);
+        assert_eq!(outcome.value, Some(payload));
+    }
+
+    /// The writer accepts any payload, so a payload the reader refuses is
+    /// evicted and rebuilt on every warm run. A large repository's Go syntax
+    /// layer passes 64 MiB of JSON; it must still restore.
+    #[test]
+    fn a_payload_larger_than_sixty_four_mebibytes_still_round_trips_to_a_hit() {
+        let scratch = scratch_dir();
+        let store = LayerCacheStore::new(scratch.path().join("layers"), true);
+        let payload = Payload {
+            items: (0..66)
+                .map(|ordinal| format!("{ordinal}{}", "x".repeat(1_048_576)))
+                .collect(),
+        };
+        let layer_key = key();
+        let manifest = manifest_for_payload(layer_key.clone(), &payload);
+
+        store.write_json(&manifest, &payload).unwrap();
+        let payload_bytes = std::fs::metadata(
+            store
+                .blobs_dir_for_test()
+                .join(format!("{}.json", manifest.payload_digest.value)),
+        )
+        .expect("payload metadata")
+        .len();
+        let outcome: LayerCacheReadOutcome<Payload> = store.read_json(&layer_key);
+
+        assert!(
+            payload_bytes > 64 * 1_048_576,
+            "fixture payload is {payload_bytes} bytes, too small to exercise the ceiling"
         );
         assert_eq!(outcome.status, LayerCacheReadStatus::Hit);
         assert_eq!(outcome.value, Some(payload));
@@ -1369,6 +1408,137 @@ mod tests {
             !stale_manifest_path.exists(),
             "stale manifest should be evicted after dependency-index invalidation"
         );
+    }
+
+    fn wide_module_graph_key(inputs: usize, changed: Option<usize>) -> LayerKey {
+        LayerKey::new(
+            crate::analysis_kernel::incremental::keys::LayerKind::ModuleGraph,
+            "polint.module_graph",
+            "1",
+            "module-graph-v1",
+            Digest::absent(DigestKind::ProviderParameters, "none"),
+            Digest::absent(DigestKind::ProviderParameters, "none"),
+            Digest::absent(DigestKind::Config, "none"),
+            Digest::absent(DigestKind::ToolInvocation, "none"),
+            (0..inputs)
+                .map(|index| {
+                    let edited = if changed == Some(index) {
+                        "-edited"
+                    } else {
+                        ""
+                    };
+                    digest(
+                        DigestKind::SourceText,
+                        &format!("src/file{index:05}.go{edited}"),
+                    )
+                })
+                .collect(),
+            vec![digest(DigestKind::DependencyLayer, "polint.go.syntax")],
+            Vec::new(),
+        )
+    }
+
+    /// A one-file edit misses every layer keyed on the scan's sources. The miss
+    /// checks each stale manifest of the same layer against the new key; with one
+    /// input digest and one dependency edge per file, that check sorts tens of
+    /// thousands of edges that all carry the layer's key, and it must not walk
+    /// the key's digest list on every comparison (it took minutes per layer on a
+    /// 2,846-file Go module before).
+    #[test]
+    fn stale_manifest_check_on_a_wide_layer_stays_near_linear() {
+        const FILES: usize = 20_000;
+        let scratch = scratch_dir();
+        let store = LayerCacheStore::new(scratch.path().join("layers"), true);
+        let payload = Payload {
+            items: vec!["graph".to_string()],
+        };
+        let stale_key = wide_module_graph_key(FILES, None);
+        let dependencies = (0..FILES)
+            .map(|index| DependencyEdge {
+                from: CacheNode::Layer(stale_key.clone()),
+                to: CacheNode::Input(format!("source:src/file{index:05}.go:hash{index}")),
+                kind: DependencyKind::SourceText,
+                required_shape: ShapeKind::Content,
+            })
+            .collect();
+        let manifest = LayerCacheManifest::new(
+            stale_key.clone(),
+            digest(DigestKind::ProviderOutput, "output"),
+            LayerCacheStore::payload_digest_for_json(&payload).expect("payload digest"),
+            dependencies,
+            PrecisionTier::Syntax,
+            "native_trusted",
+            Vec::new(),
+        );
+        store.write_json(&manifest, &payload).unwrap();
+        let stale_manifest_path = store.manifest_path_for_test(&stale_key);
+        let requested_key = wide_module_graph_key(FILES, Some(FILES / 2));
+
+        let started = std::time::Instant::now();
+        let outcome: LayerCacheReadOutcome<Payload> = store.read_json(&requested_key);
+        let elapsed = started.elapsed();
+
+        assert_eq!(outcome.status, LayerCacheReadStatus::Miss);
+        assert!(
+            !stale_manifest_path.exists(),
+            "the stale manifest is evicted"
+        );
+        // Well over the near-linear cost even in a debug build on a loaded host,
+        // and far under the quadratic one.
+        assert!(
+            elapsed < std::time::Duration::from_secs(20),
+            "stale manifest check took {} ms",
+            elapsed.as_millis()
+        );
+    }
+
+    /// The layer key's order is the derived field-by-field order whether or not
+    /// two keys share their digest lists.
+    #[test]
+    fn layer_key_order_is_field_order_with_or_without_shared_digest_lists() {
+        let base = wide_module_graph_key(3, None);
+        let shared = base.clone();
+        let separate = wide_module_graph_key(3, None);
+        let edited = wide_module_graph_key(3, Some(1));
+        assert!(std::sync::Arc::ptr_eq(
+            &base.input_digests,
+            &shared.input_digests
+        ));
+        assert!(!std::sync::Arc::ptr_eq(
+            &base.input_digests,
+            &separate.input_digests
+        ));
+        assert_eq!(base.cmp(&shared), std::cmp::Ordering::Equal);
+        assert_eq!(base.cmp(&separate), std::cmp::Ordering::Equal);
+        assert_eq!(base, separate);
+
+        let mut changed_provider = base.clone();
+        changed_provider.provider_id = "polint.module_graph.b".to_string();
+        let mut changed_extensions = base.clone();
+        changed_extensions.extension_digests =
+            std::sync::Arc::new(vec![digest(DigestKind::ExtensionCode, "extension")]);
+        let keys = [base, edited, changed_provider, changed_extensions, separate];
+        let content = |key: &LayerKey| {
+            (
+                key.layer_kind,
+                key.provider_id.clone(),
+                key.provider_version.clone(),
+                key.schema_version.clone(),
+                key.parameter_digest.clone(),
+                key.lifecycle_digest.clone(),
+                key.config_digest.clone(),
+                key.toolchain_digest.clone(),
+                (*key.input_digests).clone(),
+                (*key.dependency_layer_digests).clone(),
+                (*key.extension_digests).clone(),
+            )
+        };
+        for left in &keys {
+            for right in &keys {
+                assert_eq!(left.cmp(right), content(left).cmp(&content(right)));
+                assert_eq!(left == right, content(left) == content(right));
+            }
+        }
     }
 
     #[test]

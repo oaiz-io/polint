@@ -28,6 +28,8 @@ pub struct DomainOutput {
 pub enum DomainMaterialization {
     Full,
     SummaryInputs,
+    /// No domain facts: nothing the run asked for reads them.
+    Skipped,
 }
 
 impl DomainOutput {
@@ -63,6 +65,7 @@ impl DomainOutput {
             DomainMaterialization::SummaryInputs => {
                 Self::from_results_for_summary_inputs(interner, results)
             }
+            DomainMaterialization::Skipped => Self::empty(),
         }
     }
 

@@ -5,9 +5,13 @@ use crate::internal_core::{StableKeyId, StableKeyInterner};
 
 use crate::go::error::AnalysisError;
 use crate::go::semantic::facts::{
-    GoSemanticAddressTakenFact, GoSemanticCallsiteFact, GoSemanticDynamicDispatchFact,
-    GoSemanticFunctionFact, GoSemanticInstantiatedTypeFact, GoSemanticMethodSetFact,
-    GoSemanticPackageErrorFact, GoSemanticPackageFact, GoSemanticRtaEdgeFact,
+    GoSemanticAddressTakenFact, GoSemanticBuiltinCallFact, GoSemanticCallEdgeFact,
+    GoSemanticCallsiteFact, GoSemanticConversionFact, GoSemanticDeadCallFact,
+    GoSemanticDynamicDispatchFact, GoSemanticFieldFact, GoSemanticFunctionFact,
+    GoSemanticImplementsFact, GoSemanticInstantiatedTypeFact, GoSemanticInstantiationFact,
+    GoSemanticInterfaceFact, GoSemanticMethodSetFact, GoSemanticPackageErrorFact,
+    GoSemanticPackageFact, GoSemanticParamFact, GoSemanticRouteFact, GoSemanticRouteServeFact,
+    GoSemanticRtaEdgeFact,
 };
 use crate::go::semantic::validate::validate_go_semantic_output;
 
@@ -61,6 +65,37 @@ pub struct GoSemanticFactsOutput {
     pub dynamic_dispatch: Vec<GoSemanticDynamicDispatchFact>,
     pub rta_edges: Vec<GoSemanticRtaEdgeFact>,
     pub package_errors: Vec<GoSemanticPackageErrorFact>,
+    pub call_edges: Vec<GoSemanticCallEdgeFact>,
+    pub interfaces: Vec<GoSemanticInterfaceFact>,
+    pub implements: Vec<GoSemanticImplementsFact>,
+    pub instantiations: Vec<GoSemanticInstantiationFact>,
+    pub conversions: Vec<GoSemanticConversionFact>,
+    pub dead_calls: Vec<GoSemanticDeadCallFact>,
+    pub builtin_calls: Vec<GoSemanticBuiltinCallFact>,
+    pub fields: Vec<GoSemanticFieldFact>,
+    pub params: Vec<GoSemanticParamFact>,
+    pub routes: Vec<GoSemanticRouteFact>,
+    pub route_serves: Vec<GoSemanticRouteServeFact>,
+    /// Set when the route interpreter stopped at its step budget: the routes are
+    /// the ones found before it stopped.
+    pub route_budget_steps: Option<u64>,
+    /// The program's flow bodies, when the plan reads data flow.
+    pub flow: Option<std::sync::Arc<crate::go::flow::GoFlowProgram>>,
+    /// The data-flow models the plan's queries use, when it reads data flow.
+    pub flow_models: Option<std::sync::Arc<crate::go::flow_models::GoFlowModels>>,
+}
+
+/// Sorts a typed family by stable-key text, keeps the first row of each key (a
+/// package and its test variant emit the same declarations), and renumbers the
+/// survivors densely.
+macro_rules! normalize_keyed_family {
+    ($rows:expr, $interner:expr, $id:path) => {{
+        $rows.sort_by_cached_key(|row| $interner.resolve(row.stable_key));
+        $rows.dedup_by(|left, right| left.stable_key == right.stable_key);
+        for (index, fact) in $rows.iter_mut().enumerate() {
+            fact.id = $id(index as u64);
+        }
+    }};
 }
 
 impl GoSemanticFactsOutput {
@@ -141,6 +176,62 @@ impl GoSemanticFactsOutput {
         for (index, fact) in self.package_errors.iter_mut().enumerate() {
             fact.id = crate::go::semantic::facts::GoSemanticPackageErrorId(index as u64);
         }
+
+        normalize_keyed_family!(
+            self.call_edges,
+            interner,
+            crate::go::semantic::facts::GoSemanticCallEdgeId
+        );
+        normalize_keyed_family!(
+            self.interfaces,
+            interner,
+            crate::go::semantic::facts::GoSemanticInterfaceId
+        );
+        normalize_keyed_family!(
+            self.implements,
+            interner,
+            crate::go::semantic::facts::GoSemanticImplementsId
+        );
+        normalize_keyed_family!(
+            self.instantiations,
+            interner,
+            crate::go::semantic::facts::GoSemanticInstantiationId
+        );
+        normalize_keyed_family!(
+            self.conversions,
+            interner,
+            crate::go::semantic::facts::GoSemanticConversionId
+        );
+        normalize_keyed_family!(
+            self.dead_calls,
+            interner,
+            crate::go::semantic::facts::GoSemanticDeadCallId
+        );
+        normalize_keyed_family!(
+            self.builtin_calls,
+            interner,
+            crate::go::semantic::facts::GoSemanticBuiltinCallId
+        );
+        normalize_keyed_family!(
+            self.fields,
+            interner,
+            crate::go::semantic::facts::GoSemanticFieldId
+        );
+        normalize_keyed_family!(
+            self.params,
+            interner,
+            crate::go::semantic::facts::GoSemanticParamId
+        );
+        normalize_keyed_family!(
+            self.routes,
+            interner,
+            crate::go::semantic::facts::GoSemanticRouteId
+        );
+        normalize_keyed_family!(
+            self.route_serves,
+            interner,
+            crate::go::semantic::facts::GoSemanticRouteServeId
+        );
         self
     }
 
@@ -496,6 +587,10 @@ mod tests {
             package_path: "example.com/pkg".to_string(),
             caller: "example.com/pkg.main".to_string(),
             static_callee: None,
+            static_callee_origin: None,
+            receiver_type: None,
+            via_value: false,
+            mode: crate::go::semantic::facts::GoCallMode::Call,
             status: GoSemanticCallStatus::UnresolvedDynamic,
             reason: None,
             relative_file: None,

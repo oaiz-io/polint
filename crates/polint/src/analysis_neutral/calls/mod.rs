@@ -4,5 +4,6 @@ pub mod extract;
 pub mod facts;
 pub mod provider;
 pub mod store;
+pub mod typed;
 pub mod unresolved;
 pub mod validate;

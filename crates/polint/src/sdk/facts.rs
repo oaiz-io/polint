@@ -855,12 +855,19 @@ pub struct Cfg<'a> {
     _db: &'a AnalysisDb,
 }
 
-/// Reserved call-graph fact view. Requesting this view currently maps to unsupported `call_graph`.
-#[derive(Clone, Copy)]
-#[non_exhaustive]
-pub struct CallGraph<'a> {
-    _db: &'a AnalysisDb,
-}
+pub use super::call_graph::{
+    CallEdgeAlgorithm, CallEdgePrecision, CallGraph, CallGraphCallee, CallGraphEdge,
+    CallGraphReach, CallGraphWalk,
+};
+pub use super::dataflow::{
+    Flow, FlowAnswer, FlowPrecision, FlowSink, FlowSource, FlowSpec, FlowStep, FlowUnknown,
+    FlowValueKind,
+};
+pub use super::go_types::{
+    GoField, GoFunctionType, GoGenericTarget, GoImplementation, GoInstantiation, GoParameter,
+    GoTypes,
+};
+pub use super::routes::{Route, RouteFunction, RouteFunctionKind, RouteTransport, Routes};
 
 /// Preview event policy view. Requesting this view maps to lightweight `events`.
 #[derive(Clone, Copy)]
@@ -956,6 +963,27 @@ impl<'a> DataFlow<'a> {
     /// facts without exposing raw graph nodes, edges, or solver internals.
     pub fn forbidden(self, query: FlowQuery) -> Vec<PolicyViolation> {
         crate::policy_queries::forbidden_flows(self.db, query)
+    }
+
+    /// Answers a data-flow question: every sink the tracked values reach, each
+    /// with its path from a source, its precision, and what limited the
+    /// analysis of the functions it passes.
+    ///
+    /// Go programs are answered from the typed frontend's SSA: summaries of
+    /// each function per entering value, reused across its callers; access
+    /// paths of two field steps (three with [`FlowSpec::deeper_paths`]);
+    /// candidate callees from variable-type analysis, then the class
+    /// hierarchy; models of library functions as data, the built-in ones and a
+    /// repository's `[[go_flow_*]]` tables in `.polint/models/*.toml`. A
+    /// library function without a model is assumed to pass its arguments to
+    /// its result, and flows through such a step are
+    /// [`FlowPrecision::Conservative`]. Memory is not flow-sensitive: a
+    /// struct field or element that once held a tracked value keeps it. Each
+    /// package has a step budget and each question a deadline; what they cut
+    /// is in [`FlowAnswer::unknowns`] and on the flows they affect.
+    /// TypeScript programs get no flows yet. See `docs/facts/data-flow.md`.
+    pub fn flows(self, spec: &FlowSpec) -> FlowAnswer {
+        crate::flow_queries::flows(self.db, spec)
     }
 }
 
@@ -1096,6 +1124,12 @@ impl<'a> ChangedFileRef<'a> {
 pub trait FactView<'a>: Sized {
     /// Builds a view for the current analysis database.
     fn build(db: &'a AnalysisDb) -> Self;
+
+    /// Builds the view a rule requested optionally: `None` when the run could
+    /// not provide its capability.
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        Some(Self::build(db))
+    }
 }
 
 macro_rules! impl_fact_view {
@@ -1136,7 +1170,36 @@ impl_fact_view!(JsxAttributes);
 impl_fact_view!(CoverageFacts);
 impl_fact_view!(ChangedFiles);
 impl_fact_view!(Cfg, _db);
-impl_fact_view!(CallGraph, _db);
+impl<'a> FactView<'a> for CallGraph<'a> {
+    fn build(db: &'a AnalysisDb) -> Self {
+        Self { db }
+    }
+
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        db.capability_available("call_graph")
+            .then(|| Self::build(db))
+    }
+}
+
+impl<'a> FactView<'a> for GoTypes<'a> {
+    fn build(db: &'a AnalysisDb) -> Self {
+        Self { db }
+    }
+
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        db.capability_available("go_types").then(|| Self::build(db))
+    }
+}
+
+impl<'a> FactView<'a> for Routes<'a> {
+    fn build(db: &'a AnalysisDb) -> Self {
+        Self { db }
+    }
+
+    fn build_optional(db: &'a AnalysisDb) -> Option<Self> {
+        db.capability_available("routes").then(|| Self::build(db))
+    }
+}
 impl_fact_view!(Events);
 impl_fact_view!(Calls);
 impl_fact_view!(ControlFlow);

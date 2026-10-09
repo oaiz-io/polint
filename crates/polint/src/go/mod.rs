@@ -6,7 +6,11 @@
 mod adapter;
 mod embedded_cache;
 pub mod error;
+pub(crate) mod flow;
+pub(crate) mod flow_models;
 mod frontend;
+#[cfg(feature = "lang-go")]
+mod grammar;
 mod hash;
 pub mod lifecycle;
 mod local_db;
@@ -14,10 +18,11 @@ mod local_db;
 mod mir;
 pub mod module_graph;
 mod process_runner;
+pub(crate) mod route_models;
 pub(crate) mod rta;
 #[cfg(feature = "lang-go")]
 #[doc(hidden)]
-pub use mir::lower_go_mir;
+pub use mir::{lower_go_mir, lower_go_mir_by_file};
 #[allow(dead_code)]
 mod repo_fs;
 pub mod semantic;
@@ -30,6 +35,7 @@ mod syntax_store;
 mod test_cache;
 #[cfg(all(test, feature = "lang-go"))]
 mod tests;
+pub(crate) mod typed_calls;
 
 /// Re-export for `polint::_bench::go`; production callers use the plan-aware entrypoint.
 #[cfg(feature = "lang-go")]

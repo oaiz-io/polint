@@ -179,29 +179,52 @@ fn reference_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
 fn go_semantic_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    db.go_semantic_package_errors()
-        .iter()
-        .map(|error| {
-            let category = go_package_error_category(&error.message);
+    let mut rows = route_budget_unknowns(db);
+    rows.extend(db.go_semantic_package_errors().iter().map(|error| {
+        let category = go_package_error_category(&error.message);
+        UnknownRow::new(UnknownRowInput {
+            category,
+            capability: Some("go_semantic".to_string()),
+            family: Some("GoSemanticPackageError".to_string()),
+            provider: "polint.go.semantic".to_string(),
+            file: "<workspace>".to_string(),
+            span: None,
+            status: category.as_str().to_string(),
+            reason: Some(error.message.clone()),
+            precision: Some("unsupported".to_string()),
+            docs_path: Some("docs/facts/capability-plans.md".to_string()),
+            suggested_artifact: Some("go_setup".to_string()),
+            source_stable_key: Some(interner.resolve(error.stable_key).to_string()),
+        })
+    }));
+    rows
+}
+
+/// The row a route interpretation that stopped at its step budget leaves: the
+/// routes listed are the ones found before it stopped.
+fn route_budget_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
+    db.go_semantic_route_budget_steps()
+        .map(|steps| {
             UnknownRow::new(UnknownRowInput {
-                category,
-                capability: Some("go_semantic".to_string()),
-                family: Some("GoSemanticPackageError".to_string()),
+                category: UnknownCategory::BudgetExceeded,
+                capability: Some("routes".to_string()),
+                family: Some("GoSemanticRoutes".to_string()),
                 provider: "polint.go.semantic".to_string(),
                 file: "<workspace>".to_string(),
                 span: None,
-                status: category.as_str().to_string(),
-                reason: Some(error.message.clone()),
-                precision: Some("unsupported".to_string()),
-                docs_path: Some("docs/facts/capability-plans.md".to_string()),
-                suggested_artifact: Some("go_setup".to_string()),
-                source_stable_key: Some(interner.resolve(error.stable_key).to_string()),
+                status: "budget_exceeded".to_string(),
+                reason: Some(format!("route interpretation stopped after {steps} steps")),
+                precision: Some("unknown".to_string()),
+                docs_path: Some("docs/facts/routes.md".to_string()),
+                suggested_artifact: Some("budget_or_model".to_string()),
+                source_stable_key: Some("polint.go.semantic:route-budget".to_string()),
             })
         })
+        .into_iter()
         .collect()
 }
 
-fn go_semantic_diagnostic_unknowns(diagnostics: &[Diagnostic]) -> Vec<UnknownRow> {
+pub(crate) fn go_semantic_diagnostic_unknowns(diagnostics: &[Diagnostic]) -> Vec<UnknownRow> {
     diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.rule_id == "polint/go-semantic")
@@ -376,7 +399,7 @@ fn refined_call_unknown(
         CallTargetStatus::SetupMissing => UnknownCategory::SetupMissing,
         CallTargetStatus::Unsupported => UnknownCategory::UnsupportedSemantic,
         CallTargetStatus::BudgetExceeded => UnknownCategory::BudgetExceeded,
-        CallTargetStatus::Rejected => UnknownCategory::Rejected,
+        CallTargetStatus::Rejected | CallTargetStatus::Unreachable => UnknownCategory::Rejected,
         CallTargetStatus::Unresolved | CallTargetStatus::Ambiguous => UnknownCategory::MissingFact,
         CallTargetStatus::Resolved => UnknownCategory::MissingFact,
     };

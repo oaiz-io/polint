@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::facts::{
     RefinedCallConfidence, RefinedCallEdgeFact, RefinedCallTier, RefinedCallValidation,
 };
@@ -15,6 +17,19 @@ use crate::analysis_neutral::summaries::facts::{
 pub fn derive_summary_assisted_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    // Each caller's targets in storage order, and each site's language, built once
+    // instead of scanning every target per summary and every site per edge.
+    let mut targets_by_caller = HashMap::<_, Vec<&CallTargetFact>>::new();
+    for target in db.call_targets() {
+        targets_by_caller
+            .entry(target.caller)
+            .or_default()
+            .push(target);
+    }
+    let mut site_languages = HashMap::new();
+    for site in db.call_sites() {
+        site_languages.entry(site.id).or_insert(site.language);
+    }
     let mut edges = Vec::new();
     for summary in db.summary_facts() {
         if summary.domain != SummaryDomainKind::CallEffects
@@ -22,12 +37,21 @@ pub fn derive_summary_assisted_refinements(db: &impl AnalysisHost) -> RefinedCal
         {
             continue;
         }
-        for target in db
-            .call_targets()
-            .iter()
-            .filter(|target| target.caller == summary.function)
+        for target in targets_by_caller
+            .get(&summary.function)
+            .map_or(&[][..], Vec::as_slice)
         {
-            edges.push(edge_from_summary(db, summary, target, edges.len()));
+            let language = site_languages
+                .get(&target.site)
+                .copied()
+                .unwrap_or(crate::internal_core::Language::Unknown);
+            edges.push(edge_from_summary(
+                db,
+                summary,
+                target,
+                language,
+                edges.len(),
+            ));
         }
     }
     RefinedCallOutput { edges }.normalized(interner)
@@ -37,6 +61,7 @@ fn edge_from_summary(
     db: &impl AnalysisHost,
     summary: &SummaryFact,
     target: &CallTargetFact,
+    language: crate::internal_core::Language,
     index: usize,
 ) -> RefinedCallEdgeFact {
     let interner_handle = db.stable_key_interner();
@@ -60,13 +85,8 @@ fn edge_from_summary(
         caller: target.caller,
         target_function: target.target_function,
         target_symbol: target.target_symbol,
-        synthetic_target: None,
-        language: db
-            .call_sites()
-            .iter()
-            .find(|site| site.id == target.site)
-            .map(|site| site.language)
-            .unwrap_or(crate::internal_core::Language::Unknown),
+        synthetic_target: target.synthetic_target.clone(),
+        language,
         edge_kind: target.edge_kind,
         algorithm: CallAlgorithm::SummaryAssisted,
         tier: RefinedCallTier::SummaryAssisted,
@@ -75,7 +95,8 @@ fn edge_from_summary(
         provenance: CallProvenance::Native,
         precision: summary_precision(summary.precision),
         validation: RefinedCallValidation::ReferentiallyValidated,
-        confidence: summary_confidence(summary.precision, target.status),
+        confidence: summary_confidence(summary.precision, target.status)
+            .weaker(super::provider::target_confidence_ceiling(target)),
         evidence: vec![
             "summary_call_effect".to_string(),
             format!("summary={summary_key}"),
@@ -116,7 +137,8 @@ fn summary_confidence(
         | CallTargetStatus::Unsupported
         | CallTargetStatus::SetupMissing
         | CallTargetStatus::BudgetExceeded
-        | CallTargetStatus::Rejected => RefinedCallConfidence::Low,
+        | CallTargetStatus::Rejected
+        | CallTargetStatus::Unreachable => RefinedCallConfidence::Low,
     }
 }
 
@@ -174,7 +196,37 @@ mod tests {
         assert!(output.edges.is_empty());
     }
 
+    /// A summary refines a call; it does not make a candidate that may be called
+    /// one that must be.
+    #[test]
+    fn a_summary_assisted_edge_is_no_more_certain_than_its_base_target() {
+        for (algorithm, expected) in [
+            (CallAlgorithm::DirectReference, RefinedCallConfidence::High),
+            (CallAlgorithm::GoStatic, RefinedCallConfidence::High),
+            (CallAlgorithm::GoVta, RefinedCallConfidence::Medium),
+            (CallAlgorithm::GoCha, RefinedCallConfidence::Medium),
+        ] {
+            let mut db = db_with_call_target_found_by(algorithm);
+            db.replace_summary_facts(SummaryOutput {
+                summaries: vec![summary(
+                    SummaryStatus::Present,
+                    SummaryDomainKind::CallEffects,
+                )],
+                events: Vec::new(),
+            });
+
+            let output = derive_summary_assisted_refinements(&db);
+
+            assert_eq!(output.edges.len(), 1);
+            assert_eq!(output.edges[0].confidence, expected);
+        }
+    }
+
     fn db_with_call_target() -> LocalAnalysisDb {
+        db_with_call_target_found_by(CallAlgorithm::DirectReference)
+    }
+
+    fn db_with_call_target_found_by(algorithm: CallAlgorithm) -> LocalAnalysisDb {
         let mut db = LocalAnalysisDb::new();
         let file = db.add_file(
             "src/app.ts".into(),
@@ -232,8 +284,9 @@ mod tests {
                 caller,
                 target_function: Some(callee),
                 target_symbol: Some(SymbolId::from_raw(0)),
+                synthetic_target: None,
                 edge_kind: CallEdgeKind::Direct,
-                algorithm: CallAlgorithm::DirectReference,
+                algorithm,
                 status: CallTargetStatus::Resolved,
                 reason: None,
                 provenance: CallProvenance::NativeDirect,

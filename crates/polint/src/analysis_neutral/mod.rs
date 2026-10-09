@@ -43,6 +43,7 @@ pub mod stable_key;
 pub mod store;
 pub mod summaries;
 pub mod symbol_graph;
+pub(crate) mod taint;
 pub mod types;
 pub mod unknown_taxonomy;
 pub mod values;

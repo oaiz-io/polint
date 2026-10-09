@@ -28,6 +28,7 @@ use crate::analysis_api::SourceFile;
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::store::AdaptationModelStore;
 use crate::analysis_neutral::ids::{ObjectTokenId, PlaceId, SemanticNodeId};
+use crate::analysis_neutral::semantic_graph::build::TS_DIRECT_BINDING_ORIGIN;
 use crate::analysis_neutral::semantic_graph::build::{
     function_node_key, node_key_from_identity, place_node_key,
 };
@@ -76,6 +77,7 @@ pub(crate) fn build_semantic_graph(db: &impl AnalysisHost) -> SemanticGraphOutpu
         db,
         &ts_direct_bindings,
         no_additional_projection,
+        None,
     )
 }
 
@@ -86,12 +88,14 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection<H: Analysis
         &H,
         &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
     ),
+    excluded_language: Option<crate::internal_core::Language>,
 ) -> SemanticGraphOutput {
     build_semantic_graph_with_ts_direct_binding_collection_and_adaptation_models(
         db,
         ts_direct_bindings,
         &AdaptationModelStore::default(),
         project_additional_facts,
+        excluded_language,
     )
 }
 
@@ -121,6 +125,7 @@ pub(crate) fn build_semantic_graph_with_ts_direct_bindings_and_adaptation_models
         None,
         &[],
         no_additional_projection,
+        None,
     )
 }
 
@@ -134,6 +139,7 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection_and_adaptat
         &H,
         &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
     ),
+    excluded_language: Option<crate::internal_core::Language>,
 ) -> SemanticGraphOutput {
     let object_model = ts_direct_bindings.object_model_output();
     build_semantic_graph_with_inputs(
@@ -144,9 +150,14 @@ pub(crate) fn build_semantic_graph_with_ts_direct_binding_collection_and_adaptat
         Some(ts_direct_bindings.analyses.as_slice()),
         &ts_direct_bindings.callable_flows,
         project_additional_facts,
+        excluded_language,
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The graph build takes each TS input family and the language the plan leaves out."
+)]
 fn build_semantic_graph_with_inputs<H: AnalysisHost>(
     db: &H,
     ts_direct_bindings: &[TsDirectBindingFact],
@@ -158,10 +169,14 @@ fn build_semantic_graph_with_inputs<H: AnalysisHost>(
         &H,
         &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
     ),
+    excluded_language: Option<crate::internal_core::Language>,
 ) -> SemanticGraphOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut builder = GraphBuilder::default();
+    if let Some(language) = excluded_language {
+        builder.inner.exclude_language(language);
+    }
 
     builder.project_nodes(db);
     builder.project_call_edges_and_constraints(db);
@@ -516,12 +531,13 @@ impl GraphBuilder {
             else {
                 continue;
             };
-            self.push_constraint(
+            self.inner.push_constraint_with_origin(
                 interner,
                 ConstraintKind::CallConstraint {
                     callsite: callsite_node,
                 },
                 &interner.resolve(binding.stable_key),
+                TS_DIRECT_BINDING_ORIGIN,
             );
 
             let Some(target_key) = binding
@@ -534,13 +550,14 @@ impl GraphBuilder {
                 continue;
             };
             if direct_binding_emits_copy_edge(binding.kind) {
-                self.push_constraint(
+                self.inner.push_constraint_with_origin(
                     interner,
                     ConstraintKind::CopyEdge {
                         dst: callsite_node,
                         src: target_node,
                     },
                     &interner.resolve(binding.stable_key),
+                    TS_DIRECT_BINDING_ORIGIN,
                 );
             }
         }
@@ -661,6 +678,16 @@ impl GraphBuilder {
         db: &impl AnalysisHost,
         object_model: &TsObjectModelOutput,
     ) {
+        // Every projection below walks one of these lists; without any rows there
+        // is nothing to project, and the lookup context indexes every MIR place.
+        if object_model.allocations.is_empty()
+            && object_model.property_writes.is_empty()
+            && object_model.property_reads.is_empty()
+            && object_model.receiver_bindings.is_empty()
+            && object_model.prototype_links.is_empty()
+        {
+            return;
+        }
         let interner_handle = db.stable_key_interner();
         let interner = &interner_handle;
         let context = TsObjectModelNodeContext::new(interner, db, self, object_model);
@@ -1303,6 +1330,7 @@ mod tests {
             None,
             &[],
             no_additional_projection,
+            None,
         )
     }
 

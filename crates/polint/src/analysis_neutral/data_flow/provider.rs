@@ -45,6 +45,7 @@ pub fn derive_data_flow_with_cache_stats(
     type_value_alias_output_digest: Digest,
     entrypoints_output_digest: Digest,
     extensions_output_digest: Digest,
+    graph: bool,
 ) -> DataFlowProviderOutput {
     let mut started = std::time::Instant::now();
     let mut checkpoint = |step: &'static str| {
@@ -53,17 +54,21 @@ pub fn derive_data_flow_with_cache_stats(
     };
     debug_assert_eq!(manifest.id, DATA_FLOW_PROVIDER_ID);
     let mut output = DataFlowOutput::empty();
-    derive_local_place_nodes(db, &mut output);
-    checkpoint("place_nodes");
-    super::local::derive_local_value_flow(db, &mut output);
-    checkpoint("local_flow");
-    super::direct_calls::derive_direct_call_edges(db, &mut output);
-    checkpoint("direct_calls");
-    super::summary_edges::derive_summary_projected_edges(db, &mut output);
-    checkpoint("summary_edges");
-    derive_source_models(db, &mut output);
-    derive_extension_models(db, &mut output);
-    checkpoint("models");
+    // Without a language whose questions read the value-flow graph, the graph
+    // is left empty: Go questions are answered by the taint solver.
+    if graph {
+        derive_local_place_nodes(db, &mut output);
+        checkpoint("place_nodes");
+        super::local::derive_local_value_flow(db, &mut output);
+        checkpoint("local_flow");
+        super::direct_calls::derive_direct_call_edges(db, &mut output);
+        checkpoint("direct_calls");
+        super::summary_edges::derive_summary_projected_edges(db, &mut output);
+        checkpoint("summary_edges");
+        derive_source_models(db, &mut output);
+        derive_extension_models(db, &mut output);
+        checkpoint("models");
+    }
     let interner = db.stable_key_interner();
     output = output.normalized(&interner);
     checkpoint("normalize");

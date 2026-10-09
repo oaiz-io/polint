@@ -12,6 +12,7 @@ use crate::analysis_neutral::calls::cache_key::calls_provider_parameter_digest;
 use crate::analysis_neutral::calls::direct::resolve_direct_call_targets;
 use crate::analysis_neutral::calls::extract::extract_call_sites;
 use crate::analysis_neutral::calls::store::CallOutput;
+use crate::analysis_neutral::calls::typed::{TypedCallInputs, typed_call_targets};
 use crate::analysis_neutral::calls::unresolved::derive_unresolved_calls;
 use crate::analysis_neutral::ids::CallSiteId;
 use crate::internal_core::{Diagnostic, DiagnosticRange};
@@ -25,6 +26,13 @@ pub struct CallsProviderOutput {
     pub execution: ProviderExecution,
 }
 
+/// The calls a typed frontend resolved, and the digest of the provider that
+/// produced them, for [`derive_calls_with_cache_stats`].
+pub struct TypedCalls<'a> {
+    pub inputs: &'a TypedCallInputs,
+    pub output_digest: Digest,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn derive_calls_with_cache_stats(
     db: &mut impl AnalysisHost,
@@ -35,9 +43,42 @@ pub fn derive_calls_with_cache_stats(
     symbol_graph_output_digest: Digest,
     module_topology_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
+    typed: TypedCalls<'_>,
 ) -> CallsProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.calls", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let mut sites = extract_call_sites(db);
-    let targets = resolve_direct_call_targets(db, &sites);
+    checkpoint("extract_sites");
+    let mut targets = resolve_direct_call_targets(db, &sites);
+    checkpoint("direct_targets");
+    let interner = db.stable_key_interner();
+    let (typed_targets, typed_sites, report) = typed_call_targets(&interner, &sites, typed.inputs);
+    checkpoint("typed_join");
+    if report.sites > 0 {
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            provider = "polint.calls",
+            sites = report.sites,
+            joined = report.joined,
+            resolved = typed_sites.len(),
+            targets = report.targets,
+            "typed call facts joined"
+        );
+    }
+    // Typed facts decide what a covered site calls; a same-named symbol does not.
+    targets.retain(|target| !typed_sites.contains(&target.site));
+    targets.extend(typed_targets);
+    targets.sort_by(|left, right| {
+        (interner.resolve(left.stable_key), left.site)
+            .cmp(&(interner.resolve(right.stable_key), right.site))
+    });
+    targets.dedup_by(|left, right| left.stable_key == right.stable_key);
+    for (index, target) in targets.iter_mut().enumerate() {
+        target.id = crate::analysis_neutral::ids::CallTargetId(index as u64);
+    }
     let resolved_sites = targets
         .iter()
         .filter(|target| {
@@ -45,15 +86,37 @@ pub fn derive_calls_with_cache_stats(
         })
         .map(|target| target.site)
         .collect::<BTreeSet<_>>();
+    // A typed site is as precise as its least precise listed candidate: an exact
+    // static callee, a variable-type-analysis candidate set, or a class-hierarchy
+    // one. A budget stop for candidates past the limit lists none; it makes the
+    // analysis incomplete rather than the listed candidates less precise.
+    let mut typed_precision =
+        BTreeMap::<CallSiteId, crate::analysis_neutral::calls::facts::CallPrecision>::new();
+    for target in targets.iter().filter(|target| {
+        typed_sites.contains(&target.site)
+            && target.status == crate::analysis_neutral::calls::facts::CallTargetStatus::Resolved
+    }) {
+        typed_precision
+            .entry(target.site)
+            .and_modify(|precision| *precision = (*precision).max(target.precision))
+            .or_insert(target.precision);
+    }
     for site in &mut sites {
+        if report.dead.contains(&site.id) {
+            site.status = crate::analysis_neutral::calls::facts::CallTargetStatus::Unreachable;
+            continue;
+        }
         if resolved_sites.contains(&site.id) {
             site.status = crate::analysis_neutral::calls::facts::CallTargetStatus::Resolved;
-            site.precision = crate::analysis_neutral::calls::facts::CallPrecision::SetupAware;
+            site.precision = typed_precision
+                .get(&site.id)
+                .copied()
+                .unwrap_or(crate::analysis_neutral::calls::facts::CallPrecision::SetupAware);
         }
     }
     let unresolved = derive_unresolved_calls(db, &sites)
         .into_iter()
-        .filter(|row| !resolved_sites.contains(&row.site))
+        .filter(|row| !resolved_sites.contains(&row.site) && !report.dead.contains(&row.site))
         .collect();
     let output = CallOutput {
         sites,
@@ -61,6 +124,7 @@ pub fn derive_calls_with_cache_stats(
         unresolved,
     }
     .normalized(&db.stable_key_interner());
+    checkpoint("unresolved_normalize");
     let output_digest = calls_output_digest(
         db,
         manifest,
@@ -70,12 +134,16 @@ pub fn derive_calls_with_cache_stats(
         &symbol_graph_output_digest,
         &module_topology_output_digest,
         &upstream_syntax_output_digests,
+        &typed.output_digest,
         &output,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
-    match db.replace_call_facts(output) {
+    let replaced = db.replace_call_facts(output);
+    checkpoint("store_metadata");
+    match replaced {
         Ok(()) => CallsProviderOutput {
             diagnostics: Vec::new(),
             cache_stats,
@@ -104,6 +172,7 @@ fn calls_output_digest(
     symbol_graph_output_digest: &Digest,
     module_topology_output_digest: &Digest,
     upstream_syntax_output_digests: &[Digest],
+    typed_output_digest: &Digest,
     output: &CallOutput,
 ) -> Digest {
     let mut parts = vec![
@@ -116,6 +185,7 @@ fn calls_output_digest(
         format!("cfg={cfg_output_digest}"),
         format!("symbol_graph={symbol_graph_output_digest}"),
         format!("module_topology={module_topology_output_digest}"),
+        format!("typed_calls={typed_output_digest}"),
     ];
     extend_component_parts(
         &mut parts,
@@ -166,6 +236,14 @@ fn calls_output_digest(
             stable_function_key(&function_keys, target.target_function),
             stable_symbol_key(&symbol_keys, target.target_symbol),
         )
+    }));
+    parts.extend(output.targets.iter().filter_map(|target| {
+        target.synthetic_target.as_ref().map(|synthetic| {
+            format!(
+                "call_target_synthetic={} target={synthetic}",
+                db.resolve_stable_key(target.stable_key)
+            )
+        })
     }));
     parts.extend(output.unresolved.iter().map(|unresolved| {
         format!(

@@ -3,7 +3,7 @@
 //! This adapter resolves sidecar Go identities back to source-backed host rows;
 //! the graph builder and constraint vocabulary remain owned by polint-analysis.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::analysis_api::FunctionFact;
 use crate::analysis_neutral::AnalysisHost;
@@ -12,7 +12,7 @@ use crate::analysis_neutral::semantic_graph::build::{
     SemanticGraphBuilder, node_key_from_identity,
 };
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
-use crate::internal_core::Language;
+use crate::internal_core::{FileId, Language};
 
 use crate::go::semantic::facts::{
     GoSemanticCallStatus, GoSemanticCallsiteFact, GoSemanticFunctionFact,
@@ -26,17 +26,18 @@ pub fn project_go_semantic(
 ) {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    let index = CoreRowIndex::build(db);
     let function_node_by_qualified = semantic_functions
         .iter()
         .filter_map(|semantic_function| {
-            let function = matching_core_function(db, semantic_function)?;
+            let function = index.function(semantic_function)?;
             let node = builder.function_node(interner, db, function)?;
             Some((semantic_function.qualified.as_str(), node))
         })
         .collect::<BTreeMap<_, _>>();
 
     for callsite in semantic_callsites {
-        let Some(core_callsite) = matching_core_callsite(db, callsite) else {
+        let Some(core_callsite) = index.callsite(callsite) else {
             continue;
         };
         let site_key =
@@ -71,33 +72,69 @@ pub fn project_go_semantic(
     }
 }
 
-fn matching_core_function<'a>(
-    db: &'a impl AnalysisHost,
-    semantic_function: &GoSemanticFunctionFact,
-) -> Option<&'a FunctionFact> {
-    let file = semantic_function.file?;
-    let span = semantic_function.span.as_ref()?;
-    db.functions().iter().find(|function| {
-        function.file == file
-            && function.language == Language::Go
-            && function.name == semantic_function.name
-            && function.span.start_byte == span.start_byte
-            && function.span.end_byte == span.end_byte
-    })
+/// The Go functions and call sites a sidecar row joins to, by file and span.
+///
+/// Each bucket keeps storage order, so a lookup returns the row a scan of the
+/// whole family would have found first.
+struct CoreRowIndex<'db> {
+    functions: HashMap<(FileId, u32, u32), Vec<&'db FunctionFact>>,
+    callsites: HashMap<(FileId, u32, u32), &'db CallSiteFact>,
 }
 
-fn matching_core_callsite<'a>(
-    db: &'a impl AnalysisHost,
-    semantic_callsite: &GoSemanticCallsiteFact,
-) -> Option<&'a CallSiteFact> {
-    let file = semantic_callsite.file?;
-    let span = semantic_callsite.span.as_ref()?;
-    db.call_sites().iter().find(|callsite| {
-        callsite.file == file
-            && callsite.language == Language::Go
-            && callsite.span.start_byte == span.start_byte
-            && callsite.span.end_byte == span.end_byte
-    })
+impl<'db> CoreRowIndex<'db> {
+    fn build(db: &'db impl AnalysisHost) -> Self {
+        let mut functions = HashMap::<_, Vec<_>>::new();
+        for function in db
+            .functions()
+            .iter()
+            .filter(|function| function.language == Language::Go)
+        {
+            functions
+                .entry((
+                    function.file,
+                    function.span.start_byte,
+                    function.span.end_byte,
+                ))
+                .or_default()
+                .push(function);
+        }
+        let mut callsites = HashMap::new();
+        for callsite in db
+            .call_sites()
+            .iter()
+            .filter(|callsite| callsite.language == Language::Go)
+        {
+            callsites
+                .entry((
+                    callsite.file,
+                    callsite.span.start_byte,
+                    callsite.span.end_byte,
+                ))
+                .or_insert(callsite);
+        }
+        Self {
+            functions,
+            callsites,
+        }
+    }
+
+    fn function(&self, semantic_function: &GoSemanticFunctionFact) -> Option<&'db FunctionFact> {
+        let file = semantic_function.file?;
+        let span = semantic_function.span.as_ref()?;
+        self.functions
+            .get(&(file, span.start_byte, span.end_byte))?
+            .iter()
+            .copied()
+            .find(|function| function.name == semantic_function.name)
+    }
+
+    fn callsite(&self, semantic_callsite: &GoSemanticCallsiteFact) -> Option<&'db CallSiteFact> {
+        let file = semantic_callsite.file?;
+        let span = semantic_callsite.span.as_ref()?;
+        self.callsites
+            .get(&(file, span.start_byte, span.end_byte))
+            .copied()
+    }
 }
 
 #[cfg(all(test, feature = "lang-go"))]
@@ -272,6 +309,10 @@ mod tests {
                 package_path: "example.com/p".to_string(),
                 caller: "example.com/p.main".to_string(),
                 static_callee: static_callee.map(str::to_string),
+                static_callee_origin: None,
+                receiver_type: None,
+                via_value: false,
+                mode: crate::go::semantic::facts::GoCallMode::Call,
                 status,
                 reason: None,
                 relative_file: Some("main.go".to_string()),

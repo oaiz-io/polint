@@ -21,8 +21,38 @@ pub struct GoAnalysisConfig {
     pub module_roots: Vec<String>,
     pub package_patterns: Vec<String>,
     pub build_tags: Vec<String>,
+    /// Whether the symbol sidecar loads test variants: `[languages.go]
+    /// include_tests` when set, otherwise whether the scan includes a `_test.go`
+    /// file.
+    ///
+    /// A scan that excludes test files reads no reference in them, and loading
+    /// the test variants anyway only costs time and makes a reference in a file
+    /// that a package shares with its test variant resolve twice.
     pub include_tests: bool,
+    /// Whether the semantic sidecar loads test variants: only when `[languages.go]
+    /// include_tests` is explicitly `true`.
+    ///
+    /// Test variants roughly double what the semantic sidecar holds and builds,
+    /// for test bodies no shipped deep rule reads: test facts come from the syntax
+    /// tier and the symbol sidecar, which keep loading tests by default.
+    pub semantic_include_tests: bool,
     pub offline: bool,
+    /// Whether the semantic sidecar emits the candidate callees of interface and
+    /// function-value calls. Not a setting: set from the analysis plan, only for a
+    /// plan that reads call targets, because the call graph is most of the
+    /// sidecar's time on a large module.
+    pub semantic_call_graph: bool,
+    /// Whether the semantic sidecar emits the routes the program registers. Not a
+    /// setting: set from the analysis plan, only for a plan that reads routes.
+    pub semantic_routes: bool,
+    /// Whether the semantic sidecar emits each function body's flow program. Not
+    /// a setting: set from the analysis plan, only for a plan that reads data
+    /// flow.
+    pub semantic_dataflow: bool,
+    /// The repository's route models (`[[go_route]]` tables under
+    /// `.polint/models`) as the JSON document the sidecar reads, when there are
+    /// any and the plan reads routes.
+    pub route_models: Option<String>,
     /// `[languages.go] semantic_timeout_ms`, when configured.
     pub semantic_timeout_ms: Option<u64>,
     /// Whether the semantic sidecar emits `rta_edge` rows.
@@ -74,6 +104,11 @@ impl GoWorkspaceEnv {
     }
 }
 
+/// Whether `file` is a Go test file, which only a test variant compiles.
+fn is_go_test_file(file: &SourceFile) -> bool {
+    file.relative_path.ends_with("_test.go")
+}
+
 impl GoAnalysisConfig {
     pub fn from_settings(
         root: &Path,
@@ -121,11 +156,19 @@ impl GoAnalysisConfig {
             include_tests: settings
                 .get("include_tests")
                 .and_then(Value::as_bool)
-                .unwrap_or(true),
+                .unwrap_or_else(|| files.iter().any(|file| is_go_test_file(file))),
+            semantic_include_tests: settings
+                .get("include_tests")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             offline: settings
                 .get("offline")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            semantic_call_graph: false,
+            semantic_routes: false,
+            semantic_dataflow: false,
+            route_models: None,
             semantic_timeout_ms: positive_integer_setting(settings, "semantic_timeout_ms"),
             emit_rta_edges: emit_rta_edges_setting(settings),
             files_without_module_root,
@@ -793,6 +836,60 @@ mod derived_lifecycle_defaults {
 
     fn module_root(root: &str) -> (&'static str, Value) {
         ("module_roots", Value::String(root.to_string()))
+    }
+
+    #[test]
+    fn the_symbol_sidecar_loads_test_variants_only_for_a_scan_with_test_files() {
+        let without = config_for(&[go_file("core/app/service.go")], &[module_root("core")]);
+        assert!(
+            !without.include_tests,
+            "a scan without test files reads nothing in a test variant"
+        );
+        let with = config_for(
+            &[
+                go_file("core/app/service.go"),
+                go_file("core/app/service_test.go"),
+            ],
+            &[module_root("core")],
+        );
+        assert!(with.include_tests, "a scan with test files loads them");
+        let forced = config_for(
+            &[go_file("core/app/service.go")],
+            &[module_root("core"), ("include_tests", Value::Boolean(true))],
+        );
+        assert!(forced.include_tests, "an explicit setting wins");
+    }
+
+    #[test]
+    fn test_variants_are_opt_in_for_the_semantic_sidecar_only() {
+        let files = [
+            go_file("core/app/service.go"),
+            go_file("core/app/service_test.go"),
+        ];
+        let unset = config_for(&files, &[module_root("core")]);
+        assert!(
+            unset.include_tests,
+            "the symbol sidecar loads tests for a scan that has them"
+        );
+        assert!(
+            !unset.semantic_include_tests,
+            "the semantic sidecar loads tests only when asked"
+        );
+
+        let on = config_for(
+            &files,
+            &[module_root("core"), ("include_tests", Value::Boolean(true))],
+        );
+        assert!(on.include_tests && on.semantic_include_tests);
+
+        let off = config_for(
+            &files,
+            &[
+                module_root("core"),
+                ("include_tests", Value::Boolean(false)),
+            ],
+        );
+        assert!(!off.include_tests && !off.semantic_include_tests);
     }
 
     #[test]

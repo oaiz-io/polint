@@ -62,6 +62,13 @@ pub enum RefinedCallConfidence {
     Low,
 }
 
+impl RefinedCallConfidence {
+    /// The less certain of two confidences.
+    pub(crate) fn weaker(self, other: Self) -> Self {
+        self.max(other)
+    }
+}
+
 impl RefinedCallEdgeFact {
     pub fn normalized(mut self) -> Self {
         self.evidence.sort();

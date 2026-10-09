@@ -60,6 +60,9 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
             .map(|row| db.resolve_stable_key(row.stable_key)),
     );
 
+    // Call facts restored from the call-resolution cache come without the MIR
+    // they were lowered from; their MIR ids are not references into this run.
+    let check_mir = !db.call_facts_without_mir();
     for site in db.call_sites() {
         let stable_key = db.resolve_stable_key(site.stable_key);
         check_ref(
@@ -80,24 +83,26 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
             "caller",
             "dangling call caller function reference",
         );
-        check_ref(
-            diagnostics,
-            &bodies,
-            site.body,
-            "CallSite",
-            &stable_key,
-            "body",
-            "dangling call MIR body reference",
-        );
-        check_ref(
-            diagnostics,
-            &operations,
-            site.operation,
-            "CallSite",
-            &stable_key,
-            "operation",
-            "dangling call MIR operation reference",
-        );
+        if check_mir {
+            check_ref(
+                diagnostics,
+                &bodies,
+                site.body,
+                "CallSite",
+                &stable_key,
+                "body",
+                "dangling call MIR body reference",
+            );
+            check_ref(
+                diagnostics,
+                &operations,
+                site.operation,
+                "CallSite",
+                &stable_key,
+                "operation",
+                "dangling call MIR operation reference",
+            );
+        }
         if let Some(owner_symbol) = site.owner_symbol {
             check_ref(
                 diagnostics,
@@ -109,7 +114,7 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
                 "dangling call owner symbol reference",
             );
         }
-        if let Some(receiver) = site.receiver {
+        if let Some(receiver) = site.receiver.filter(|_| check_mir) {
             check_ref(
                 diagnostics,
                 &places,
@@ -120,7 +125,7 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
                 "dangling call receiver place reference",
             );
         }
-        for argument in &site.arguments {
+        for argument in site.arguments.iter().filter(|_| check_mir) {
             check_ref(
                 diagnostics,
                 &places,
@@ -131,7 +136,7 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
                 "dangling call argument place reference",
             );
         }
-        if let Some(result) = site.result {
+        if let Some(result) = site.result.filter(|_| check_mir) {
             check_ref(
                 diagnostics,
                 &places,
@@ -207,13 +212,14 @@ pub fn validate_calls(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>)
         if target.status == CallTargetStatus::Resolved
             && target.target_function.is_none()
             && target.target_symbol.is_none()
+            && target.synthetic_target.is_none()
         {
             push_call_diagnostic(
                 diagnostics,
                 "CallTarget",
                 &stable_key,
                 "target",
-                "resolved call target requires a function or symbol",
+                "resolved call target requires a function, a symbol or a synthetic callee",
             );
         }
         if unresolved_status(target.status) && target.reason.is_none() {
@@ -404,6 +410,7 @@ mod tests {
                     reason: Some(UnresolvedCallReason::DynamicProperty),
                     target_function: None,
                     target_symbol: None,
+                    synthetic_target: None,
                     stable_key: crate::internal_core::StableKeyId(1),
                     ..target(1, CallSiteId(0), "call-target:ok")
                 },
@@ -412,6 +419,7 @@ mod tests {
                     status: CallTargetStatus::Unresolved,
                     target_function: None,
                     target_symbol: None,
+                    synthetic_target: None,
                     stable_key: crate::internal_core::StableKeyId(2),
                     ..target(2, CallSiteId(0), "call-target:ok")
                 },
@@ -473,6 +481,7 @@ mod tests {
                 reason: Some(UnresolvedCallReason::FrameworkDispatch),
                 target_function: Some(FunctionId::from_raw(1)),
                 target_symbol: Some(SymbolId::from_raw(1)),
+                synthetic_target: None,
                 stable_key: crate::internal_core::StableKeyId(1),
                 ..target(0, CallSiteId(0), "call-target:ok")
             }],
@@ -682,6 +691,7 @@ mod tests {
             caller: FunctionId::from_raw(0),
             target_function: Some(FunctionId::from_raw(1)),
             target_symbol: Some(SymbolId::from_raw(1)),
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,

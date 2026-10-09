@@ -36,8 +36,10 @@ no-leak proof all exist. Broad raw graph/database APIs stay deferred.
 | `References<'_>` | stable | Documented in `docs/facts/symbols-and-references.md`; temp-repo SDK tests; status/precision-aware helpers; no raw semantic graph. |
 | Metric views | stable | `FileMetrics<'_>`, `FunctionMetrics<'_>`, and `ComplexityMetrics<'_>` are documented in `docs/facts/metrics.md`; threshold helpers are bounded over stored facts. |
 | `Cfg<'_>` | defer | Reserved capability. Needs public fact design, docs, temp-repo tests, bounded queries, setup behavior, cache/input proof, and no-leak proof before support. |
-| `CallGraph<'_>` | defer | Reserved capability. A future API must separate direct/refined/unresolved/dynamic/unsupported/budgeted results. |
-| `DataFlow<'_>` | preview | Policy-level view documented in `docs/facts/data-flow.md`; v1.4 backs bounded source/sink/barrier queries while raw graph APIs stay private. |
+| `CallGraph<'_>` | preview | Resolved call edges under `polint::sdk::facts`; derives `call_graph`; documented in `docs/facts/call-graph.md`. Edges carry precision and resolution algorithm; unresolved sites stay in `polint unknowns --cap calls`; `Option<CallGraph<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
+| `GoTypes<'_>` | preview | Typed Go frontend facts under `polint::sdk::facts`; derives `go_types`; documented in `docs/facts/go-semantic-types.md`. Unavailable (setup missing) when the frontend loaded no package; `Option<GoTypes<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
+| `Routes<'_>` | preview | Framework routes from the typed Go frontend under `polint::sdk::facts`; derives `routes`; documented in `docs/facts/routes.md`. Built-in models for gin, chi, net/http and Watermill, repository models in `.polint/models/*.toml` (`[[go_route]]`); every route carries path and middleware completeness flags; an interpretation budget stop is a `budget_exceeded` completeness. Unavailable (setup missing) when the frontend loaded no package; `Option<Routes<'_>>` runs a rule without it. Temp-repo SDK test in `crates/polint/tests/cli.rs`. |
+| `DataFlow<'_>` | preview | Policy-level view documented in `docs/facts/data-flow.md`; v1.4 backs bounded source/sink/barrier queries while raw graph APIs stay private. `flows(&FlowSpec)` answers interprocedural Go questions with each flow's path, precision and unknowns; models are data (`[[go_flow_*]]` tables). |
 | `Evidence<'_>` | internal | Evidence remains diagnostic rendering data, not a rule-author SDK view; see `docs/facts/evidence.md`. |
 | Effects/Summaries | internal | Private analysis substrate; no public SDK, stable CLI JSON, or docs/facts contract yet. |
 | Types/Values/Aliases | internal | Private precision substrate; no public SDK, stable CLI JSON, or docs/facts contract yet. |
@@ -76,7 +78,7 @@ source/sink/barrier policies. Raw graph internals remain private.
 | Pattern structs | preview | `EventPattern`, `SourcePattern`, `SinkPattern`, `GuardPattern`, and `BarrierPattern` live under `polint::sdk::policy` and are re-exported by the prelude. Phase 55 starts with exact strings and explicit lists. |
 | `PolicyViolation` and status enums | preview | `PolicyViolation`, `PolicyStatus`, `PolicyPrecision`, and `PolicyConfidence` are public result vocabulary; full evidence semantics are deferred to Phase 59. |
 | `Cfg<'_>` | defer | Reserved raw CFG capability `cfg`; not an alias for `ControlFlow<'_>` and still unsupported. |
-| `CallGraph<'_>` | defer | Reserved raw call-graph capability `call_graph`; not an alias for `Calls<'_>` and still unsupported. |
+| `CallGraph<'_>` | preview | Call-edge view for rules that walk the graph; not an alias for `Calls<'_>`, which keeps the event-pattern reachability queries. |
 | Raw graph, solver, provider, parser, and `AnalysisDb` internals | internal | Must remain unreachable from `polint::sdk::prelude::*`, CLI public JSON, README examples, generated skill text, and `docs/facts/`. |
 
 ## Principles (execution checklist)
@@ -212,3 +214,47 @@ depending on provider, run-report, solver, or unknown-taxonomy internals.
 
 The `ALLOWED_PRELUDE` count moved `119 -> 122`. No provider graph, solver row,
 run-report type, or unknown-taxonomy type is promoted.
+
+## Route view promotion (sanctioned prelude addition)
+
+Endpoint and subscriber policies need the route table a program builds, with the
+handler and the effective middleware of each route, instead of re-deriving it
+from registration text. The view and its four small value types are promoted;
+the framework model vocabulary is data (`[[go_route]]` tables), not Rust API.
+
+| Surface | Disposition | Required gates and notes |
+|---|---|---|
+| `Routes<'_>` | preview | Derives `routes`; `iter`, `http`, `messages`, `handled_by`, `served_from`, `complete`. Probe witness `_assert_routes`. |
+| `Route<'_>` | preview | Read-only route: framework, transport, method, path with completeness, name, middleware completeness, location, registering function; `handlers()` and `middleware()` iterators. Probe witness `_assert_route`. |
+| `RouteFunction<'_>` | preview | A handler or middleware: name, kind, field, joinable `FunctionId`. Probe witness `_assert_routefunction`. |
+| `RouteFunctionKind` | preview | Non-exhaustive: function, literal, factory, field, unknown. Probe witness `_assert_routefunctionkind`. |
+| `RouteTransport` | preview | Non-exhaustive: HTTP or message. Probe witness `_assert_routetransport`. |
+
+The `ALLOWED_PRELUDE` count moved `138 -> 143` for these additions. Route-interpreter
+internals (router objects, calling contexts, serve-call rows) stay crate-private.
+
+## Data-flow question promotion (sanctioned prelude addition)
+
+Repository policies about where request data, message payloads, secrets,
+contexts and tenant values may go need the path a value takes across
+functions, how sure each path is, and what the analysis could not see. The
+existing `DataFlow<'_>` view gains one method, `flows(&FlowSpec)`, and the
+question and answer types it uses are promoted; the solver, its summaries and
+the flow program stay crate-private, and sources, sinks, sanitizers and
+propagators beyond the built-in ones are data (`[[go_flow_*]]` tables in
+`.polint/models/*.toml`), not Rust API.
+
+| Surface | Disposition | Required gates and notes |
+|---|---|---|
+| `FlowSpec` | preview | Builder of sources, sinks, sanitizers, untracked value kinds and deeper paths. Probe witness `_assert_flowspec`. |
+| `FlowSource` | preview | Model kind, call result, call argument pointee, parameter type, names, callback parameter. Probe witness `_assert_flowsource`. |
+| `FlowSink` | preview | Model kind, call (any argument), call argument, returned value. Probe witness `_assert_flowsink`. |
+| `FlowValueKind` | preview | Non-exhaustive: context, boolean, number. Probe witness `_assert_flowvaluekind`. |
+| `FlowAnswer` | preview | Flows plus run-wide unknowns; `is_complete`. Probe witness `_assert_flowanswer`. |
+| `Flow` | preview | Source, sink, sink argument, steps, precision, unknowns; `diagnostic` with located path evidence (SARIF code flows). Probe witness `_assert_flow`. |
+| `FlowStep` | preview | File, path, line, column, function. Probe witness `_assert_flowstep`. |
+| `FlowPrecision` | preview | Non-exhaustive: exact, setup-aware, conservative, heuristic. Probe witness `_assert_flowprecision`. |
+| `FlowUnknown` | preview | Non-exhaustive: unit budget, deadline, call depth, unresolved call, no program (the typed Go frontend loaded no package). Probe witness `_assert_flowunknown`. |
+
+The `ALLOWED_PRELUDE` count moved `143 -> 152` for these additions. Go is
+answered today; TypeScript programs get no flows from `flows` yet.

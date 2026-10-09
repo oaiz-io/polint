@@ -13,6 +13,9 @@ pub enum UnknownCategory {
     BudgetExceeded,
     Rejected,
     ModelMissing,
+    /// A provider the requested capability depends on did not produce its
+    /// output: it failed, or a dependency it needs failed before it ran.
+    ProviderFailed,
 }
 
 impl UnknownCategory {
@@ -28,6 +31,7 @@ impl UnknownCategory {
             Self::BudgetExceeded => "budget_exceeded",
             Self::Rejected => "rejected",
             Self::ModelMissing => "model_missing",
+            Self::ProviderFailed => "provider_failed",
         }
     }
 }

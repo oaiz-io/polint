@@ -271,7 +271,8 @@ fn call_status_to_observed(
         crate::analysis::calls::facts::CallTargetStatus::BudgetExceeded => {
             ObservedStatus::BudgetExceeded
         }
-        crate::analysis::calls::facts::CallTargetStatus::Rejected => ObservedStatus::Rejected,
+        crate::analysis::calls::facts::CallTargetStatus::Rejected
+        | crate::analysis::calls::facts::CallTargetStatus::Unreachable => ObservedStatus::Rejected,
     }
 }
 
@@ -3842,9 +3843,9 @@ path = "repo"
                 ("provider_order.4", "polint.symbol_graph"),
                 ("provider_order.5", "polint.module_topology"),
                 ("provider_order.6", "polint.semantic_mir"),
-                ("provider_order.7", "polint.cfg"),
-                ("provider_order.8", "polint.calls"),
-                ("provider_order.9", "polint.go.semantic"),
+                ("provider_order.7", "polint.go.semantic"),
+                ("provider_order.8", "polint.cfg"),
+                ("provider_order.9", "polint.calls"),
                 ("provider_order.10", "polint.ts.types"),
                 ("provider_order.11", "polint.identity"),
                 ("provider_order.12", "polint.abstract_domains"),

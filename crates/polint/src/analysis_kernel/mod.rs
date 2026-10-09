@@ -8,7 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[rustfmt::skip]
 #[cfg(test)] mod debug;
+pub(crate) mod call_cache;
 mod completeness;
+pub(crate) use completeness::pipeline_failure_unknowns;
 #[cfg(test)]
 mod dispatch_tests;
 pub(crate) mod go_syntax_projection;
@@ -56,6 +58,9 @@ fn requested_trigger_capabilities(plan: &AnalysisPlan) -> std::collections::BTre
         "calls",
         "control_flow",
         "dataflow",
+        "call_graph",
+        "go_types",
+        "routes",
         "file_metrics",
         "function_metrics",
         "complexity_metrics",
@@ -72,13 +77,16 @@ pub(crate) const SCOPE_RULE_ID: &str = "polint/scope";
 
 /// Capabilities whose analysis crosses file boundaries, so requesting one loads
 /// every discovered file regardless of any rule's `files` list.
-const CROSS_FILE_CAPABILITIES: [&str; 7] = [
+const CROSS_FILE_CAPABILITIES: [&str; 10] = [
     "calls",
+    "call_graph",
     "control_flow",
     "dataflow",
+    "go_types",
     "module_graph",
     "references",
     "resolved_imports",
+    "routes",
     "symbols",
 ];
 
@@ -262,9 +270,13 @@ fn run_scheduled_providers<'a>(
     .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let mut provider_telemetry = Vec::with_capacity(AnalysisKernel::provider_manifests().len());
     let mut envelope = resource::ResourceEnvelope::from_env();
+    let mut call_cache = CallCacheState::Inactive;
     // Emit a provider_outputs row for every manifest entry (historical identity),
     // but only execute providers selected by capability closure.
     for provider_id in scheduled_order() {
+        if provider_id == call_cache::CACHED_PROVIDERS[0] {
+            call_cache = call_cache.restore_or_compute(db);
+        }
         let selected = enabled_providers.contains(provider_id);
         let blockers = if selected {
             tracker
@@ -296,7 +308,29 @@ fn run_scheduled_providers<'a>(
         let stage_started = std::time::Instant::now();
         let deferred_before = db.deferred_syntax_metadata_len();
         let stage_rss_before = crate::measure::current_rss_bytes();
-        let result = if ready {
+        let restored = match &call_cache {
+            CallCacheState::Restored(providers)
+                if ready && call_cache::restores(provider_id, input.plan) =>
+            {
+                providers.get(provider_id).cloned()
+            }
+            _ => None,
+        };
+        let result = if let Some(restored) = restored {
+            // Restored from the call-resolution cache: the provider's facts are
+            // in the database already and it reports the digest and diagnostics
+            // the computing run recorded. It did not run, so it reports no
+            // counters.
+            let mut cache_stats = incremental::CacheStats::default();
+            cache_stats.record_hit();
+            ProviderRunResult {
+                diagnostics: restored.diagnostics,
+                cache_stats,
+                output_digest: Some(restored.output_digest),
+                execution: Default::default(),
+                counts: std::collections::BTreeMap::new(),
+            }
+        } else if ready {
             let mut ctx = ProviderCtx {
                 facts: &mut *db,
                 host: &mut host_services,
@@ -318,6 +352,7 @@ fn run_scheduled_providers<'a>(
                 counts: std::collections::BTreeMap::new(),
             }
         };
+        call_cache.observe(db, provider_id, ready, &result);
         let stage_elapsed_ms = ready.then(|| stage_started.elapsed().as_millis() as u64);
         // A provider owns the truth of whether its output is usable. Never let
         // a failed result's digest enter the dependency map or the identity
@@ -432,9 +467,20 @@ fn run_scheduled_providers<'a>(
         if provider_id == "polint.go.syntax"
             && ready
             && matches!(execution, crate::analysis_api::ProviderExecution::Succeeded)
-            && enabled_providers.contains("polint.go.semantic")
         {
-            start_go_semantic_prefetch(db, input, &upstream_digests);
+            call_cache = CallCacheState::decide(
+                db,
+                input,
+                input_snapshot,
+                enabled_providers,
+                &upstream_digests,
+            );
+            if enabled_providers.contains("polint.go.semantic")
+                && (!call_cache.will_restore()
+                    || !call_cache::restores("polint.go.semantic", input.plan))
+            {
+                start_go_semantic_prefetch(db, input, &upstream_digests);
+            }
         }
     }
 
@@ -459,6 +505,156 @@ fn run_scheduled_providers<'a>(
         tracker,
         provider_telemetry,
     ))
+}
+
+/// Where a run stands with the call-resolution cache (see [`call_cache`]).
+enum CallCacheState {
+    /// The run cannot use the cache.
+    Inactive,
+    /// An entry is stored under the run's key; it is restored when the cached
+    /// providers' turn comes.
+    Hit {
+        directory: std::path::PathBuf,
+        key: String,
+    },
+    /// The cached providers' facts are in the database; their recorded outcomes.
+    Restored(BTreeMap<String, call_cache::CachedProvider>),
+    /// The cached providers compute; their outcomes so far.
+    Computing {
+        directory: std::path::PathBuf,
+        key: String,
+        providers: Vec<call_cache::CachedProvider>,
+        clean: bool,
+    },
+}
+
+impl CallCacheState {
+    /// Decides, once the Go syntax is known, whether the run will restore or
+    /// compute; see [`call_cache::KEYED_UPSTREAM`] for why that is enough.
+    fn decide(
+        db: &AnalysisDb,
+        input: &KernelInput<'_>,
+        input_snapshot: &incremental::InputSnapshot,
+        enabled_providers: &std::collections::BTreeSet<&'static str>,
+        upstream_digests: &BTreeMap<&'static str, crate::analysis_api::Digest>,
+    ) -> Self {
+        let Some(directory) = call_cache::cache_dir(input.cache) else {
+            return Self::Inactive;
+        };
+        if !call_cache::eligible(input.plan, db, enabled_providers) {
+            return Self::Inactive;
+        }
+        let identity = go_semantic_run_identity(db, input, upstream_digests);
+        let Some(key) = call_cache::entry_key(
+            input_snapshot,
+            upstream_digests,
+            identity.as_deref(),
+            &input.loaded.root,
+        ) else {
+            return Self::Inactive;
+        };
+        if call_cache::has_entry(&directory, &key) {
+            Self::Hit { directory, key }
+        } else {
+            Self::Computing {
+                directory,
+                key,
+                providers: Vec::new(),
+                clean: true,
+            }
+        }
+    }
+
+    fn will_restore(&self) -> bool {
+        matches!(self, Self::Hit { .. })
+    }
+
+    /// At the first cached provider's turn: restores a stored entry, or falls
+    /// back to computing when it cannot be used.
+    fn restore_or_compute(self, db: &mut AnalysisDb) -> Self {
+        let Self::Hit { directory, key } = self else {
+            return self;
+        };
+        match call_cache::restore(db, &directory, &key) {
+            Some(providers) => Self::Restored(
+                providers
+                    .into_iter()
+                    .map(|provider| (provider.id.clone(), provider))
+                    .collect(),
+            ),
+            None => Self::Computing {
+                directory,
+                key,
+                providers: Vec::new(),
+                clean: true,
+            },
+        }
+    }
+
+    /// Records a cached provider's outcome while computing, and stores the
+    /// entry after the last one when every cached provider succeeded.
+    fn observe(
+        &mut self,
+        db: &AnalysisDb,
+        provider_id: &str,
+        ready: bool,
+        result: &ProviderRunResult,
+    ) {
+        let Self::Computing {
+            directory,
+            key,
+            providers,
+            clean,
+        } = self
+        else {
+            return;
+        };
+        if !call_cache::CACHED_PROVIDERS.contains(&provider_id) {
+            return;
+        }
+        match (&result.output_digest, &result.execution) {
+            (Some(digest), crate::analysis_api::ProviderExecution::Succeeded) if ready => {
+                providers.push(call_cache::CachedProvider {
+                    id: provider_id.to_string(),
+                    output_digest: digest.clone(),
+                    diagnostics: result.diagnostics.clone(),
+                });
+            }
+            _ => {
+                if *clean {
+                    tracing::debug!(
+                        target: "polint::kernel::stage",
+                        provider = provider_id,
+                        "call-resolution cache entry not written: a cached provider did not succeed"
+                    );
+                }
+                *clean = false;
+            }
+        }
+        if Some(&provider_id) == call_cache::CACHED_PROVIDERS.last() && *clean {
+            call_cache::persist(db, directory, key, std::mem::take(providers));
+        }
+    }
+}
+
+/// The identity of the semantic sidecar run this scan would make; see
+/// [`crate::go::semantic::client::sidecar_run_identity`].
+fn go_semantic_run_identity(
+    db: &AnalysisDb,
+    input: &KernelInput<'_>,
+    upstream_digests: &BTreeMap<&'static str, crate::analysis_api::Digest>,
+) -> Option<String> {
+    let files = crate::go::lifecycle::go_files(db);
+    let config = provider::go_semantic_request(input.plan, &input.loaded.root).apply(
+        crate::go::lifecycle::GoAnalysisConfig::from_settings_files(
+            &input.loaded.root,
+            &input.loaded.config.languages.go,
+            &files,
+        )
+        .ok()?,
+    );
+    let upstream = upstream_digests.get("polint.go.syntax")?.to_string();
+    crate::go::semantic::client::sidecar_run_identity(&config, &upstream)
 }
 
 /// Starts the Go semantic sidecar the moment `polint.go.syntax` has fixed its
@@ -490,6 +686,7 @@ fn start_go_semantic_prefetch(
         db,
         input.cache.sidecar_cache_dir(),
         upstream.to_string(),
+        &provider::go_semantic_request(input.plan, &input.loaded.root),
     );
     if prefetch.is_some() {
         crate::analysis_kernel::host::with_provider_host_session_mut(|session| {
@@ -602,6 +799,9 @@ impl AnalysisKernel {
                     | "calls"
                     | "control_flow"
                     | "dataflow"
+                    | "call_graph"
+                    | "go_types"
+                    | "routes"
             )
         });
         let rule_scope = if run_cross_file_analysis {
@@ -708,9 +908,10 @@ impl AnalysisKernel {
         let provider_outcomes = provider_tracker
             .seal(&validation_downgrades)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        let (runtime_blocked_rules, capability_diagnostics) =
+        let (runtime_blocked_rules, capability_diagnostics, unavailable_capabilities) =
             Self::runtime_capability_blockers(input.plan, &db, &provider_outcomes);
         diagnostics.extend(capability_diagnostics);
+        db.set_unavailable_capabilities(unavailable_capabilities);
         db.finish_all_fact_meta_insertions();
         let store_config = store::StoreConfig::new(
             input.cache.semantic_store_path(),
@@ -847,22 +1048,27 @@ impl AnalysisKernel {
             .unwrap_or_else(|| panic!("missing provider manifest {provider_id}"))
     }
 
+    /// The rules that cannot run because a capability they require did not
+    /// succeed, their diagnostics, and every requested capability that is not
+    /// available; a rule that requested one optionally runs without it.
     pub(crate) fn runtime_capability_blockers(
         plan: &AnalysisPlan,
         db: &AnalysisDb,
         outcomes: &[ProviderOutcome],
-    ) -> (BTreeSet<String>, Vec<Diagnostic>) {
+    ) -> (BTreeSet<String>, Vec<Diagnostic>, BTreeSet<String>) {
         let by_id = outcomes
             .iter()
             .map(|outcome| (outcome.provider_id.as_str(), outcome))
             .collect::<BTreeMap<_, _>>();
         let mut blocked_rules = BTreeSet::new();
         let mut diagnostics = Vec::new();
+        let mut unavailable = BTreeSet::new();
         for rule in plan.rules() {
             for capability in &rule.requested_capabilities {
                 if plan.support_view().status_for(capability)
                     != Some(crate::core::CapabilitySupportStatus::Supported)
                 {
+                    unavailable.insert(capability.clone());
                     continue;
                 }
                 let mut providers = Self::capability_providers(capability, db);
@@ -886,6 +1092,20 @@ impl AnalysisKernel {
                     .filter(|outcome| outcome.status != ProviderOutcomeStatus::Succeeded)
                     .collect::<Vec<_>>();
                 if failed.is_empty() {
+                    if provider::unanswerable_without_typed_go_frontend(capability, plan, db)
+                        && provider::go_types_unloaded(db)
+                    {
+                        unavailable.insert(capability.clone());
+                        if !rule.optional_capabilities.contains(capability) {
+                            blocked_rules.insert(rule.id.clone());
+                            diagnostics
+                                .push(typed_go_frontend_unloaded_diagnostic(&rule.id, capability));
+                        }
+                    }
+                    continue;
+                }
+                unavailable.insert(capability.clone());
+                if rule.optional_capabilities.contains(capability) {
                     continue;
                 }
                 blocked_rules.insert(rule.id.clone());
@@ -914,7 +1134,7 @@ impl AnalysisKernel {
                 );
             }
         }
-        (blocked_rules, diagnostics)
+        (blocked_rules, diagnostics, unavailable)
     }
 
     fn capability_providers(capability: &str, db: &AnalysisDb) -> Vec<&'static str> {
@@ -929,7 +1149,9 @@ impl AnalysisKernel {
             "events" => &["polint.go.syntax", "polint.ts.syntax"],
             "resolved_imports" | "module_graph" => &["polint.module_graph"],
             "symbols" | "references" => &["polint.symbol_graph"],
-            "calls" | "control_flow" | "cfg" | "call_graph" => &["polint.refined_calls"],
+            "calls" | "control_flow" | "cfg" => &["polint.refined_calls"],
+            "call_graph" => &["polint.calls"],
+            "go_types" | "routes" => &["polint.go.semantic"],
             "dataflow" => &["polint.evidence"],
             "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
             _ => &[],
@@ -951,6 +1173,21 @@ impl AnalysisKernel {
 
 fn is_syntax_provider(provider_id: &str) -> bool {
     matches!(provider_id, "polint.go.syntax" | "polint.ts.syntax")
+}
+
+fn typed_go_frontend_unloaded_diagnostic(rule_id: &str, capability: &str) -> Diagnostic {
+    Diagnostic::error(
+        "polint/capability",
+        "<workspace>",
+        TextRange::point(1, 1),
+        format!(
+            "Rule `{rule_id}` requested capability `{capability}`, but the typed Go frontend loaded no package: Go files outside every go.mod module root are not type-checked."
+        ),
+    )
+    .with_evidence("rule", rule_id.to_string())
+    .with_evidence("capability", capability.to_string())
+    .with_evidence("status", ProviderOutcomeStatus::SetupMissing.label())
+    .with_evidence("blockers", "polint.go.semantic")
 }
 
 fn provider_output_summary_parts(db: &AnalysisDb, manifest: &ProviderManifest) -> Vec<String> {
@@ -1596,6 +1833,160 @@ mod tests {
         }
     }
 
+    /// Runs the kernel over a temporary tree holding `files`.
+    #[cfg(feature = "lang-go")]
+    fn run_tree_for_domain_test(files: &[(&str, &str)], plan: &AnalysisPlan) -> KernelOutput {
+        let temp = tempfile::tempdir().expect("temp directory");
+        for (path, text) in files {
+            std::fs::write(temp.path().join(path), text).expect("write source");
+        }
+        let loaded = load_config(temp.path()).expect("default config loads");
+        AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &Cache::new("", false),
+            config_digest: "config",
+            rule_digest: "rules",
+            plan,
+            parallel: false,
+        })
+        .expect("kernel should run")
+    }
+
+    #[cfg(feature = "lang-go")]
+    const DOMAIN_TEST_GO: &[(&str, &str)] = &[
+        ("go.mod", "module example.com/domains\n\ngo 1.22\n"),
+        (
+            "main.go",
+            "package main\n\nfunc sink(value int) int { return value + 1 }\n\nfunc branch(ready bool) int {\n\tif ready {\n\t\treturn sink(1)\n\t}\n\tpanic(\"never\")\n}\n\nfunc main() { branch(true) }\n",
+        ),
+    ];
+
+    #[cfg(feature = "lang-go")]
+    fn per_operation_domain_facts(output: &KernelOutput) -> usize {
+        use crate::analysis_neutral::domains::facts::DomainLocation;
+        output
+            .db
+            .abstract_domain_observations()
+            .iter()
+            .filter(|row| {
+                matches!(
+                    row.location,
+                    DomainLocation::BeforeOperation | DomainLocation::AfterOperation
+                )
+            })
+            .count()
+    }
+
+    /// A summary as the domain test compares it: keys as text, then its fields.
+    #[cfg(feature = "lang-go")]
+    type SummaryRow = (
+        String,
+        String,
+        crate::analysis_neutral::summaries::facts::SummaryDomainKind,
+        crate::analysis_neutral::summaries::facts::SummaryStatus,
+        crate::analysis_neutral::summaries::facts::SummaryPrecision,
+        crate::analysis_neutral::summaries::facts::SummaryProvenance,
+        String,
+        Vec<crate::analysis_neutral::summaries::facts::SummaryFlowEdge>,
+    );
+
+    #[cfg(feature = "lang-go")]
+    fn summary_rows(output: &KernelOutput) -> Vec<SummaryRow> {
+        let interner = output.db.stable_key_interner();
+        output
+            .db
+            .summary_facts()
+            .iter()
+            .map(|fact| {
+                (
+                    interner.resolve(fact.callable_stable_key).to_string(),
+                    interner.resolve(fact.stable_key).to_string(),
+                    fact.domain,
+                    fact.status,
+                    fact.precision,
+                    fact.provenance,
+                    fact.payload_digest.clone(),
+                    fact.tito_flows.clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// Asserts the compact domain materialization for `plan` over `files`: no
+    /// per-operation states unless asked for, and the same summaries either way.
+    #[cfg(feature = "lang-go")]
+    fn assert_compact_domains(files: &[(&str, &str)], plan: AnalysisPlan, capability: &str) {
+        assert!(!plan.requests_per_point_domain_facts());
+        let compact = run_tree_for_domain_test(files, &plan);
+        let full = run_tree_for_domain_test(files, &plan.with_per_point_domain_facts());
+        assert_eq!(
+            per_operation_domain_facts(&compact),
+            0,
+            "`{capability}` must not materialize per-operation domain states"
+        );
+        assert!(
+            per_operation_domain_facts(&full) > 0,
+            "an explicit per-point request must still get per-operation states"
+        );
+        assert!(!compact.db.summary_facts().is_empty());
+        assert_eq!(
+            summary_rows(&compact),
+            summary_rows(&full),
+            "`{capability}` summaries must not depend on the domain materialization"
+        );
+    }
+
+    /// Control flow gets the compact domain materialization: the summaries read
+    /// only entry reachability, and the per-point states were most of a deep
+    /// run's time and memory. The summaries a rule sees must not depend on the
+    /// choice. Call resolution reads no summary and gets no domain facts at all,
+    /// and neither does data flow over Go alone, which the taint solver answers
+    /// over the typed frontend's flow programs.
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn deep_capabilities_get_compact_domain_facts_unless_per_point_states_are_requested() {
+        let calls = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let calls_run = run_tree_for_domain_test(DOMAIN_TEST_GO, &calls);
+        if !crate::go::semantic::process::typed_frontend_loaded_for_tests(&calls_run.db) {
+            eprintln!("skipping: the typed Go frontend loaded no package here");
+            return;
+        }
+        assert!(calls_run.db.abstract_domain_observations().is_empty());
+        assert!(calls_run.db.summary_facts().is_empty());
+        assert!(
+            per_operation_domain_facts(&run_tree_for_domain_test(
+                DOMAIN_TEST_GO,
+                &calls.with_per_point_domain_facts()
+            )) > 0
+        );
+
+        let control = AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
+        assert_compact_domains(DOMAIN_TEST_GO, control, "control_flow");
+
+        let dataflow = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        let go_only = run_tree_for_domain_test(DOMAIN_TEST_GO, &dataflow);
+        assert!(go_only.db.abstract_domain_observations().is_empty());
+        assert!(go_only.db.summary_facts().is_empty());
+        assert!(
+            go_only.db.go_flow_program().is_some(),
+            "Go data flow reads the typed frontend's flow programs"
+        );
+    }
+
+    /// Data flow over a language the taint solver does not answer still builds
+    /// the value-flow graph from compact domains and summaries.
+    #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
+    #[test]
+    fn graph_data_flow_gets_compact_domain_facts_unless_per_point_states_are_requested() {
+        let mut files = DOMAIN_TEST_GO.to_vec();
+        files.push((
+            "app.ts",
+            "export function handler(token: string): string {\n  return token;\n}\n",
+        ));
+        let dataflow = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        assert_compact_domains(&files, dataflow, "dataflow");
+    }
+
     #[cfg(all(feature = "lang-go", feature = "lang-typescript"))]
     #[test]
     fn loop_bodies_stay_reachable_under_a_constant_true_condition() {
@@ -1616,7 +2007,10 @@ mod tests {
         )
         .expect("write TypeScript source");
         let loaded = load_config(temp.path()).expect("default config loads");
-        let plan = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        // The assertion reads the state after each call, which only the
+        // per-point materialization records.
+        let plan = AnalysisPlan::from_capability_names_for_test(&["dataflow"])
+            .with_per_point_domain_facts();
 
         let output = AnalysisKernel::run(KernelInput {
             loaded: &loaded,
@@ -1627,6 +2021,13 @@ mod tests {
             parallel: false,
         })
         .expect("kernel should run");
+        assert!(
+            output.db.abstract_domain_observations().iter().any(|row| {
+                row.location
+                    == crate::analysis_neutral::domains::facts::DomainLocation::AfterOperation
+            }),
+            "the fixture must materialize per-operation states"
+        );
 
         // A loop body is lowered into the block its branch reaches on the
         // `false` edge, so binding the loop condition would refine the body with
@@ -1965,9 +2366,9 @@ mod tests {
                 "polint.symbol_graph",
                 "polint.module_topology",
                 "polint.semantic_mir",
+                "polint.go.semantic",
                 "polint.cfg",
                 "polint.calls",
-                "polint.go.semantic",
                 "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
@@ -2570,9 +2971,9 @@ mod tests {
 
         for provider_id in [
             "polint.semantic_mir",
+            "polint.go.semantic",
             "polint.cfg",
             "polint.calls",
-            "polint.go.semantic",
             "polint.ts.types",
             "polint.identity",
             "polint.abstract_domains",
@@ -2626,7 +3027,10 @@ mod tests {
 
     #[cfg(feature = "lang-typescript")]
     #[test]
-    fn calls_plan_keeps_full_cfg_relation_rows() {
+    fn cfg_relations_are_derived_only_for_plans_that_read_them() {
+        // Reachability, dominance and control dependence rows are read by the
+        // control-flow queries and the data-flow evidence, never by call
+        // resolution: a calls plan lowers the CFG but derives none of them.
         let temp = tempfile::tempdir().expect("tempdir");
         std::fs::write(
             temp.path().join("app.ts"),
@@ -2635,32 +3039,36 @@ mod tests {
         .expect("write ts");
         let loaded = load_config(temp.path()).expect("default config loads");
         let cache = Cache::new("", false);
-        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let run = |capability: &str| {
+            let plan = AnalysisPlan::from_capability_names_for_test(&[capability]);
+            AnalysisKernel::run(KernelInput {
+                loaded: &loaded,
+                cache: &cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            })
+            .expect("kernel should run")
+        };
 
-        let output = AnalysisKernel::run(KernelInput {
-            loaded: &loaded,
-            cache: &cache,
-            config_digest: "config",
-            rule_digest: "rules",
-            plan: &plan,
-            parallel: false,
-        })
-        .expect("kernel should run");
-
+        let calls = run("calls");
         assert_eq!(
-            provider_output(&output, "polint.cfg")
-                .cache_stats
-                .recomputes,
+            provider_output(&calls, "polint.cfg").cache_stats.recomputes,
             1
         );
         assert!(
-            !output.db.cfg_reachability().is_empty(),
-            "calls plans should still derive full CFG relation rows"
+            !calls.db.cfg_functions().is_empty(),
+            "a calls plan still lowers the CFG"
         );
-        assert!(
-            !output.db.cfg_postdominators().is_empty(),
-            "calls plans should keep postdominator rows for downstream refinements"
-        );
+        assert!(calls.db.cfg_reachability().is_empty());
+        assert!(calls.db.cfg_dominators().is_empty());
+        assert!(calls.db.cfg_postdominators().is_empty());
+        assert!(calls.db.cfg_control_dependence().is_empty());
+
+        let control_flow = run("control_flow");
+        assert!(!control_flow.db.cfg_reachability().is_empty());
+        assert!(!control_flow.db.cfg_postdominators().is_empty());
     }
 
     #[test]
@@ -2742,9 +3150,9 @@ function cleanup(value: string) {{ return value.trim(); }}
             "polint.module_graph",
             "polint.symbol_graph",
             "polint.semantic_mir",
+            "polint.go.semantic",
             "polint.cfg",
             "polint.calls",
-            "polint.go.semantic",
             "polint.ts.types",
             "polint.identity",
             "polint.abstract_domains",
@@ -3360,9 +3768,9 @@ function setup() {
                 "polint.symbol_graph",
                 "polint.module_topology",
                 "polint.semantic_mir",
+                "polint.go.semantic",
                 "polint.cfg",
                 "polint.calls",
-                "polint.go.semantic",
                 "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
@@ -3411,6 +3819,217 @@ function setup() {
                 },
             ]
         );
+    }
+
+    /// A calls run over unchanged Go sources restores the call facts the first
+    /// run computed instead of running the deep providers again, and its queries
+    /// read the same facts; an edit makes the next run compute again.
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn a_calls_run_over_unchanged_go_sources_restores_its_call_facts() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        std::fs::write(
+            temp.path().join("go.mod"),
+            "module example.com/cached\n\ngo 1.22\n",
+        )
+        .expect("write go.mod");
+        let source = "package main\n\ntype speaker interface{ speak() string }\n\ntype dog struct{}\n\nfunc (dog) speak() string { return \"woof\" }\n\nfunc helper(value int) int { return value + 1 }\n\nfunc main() {\n\tvar s speaker = dog{}\n\t_ = s.speak()\n\tf := helper\n\t_ = f(helper(1))\n}\n";
+        std::fs::write(temp.path().join("main.go"), source).expect("write Go source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::default_for_repo(temp.path(), true);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let run = || {
+            AnalysisKernel::run(KernelInput {
+                loaded: &loaded,
+                cache: &cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            })
+            .expect("kernel should run")
+        };
+        // What a query can read, by stable-key text rather than run-local ids.
+        let call_facts = |output: &KernelOutput| {
+            let interner = output.db.stable_key_interner();
+            let key = |id| interner.resolve(id).to_string();
+            let mut rows = Vec::new();
+            for site in output.db.call_sites() {
+                rows.push(format!(
+                    "site {} {:?} {:?}",
+                    key(site.stable_key),
+                    site.callee,
+                    site.status
+                ));
+            }
+            for target in output.db.call_targets() {
+                rows.push(format!(
+                    "target {} {:?} {:?} {:?}",
+                    key(target.stable_key),
+                    target.target_function,
+                    target.synthetic_target,
+                    target.algorithm
+                ));
+            }
+            for edge in output.db.refined_call_edges() {
+                rows.push(format!(
+                    "edge {} {:?} {:?} {:?}",
+                    key(edge.stable_key),
+                    edge.tier,
+                    edge.status,
+                    edge.target_function
+                ));
+            }
+            for root in output.db.reachability_roots() {
+                rows.push(format!("root {} {:?}", key(root.stable_key), root.id));
+            }
+            rows
+        };
+
+        let computed = run();
+        if !crate::go::semantic::process::typed_frontend_loaded_for_tests(&computed.db) {
+            eprintln!("skipping: the typed Go frontend loaded no package here");
+            return;
+        }
+        assert!(!computed.db.refined_call_edges().is_empty());
+        assert!(
+            computed.db.call_targets().iter().any(|target| {
+                target.algorithm == crate::analysis_neutral::calls::facts::CallAlgorithm::GoVta
+            }),
+            "the typed call layer answered the interface call"
+        );
+        for provider in call_cache::CACHED_PROVIDERS {
+            assert_eq!(
+                provider_output(&computed, provider).cache_stats.hits,
+                0,
+                "{provider} computes on the first run"
+            );
+        }
+
+        let restored = run();
+        for provider in call_cache::CACHED_PROVIDERS {
+            let row = provider_output(&restored, provider);
+            assert_eq!(row.cache_stats.hits, 1, "{provider} is restored");
+            assert_eq!(
+                row.output_digest,
+                provider_output(&computed, provider).output_digest,
+                "{provider} reports the digest the computing run recorded"
+            );
+        }
+        assert!(
+            restored.db.mir_bodies().is_empty(),
+            "nothing below the call facts ran"
+        );
+        assert_eq!(call_facts(&restored), call_facts(&computed));
+        assert_eq!(
+            restored.diagnostics, computed.diagnostics,
+            "a restored run reports what the computing run reported"
+        );
+
+        std::fs::write(
+            temp.path().join("main.go"),
+            source.replace("value + 1", "value + 2"),
+        )
+        .expect("edit Go source");
+        let edited = run();
+        assert_eq!(
+            provider_output(&edited, "polint.semantic_mir")
+                .cache_stats
+                .hits,
+            0,
+            "an edit computes again"
+        );
+        assert!(!edited.db.mir_bodies().is_empty());
+    }
+
+    /// A data-flow run over unchanged Go sources restores the call facts too,
+    /// but still runs the semantic sidecar's provider for the flow programs an
+    /// entry does not hold, and its questions get the computing run's answers.
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn a_go_data_flow_run_over_unchanged_sources_restores_call_facts_and_reads_flow_programs() {
+        use crate::sdk::dataflow::{FlowSink, FlowSource, FlowSpec};
+
+        let temp = tempfile::tempdir().expect("temp directory");
+        std::fs::write(
+            temp.path().join("go.mod"),
+            "module example.com/cachedflow\n\ngo 1.22\n",
+        )
+        .expect("write go.mod");
+        std::fs::write(
+            temp.path().join("main.go"),
+            "package main\n\nfunc source() string { return \"secret\" }\n\nfunc pass(value string) string { return value }\n\nfunc sink(value string) {}\n\nfunc main() {\n\tsink(pass(source()))\n}\n",
+        )
+        .expect("write Go source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::default_for_repo(temp.path(), true);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["dataflow"]);
+        let run = || {
+            AnalysisKernel::run(KernelInput {
+                loaded: &loaded,
+                cache: &cache,
+                config_digest: "config",
+                rule_digest: "rules",
+                plan: &plan,
+                parallel: false,
+            })
+            .expect("kernel should run")
+        };
+        let spec = FlowSpec::new()
+            .source(FlowSource::call_result("source"))
+            .sink(FlowSink::call_argument("sink", 0));
+
+        let computed = run();
+        if !crate::go::semantic::process::typed_frontend_loaded_for_tests(&computed.db) {
+            eprintln!("skipping: the typed Go frontend loaded no package here");
+            return;
+        }
+        for provider in call_cache::CACHED_PROVIDERS {
+            assert_eq!(
+                provider_output(&computed, provider).cache_stats.hits,
+                0,
+                "{provider} computes on the first run"
+            );
+        }
+        let computed_answer = crate::flow_queries::flows(&computed.db, &spec);
+        assert_eq!(
+            computed_answer.flows.len(),
+            1,
+            "the source reaches the sink through pass"
+        );
+
+        let restored = run();
+        for provider in call_cache::CACHED_PROVIDERS {
+            let row = provider_output(&restored, provider);
+            if call_cache::restores(provider, &plan) {
+                assert_eq!(row.cache_stats.hits, 1, "{provider} is restored");
+            }
+            assert_eq!(
+                row.output_digest,
+                provider_output(&computed, provider).output_digest,
+                "{provider} reports the computing run's digest"
+            );
+        }
+        assert!(
+            restored.db.mir_bodies().is_empty(),
+            "nothing below the call facts ran"
+        );
+        assert_eq!(
+            restored
+                .db
+                .go_flow_program()
+                .map(|program| program.digest()),
+            computed
+                .db
+                .go_flow_program()
+                .map(|program| program.digest()),
+            "the restoring run loads the same flow programs"
+        );
+        assert_eq!(
+            crate::flow_queries::flows(&restored.db, &spec),
+            computed_answer
+        );
+        assert_eq!(restored.diagnostics, computed.diagnostics);
     }
 
     fn provider_output<'a>(

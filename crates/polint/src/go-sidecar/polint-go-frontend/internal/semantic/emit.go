@@ -22,7 +22,7 @@ import (
 	"golang.org/x/tools/go/ssa/ssautil"
 )
 
-const SchemaVersion = "polint-go-semantic-3"
+const SchemaVersion = "polint-go-semantic-4"
 const XToolsVersion = "v0.49.0"
 const topologyManifestMaxBytes int64 = 1_048_576
 
@@ -40,6 +40,18 @@ type Config struct {
 	// rows, and `rta.Analyze` runs once per main package, so on a repository
 	// with 8 binaries it is 76% of the run for output nobody consumes.
 	EmitRTAEdges bool
+	// CallGraph turns on the `call_edges` rows: the candidate callees of every
+	// interface and function-value call, from variable type analysis over the
+	// whole program. Only a plan that reads call targets asks for it; it is most
+	// of the sidecar's time on a large module.
+	CallGraph bool
+	// Dataflow turns on the `flow_body` rows: one flow program per function body,
+	// for the data-flow solver. It implies the call graph.
+	Dataflow bool
+	// RouteModels, when set, turns on the `route` and `route_serve` rows: the
+	// routes the program registers with the frameworks the models describe
+	// (the built-in defaults and the repository's own).
+	RouteModels *RouteModels
 	// ScopeFiles is the set of repository-relative Go files this scan discovered,
 	// or nil when the caller did not narrow the scan.
 	//
@@ -98,6 +110,7 @@ func (t *phaseTimer) finish(phase string, workload phaseWorkload) {
 		"deps_with_types":   workload.depsWithTypes,
 		"rows_emitted":      workload.rowsEmitted,
 		"peak_heap_bytes":   t.sampleHeap(),
+		"peak_rss_bytes":    peakRSSBytes(),
 	})
 	t.started = now
 }
@@ -158,7 +171,7 @@ type emitter struct {
 	// keep-first is lossless. A package with no such collision never triggers a skip, so its
 	// emitted rows are byte-identical to before this set existed.
 	emittedMethodSetKeys map[string]bool
-	// emittedFunctionKeys makes emitFunction idempotent per (package_id, fn.String()) stable
+	// emittedFunctionKeys makes emitFunction idempotent per (package_id, functionName(fn)) stable
 	// key. A concrete method VALUE of a reachable generic instantiation can be harvested via
 	// TWO entry points — the per-function `ssaFunctions` walk in emitSSAPackage AND
 	// emitInstantiatedMethodSets' `emitFunction` on the instantiated method-set — yielding
@@ -168,10 +181,26 @@ type emitter struct {
 	// the row duplicates → `validate_unique("function", ...)` rejects the ENTIRE Go fact set
 	// (a STRUCTURAL family is, correctly, NOT row-resilient) → RTA derives zero edges
 	// repo-wide (review #4). Keep-first at the SOURCE keeps the validator strict while
-	// suppressing the spurious duplicate. `fn.String()` is the official SSA identity, so two
+	// suppressing the spurious duplicate. `functionName` is the SSA identity, so two
 	// genuinely-distinct functions never share a key; a package without the cross-path
 	// collision never repeats one, so its rows stay byte-identical.
 	emittedFunctionKeys map[string]bool
+	// emittedTypedKeys makes the type-fact emitters idempotent per stable key: a
+	// package and its test variant declare the same types, fields and parameters.
+	emittedTypedKeys map[string]bool
+	// callGraph is Config.CallGraph: whether dynamic call sites are collected
+	// and their candidate callees emitted.
+	callGraph bool
+	// callGraphResult is the program's call graph, computed on first use.
+	callGraphResult *callGraphAnalysis
+	// dynamicSites collects the in-scope interface and function-value calls
+	// whose callees the call graph resolves after every call site is emitted.
+	dynamicSites []dynamicSite
+	// callIndexes holds one call-expression index per function body.
+	callIndexes map[*ssa.Function]*callIndex
+	// typesInfo holds each loaded package's type information, for questions
+	// about the syntax a call is written with.
+	typesInfo map[*types.Package]*types.Info
 }
 
 func Emit(config Config) ([]Row, error) {
@@ -200,22 +229,7 @@ func Emit(config Config) ([]Row, error) {
 
 	fset := token.NewFileSet()
 	loadConfig := &packages.Config{
-		Mode: packages.NeedName |
-			packages.NeedFiles |
-			packages.NeedCompiledGoFiles |
-			packages.NeedImports |
-			// NeedDeps loads the full transitive dependency graph with type
-			// info. Without it, indirectly-imported packages (e.g. reflect via
-			// fmt) are type-checked only from export data, so ssautil.AllPackages
-			// builds an incomplete SSA package for them. rta.Analyze then panics
-			// on `reflectPkg.Members["Value"].(*ssa.Type)` when Members["Value"]
-			// is nil. See golang.org/x/tools/go/callgraph/rta/rta.go.
-			packages.NeedDeps |
-			packages.NeedSyntax |
-			packages.NeedTypes |
-			packages.NeedTypesInfo |
-			packages.NeedTypesSizes |
-			packages.NeedModule,
+		Mode:  loadMode(config),
 		Dir:   root,
 		Fset:  fset,
 		Tests: config.IncludeTests,
@@ -233,25 +247,11 @@ func Emit(config Config) ([]Row, error) {
 	workload := countWorkload(pkgs)
 	timer.finish("packages_load", workload)
 
-	hasMain := false
-	for _, pkg := range pkgs {
-		if pkg.Name == "main" {
-			hasMain = true
-			break
-		}
-	}
-	var prog *ssa.Program
-	var ssaPkgs []*ssa.Package
-	if hasMain {
-		prog, ssaPkgs = ssautil.AllPackages(pkgs, ssa.InstantiateGenerics)
-		prog.Build()
-	} else {
-		prog, ssaPkgs = ssautil.Packages(pkgs, ssa.InstantiateGenerics)
-		prog.Build()
-	}
+	prog, ssaPkgs := buildProgram(pkgs, config)
 	sort.Slice(ssaPkgs, func(i, j int) bool {
 		return packageID(ssaPkgs[i]) < packageID(ssaPkgs[j])
 	})
+	pruned := pruneProgram(prog, ssaPkgs)
 	timer.finish("ssa_build", workload)
 
 	e := &emitter{
@@ -260,6 +260,15 @@ func Emit(config Config) ([]Row, error) {
 		scopeFiles:           config.ScopeFiles,
 		emittedMethodSetKeys: make(map[string]bool),
 		emittedFunctionKeys:  make(map[string]bool),
+		emittedTypedKeys:     make(map[string]bool),
+		callGraph:            config.CallGraph || config.Dataflow,
+		callIndexes:          make(map[*ssa.Function]*callIndex),
+		typesInfo:            make(map[*types.Package]*types.Info, len(pkgs)),
+	}
+	for _, pkg := range pkgs {
+		if pkg.Types != nil && pkg.TypesInfo != nil {
+			e.typesInfo[pkg.Types] = pkg.TypesInfo
+		}
 	}
 	e.add(Row{
 		"kind":            "session_begin",
@@ -274,6 +283,7 @@ func Emit(config Config) ([]Row, error) {
 		e.emitPackage(pkg)
 		e.emitPackageErrors(pkg)
 	}
+	e.emitDeadCalls(pruned)
 	// `prog.MethodValue` inside the instantiation walk BUILDS a wrapper, and a built
 	// wrapper can register new `MakeInterface` types, so the program's runtime type set
 	// grows while this loop runs. The per-package version hid that behind 349 fresh
@@ -311,6 +321,20 @@ func Emit(config Config) ([]Row, error) {
 		}
 	}
 	e.addPhase(timer, "emit_rows", workload)
+	e.emitTypeFacts(pkgs)
+	e.addPhase(timer, "type_facts", workload)
+	if config.RouteModels != nil {
+		e.emitRoutes(prog, ssaPkgs, config.RouteModels)
+		e.addPhase(timer, "routes", workload)
+	}
+	if config.CallGraph || config.Dataflow {
+		e.emitCallEdges(prog, e.dynamicSites)
+		e.addPhase(timer, "call_graph", workload)
+	}
+	if config.Dataflow {
+		e.emitFlowBodies(prog)
+		e.addPhase(timer, "flow_bodies", workload)
+	}
 	if config.EmitRTAEdges {
 		e.emitRTAEdges(ssaPkgs)
 	}
@@ -325,8 +349,68 @@ func Emit(config Config) ([]Row, error) {
 		"compiled_go_files": workload.compiledGoFiles,
 		"deps_with_types":   workload.depsWithTypes,
 		"peak_heap_bytes":   timer.sampleHeap(),
+		"peak_rss_bytes":    peakRSSBytes(),
 	})
 	return e.rows, nil
+}
+
+// loadMode is what go/packages loads for a run.
+//
+// The root packages are parsed and type-checked from source; every dependency
+// is typed from the compiler's export data, which the go build cache already
+// holds for any module that builds. That gives the roots the same syntax, types
+// and SSA bodies as a whole-program load, for a fraction of the memory and time:
+// type-checking every transitive dependency from source is most of a
+// whole-program load's cost, and no row this sidecar emits describes a
+// dependency's body.
+//
+// Only the RTA oracle comparison loads the whole program from source.
+// rta.Analyze builds SSA for every reachable package, and on a dependency
+// created from export data (reflect, imported through fmt) it panics looking up
+// `reflectPkg.Members["Value"]`. See golang.org/x/tools/go/callgraph/rta/rta.go.
+func loadMode(config Config) packages.LoadMode {
+	mode := packages.NeedName |
+		packages.NeedFiles |
+		packages.NeedCompiledGoFiles |
+		packages.NeedImports |
+		packages.NeedSyntax |
+		packages.NeedTypes |
+		packages.NeedTypesInfo |
+		packages.NeedTypesSizes |
+		packages.NeedModule
+	if config.EmitRTAEdges {
+		mode |= packages.NeedDeps
+	}
+	return mode
+}
+
+// buildProgram builds SSA bodies for the root packages only.
+//
+// Dependencies become SSA packages without bodies. A call into one still has its
+// *ssa.Function as the static callee, so a callsite row names the same callee
+// either way; what a whole-program build adds is bodies for every dependency
+// function, which no row reads. The RTA oracle comparison is the exception: it
+// needs every reachable body, so it builds the whole program when a root is a
+// main package, as rta.Analyze requires.
+func buildProgram(pkgs []*packages.Package, config Config) (*ssa.Program, []*ssa.Package) {
+	var prog *ssa.Program
+	var ssaPkgs []*ssa.Package
+	if config.EmitRTAEdges && hasMainPackage(pkgs) {
+		prog, ssaPkgs = ssautil.AllPackages(pkgs, ssa.InstantiateGenerics)
+	} else {
+		prog, ssaPkgs = ssautil.Packages(pkgs, ssa.InstantiateGenerics)
+	}
+	prog.Build()
+	return prog, ssaPkgs
+}
+
+func hasMainPackage(pkgs []*packages.Package) bool {
+	for _, pkg := range pkgs {
+		if pkg.Name == "main" {
+			return true
+		}
+	}
+	return false
 }
 
 // addPhase closes a stage that ran after the emitter existed, so its row can
@@ -359,6 +443,14 @@ var fileAnchoredKinds = map[string]bool{
 	"method":        true,
 	"init_function": true,
 	"callsite":      true,
+	"call_edges":    true,
+	"param":         true,
+	"instantiation": true,
+	"conversion":    true,
+	"builtin_call":  true,
+	"route":         true,
+	"route_serve":   true,
+	"dead_call":     true,
 }
 
 // inScope answers whether the kernel would keep this row.
@@ -442,6 +534,7 @@ func (e *emitter) emitSSAPackage(pkg *ssa.Package, instantiations []instantiatio
 	functions := ssaFunctions(pkg)
 	for _, fn := range functions {
 		e.emitFunction(pkg, fn)
+		e.emitParams(pkg, fn)
 		e.emitCallsites(pkg, fn)
 		e.emitInstantiatedTypes(pkg, fn)
 		e.emitAddressTaken(pkg, fn)
@@ -535,12 +628,12 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 			"kind":         "unsupported",
 			"package_id":   packageID(pkg),
 			"package_path": packagePath(pkg),
-			"name":         fn.String(),
+			"name":         functionName(fn),
 			"reason":       "synthetic function without stable source identity",
 		})
 		return
 	}
-	// Keep-first per (package_id, fn.String()) so a method VALUE reachable via two harvest
+	// Keep-first per (package_id, functionName(fn)) so a method VALUE reachable via two harvest
 	// paths (the ssaFunctions walk AND emitInstantiatedMethodSets) emits exactly ONE
 	// function/method row — never a duplicate stable_key that fails validate_unique and
 	// zeroes the whole Go fact set (review #4). Gating here also suppresses the duplicate's
@@ -548,7 +641,7 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 	// cross-path collision never repeats a key, so this is a no-op and rows stay
 	// byte-identical. The `unsupported`-synthetic early return above is intentionally
 	// ungated (no stable_key, distinct kind, not a validate_unique family).
-	functionKey := stableKey(packageID(pkg), fn.String())
+	functionKey := stableKey(packageID(pkg), functionName(fn))
 	if e.emittedFunctionKeys[functionKey] {
 		return
 	}
@@ -571,7 +664,7 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 		// or the SSA↔core join (`matching_core_function`, file+name+span) would miss the
 		// instantiated method's node and the generic-dispatch edge would be lost
 		// (FINDING A). A non-generic method name has no `[...]` suffix and is unchanged.
-		if receiver := receiverTypeName(fn.Signature.Recv().Type().String()); receiver != "" {
+		if receiver := receiverTypeName(canonicalTypeString(fn.Signature.Recv().Type())); receiver != "" {
 			name = receiver + "." + stripMethodTypeArgs(fn.Name())
 		}
 	}
@@ -580,7 +673,7 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 		"package_id":   packageID(pkg),
 		"package_path": packagePath(pkg),
 		"name":         name,
-		"qualified":    fn.String(),
+		"qualified":    functionName(fn),
 		"signature":    signatureString(fn.Signature),
 		"stable_key":   functionKey,
 	}
@@ -594,14 +687,14 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 		row["span"] = pos
 	}
 	if fn.Signature != nil && fn.Signature.Recv() != nil {
-		row["receiver"] = fn.Signature.Recv().Type().String()
+		row["receiver"] = canonicalTypeString(fn.Signature.Recv().Type())
 		e.add(Row{
 			"kind":         "receiver_type",
 			"package_id":   packageID(pkg),
 			"package_path": packagePath(pkg),
-			"method":       fn.String(),
-			"receiver":     fn.Signature.Recv().Type().String(),
-			"stable_key":   stableKey(packageID(pkg), "recv", fn.String(), fn.Signature.Recv().Type().String()),
+			"method":       functionName(fn),
+			"receiver":     canonicalTypeString(fn.Signature.Recv().Type()),
+			"stable_key":   stableKey(packageID(pkg), "recv", functionName(fn), canonicalTypeString(fn.Signature.Recv().Type())),
 		})
 	}
 	e.add(row)
@@ -610,6 +703,11 @@ func (e *emitter) emitFunction(pkg *ssa.Package, fn *ssa.Function) {
 func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 	if fn == nil {
 		return
+	}
+	index := e.callIndexes[fn]
+	if index == nil {
+		index = newCallIndex(fn.Syntax())
+		e.callIndexes[fn] = index
 	}
 	for _, block := range fn.Blocks {
 		for _, instr := range block.Instrs {
@@ -622,13 +720,26 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				"kind":         "callsite",
 				"package_id":   packageID(pkg),
 				"package_path": packagePath(pkg),
-				"caller":       fn.String(),
+				"caller":       functionName(fn),
+			}
+			if mode := callMode(call); mode != "" {
+				row["mode"] = mode
 			}
 			dynamic := false
 			switch {
 			case common != nil && common.StaticCallee() != nil:
-				row["static_callee"] = common.StaticCallee().String()
+				callee := common.StaticCallee()
+				row["static_callee"] = functionName(callee)
 				row["status"] = "resolved_static"
+				if e.callsThroughValue(pkg, index.syntaxFor(call)) {
+					row["via_value"] = true
+				}
+				if origin := callee.Origin(); origin != nil {
+					row["static_callee_origin"] = functionName(origin)
+				}
+				if callee.Signature != nil && callee.Signature.Recv() != nil && len(common.Args) > 0 {
+					row["receiver_type"] = canonicalTypeString(common.Args[0].Type())
+				}
 			case common != nil && isBuiltinCall(common):
 				// FINDING 4: a builtin call (`len`, `append`, `recover`, ...) has a nil
 				// StaticCallee() because its callee is a *ssa.Builtin, not an
@@ -642,16 +753,19 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 				row["status"] = "unresolved_dynamic"
 				row["reason"] = "interface or func-value dynamic dispatch"
 				dynamic = true
+				if common != nil && common.IsInvoke() && common.Value != nil {
+					row["receiver_type"] = canonicalTypeString(common.Value.Type())
+				}
 			}
-			stableParts := []string{packageID(pkg), fn.String(), e.positionKey(call.Pos())}
-			if syntax := callSyntax(fn, call); syntax != nil {
+			stableParts := []string{packageID(pkg), functionName(fn), e.positionKey(call.Pos())}
+			if syntax := index.syntaxFor(call); syntax != nil {
 				if pos := e.positionSpan(syntax.Pos(), syntax.End()); pos != nil {
 					file := posFile(e.fset, syntax.Pos(), e.root)
 					row["file"] = file
 					row["span"] = pos
 					stableParts = []string{
 						packageID(pkg),
-						fn.String(),
+						functionName(fn),
 						file,
 						strconv.Itoa(pos.StartByte),
 						strconv.Itoa(pos.EndByte),
@@ -667,7 +781,48 @@ func (e *emitter) emitCallsites(pkg *ssa.Package, fn *ssa.Function) {
 			if dynamic {
 				e.emitDynamicDispatch(pkg, fn, common, callsiteKey)
 			}
+			if dynamic && e.callGraph && e.inScope(row) {
+				file, _ := row["file"].(string)
+				e.dynamicSites = append(e.dynamicSites, dynamicSite{
+					pkg:    pkg,
+					caller: fn,
+					call:   call,
+					key:    callsiteKey,
+					file:   file,
+				})
+			}
 		}
+	}
+}
+
+// callsThroughValue reports whether a call's syntax calls a function value (a
+// variable, a struct field, a call's result) rather than naming a function or a
+// method, so that SSA knowing its one callee is value flow, not the call naming
+// it: `run := handler; run()` is through a value, `handler()` and `x.Method()`
+// are not.
+func (e *emitter) callsThroughValue(pkg *ssa.Package, syntax ast.Node) bool {
+	call, ok := syntax.(*ast.CallExpr)
+	if !ok || pkg == nil {
+		return false
+	}
+	info := e.typesInfo[pkg.Pkg]
+	if info == nil {
+		return false
+	}
+	switch fun := ast.Unparen(call.Fun).(type) {
+	case *ast.Ident:
+		_, isVar := info.Uses[fun].(*types.Var)
+		return isVar
+	case *ast.SelectorExpr:
+		if selection, ok := info.Selections[fun]; ok {
+			return selection.Kind() == types.FieldVal
+		}
+		_, isVar := info.Uses[fun.Sel].(*types.Var)
+		return isVar
+	case *ast.CallExpr:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -685,7 +840,7 @@ func (e *emitter) emitDynamicDispatch(pkg *ssa.Package, fn *ssa.Function, common
 		"kind":                "dynamic_dispatch",
 		"package_id":          packageID(pkg),
 		"package_path":        packagePath(pkg),
-		"caller":              fn.String(),
+		"caller":              functionName(fn),
 		"callsite_stable_key": callsiteKey,
 	}
 	var discriminant string
@@ -739,7 +894,7 @@ func (e *emitter) emitInstantiatedTypes(pkg *ssa.Package, fn *ssa.Function) {
 					"kind":         "unsupported",
 					"package_id":   packageID(pkg),
 					"package_path": packagePath(pkg),
-					"name":         fn.String(),
+					"name":         functionName(fn),
 					"reason":       "MakeInterface operand without stable type identity",
 				})
 				continue
@@ -787,7 +942,7 @@ func (e *emitter) emitAddressTaken(pkg *ssa.Package, fn *ssa.Function) {
 		if target == nil {
 			return
 		}
-		identity := target.String()
+		identity := functionName(target)
 		if identity == "" || seen[identity] {
 			return
 		}
@@ -842,34 +997,6 @@ func isBuiltinCall(common *ssa.CallCommon) bool {
 	}
 	_, ok := common.Value.(*ssa.Builtin)
 	return ok
-}
-
-func callSyntax(fn *ssa.Function, call ssa.CallInstruction) ast.Node {
-	if fn == nil || !call.Pos().IsValid() {
-		return nil
-	}
-	syntax := fn.Syntax()
-	if syntax == nil {
-		return nil
-	}
-	pos := call.Pos()
-	var best ast.Node
-	ast.Inspect(syntax, func(node ast.Node) bool {
-		if node == nil {
-			return true
-		}
-		expr, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		if expr.Pos() <= pos && pos < expr.End() {
-			if best == nil || expr.End()-expr.Pos() < best.End()-best.Pos() {
-				best = expr
-			}
-		}
-		return true
-	})
-	return best
 }
 
 // addMethodSet emits a single `method_set` row for `identity` (already the canonical,
@@ -1083,15 +1210,23 @@ func ssaFunctions(pkg *ssa.Package) []*ssa.Function {
 		case *ssa.Function:
 			collectWithAnon(value, seen, &functions)
 		case *ssa.Type:
-			methodSet := pkg.Prog.MethodSets.MethodSet(types.NewPointer(value.Type()))
-			for i := 0; i < methodSet.Len(); i++ {
-				if fn := pkg.Prog.MethodValue(methodSet.At(i)); fn != nil {
-					collectWithAnon(fn, seen, &functions)
+			// The value type's method set yields the declared value-receiver
+			// methods; the pointer type's yields the pointer-receiver methods and
+			// the wrappers SSA synthesizes for value methods called through a
+			// pointer. Only the declared function has the method's body, so
+			// without the first set the calls inside a value-receiver method
+			// would never be emitted.
+			for _, typ := range []types.Type{value.Type(), types.NewPointer(value.Type())} {
+				methodSet := pkg.Prog.MethodSets.MethodSet(typ)
+				for i := 0; i < methodSet.Len(); i++ {
+					if fn := pkg.Prog.MethodValue(methodSet.At(i)); fn != nil {
+						collectWithAnon(fn, seen, &functions)
+					}
 				}
 			}
 		}
 	}
-	sort.Slice(functions, func(i, j int) bool { return functions[i].String() < functions[j].String() })
+	sort.Slice(functions, func(i, j int) bool { return functionName(functions[i]) < functionName(functions[j]) })
 	return functions
 }
 
@@ -1130,21 +1265,182 @@ func signatureString(sig *types.Signature) string {
 	return sig.String()
 }
 
-// canonicalTypeString returns the type's `.String()` resolved THROUGH any type alias to
-// its underlying type (FIX 3). go/types reports a value of a type alias (`type AliasDog =
-// Dog`) under the alias spelling (`...AliasDog`) for both the MakeInterface operand type
-// and the alias's package-scope TypeName, but the concrete method's receiver is the
-// UNDERLYING `...Dog`. Keying the instantiated_type and method_set under the alias spelling
-// makes the Rust resolver's `methods_by_receiver["...AliasDog"]` lookup miss and the
-// interface-dispatch edge is silently dropped. `types.Unalias` collapses the alias chain to
-// the underlying type so instantiated_type, method_set key, and the method receiver all
-// share one canonical identity and the join succeeds. It is a NO-OP on a non-alias type, so
-// every non-alias identity's `.String()` is unchanged (byte-identity preserved).
+// canonicalTypeString returns the type's `.String()` with every type alias
+// resolved to the type it names, at any depth (`[]Alias`, `Box[Alias]`,
+// `func(Alias)`). go/types reports a value of an alias type (`type AliasDog = Dog`)
+// under the alias spelling, while a method's receiver is the named type itself,
+// so a join keyed by type strings must resolve aliases on both sides. A type
+// that contains no alias prints exactly as `.String()` does.
 func canonicalTypeString(t types.Type) string {
 	if t == nil {
 		return ""
 	}
-	return types.Unalias(t).String()
+	return deepUnalias(t).String()
+}
+
+// deepUnalias rebuilds t with every alias it contains resolved; it returns t
+// itself when t contains none.
+func deepUnalias(t types.Type) types.Type {
+	if t == nil || !containsAlias(t) {
+		return t
+	}
+	switch t := types.Unalias(t).(type) {
+	case *types.Pointer:
+		return types.NewPointer(deepUnalias(t.Elem()))
+	case *types.Slice:
+		return types.NewSlice(deepUnalias(t.Elem()))
+	case *types.Array:
+		return types.NewArray(deepUnalias(t.Elem()), t.Len())
+	case *types.Map:
+		return types.NewMap(deepUnalias(t.Key()), deepUnalias(t.Elem()))
+	case *types.Chan:
+		return types.NewChan(t.Dir(), deepUnalias(t.Elem()))
+	case *types.Named:
+		args := t.TypeArgs()
+		if args == nil || args.Len() == 0 {
+			return t
+		}
+		resolved := make([]types.Type, args.Len())
+		for i := range resolved {
+			resolved[i] = deepUnalias(args.At(i))
+		}
+		instance, err := types.Instantiate(nil, t.Origin(), resolved, false)
+		if err != nil {
+			return t
+		}
+		return instance
+	case *types.Signature:
+		return types.NewSignatureType(nil, nil, nil, deepUnaliasTuple(t.Params()), deepUnaliasTuple(t.Results()), t.Variadic())
+	case *types.Struct:
+		fields := make([]*types.Var, t.NumFields())
+		tags := make([]string, t.NumFields())
+		for i := range fields {
+			field := t.Field(i)
+			fields[i] = types.NewField(field.Pos(), field.Pkg(), field.Name(), deepUnalias(field.Type()), field.Embedded())
+			tags[i] = t.Tag(i)
+		}
+		return types.NewStruct(fields, tags)
+	default:
+		return t
+	}
+}
+
+func deepUnaliasTuple(tuple *types.Tuple) *types.Tuple {
+	if tuple == nil {
+		return nil
+	}
+	vars := make([]*types.Var, tuple.Len())
+	for i := range vars {
+		v := tuple.At(i)
+		vars[i] = types.NewParam(v.Pos(), v.Pkg(), v.Name(), deepUnalias(v.Type()))
+	}
+	return types.NewTuple(vars...)
+}
+
+// containsAlias reports whether t mentions a type alias anywhere a printed type
+// string would show it. Named types are not entered beyond their type arguments,
+// so recursive types terminate.
+func containsAlias(t types.Type) bool {
+	switch t := t.(type) {
+	case *types.Alias:
+		return true
+	case *types.Pointer:
+		return containsAlias(t.Elem())
+	case *types.Slice:
+		return containsAlias(t.Elem())
+	case *types.Array:
+		return containsAlias(t.Elem())
+	case *types.Map:
+		return containsAlias(t.Key()) || containsAlias(t.Elem())
+	case *types.Chan:
+		return containsAlias(t.Elem())
+	case *types.Named:
+		args := t.TypeArgs()
+		for i := 0; args != nil && i < args.Len(); i++ {
+			if containsAlias(args.At(i)) {
+				return true
+			}
+		}
+		return false
+	case *types.Signature:
+		return tupleContainsAlias(t.Params()) || tupleContainsAlias(t.Results())
+	case *types.Struct:
+		for i := 0; i < t.NumFields(); i++ {
+			if containsAlias(t.Field(i).Type()) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+func tupleContainsAlias(tuple *types.Tuple) bool {
+	for i := 0; tuple != nil && i < tuple.Len(); i++ {
+		if containsAlias(tuple.At(i).Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// functionName is fn's identity: its `.String()`, except that the type arguments of
+// a generic instance and the receiver of a method of an instantiated type are
+// printed with their aliases resolved. SSA keeps one instance per identical list
+// of type arguments and names it by the spelling that created it first, and the
+// builder creates instances from every package in parallel, so the raw name of
+// an instance depends on scheduling and on code in unrelated packages.
+func functionName(fn *ssa.Function) string {
+	if fn == nil {
+		return ""
+	}
+	if parent := fn.Parent(); parent != nil {
+		for i, anon := range parent.AnonFuncs {
+			if anon == fn {
+				return fmt.Sprintf("%s$%d", functionName(parent), i+1)
+			}
+		}
+		return fn.String()
+	}
+	var receiver types.Type
+	switch {
+	case fn.Signature.Recv() != nil:
+		receiver = fn.Signature.Recv().Type()
+	case strings.HasSuffix(fn.Name(), "$bound") && len(fn.FreeVars) == 1:
+		receiver = fn.FreeVars[0].Type()
+	case strings.HasSuffix(fn.Name(), "$thunk") && fn.Signature.Params().Len() > 0:
+		receiver = fn.Signature.Params().At(0).Type()
+	}
+	if receiver != nil {
+		if !containsAlias(receiver) {
+			return fn.String()
+		}
+		return fmt.Sprintf("(%s).%s", deepUnalias(receiver).String(), fn.Name())
+	}
+	origin := fn.Origin()
+	targs := fn.TypeArgs()
+	if origin == nil || len(targs) == 0 {
+		return fn.String()
+	}
+	aliased := false
+	for _, targ := range targs {
+		aliased = aliased || containsAlias(targ)
+	}
+	if !aliased {
+		return fn.String()
+	}
+	var name strings.Builder
+	name.WriteString(origin.String())
+	name.WriteString("[")
+	for i, targ := range targs {
+		if i > 0 {
+			name.WriteString(", ")
+		}
+		name.WriteString(deepUnalias(targ).String())
+	}
+	name.WriteString("]")
+	return name.String()
 }
 
 func receiverTypeName(receiver string) string {

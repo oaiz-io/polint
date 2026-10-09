@@ -29,10 +29,10 @@ fact = { family = "DomainObservation", stable_key = "strings", mode = "partial",
 fact = { family = "DomainObservation", stable_key = "initializedness", mode = "partial", producer_id = "polint.abstract_domains", precision = "exact_local", status = "present" }
 
 [[expected]]
-fact = { family = "DomainObservation", stable_key = "unknown", mode = "partial", producer_id = "polint.abstract_domains", precision = "unknown", status = "unknown" }
+fact = { family = "DomainObservation", stable_key = "DomainObservation", mode = "partial", producer_id = "polint.abstract_domains", precision = "unknown", status = "unknown" }
 
 [[expected]]
-fact = { family = "DomainObservation", stable_key = "unsupported", mode = "partial", producer_id = "polint.abstract_domains", precision = "unsupported", status = "unsupported" }
+fact = { family = "DomainObservation", stable_key = "DomainObservation", mode = "partial", producer_id = "polint.abstract_domains", precision = "unsupported", status = "unsupported" }
 
 [[expected]]
 fact = { family = "DomainEvent", stable_key = "budget", mode = "partial", producer_id = "polint.abstract_domains", precision = "conservative", status = "budget_exceeded" }

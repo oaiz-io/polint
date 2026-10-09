@@ -258,6 +258,8 @@ pub struct AnalysisDb {
     /// Provider-owned stores keyed by primary [`FactFamily`]. Iteration stays ordered.
     pub(crate) fact_stores: BTreeMap<FactFamily, FactStoreEntry>,
     fact_view_indexes: OnceLock<FactViewIndexes>,
+    call_graph_index: OnceLock<crate::core::view_index::CallGraphIndex>,
+    go_types_index: OnceLock<crate::core::view_index::GoTypesIndex>,
     pub(crate) path_contexts: Option<crate::path_context::PathContextIndex>,
     /// Diff-to-target-ref facts, injected by the host for `polint review`.
     ///
@@ -273,6 +275,13 @@ pub struct AnalysisDb {
     /// their metadata is not recorded yet.
     deferred_metric_metadata: bool,
     defer_syntax_metadata: bool,
+    /// Whether the call facts were restored from the call-resolution cache, in
+    /// which case no MIR was materialized: call sites keep the MIR body,
+    /// operation and place ids of the run that computed them.
+    call_facts_without_mir: bool,
+    /// Capabilities the rules requested that the run could not provide; a view
+    /// requested optionally is absent for them.
+    unavailable_capabilities: BTreeSet<String>,
 }
 
 impl Clone for AnalysisDb {
@@ -283,11 +292,15 @@ impl Clone for AnalysisDb {
             fact_meta: self.fact_meta.clone(),
             fact_stores: self.fact_stores.clone(),
             fact_view_indexes: self.fact_view_indexes.clone(),
+            call_graph_index: self.call_graph_index.clone(),
+            go_types_index: self.go_types_index.clone(),
             path_contexts: self.path_contexts.clone(),
             changeset: self.changeset.clone(),
             deferred_syntax_metadata: self.deferred_syntax_metadata.clone(),
             deferred_metric_metadata: self.deferred_metric_metadata,
             defer_syntax_metadata: self.defer_syntax_metadata,
+            call_facts_without_mir: self.call_facts_without_mir,
+            unavailable_capabilities: self.unavailable_capabilities.clone(),
         }
     }
 }
@@ -417,11 +430,15 @@ impl Default for AnalysisDb {
             fact_meta: FactMetaStore::default(),
             fact_stores,
             fact_view_indexes: OnceLock::new(),
+            call_graph_index: OnceLock::new(),
+            go_types_index: OnceLock::new(),
             path_contexts: None,
             changeset: None,
             deferred_syntax_metadata: Vec::new(),
             deferred_metric_metadata: false,
             defer_syntax_metadata: false,
+            call_facts_without_mir: false,
+            unavailable_capabilities: BTreeSet::new(),
         }
     }
 }
@@ -776,6 +793,20 @@ impl AnalysisDb {
 
     pub(crate) fn invalidate_fact_view_indexes(&mut self) {
         let _ = self.fact_view_indexes.take();
+        let _ = self.call_graph_index.take();
+        let _ = self.go_types_index.take();
+    }
+
+    /// The call-graph view's index, built on first use.
+    pub(crate) fn call_graph_index(&self) -> &crate::core::view_index::CallGraphIndex {
+        self.call_graph_index
+            .get_or_init(|| crate::core::view_index::CallGraphIndex::build(self))
+    }
+
+    /// The Go type view's index, built on first use.
+    pub(crate) fn go_types_index(&self) -> &crate::core::view_index::GoTypesIndex {
+        self.go_types_index
+            .get_or_init(|| crate::core::view_index::GoTypesIndex::build(self))
     }
 
     fn fact_view_indexes(&self) -> &FactViewIndexes {
@@ -1182,8 +1213,21 @@ impl AnalysisDb {
     fn refresh_identity_metadata(&mut self) {
         let interner = self.stable_key_interner();
         self.fact_meta.remove_family(FactFamily::Identity);
-        let records = self.identity_records().to_vec();
-        for record in &records {
+        self.record_family_metadata(
+            FactFamily::Identity,
+            |db| db.identity_records(),
+            |_, record| record.id.0,
+            |db, record| db.identity_metadata(&interner, record),
+        );
+        self.finish_fact_meta_insertions(&[FactFamily::Identity]);
+    }
+
+    fn identity_metadata(
+        &self,
+        interner: &crate::core::StableKeyInterner,
+        record: &IdentityRecord,
+    ) -> FactMeta {
+        {
             let (precision, confidence) = Self::identity_status_metadata(record);
             let payload = stable_parts([
                 ("kind", Self::identity_kind_label(record.kind).to_string()),
@@ -1213,20 +1257,15 @@ impl AnalysisDb {
                         .unwrap_or_else(none_value),
                 ),
             ]);
-            self.record_fact_meta(
-                FactFamily::Identity,
-                record.id.0,
-                fact_meta_from_stable_key(
-                    &interner,
-                    "polint.identity",
-                    precision,
-                    confidence,
-                    record.stable_key,
-                    payload,
-                ),
-            );
+            fact_meta_from_stable_key(
+                interner,
+                "polint.identity",
+                precision,
+                confidence,
+                record.stable_key,
+                payload,
+            )
         }
-        self.finish_fact_meta_insertions(&[FactFamily::Identity]);
     }
 
     #[allow(
@@ -1867,6 +1906,86 @@ impl AnalysisDb {
         &self.go_semantic_store().output().package_errors
     }
 
+    pub(crate) fn go_semantic_call_edges(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticCallEdgeFact] {
+        &self.go_semantic_store().output().call_edges
+    }
+
+    pub(crate) fn go_semantic_conversions(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticConversionFact] {
+        &self.go_semantic_store().output().conversions
+    }
+
+    /// The call expressions a constant branch condition rules out.
+    pub(crate) fn go_semantic_dead_calls(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticDeadCallFact] {
+        &self.go_semantic_store().output().dead_calls
+    }
+
+    #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
+    pub(crate) fn go_semantic_interfaces(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticInterfaceFact] {
+        &self.go_semantic_store().output().interfaces
+    }
+
+    pub(crate) fn go_semantic_implements(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticImplementsFact] {
+        &self.go_semantic_store().output().implements
+    }
+
+    pub(crate) fn go_semantic_instantiations(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticInstantiationFact] {
+        &self.go_semantic_store().output().instantiations
+    }
+
+    pub(crate) fn go_semantic_routes(&self) -> &[crate::go::semantic::facts::GoSemanticRouteFact] {
+        &self.go_semantic_store().output().routes
+    }
+
+    /// The Go program's flow bodies, when the run's plan reads data flow and the
+    /// semantic sidecar loaded the program.
+    pub(crate) fn go_flow_program(&self) -> Option<&crate::go::flow::GoFlowProgram> {
+        self.go_semantic_store().output().flow.as_deref()
+    }
+
+    /// The data-flow models the run's Go queries use, when its plan reads data
+    /// flow.
+    pub(crate) fn go_flow_models(&self) -> Option<&crate::go::flow_models::GoFlowModels> {
+        self.go_semantic_store().output().flow_models.as_deref()
+    }
+
+    pub(crate) fn go_semantic_route_serves(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticRouteServeFact] {
+        &self.go_semantic_store().output().route_serves
+    }
+
+    /// The steps the route interpreter took before its budget stopped it, when it
+    /// did.
+    pub(crate) fn go_semantic_route_budget_steps(&self) -> Option<u64> {
+        self.go_semantic_store().output().route_budget_steps
+    }
+
+    pub(crate) fn go_semantic_fields(&self) -> &[crate::go::semantic::facts::GoSemanticFieldFact] {
+        &self.go_semantic_store().output().fields
+    }
+
+    pub(crate) fn go_semantic_params(&self) -> &[crate::go::semantic::facts::GoSemanticParamFact] {
+        &self.go_semantic_store().output().params
+    }
+
+    pub(crate) fn go_semantic_builtin_calls(
+        &self,
+    ) -> &[crate::go::semantic::facts::GoSemanticBuiltinCallFact] {
+        &self.go_semantic_store().output().builtin_calls
+    }
+
     #[allow(
         dead_code,
         reason = "Retained for AnalysisDb until dual accessors are removed."
@@ -2001,24 +2120,24 @@ impl AnalysisDb {
         self.fact_meta.remove_family(FactFamily::CallTarget);
         self.fact_meta.remove_family(FactFamily::UnresolvedCall);
 
-        let call_sites = self.call_sites().to_vec();
-        let call_targets = self.call_targets().to_vec();
-        let unresolved_calls = self.unresolved_calls().to_vec();
-
-        for fact in &call_sites {
-            let metadata = self.call_site_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::CallSite, fact.id.0, metadata);
-        }
-
-        for fact in &call_targets {
-            let metadata = self.call_target_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::CallTarget, fact.id.0, metadata);
-        }
-
-        for (index, fact) in unresolved_calls.iter().enumerate() {
-            let metadata = self.unresolved_call_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::UnresolvedCall, index as u64, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::CallSite,
+            |db| db.call_sites(),
+            |_, fact| fact.id.0,
+            |db, fact| db.call_site_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::CallTarget,
+            |db| db.call_targets(),
+            |_, fact| fact.id.0,
+            |db, fact| db.call_target_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::UnresolvedCall,
+            |db| db.unresolved_calls(),
+            |index, _| index as u64,
+            |db, fact| db.unresolved_call_metadata(interner, fact),
+        );
 
         self.finish_fact_meta_insertions(&[
             FactFamily::CallSite,
@@ -2030,11 +2149,12 @@ impl AnalysisDb {
     fn refresh_refined_call_metadata(&mut self) {
         self.fact_meta.remove_family(FactFamily::RefinedCallEdge);
 
-        let edges = self.refined_call_edges().to_vec();
-        for fact in &edges {
-            let metadata = self.refined_call_edge_metadata(fact);
-            self.record_fact_meta(FactFamily::RefinedCallEdge, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::RefinedCallEdge,
+            |db| db.refined_call_edges(),
+            |_, fact| fact.id.0,
+            |db, fact| db.refined_call_edge_metadata(fact),
+        );
         self.finish_fact_meta_insertions(&[FactFamily::RefinedCallEdge]);
     }
 
@@ -2153,16 +2273,18 @@ impl AnalysisDb {
         self.fact_meta.remove_family(FactFamily::DomainObservation);
         self.fact_meta.remove_family(FactFamily::DomainEvent);
 
-        let observations = self.domain_store_inner().observations().to_vec();
-        let events = self.domain_store_inner().events().to_vec();
-        for fact in &observations {
-            let metadata = self.domain_observation_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::DomainObservation, fact.id.0, metadata);
-        }
-        for fact in &events {
-            let metadata = self.domain_event_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::DomainEvent, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::DomainObservation,
+            |db| db.domain_store_inner().observations(),
+            |_, fact| fact.id.0,
+            |db, fact| db.domain_observation_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::DomainEvent,
+            |db| db.domain_store_inner().events(),
+            |_, fact| fact.id.0,
+            |db, fact| db.domain_event_metadata(interner, fact),
+        );
         self.finish_fact_meta_insertions(&[FactFamily::DomainObservation, FactFamily::DomainEvent]);
     }
 
@@ -2273,47 +2395,54 @@ impl AnalysisDb {
             self.fact_meta.remove_family(family);
         }
 
-        let types = self.type_facts().to_vec();
-        let narrowed = self.narrowed_type_facts().to_vec();
-        let values = self.value_facts().to_vec();
-        let allocations = self.allocation_tokens().to_vec();
-        let access_paths = self.access_path_facts().to_vec();
-        let constraints = self.points_to_constraints().to_vec();
-        let sets = self.points_to_sets().to_vec();
-        let aliases = self.alias_answers().to_vec();
-
-        for fact in &types {
-            let metadata = self.type_fact_metadata(fact);
-            self.record_fact_meta(FactFamily::Type, fact.id.0, metadata);
-        }
-        for fact in &narrowed {
-            let metadata = self.narrowed_type_metadata(fact);
-            self.record_fact_meta(FactFamily::NarrowedType, fact.id.0, metadata);
-        }
-        for fact in &values {
-            let metadata = self.value_fact_metadata(fact);
-            self.record_fact_meta(FactFamily::Value, fact.id.0, metadata);
-        }
-        for fact in &allocations {
-            let metadata = self.allocation_token_metadata(fact);
-            self.record_fact_meta(FactFamily::AllocationToken, fact.id.0, metadata);
-        }
-        for fact in &access_paths {
-            let metadata = self.access_path_metadata(fact);
-            self.record_fact_meta(FactFamily::AccessPath, fact.id.0, metadata);
-        }
-        for fact in &constraints {
-            let metadata = self.points_to_constraint_metadata(fact);
-            self.record_fact_meta(FactFamily::PointsToConstraint, fact.id.0, metadata);
-        }
-        for fact in &sets {
-            let metadata = self.points_to_set_metadata(fact);
-            self.record_fact_meta(FactFamily::PointsToSet, fact.id.0, metadata);
-        }
-        for fact in &aliases {
-            let metadata = self.alias_answer_metadata(fact);
-            self.record_fact_meta(FactFamily::AliasAnswer, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::Type,
+            |db| db.type_facts(),
+            |_, fact| fact.id.0,
+            |db, fact| db.type_fact_metadata(fact),
+        );
+        self.record_family_metadata(
+            FactFamily::NarrowedType,
+            |db| db.narrowed_type_facts(),
+            |_, fact| fact.id.0,
+            |db, fact| db.narrowed_type_metadata(fact),
+        );
+        self.record_family_metadata(
+            FactFamily::Value,
+            |db| db.value_facts(),
+            |_, fact| fact.id.0,
+            |db, fact| db.value_fact_metadata(fact),
+        );
+        self.record_family_metadata(
+            FactFamily::AllocationToken,
+            |db| db.allocation_tokens(),
+            |_, fact| fact.id.0,
+            |db, fact| db.allocation_token_metadata(fact),
+        );
+        self.record_family_metadata(
+            FactFamily::AccessPath,
+            |db| db.access_path_facts(),
+            |_, fact| fact.id.0,
+            |db, fact| db.access_path_metadata(fact),
+        );
+        self.record_family_metadata(
+            FactFamily::PointsToConstraint,
+            |db| db.points_to_constraints(),
+            |_, fact| fact.id.0,
+            |db, fact| db.points_to_constraint_metadata(fact),
+        );
+        self.record_family_metadata(
+            FactFamily::PointsToSet,
+            |db| db.points_to_sets(),
+            |_, fact| fact.id.0,
+            |db, fact| db.points_to_set_metadata(fact),
+        );
+        self.record_family_metadata(
+            FactFamily::AliasAnswer,
+            |db| db.alias_answers(),
+            |_, fact| fact.id.0,
+            |db, fact| db.alias_answer_metadata(fact),
+        );
 
         self.finish_fact_meta_insertions(&[
             FactFamily::Type,
@@ -2675,60 +2804,68 @@ impl AnalysisDb {
         self.fact_meta
             .remove_family(FactFamily::UnsupportedControlFlow);
 
-        let cfg_functions = self.cfg_functions().to_vec();
-        let cfg_nodes = self.cfg_nodes().to_vec();
-        let cfg_blocks = self.cfg_blocks().to_vec();
-        let cfg_edges = self.cfg_edges().to_vec();
-        let cfg_reachability = self.cfg_reachability().to_vec();
-        let cfg_dominators = self.cfg_dominators().to_vec();
-        let cfg_postdominators = self.cfg_postdominators().to_vec();
-        let cfg_control_dependence = self.cfg_control_dependence().to_vec();
-        let unsupported_control_flow = self.unsupported_control_flow().to_vec();
+        self.record_family_metadata(
+            FactFamily::CfgFunction,
+            |db| db.cfg_functions(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_function_metadata(fact),
+        );
 
-        for fact in &cfg_functions {
-            let metadata = self.cfg_function_metadata(fact);
-            self.record_fact_meta(FactFamily::CfgFunction, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::CfgNode,
+            |db| db.cfg_nodes(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_node_metadata(fact),
+        );
 
-        for fact in &cfg_nodes {
-            let metadata = self.cfg_node_metadata(fact);
-            self.record_fact_meta(FactFamily::CfgNode, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::BasicBlock,
+            |db| db.cfg_blocks(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_block_metadata(fact),
+        );
 
-        for fact in &cfg_blocks {
-            let metadata = self.cfg_block_metadata(fact);
-            self.record_fact_meta(FactFamily::BasicBlock, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::CfgEdge,
+            |db| db.cfg_edges(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_edge_metadata(fact),
+        );
 
-        for fact in &cfg_edges {
-            let metadata = self.cfg_edge_metadata(fact);
-            self.record_fact_meta(FactFamily::CfgEdge, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::CfgReachability,
+            |db| db.cfg_reachability(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_reachability_metadata(fact),
+        );
 
-        for fact in &cfg_reachability {
-            let metadata = self.cfg_reachability_metadata(fact);
-            self.record_fact_meta(FactFamily::CfgReachability, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::CfgDominator,
+            |db| db.cfg_dominators(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_dominator_metadata(fact),
+        );
 
-        for fact in &cfg_dominators {
-            let metadata = self.cfg_dominator_metadata(fact);
-            self.record_fact_meta(FactFamily::CfgDominator, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::CfgPostDominator,
+            |db| db.cfg_postdominators(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_postdominator_metadata(fact),
+        );
 
-        for fact in &cfg_postdominators {
-            let metadata = self.cfg_postdominator_metadata(fact);
-            self.record_fact_meta(FactFamily::CfgPostDominator, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::CfgControlDependence,
+            |db| db.cfg_control_dependence(),
+            |_, fact| fact.id.0,
+            |db, fact| db.cfg_control_dependence_metadata(fact),
+        );
 
-        for fact in &cfg_control_dependence {
-            let metadata = self.cfg_control_dependence_metadata(fact);
-            self.record_fact_meta(FactFamily::CfgControlDependence, fact.id.0, metadata);
-        }
-
-        for fact in &unsupported_control_flow {
-            let metadata = self.unsupported_control_flow_metadata(fact);
-            self.record_fact_meta(FactFamily::UnsupportedControlFlow, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::UnsupportedControlFlow,
+            |db| db.unsupported_control_flow(),
+            |_, fact| fact.id.0,
+            |db, fact| db.unsupported_control_flow_metadata(fact),
+        );
 
         self.finish_fact_meta_insertions(&[
             FactFamily::CfgFunction,
@@ -2750,37 +2887,30 @@ impl AnalysisDb {
         self.fact_meta
             .remove_family(FactFamily::UnsupportedSemantic);
 
-        for index in 0..self.mir_bodies().len() {
-            let (run_id, metadata) = {
-                let body = &self.mir_bodies()[index];
-                (body.id.0, self.mir_body_metadata(interner, body))
-            };
-            self.record_fact_meta(FactFamily::MirBody, run_id, metadata);
-        }
-
-        for index in 0..self.mir_operations().len() {
-            let (run_id, metadata) = {
-                let operation = &self.mir_operations()[index];
-                (operation.id.0, self.mir_operation_metadata(operation))
-            };
-            self.record_fact_meta(FactFamily::MirOperation, run_id, metadata);
-        }
-
-        for index in 0..self.mir_places().len() {
-            let (run_id, metadata) = {
-                let place = &self.mir_places()[index];
-                (place.id.0, self.place_metadata(place))
-            };
-            self.record_fact_meta(FactFamily::Place, run_id, metadata);
-        }
-
-        for index in 0..self.unsupported_semantics().len() {
-            let (run_id, metadata) = {
-                let row = &self.unsupported_semantics()[index];
-                (row.id.0, self.unsupported_semantic_metadata(row))
-            };
-            self.record_fact_meta(FactFamily::UnsupportedSemantic, run_id, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::MirBody,
+            |db| db.mir_bodies(),
+            |_, body| body.id.0,
+            |db, body| db.mir_body_metadata(interner, body),
+        );
+        self.record_family_metadata(
+            FactFamily::MirOperation,
+            |db| db.mir_operations(),
+            |_, operation| operation.id.0,
+            |db, operation| db.mir_operation_metadata(operation),
+        );
+        self.record_family_metadata(
+            FactFamily::Place,
+            |db| db.mir_places(),
+            |_, place| place.id.0,
+            |db, place| db.place_metadata(place),
+        );
+        self.record_family_metadata(
+            FactFamily::UnsupportedSemantic,
+            |db| db.unsupported_semantics(),
+            |_, row| row.id.0,
+            |db, row| db.unsupported_semantic_metadata(row),
+        );
 
         self.finish_fact_meta_insertions(&[
             FactFamily::MirBody,
@@ -4180,6 +4310,21 @@ impl AnalysisDb {
     /// metadata is most of the cost of restoring facts from the analysis cache,
     /// and all of it is wasted. [`AnalysisDb::record_deferred_syntax_metadata`]
     /// records it later for whoever does need it.
+    /// Records that the call facts came from the call-resolution cache and no
+    /// MIR was materialized; see `call_facts_without_mir`.
+    pub(crate) fn set_unavailable_capabilities(&mut self, capabilities: BTreeSet<String>) {
+        self.unavailable_capabilities = capabilities;
+    }
+
+    /// Whether the run provides `capability`; see `unavailable_capabilities`.
+    pub(crate) fn capability_available(&self, capability: &str) -> bool {
+        !self.unavailable_capabilities.contains(capability)
+    }
+
+    pub(crate) fn mark_call_facts_restored_without_mir(&mut self) {
+        self.call_facts_without_mir = true;
+    }
+
     pub(crate) fn defer_syntax_fact_metadata(&mut self) {
         self.defer_syntax_metadata = true;
     }
@@ -4263,6 +4408,36 @@ impl AnalysisDb {
         let reference = FactRef::new(family, run_id);
         let _insert = self.fact_meta.insert(reference, meta);
         debug_assert!(self.metadata_for(reference).is_some());
+    }
+
+    /// Records the metadata of every row of one family, computing the rows in
+    /// parallel and inserting them in row order.
+    ///
+    /// Equivalent to computing and recording row by row as long as `metadata`
+    /// reads no row of `family` itself and interns no key: a row of the family
+    /// being recorded would be visible to later rows in the sequential loop and
+    /// to none here, and a key interned from several threads would take an id
+    /// that depends on scheduling. The metadata functions of the families this
+    /// is used for read only the stable keys of families recorded before them.
+    fn record_family_metadata<T: Sync>(
+        &mut self,
+        family: FactFamily,
+        rows: impl for<'a> Fn(&'a Self) -> &'a [T],
+        run_id: impl Fn(usize, &T) -> u64 + Sync,
+        metadata: impl Fn(&Self, &T) -> FactMeta + Sync,
+    ) {
+        use rayon::prelude::*;
+        let computed: Vec<(u64, FactMeta)> = {
+            let this = &*self;
+            rows(this)
+                .par_iter()
+                .enumerate()
+                .map(|(index, row)| (run_id(index, row), metadata(this, row)))
+                .collect()
+        };
+        for (run_id, meta) in computed {
+            self.record_fact_meta(family, run_id, meta);
+        }
     }
 
     fn finish_fact_meta_insertions(&mut self, families: &[FactFamily]) {
@@ -6174,37 +6349,44 @@ impl AnalysisDb {
     fn refresh_solver_metadata(&mut self) {
         self.fact_meta.remove_family(FactFamily::SolverDerivedEdge);
         let interner = self.stable_key_interner();
-        let edges = self.solver_derived_edges().to_vec();
-        for edge in &edges {
-            let precision = crate::analysis_neutral::solver::facts::derived_edge_precision_ceiling(
-                edge.precision,
-            );
-            let confidence = match edge.status {
-                PointsToStatus::Present => FactConfidence::High,
-                PointsToStatus::BudgetExceeded => FactConfidence::Medium,
-                PointsToStatus::Unknown
-                | PointsToStatus::Unsupported
-                | PointsToStatus::SetupMissing => FactConfidence::Low,
-            };
-            let metadata = fact_meta_from_stable_key(
-                &interner,
-                "polint.solver",
-                precision,
-                confidence,
-                edge.stable_key,
-                stable_parts([
-                    ("status", format!("{:?}", edge.status)),
-                    ("precision", format!("{:?}", edge.precision)),
-                    (
-                        "provenance",
-                        serde_json::to_string(&edge.provenance.stable_payload(&interner))
-                            .expect("solver provenance stable payload serializes"),
-                    ),
-                ]),
-            );
-            self.record_fact_meta(FactFamily::SolverDerivedEdge, edge.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::SolverDerivedEdge,
+            |db| db.solver_derived_edges(),
+            |_, edge| edge.id.0,
+            |_, edge| Self::solver_derived_edge_metadata(&interner, edge),
+        );
         self.finish_fact_meta_insertions(&[FactFamily::SolverDerivedEdge]);
+    }
+
+    fn solver_derived_edge_metadata(
+        interner: &crate::core::StableKeyInterner,
+        edge: &crate::analysis_neutral::solver::facts::DerivedEdgeFact,
+    ) -> FactMeta {
+        let precision =
+            crate::analysis_neutral::solver::facts::derived_edge_precision_ceiling(edge.precision);
+        let confidence = match edge.status {
+            PointsToStatus::Present => FactConfidence::High,
+            PointsToStatus::BudgetExceeded => FactConfidence::Medium,
+            PointsToStatus::Unknown
+            | PointsToStatus::Unsupported
+            | PointsToStatus::SetupMissing => FactConfidence::Low,
+        };
+        fact_meta_from_stable_key(
+            interner,
+            "polint.solver",
+            precision,
+            confidence,
+            edge.stable_key,
+            stable_parts([
+                ("status", format!("{:?}", edge.status)),
+                ("precision", format!("{:?}", edge.precision)),
+                (
+                    "provenance",
+                    serde_json::to_string(&edge.provenance.stable_payload(interner))
+                        .expect("solver provenance stable payload serializes"),
+                ),
+            ]),
+        )
     }
 
     fn refresh_semantic_graph_metadata(&mut self) {
@@ -6341,6 +6523,10 @@ impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
 
     fn replace_call_facts(&mut self, output: CallOutput) -> Result<(), AnalysisError> {
         AnalysisDb::replace_call_facts(self, output)
+    }
+
+    fn call_facts_without_mir(&self) -> bool {
+        self.call_facts_without_mir
     }
 
     fn replace_cfg_facts(&mut self, output: CfgOutput) -> Result<(), AnalysisError> {

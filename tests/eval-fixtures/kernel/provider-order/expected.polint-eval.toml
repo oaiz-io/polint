@@ -27,13 +27,13 @@ invariant = { name = "provider_order.5", value = "polint.module_topology", mode 
 invariant = { name = "provider_order.6", value = "polint.semantic_mir", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.7", value = "polint.cfg", mode = "exact" }
+invariant = { name = "provider_order.7", value = "polint.go.semantic", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.8", value = "polint.calls", mode = "exact" }
+invariant = { name = "provider_order.8", value = "polint.cfg", mode = "exact" }
 
 [[expected]]
-invariant = { name = "provider_order.9", value = "polint.go.semantic", mode = "exact" }
+invariant = { name = "provider_order.9", value = "polint.calls", mode = "exact" }
 
 [[expected]]
 invariant = { name = "provider_order.10", value = "polint.ts.types", mode = "exact" }

@@ -128,7 +128,7 @@ fn blocker_fixture(
             .expect("provider outcome")
             .reject_validation_for_test();
     }
-    let (blocked, diagnostics) = AnalysisKernel::runtime_capability_blockers(
+    let (blocked, diagnostics, _) = AnalysisKernel::runtime_capability_blockers(
         &plan,
         &output.db,
         &output.run_report.provider_outcomes,

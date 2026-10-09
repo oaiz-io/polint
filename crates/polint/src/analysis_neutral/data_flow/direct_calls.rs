@@ -601,7 +601,7 @@ fn unresolved_status(status: CallTargetStatus) -> DataFlowStatus {
         CallTargetStatus::Unsupported => DataFlowStatus::Unsupported,
         CallTargetStatus::SetupMissing => DataFlowStatus::SetupMissing,
         CallTargetStatus::BudgetExceeded => DataFlowStatus::BudgetExceeded,
-        CallTargetStatus::Rejected => DataFlowStatus::Rejected,
+        CallTargetStatus::Rejected | CallTargetStatus::Unreachable => DataFlowStatus::Rejected,
     }
 }
 

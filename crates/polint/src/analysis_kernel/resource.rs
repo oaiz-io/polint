@@ -152,6 +152,50 @@ pub(crate) fn budget_diagnostic(trip: &ResourceTrip) -> crate::diagnostics::Diag
     .with_evidence("ceiling_bytes", trip.ceiling_bytes.to_string())
 }
 
+/// Memory this process may use, in bytes: the host total, lowered to the
+/// control group's limit when polint runs inside one that sets a smaller limit.
+///
+/// Returns `None` where neither reading is available.
+pub(crate) fn available_memory_bytes() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let host = host_memory_bytes();
+        let cgroup = cgroup_memory_limit(
+            std::fs::read_to_string("/sys/fs/cgroup/memory.max")
+                .ok()
+                .as_deref(),
+            std::fs::read_to_string("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+                .ok()
+                .as_deref(),
+        );
+        match (host, cgroup) {
+            (Some(host), Some(limit)) => Some(host.min(limit)),
+            (host, limit) => host.or(limit),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        host_memory_bytes()
+    }
+}
+
+/// The memory limit of the control group polint runs in, from the cgroup v2
+/// `memory.max` or, failing that, the cgroup v1 `memory.limit_in_bytes`.
+///
+/// "max" (v2) and the near-`i64::MAX` sentinel v1 reports for "no limit" both
+/// mean unlimited and yield `None`.
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+fn cgroup_memory_limit(v2_max: Option<&str>, v1_limit: Option<&str>) -> Option<u64> {
+    const UNLIMITED_FLOOR: u64 = 1 << 60;
+    let parse = |raw: &str| {
+        raw.trim()
+            .parse::<u64>()
+            .ok()
+            .filter(|bytes| *bytes > 0 && *bytes < UNLIMITED_FLOOR)
+    };
+    v2_max.and_then(parse).or_else(|| v1_limit.and_then(parse))
+}
+
 /// Total host memory in bytes, read from `/proc/meminfo` on Linux.
 ///
 /// Returns `None` on every other target and whenever the reading is not
@@ -206,6 +250,34 @@ mod tests {
         assert_eq!(trip.ceiling_bytes, 1);
         assert!(trip.observed_bytes > 0);
         assert!(envelope.exhausted());
+    }
+
+    #[test]
+    fn cgroup_limit_reads_v2_then_v1_and_treats_unlimited_as_absent() {
+        assert_eq!(
+            cgroup_memory_limit(Some("23622320128\n"), Some("1024")),
+            Some(23_622_320_128)
+        );
+        assert_eq!(cgroup_memory_limit(Some("max\n"), None), None);
+        assert_eq!(
+            cgroup_memory_limit(Some("max\n"), Some("4294967296\n")),
+            Some(4_294_967_296)
+        );
+        assert_eq!(
+            cgroup_memory_limit(None, Some("9223372036854771712\n")),
+            None
+        );
+        assert_eq!(cgroup_memory_limit(None, None), None);
+    }
+
+    #[test]
+    fn available_memory_never_exceeds_the_host_total() {
+        if let (Some(available), Some(host)) = (available_memory_bytes(), host_memory_bytes()) {
+            assert!(
+                available <= host,
+                "available {available} exceeds host {host}"
+            );
+        }
     }
 
     #[test]

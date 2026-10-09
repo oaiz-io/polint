@@ -26,10 +26,24 @@ use crate::analysis_neutral::types::facts::TypeShape;
 use crate::internal_core::{FileId, FunctionId, Language, Span, StableKeyId};
 
 #[doc(hidden)]
-pub fn lower_go_mir(db: &impl AnalysisHost) -> MirOutput {
+/// Lowers every Go file to MIR, as one output.
+pub fn lower_go_mir(db: &(impl AnalysisHost + Sync)) -> MirOutput {
+    crate::analysis_neutral::mir_body_compose::concat_outputs(lower_go_mir_by_file(db))
+}
+
+/// Lowers every Go file to its own MIR output, the files in parallel, returned
+/// in repository path order.
+///
+/// A file's bodies, places, operations and control flow depend on that file and
+/// on read-only indexes only: every place key carries its file's path, so no
+/// place is shared between files, and operation ordinals are file-local. Merging
+/// the outputs renumbers every id by stable key, so the merged result does not
+/// depend on how the files were scheduled.
+pub fn lower_go_mir_by_file(db: &(impl AnalysisHost + Sync)) -> Vec<MirOutput> {
+    use rayon::prelude::*;
+
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let mut lowering = GoMirLowering::default();
     let index = LoweringIndex::build(db);
     let mut files = db
         .files()
@@ -38,66 +52,26 @@ pub fn lower_go_mir(db: &impl AnalysisHost) -> MirOutput {
         .collect::<Vec<_>>();
     files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
-    for file in files {
-        lowering.lower_file(interner, db, &index, file);
-    }
-
-    let (places, place_types) = lowering.places.clone().finish_with_types(interner);
-    let place_ids = places
-        .iter()
-        .map(|place| (interner.resolve(place.stable_key).to_string(), place.id))
-        .collect::<BTreeMap<_, _>>();
-    let operations = lowering.finish_operations(&place_ids);
-    let unsupported = lowering.finish_unsupported(interner, &place_ids);
-    let control_effects = lowering
-        .operations
-        .iter()
-        .filter_map(|operation| operation.to_control_effect(&place_ids))
+    // Each file lowers against its own interner overlay, and the overlays are
+    // folded back in file order, so every key gets the same id on every run and
+    // at every job count however the files were scheduled.
+    let lowered = files
+        .par_iter()
+        .map(|file| {
+            let overlay = interner.overlay();
+            let mut lowering = GoMirLowering::default();
+            lowering.lower_file(&overlay, db, &index, file);
+            (lowering.finish(&overlay), overlay)
+        })
         .collect::<Vec<_>>();
-    let call_unwinds = lowering
-        .operations
-        .iter()
-        .filter_map(|operation| match operation.kind {
-            OperationKindDraft::Call { unwind: true, .. } => Some(operation.id),
-            _ => None,
+    lowered
+        .into_iter()
+        .map(|(mut output, overlay)| {
+            let remap = interner.absorb(&overlay);
+            output.remap_stable_keys(|id| remap.apply(id));
+            output
         })
-        .collect::<BTreeSet<_>>();
-    let control_shapes = lowering
-        .operations
-        .iter()
-        .filter_map(|operation| match operation.kind {
-            OperationKindDraft::Branch { shape, .. } => Some((operation.id, shape)),
-            _ => None,
-        })
-        .collect::<BTreeMap<_, _>>();
-    let branch_regions = lowering
-        .operations
-        .iter()
-        .filter_map(|operation| match operation.kind {
-            OperationKindDraft::Branch { region, .. } => Some((operation.id, region)),
-            _ => None,
-        })
-        .collect::<BTreeMap<_, _>>();
-    let (blocks, statements, terminators) = lower_control_flow(
-        interner,
-        &lowering.bodies,
-        &operations,
-        &control_shapes,
-        &branch_regions,
-        &control_effects,
-        &call_unwinds,
-    );
-
-    MirOutput {
-        bodies: lowering.bodies,
-        blocks,
-        statements,
-        terminators,
-        places,
-        place_types,
-        operations,
-        unsupported,
-    }
+        .collect()
 }
 
 fn lower_control_flow(
@@ -161,6 +135,8 @@ fn lower_control_flow(
         for (step_index, step_id) in step_ids.into_iter().enumerate() {
             if let Some(operation) = body_operations.get(&step_id).copied() {
                 let operation_stable_key = interner.resolve(operation.stable_key);
+                let operation_stable_key =
+                    crate::analysis_api::compact_key_reference(&operation_stable_key);
                 let statement = MirStatement {
                     id: MirStatementId(statements.len() as u64),
                     body: body.id,
@@ -363,6 +339,7 @@ fn lower_control_flow(
             drafts[current].terminator = Some(MirTerminatorKind::Return { value: None });
         }
         let body_stable_key = interner.resolve(body.stable_key);
+        let body_stable_key = crate::analysis_api::compact_key_reference(&body_stable_key);
         for draft in drafts {
             let kind = draft
                 .terminator
@@ -510,6 +487,68 @@ struct GoMirLowering {
 }
 
 impl GoMirLowering {
+    /// The output of everything lowered so far: places, operations and
+    /// unsupported rows resolved against each other, and the bodies' blocks,
+    /// statements and terminators.
+    fn finish(self, interner: &crate::internal_core::StableKeyInterner) -> MirOutput {
+        let (places, place_types) = self.places.clone().finish_with_types(interner);
+        let place_ids = places
+            .iter()
+            .map(|place| (interner.resolve(place.stable_key).to_string(), place.id))
+            .collect::<BTreeMap<_, _>>();
+        let operations = self.finish_operations(&place_ids);
+        let unsupported = self.finish_unsupported(interner, &place_ids);
+        let control_effects = self
+            .operations
+            .iter()
+            .filter_map(|operation| operation.to_control_effect(&place_ids))
+            .collect::<Vec<_>>();
+        let call_unwinds = self
+            .operations
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                OperationKindDraft::Call { unwind: true, .. } => Some(operation.id),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+        let control_shapes = self
+            .operations
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                OperationKindDraft::Branch { shape, .. } => Some((operation.id, shape)),
+                _ => None,
+            })
+            .collect::<BTreeMap<_, _>>();
+        let branch_regions = self
+            .operations
+            .iter()
+            .filter_map(|operation| match operation.kind {
+                OperationKindDraft::Branch { region, .. } => Some((operation.id, region)),
+                _ => None,
+            })
+            .collect::<BTreeMap<_, _>>();
+        let (blocks, statements, terminators) = lower_control_flow(
+            interner,
+            &self.bodies,
+            &operations,
+            &control_shapes,
+            &branch_regions,
+            &control_effects,
+            &call_unwinds,
+        );
+
+        MirOutput {
+            bodies: self.bodies,
+            blocks,
+            statements,
+            terminators,
+            places,
+            place_types,
+            operations,
+            unsupported,
+        }
+    }
+
     fn lower_file(
         &mut self,
         interner: &crate::internal_core::StableKeyInterner,
@@ -519,7 +558,7 @@ impl GoMirLowering {
     ) {
         let mut parser = Parser::new();
         if parser
-            .set_language(&tree_sitter_go::LANGUAGE.into())
+            .set_language(&crate::go::grammar::language())
             .is_err()
         {
             return;
@@ -2662,9 +2701,11 @@ func authorize(user User, index int) bool {
         );
 
         assert_eq!(first.bodies.len(), 1);
+        // The body key embeds its owner function key by digest; the owner key
+        // itself names the function.
         assert!(
             first_interner
-                .resolve(first.bodies[0].stable_key)
+                .resolve(first.bodies[0].owner_stable_key)
                 .contains("authorize")
         );
         assert_eq!(

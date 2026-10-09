@@ -2584,6 +2584,12 @@ fn unknowns(root: PathBuf, args: &UnknownsArgs) -> Result<u8> {
     taxonomy_rows.extend(
         crate::analysis::unknown_taxonomy::collect::resource_budget_unknowns(&analysis.diagnostics),
     );
+    // A pipeline that did not run leaves nothing to report unknowns from, so an
+    // empty answer would read as "nothing is unknown". Name what did not run and
+    // fail instead.
+    let failures = analysis.pipeline_failures(&[args.capability.as_str()]);
+    let exit = if failures.is_empty() { 0 } else { 1 };
+    taxonomy_rows.extend(failures);
     let rows = crate::analysis::unknown_taxonomy::facts::normalize_rows(taxonomy_rows)
         .into_iter()
         .map(UnknownsRow::from_taxonomy_compat)
@@ -2596,7 +2602,12 @@ fn unknowns(root: PathBuf, args: &UnknownsArgs) -> Result<u8> {
         rows,
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
-    Ok(0)
+    // As at the end of a rule check: the report is written and nothing reads the
+    // fact database again, so freeing millions of facts one at a time would only
+    // delay an exit that reclaims the address space anyway. The cache handle
+    // dropped inside the analysis, so nothing with a side effect on drop is lost.
+    std::mem::forget(analysis.db);
+    Ok(exit)
 }
 
 fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
@@ -2633,6 +2644,8 @@ fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
             crate::analysis::unknown_taxonomy::collect::PUBLIC_UNKNOWN_CAPABILITIES.to_vec()
         });
     let analysis = analyze_for_agent_json(&root, &args.paths, args.no_cache, &requested_caps)?;
+    let failures = analysis.pipeline_failures(&requested_caps);
+    let exit = if failures.is_empty() { 0 } else { 1 };
     let rows = if let Some(capability) = &args.capability {
         // A resource-budget stop is run-level: it is why the run could not
         // finish, so it belongs in every capability's answer, not only the
@@ -2652,7 +2665,10 @@ fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
             &analysis.db,
             &analysis.diagnostics,
         )
-    }
+    };
+    let rows = crate::analysis::unknown_taxonomy::facts::normalize_rows(
+        rows.into_iter().chain(failures).collect(),
+    )
     .into_iter()
     .map(UnknownsRow::from_taxonomy_full)
     .collect();
@@ -2664,7 +2680,7 @@ fn inspect_unknowns(root: PathBuf, args: &InspectUnknownsArgs) -> Result<u8> {
         rows,
     };
     println!("{}", serde_json::to_string_pretty(&report)?);
-    Ok(0)
+    Ok(exit)
 }
 
 fn view_supports_unknowns(view: &PublicFactView) -> bool {
@@ -3104,6 +3120,8 @@ impl FactsListReport {
             public_fact_view("control_flow").unwrap(),
             public_fact_view("cfg").unwrap(),
             public_fact_view("call_graph").unwrap(),
+            public_fact_view("go_types").unwrap(),
+            public_fact_view("routes").unwrap(),
             public_fact_view("dataflow").unwrap(),
             public_fact_view("coverage_facts").unwrap(),
             public_fact_view("test_suite_metrics").unwrap(),
@@ -3223,8 +3241,26 @@ fn public_fact_view(capability: &str) -> Option<PublicFactView> {
             capability: "call_graph",
             view_type: "CallGraph",
             canonical_path: "polint::sdk::facts::CallGraph<'_>",
-            stability: "reserved",
-            docs_path: "docs/facts/capability-plans.md",
+            stability: "preview",
+            docs_path: "docs/facts/call-graph.md",
+            sampling: false,
+            unknowns: false,
+        },
+        "go_types" => PublicFactView {
+            capability: "go_types",
+            view_type: "GoTypes",
+            canonical_path: "polint::sdk::facts::GoTypes<'_>",
+            stability: "preview",
+            docs_path: "docs/facts/go-semantic-types.md",
+            sampling: false,
+            unknowns: false,
+        },
+        "routes" => PublicFactView {
+            capability: "routes",
+            view_type: "Routes",
+            canonical_path: "polint::sdk::facts::Routes<'_>",
+            stability: "preview",
+            docs_path: "docs/facts/routes.md",
             sampling: false,
             unknowns: false,
         },
@@ -3270,6 +3306,23 @@ fn polint_tool_info() -> crate::diagnostics::PolintToolInfo {
 struct AgentJsonAnalysis {
     db: AnalysisDb,
     diagnostics: Vec<Diagnostic>,
+    provider_outcomes: Vec<crate::analysis_kernel::ProviderOutcome>,
+    capability_support: crate::core::CapabilitySupportView,
+}
+
+impl AgentJsonAnalysis {
+    /// Error rows for the part of `capabilities`' pipeline that did not run.
+    fn pipeline_failures(
+        &self,
+        capabilities: &[&str],
+    ) -> Vec<crate::analysis::unknown_taxonomy::facts::UnknownRow> {
+        crate::analysis_kernel::pipeline_failure_unknowns(
+            capabilities,
+            &self.provider_outcomes,
+            &self.capability_support,
+            &self.diagnostics,
+        )
+    }
 }
 
 fn analyze_for_agent_json(
@@ -3312,6 +3365,8 @@ fn analyze_for_agent_json(
     Ok(AgentJsonAnalysis {
         db: output.db,
         diagnostics: output.diagnostics,
+        provider_outcomes: output.run_report.provider_outcomes,
+        capability_support: output.capability_support,
     })
 }
 
@@ -5367,10 +5422,14 @@ mod tests {
         );
 
         assert_eq!(public_fact_view("cfg").unwrap().stability, "reserved");
-        assert_eq!(
-            public_fact_view("call_graph").unwrap().stability,
-            "reserved"
-        );
+        for (capability, docs_path) in [
+            ("call_graph", "docs/facts/call-graph.md"),
+            ("go_types", "docs/facts/go-semantic-types.md"),
+            ("routes", "docs/facts/routes.md"),
+        ] {
+            let view = public_fact_view(capability).unwrap();
+            assert_eq!((view.stability, view.docs_path), ("preview", docs_path));
+        }
     }
 
     #[test]

@@ -29,6 +29,13 @@ use crate::ts::binding::store::{
 const ADAPTATION_MODEL_DIR: &str = ".polint/models";
 const ADAPTATION_MODEL_MAX_BYTES: u64 = 1_048_576;
 
+/// The projection a run without Go points-to facts uses: no Go constraints.
+fn skip_go_semantic_facts(
+    _db: &AnalysisDb,
+    _builder: &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
+) {
+}
+
 fn project_go_semantic_facts(
     db: &AnalysisDb,
     builder: &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
@@ -69,6 +76,7 @@ pub(crate) struct SemanticGraphProviderRunOutput {
 /// provider/schema/parameter digests (D-17), so any upstream change or algorithm bump
 /// deterministically invalidates the semantic-graph cache.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn derive_semantic_graph_with_cache_stats(
     db: &mut AnalysisDb,
     loaded: &LoadedConfig,
@@ -88,6 +96,69 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
     semantic_mir_output_digest: Digest,
     go_semantic_output_digest: Digest,
 ) -> SemanticGraphProviderRunOutput {
+    derive_semantic_graph_with_go_points_to(
+        db,
+        loaded,
+        adaptation_budget,
+        input_snapshot,
+        manifest,
+        calls_output_digest,
+        identity_output_digest,
+        abstract_domains_output_digest,
+        entrypoints_output_digest,
+        reachability_output_digest,
+        type_value_alias_output_digest,
+        symbol_output_digest,
+        module_topology_output_digest,
+        go_syntax_output_digest,
+        ts_syntax_output_digest,
+        semantic_mir_output_digest,
+        go_semantic_output_digest,
+        true,
+    )
+}
+
+/// [`derive_semantic_graph_with_cache_stats`], projecting the Go semantic
+/// sidecar's call constraints only when `go_points_to` is set; see
+/// `analysis_kernel::provider::go_points_to_requested`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn derive_semantic_graph_with_go_points_to(
+    db: &mut AnalysisDb,
+    loaded: &LoadedConfig,
+    adaptation_budget: AdaptationModelBudget,
+    input_snapshot: &InputSnapshot,
+    manifest: &ProviderManifest,
+    calls_output_digest: Digest,
+    identity_output_digest: Digest,
+    abstract_domains_output_digest: Digest,
+    entrypoints_output_digest: Digest,
+    reachability_output_digest: Digest,
+    type_value_alias_output_digest: Digest,
+    symbol_output_digest: Digest,
+    module_topology_output_digest: Digest,
+    go_syntax_output_digest: Digest,
+    ts_syntax_output_digest: Digest,
+    semantic_mir_output_digest: Digest,
+    go_semantic_output_digest: Digest,
+    go_points_to: bool,
+) -> SemanticGraphProviderRunOutput {
+    let project_go: fn(
+        &AnalysisDb,
+        &mut crate::analysis_neutral::semantic_graph::build::SemanticGraphBuilder,
+    ) = if go_points_to {
+        project_go_semantic_facts
+    } else {
+        skip_go_semantic_facts
+    };
+    // Without Go points-to facts nothing reads the Go part of the graph: its
+    // call constraints would only feed the solver edges the typed call layer
+    // already answers.
+    let excluded_language = (!go_points_to).then_some(crate::internal_core::Language::Go);
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = SEMANTIC_GRAPH_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, SEMANTIC_GRAPH_PROVIDER_ID);
@@ -99,6 +170,7 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
     // direct bindings, object-model rows, and token-source flow projection on
     // the same parse/semantic pass per TS file.
     let ts_direct_bindings = collect_ts_direct_binding_collection(db);
+    checkpoint("ts_direct_bindings");
 
     // Step: refresh private TS object-model rows. This keeps the projection's
     // consumed object/property facts deterministic and digest-visible without
@@ -118,14 +190,17 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
 
     // Step: project + normalize. The build is read-only; normalized() fixes the
     // stable-key order the digest is computed over.
+    checkpoint("ts_object_model");
     let ts_direct_binding_output_digest =
         ts_direct_binding_output_digest(ts_direct_bindings.output(), interner);
     let base_output = build_semantic_graph_with_ts_direct_binding_collection(
         db,
         &ts_direct_bindings,
-        project_go_semantic_facts,
+        project_go,
+        excluded_language,
     )
     .normalized(interner);
+    checkpoint("build_normalize");
     let adaptation_models =
         collect_adaptation_model_input(interner, loaded, &base_output, adaptation_budget);
     let output = if adaptation_models.store.accepted().is_empty() {
@@ -135,11 +210,13 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
             db,
             &ts_direct_bindings,
             &adaptation_models.store,
-            project_go_semantic_facts,
+            project_go,
+            excluded_language,
         )
         .normalized(interner)
     };
 
+    checkpoint("adaptation_models");
     // Step: digest over the stored stable KEYS (never dense IDs — see
     // `semantic_graph_output_digest`), with the empty-output sentinel.
     let output_digest = semantic_graph_output_digest(
@@ -166,7 +243,10 @@ pub(crate) fn derive_semantic_graph_with_cache_stats(
     // Step: store (assigns dense IDs + referentially validates inside
     // from_output). On store error the db keeps its prior state and the facts the
     // digest certifies were not persisted, so return output_digest: None.
-    match db.replace_normalized_semantic_graph_facts(output) {
+    checkpoint("digest");
+    let stored = db.replace_normalized_semantic_graph_facts(output);
+    checkpoint("store_metadata");
+    match stored {
         Ok(()) => {
             db.replace_adaptation_model_facts(
                 adaptation_models.store.accepted().to_vec(),
@@ -916,6 +996,10 @@ mod tests {
                     package_path: "example.com/app".to_string(),
                     caller: "example.com/app.main".to_string(),
                     static_callee: Some("example.com/app.run".to_string()),
+                    static_callee_origin: None,
+                    receiver_type: None,
+                    via_value: false,
+                    mode: crate::go::semantic::facts::GoCallMode::Call,
                     status: GoSemanticCallStatus::ResolvedStatic,
                     reason: None,
                     relative_file: Some("cmd/app/main.go".to_string()),

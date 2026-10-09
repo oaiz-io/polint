@@ -9,10 +9,10 @@ path = "repo"
 max_runtime_ms = 120000
 
 [[expected]]
-fact = { family = "CfgFunction", stable_key = "cfg.go", mode = "partial", producer_id = "polint.cfg", precision = "exact_lowered", status = "resolved" }
+fact = { family = "CfgFunction", stable_key = "language=2:go", mode = "partial", producer_id = "polint.cfg", precision = "exact_lowered", status = "resolved" }
 
 [[expected]]
-fact = { family = "CfgFunction", stable_key = "cfg.ts", mode = "partial", producer_id = "polint.cfg", precision = "exact_lowered", status = "resolved" }
+fact = { family = "CfgFunction", stable_key = "language=2:ts", mode = "partial", producer_id = "polint.cfg", precision = "exact_lowered", status = "resolved" }
 
 [[expected]]
 fact = { family = "CfgNode", stable_key = "Return", mode = "partial", producer_id = "polint.cfg", precision = "exact_lowered", status = "resolved" }
@@ -36,7 +36,7 @@ fact = { family = "CfgPostDominator", stable_key = "NormalControl", mode = "part
 fact = { family = "CfgControlDependence", stable_key = "NormalControl", mode = "partial", producer_id = "polint.cfg", precision = "exact_lowered", status = "resolved" }
 
 [[expected]]
-fact = { family = "UnsupportedControlFlow", stable_key = "throw", mode = "partial", producer_id = "polint.cfg", precision = "unsupported", status = "unsupported" }
+fact = { family = "UnsupportedControlFlow", stable_key = "construct=3:try", mode = "partial", producer_id = "polint.cfg", precision = "unsupported", status = "unsupported" }
 
 [[expected]]
 invariant = { name = "cfg.current_determinism", value = "cold_warm_no_cache_equal", mode = "exact" }

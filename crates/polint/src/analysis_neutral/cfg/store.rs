@@ -16,9 +16,88 @@ pub struct CfgOutput {
     pub unsupported: Vec<UnsupportedControlFlowFact>,
 }
 
+/// How far a separately lowered part of a CFG output moves when it is appended
+/// behind the parts lowered before it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct CfgIdOffsets {
+    pub(crate) functions: u64,
+    pub(crate) nodes: u64,
+    pub(crate) blocks: u64,
+    pub(crate) edges: u64,
+}
+
 impl CfgOutput {
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    /// Appends a part lowered on its own, renumbering its builder-local ids
+    /// behind the rows already here and moving its stable keys through `remap`.
+    ///
+    /// A builder numbers each id family from one and allocates exactly one row
+    /// per id, so the offsets are the row counts so far, and appending parts in
+    /// lowering order gives every row the id one builder lowering all of them in
+    /// that order would have given it. Only the builder's own families are
+    /// renumbered: the derived families and unsupported rows are added after the
+    /// parts are joined.
+    pub(crate) fn append_lowered_part(
+        &mut self,
+        mut part: CfgOutput,
+        remap: impl Fn(crate::internal_core::StableKeyId) -> crate::internal_core::StableKeyId,
+    ) {
+        use crate::analysis_neutral::cfg::ids::{
+            BasicBlockId, CfgEdgeId, CfgFunctionId, CfgNodeId,
+        };
+        debug_assert!(
+            part.reachability.is_empty()
+                && part.dominators.is_empty()
+                && part.postdominators.is_empty()
+                && part.control_dependence.is_empty()
+                && part.unsupported.is_empty(),
+            "a lowered part carries builder rows only"
+        );
+        let offsets = CfgIdOffsets {
+            functions: self.functions.len() as u64,
+            nodes: self.nodes.len() as u64,
+            blocks: self.blocks.len() as u64,
+            edges: self.edges.len() as u64,
+        };
+        let function = |id: CfgFunctionId| CfgFunctionId(id.0 + offsets.functions);
+        let node = |id: CfgNodeId| CfgNodeId(id.0 + offsets.nodes);
+        let block = |id: BasicBlockId| BasicBlockId(id.0 + offsets.blocks);
+        for row in &mut part.functions {
+            row.id = function(row.id);
+            row.entry_node = node(row.entry_node);
+            row.normal_exit_node = node(row.normal_exit_node);
+            row.exceptional_exit_node = row.exceptional_exit_node.map(node);
+            row.stable_key = remap(row.stable_key);
+        }
+        for row in &mut part.nodes {
+            row.id = node(row.id);
+            row.cfg_function = function(row.cfg_function);
+            row.block = block(row.block);
+            row.stable_key = remap(row.stable_key);
+        }
+        for row in &mut part.blocks {
+            row.id = block(row.id);
+            row.cfg_function = function(row.cfg_function);
+            row.first_node = row.first_node.map(node);
+            row.last_node = row.last_node.map(node);
+            row.stable_key = remap(row.stable_key);
+        }
+        for row in &mut part.edges {
+            row.id = CfgEdgeId(row.id.0 + offsets.edges);
+            row.cfg_function = function(row.cfg_function);
+            row.from = node(row.from);
+            row.to = node(row.to);
+            row.from_block = block(row.from_block);
+            row.to_block = block(row.to_block);
+            row.stable_key = remap(row.stable_key);
+        }
+        self.functions.append(&mut part.functions);
+        self.nodes.append(&mut part.nodes);
+        self.blocks.append(&mut part.blocks);
+        self.edges.append(&mut part.edges);
     }
 
     pub fn normalized(mut self, interner: &crate::internal_core::StableKeyInterner) -> Self {

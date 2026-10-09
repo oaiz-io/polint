@@ -73,6 +73,10 @@ pub(crate) fn derive_requested_symbols(
     derive_requested_symbols_uncached(db, loaded, plan)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The layer key consumes every input the derivation reads, including what the plan asks of it."
+)]
 pub(crate) fn symbol_graph_layer_key(
     db: &AnalysisDb,
     manifest: &ProviderManifest,
@@ -81,6 +85,7 @@ pub(crate) fn symbol_graph_layer_key(
     ts_js_lifecycle_digest: Digest,
     module_graph_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
+    selection: &SymbolGraphSelection,
 ) -> LayerKey {
     LayerKey::symbol_graph_layer_key(
         manifest,
@@ -92,8 +97,80 @@ pub(crate) fn symbol_graph_layer_key(
         ts_js_lifecycle_digest,
         module_graph_output_digest,
         upstream_syntax_output_digests,
-        symbol_graph_parameter_digest(),
+        symbol_graph_parameter_digest(selection),
     )
+}
+
+/// What the plan asks the symbol graph for, per language.
+///
+/// TypeScript and JavaScript symbols and references are built for any plan that
+/// needs them, directly or through a capability that depends on them. The Go
+/// symbol sidecar runs only for the symbols and references a rule asks for
+/// itself: a deep analysis depends on symbols and references, but its Go call
+/// sites are resolved from the semantic sidecar's typed facts, and on a large
+/// module the symbol sidecar alone outweighs the whole deep analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SymbolGraphSelection {
+    request: crate::analysis_neutral::symbol_graph::SymbolGraphRequest,
+    go_request: crate::analysis_neutral::symbol_graph::SymbolGraphRequest,
+    go_reference_files: std::collections::BTreeSet<String>,
+}
+
+impl SymbolGraphSelection {
+    pub(crate) fn from_plan(db: &AnalysisDb, plan: &AnalysisPlan) -> Self {
+        let go_files = db
+            .files()
+            .iter()
+            .filter(|file| file.language == Language::Go)
+            .collect::<Vec<_>>();
+        let go_reference_files = go_files
+            .iter()
+            .filter(|file| {
+                !plan
+                    .rules_requesting_capability_directly_matching_files(
+                        "references",
+                        std::slice::from_ref(*file),
+                    )
+                    .is_empty()
+            })
+            .map(|file| file.relative_path.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        let go_references = !go_reference_files.is_empty();
+        let go_symbols = go_references
+            || !plan
+                .rules_requesting_capability_directly_matching_files("symbols", &go_files)
+                .is_empty();
+        Self {
+            request: crate::analysis_neutral::symbol_graph::SymbolGraphRequest::new(
+                plan.requests_capability("symbols"),
+                plan.requests_capability("references"),
+            ),
+            go_request: crate::analysis_neutral::symbol_graph::SymbolGraphRequest::new(
+                go_symbols,
+                go_references,
+            ),
+            go_reference_files,
+        }
+    }
+
+    fn digest_parts(&self) -> Vec<String> {
+        let mut parts = vec![
+            format!(
+                "request=symbols:{}/references:{}",
+                self.request.symbols, self.request.references
+            ),
+            format!(
+                "go_request=symbols:{}/references:{}",
+                self.go_request.symbols, self.go_request.references
+            ),
+        ];
+        parts.extend(
+            self.go_reference_files
+                .iter()
+                .map(|file| format!("go_reference_file={file}")),
+        );
+        parts
+    }
 }
 
 #[expect(
@@ -125,6 +202,7 @@ pub(crate) fn derive_requested_symbols_with_cache_stats(
         "symbol_graph_ts_js_lifecycle",
         &input_snapshot.ts_js_lifecycle.components,
     );
+    let selection = SymbolGraphSelection::from_plan(db, plan);
     let layer_key = symbol_graph_layer_key(
         db,
         manifest,
@@ -133,6 +211,7 @@ pub(crate) fn derive_requested_symbols_with_cache_stats(
         ts_js_lifecycle_digest.clone(),
         module_graph_output_digest.clone(),
         upstream_syntax_output_digests.clone(),
+        &selection,
     );
     let store = cache.layer_cache_store();
     let interner = db.stable_key_interner();
@@ -175,6 +254,18 @@ pub(crate) fn derive_requested_symbols_with_cache_stats(
             let (mut derivation, payload) =
                 derive_requested_symbols_uncached_with_payload(db, loaded, plan);
             let payload = payload.unwrap_or_else(|| symbol_graph_layer_payload(db, &derivation));
+            if has_setup_missing_support(&payload) {
+                // A setup-missing graph records a failure of the environment
+                // (toolchain, network, module download), not of the sources the key
+                // covers. Caching it would replay the failure after the environment
+                // is fixed, so it is recomputed on every run until it loads.
+                derivation.output_digest = Some(symbol_graph_output_digest_for_payload(
+                    &payload,
+                    Some(&layer_key),
+                ));
+                derivation.cache_stats = cache_stats;
+                return derivation;
+            }
             let dependencies = symbol_graph_layer_dependency_edges(
                 db,
                 &layer_key,
@@ -197,6 +288,13 @@ pub(crate) fn derive_requested_symbols_with_cache_stats(
             derivation
         }
     }
+}
+
+fn has_setup_missing_support(payload: &SymbolGraphLayerPayload) -> bool {
+    payload
+        .capability_support
+        .iter()
+        .any(|support| support.status == CapabilitySupportStatus::SetupMissing)
 }
 
 fn derive_requested_symbols_uncached(
@@ -222,10 +320,7 @@ fn derive_requested_symbols_uncached_with_payload(
     let mut derivation = SymbolGraphDerivation::default();
     let mut semantic_output = SemanticIndexOutput::default();
 
-    let request = crate::analysis_neutral::symbol_graph::SymbolGraphRequest::new(
-        plan.requests_capability("symbols"),
-        plan.requests_capability("references"),
-    );
+    let selection = SymbolGraphSelection::from_plan(db, plan);
     #[cfg(feature = "lang-typescript")]
     merge_language_output(
         &mut derivation,
@@ -234,7 +329,7 @@ fn derive_requested_symbols_uncached_with_payload(
             &mut builder,
             db,
             crate::ts::symbol_graph::TsSymbolOptions {
-                request,
+                request: selection.request,
                 resolved_imports: db.resolved_imports().to_vec(),
                 module_nodes: db.module_nodes().to_vec(),
             },
@@ -242,17 +337,6 @@ fn derive_requested_symbols_uncached_with_payload(
         db,
         plan,
     );
-    let go_reference_files = db
-        .files()
-        .iter()
-        .filter(|file| file.language == Language::Go)
-        .filter(|file| {
-            !plan
-                .rules_for_capability_matching_files("references", std::slice::from_ref(file))
-                .is_empty()
-        })
-        .map(|file| file.relative_path.clone())
-        .collect();
     merge_language_output(
         &mut derivation,
         &mut semantic_output,
@@ -262,8 +346,8 @@ fn derive_requested_symbols_uncached_with_payload(
             &crate::go::symbol_graph::GoSymbolOptions {
                 root: loaded.root.clone(),
                 settings: loaded.config.languages.go.clone(),
-                request,
-                reference_files: Some(go_reference_files),
+                request: selection.go_request,
+                reference_files: Some(selection.go_reference_files),
             },
         ),
         db,
@@ -514,7 +598,12 @@ fn symbol_graph_import_shape_digests(db: &AnalysisDb) -> Vec<Digest> {
         .collect()
 }
 
-fn symbol_graph_parameter_digest() -> Digest {
+fn symbol_graph_parameter_digest(selection: &SymbolGraphSelection) -> Digest {
+    let selection_parts = selection.digest_parts();
+    let selection_parts = selection_parts
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     Digest::from_unordered(
         DigestKind::ProviderParameters,
         "symbol_graph_parameters",
@@ -525,6 +614,11 @@ fn symbol_graph_parameter_digest() -> Digest {
                 &["output=symbols", "output=definitions", "output=references"],
             ),
             semantic_provider_parameter_digest(),
+            Digest::from_parts(
+                DigestKind::ProviderParameters,
+                "symbol_graph_selection",
+                &selection_parts,
+            ),
         ],
     )
 }
@@ -1234,7 +1328,7 @@ fn sort_symbol_derivation(derivation: &mut SymbolGraphDerivation) {
     });
 }
 
-fn language_name(language: Language) -> &'static str {
+pub(crate) fn language_name(language: Language) -> &'static str {
     match language {
         Language::Go => "Go",
         Language::TypeScript => "TypeScript",
@@ -1817,6 +1911,56 @@ export function answer() {{
 
     mod symbol_graph_layer_cache {
         use super::*;
+
+        /// A setup-missing graph records a failure of the environment, which the
+        /// layer key does not cover. Caching it would replay the failure on every
+        /// run after the environment is fixed.
+        #[cfg(feature = "lang-go")]
+        #[test]
+        fn setup_missing_symbol_graph_is_recomputed_instead_of_cached() {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let loaded = loaded_config_for(temp.path());
+            let cache = Cache::new(temp.path().join("cache").join("analysis"), true);
+            let plan = requested_symbol_plan();
+            // No go.mod anywhere above the file, so the Go symbol facts cannot load.
+            let orphan = "package main\n\nfunc main() {}\n";
+            let mut first_db = AnalysisDb::new();
+            add_file(&mut first_db, temp.path(), "orphan/main.go", orphan);
+            let mut second_db = AnalysisDb::new();
+            add_file(&mut second_db, temp.path(), "orphan/main.go", orphan);
+
+            let first = derive_symbols_with_cache(
+                &mut first_db,
+                &loaded,
+                &cache,
+                &plan,
+                "config",
+                "stable",
+            );
+            let second = derive_symbols_with_cache(
+                &mut second_db,
+                &loaded,
+                &cache,
+                &plan,
+                "config",
+                "stable",
+            );
+
+            assert!(
+                first
+                    .capability_support
+                    .iter()
+                    .any(|support| support.status == CapabilitySupportStatus::SetupMissing),
+                "the fixture must produce a setup-missing symbol graph"
+            );
+            assert_eq!(first.cache_stats.recomputes, 1);
+            assert_eq!(first.cache_stats.writes, 0);
+            assert_eq!(second.cache_stats.hits, 0);
+            assert_eq!(second.cache_stats.recomputes, 1);
+            assert_eq!(second.cache_stats.writes, 0);
+            assert_eq!(first.output_digest, second.output_digest);
+            assert!(first.output_digest.is_some());
+        }
 
         #[test]
         fn symbol_graph_layer_reuses_warm_cache() {
@@ -2458,7 +2602,6 @@ mod semantic_cache_restore {
         let cold = run_kernel(temp.path(), &cache, &plan);
         let warm = run_kernel(temp.path(), &cache, &plan);
 
-        assert_warm_symbol_graph_reuse(&warm);
         let cold_keys = stable_export_keys(&cold);
         let warm_keys = stable_export_keys(&warm);
         if cold_keys.is_empty() {
@@ -2474,7 +2617,13 @@ mod semantic_cache_restore {
                         .message
                         .contains("symbol graph provider support is setup_missing")
             }));
+            // A setup-missing graph records a failure of the environment, so
+            // it is never layer-cached: the warm run recomputes it.
+            let telemetry = symbol_graph_telemetry(&warm);
+            assert_eq!(telemetry.cache_stats.hits, 0);
+            assert_eq!(telemetry.cache_stats.recomputes, 1);
         } else {
+            assert_warm_symbol_graph_reuse(&warm);
             assert_eq!(cold_keys, warm_keys);
         }
     }

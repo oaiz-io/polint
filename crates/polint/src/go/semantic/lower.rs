@@ -3,15 +3,24 @@ use std::collections::BTreeMap;
 use crate::analysis_api::FactDatabase;
 use crate::analysis_api::FactFamily;
 use crate::go::semantic::facts::{
-    GoSemanticAddressTakenFact, GoSemanticAddressTakenId, GoSemanticCallStatus,
-    GoSemanticCallsiteFact, GoSemanticCallsiteId, GoSemanticDynamicDispatchFact,
-    GoSemanticDynamicDispatchId, GoSemanticFunctionFact, GoSemanticFunctionId,
-    GoSemanticFunctionKind, GoSemanticInstantiatedTypeFact, GoSemanticInstantiatedTypeId,
+    GoAbstractCallee, GoCallEdgeAlgorithm, GoCallMode, GoGenericKind, GoSemanticAddressTakenFact,
+    GoSemanticAddressTakenId, GoSemanticBuiltinCallFact, GoSemanticBuiltinCallId,
+    GoSemanticCallEdgeFact, GoSemanticCallEdgeId, GoSemanticCallStatus, GoSemanticCallee,
+    GoSemanticCallsiteFact, GoSemanticCallsiteId, GoSemanticConversionFact, GoSemanticConversionId,
+    GoSemanticDeadCallFact, GoSemanticDeadCallId, GoSemanticDynamicDispatchFact,
+    GoSemanticDynamicDispatchId, GoSemanticFieldFact, GoSemanticFieldId, GoSemanticFunctionFact,
+    GoSemanticFunctionId, GoSemanticFunctionKind, GoSemanticImplementsFact, GoSemanticImplementsId,
+    GoSemanticInstantiatedTypeFact, GoSemanticInstantiatedTypeId, GoSemanticInstantiationFact,
+    GoSemanticInstantiationId, GoSemanticInterfaceFact, GoSemanticInterfaceId,
     GoSemanticMethodSetFact, GoSemanticMethodSetId, GoSemanticPackageErrorFact,
-    GoSemanticPackageErrorId, GoSemanticPackageFact, GoSemanticPackageId, GoSemanticRtaEdgeFact,
-    GoSemanticRtaEdgeId,
+    GoSemanticPackageErrorId, GoSemanticPackageFact, GoSemanticPackageId, GoSemanticParamFact,
+    GoSemanticParamId, GoSemanticRouteFact, GoSemanticRouteId, GoSemanticRouteServeFact,
+    GoSemanticRouteServeId, GoSemanticRtaEdgeFact, GoSemanticRtaEdgeId,
 };
-use crate::go::semantic::protocol::{GoSemanticOutput, GoSemanticRawFrame, GoSemanticSpan};
+use crate::go::semantic::facts::{GoRouteFunction, GoRouteFunctionKind, GoRouteTransport};
+use crate::go::semantic::protocol::{
+    GoSemanticOutput, GoSemanticRawFrame, GoSemanticRouteFunctionFrame, GoSemanticSpan,
+};
 use crate::go::semantic::store::GoSemanticFactsOutput;
 use crate::go::semantic::validate::validate_relative_path;
 use crate::go::stable_key::semantic_stable_key;
@@ -91,6 +100,57 @@ pub(crate) fn lower_go_semantic(
             "package_error" => lowered
                 .package_errors
                 .push(lower_package_error(interner, row)),
+            // A call edge, parameter, instantiation or conversion belongs to the file it
+            // is written in, like the call site and function it describes.
+            "call_edges" => push_in_scope(
+                &mut lowered.call_edges,
+                lower_call_edge(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "param" => push_in_scope(
+                &mut lowered.params,
+                lower_param(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "instantiation" => push_in_scope(
+                &mut lowered.instantiations,
+                lower_instantiation(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "conversion" => push_in_scope(
+                &mut lowered.conversions,
+                lower_conversion(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "builtin_call" => push_in_scope(
+                &mut lowered.builtin_calls,
+                lower_builtin_call(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "dead_call" => push_in_scope(
+                &mut lowered.dead_calls,
+                lower_dead_call(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            // Declarations describe types other files use, so they are kept whatever
+            // the scope; a declaration outside it keeps no location.
+            "interface" => lowered
+                .interfaces
+                .push(lower_interface(interner, row, &files)),
+            "implements" => lowered.implements.push(lower_implements(interner, row)),
+            "field" => lowered.fields.push(lower_field(interner, row, &files)),
+            // A route belongs to the file its registration is written in.
+            "route" => push_in_scope(
+                &mut lowered.routes,
+                lower_route(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "route_serve" => push_in_scope(
+                &mut lowered.route_serves,
+                lower_route_serve(interner, row, &files)?,
+                &mut out_of_scope_rows,
+            ),
+            "route_budget" => lowered.route_budget_steps = Some(row.steps),
             "receiver_type" | "unsupported" | "type_fact" => {}
             _ => {}
         }
@@ -191,6 +251,14 @@ fn lower_callsite(
         package_path: row.package_path.clone(),
         caller: row.caller.clone(),
         static_callee: non_empty(row.static_callee.as_str()),
+        static_callee_origin: non_empty(row.static_callee_origin.as_str()),
+        receiver_type: non_empty(row.receiver_type.as_str()),
+        via_value: row.via_value,
+        mode: match row.mode.as_str() {
+            "go" => GoCallMode::Go,
+            "defer" => GoCallMode::Defer,
+            _ => GoCallMode::Call,
+        },
         status: match row.status.as_str() {
             "resolved_static" => GoSemanticCallStatus::ResolvedStatic,
             "unsupported" => GoSemanticCallStatus::Unsupported,
@@ -201,6 +269,314 @@ fn lower_callsite(
         file: location.file,
         span: location.span,
     }))
+}
+
+fn lower_call_edge(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticCallEdgeFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    let (algorithm, callees, abstract_callee) = match row.algorithm.as_str() {
+        algorithm @ ("vta" | "cha") => {
+            let callees = row
+                .callees
+                .iter()
+                .enumerate()
+                .map(|(index, name)| GoSemanticCallee {
+                    name: name.clone(),
+                    origin: row
+                        .callee_origins
+                        .get(index)
+                        .and_then(|origin| non_empty(origin.as_str())),
+                })
+                .collect::<Vec<_>>();
+            if callees.is_empty() {
+                return Ok(None);
+            }
+            let algorithm = if algorithm == "vta" {
+                GoCallEdgeAlgorithm::Vta
+            } else {
+                GoCallEdgeAlgorithm::Cha
+            };
+            (algorithm, callees, None)
+        }
+        "type_hierarchy" => {
+            let abstract_callee = match row.callee_kind.as_str() {
+                "interface_method" => GoAbstractCallee::InterfaceMethod(row.callee.clone()),
+                "signature" => GoAbstractCallee::Signature(row.callee.clone()),
+                _ => return Ok(None),
+            };
+            if row.callee.is_empty() {
+                return Ok(None);
+            }
+            (
+                GoCallEdgeAlgorithm::TypeHierarchy,
+                Vec::new(),
+                Some(abstract_callee),
+            )
+        }
+        // A row whose algorithm this build cannot name is dropped rather than
+        // given a precision it may not have.
+        _ => return Ok(None),
+    };
+    Ok(Some(GoSemanticCallEdgeFact {
+        id: GoSemanticCallEdgeId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        caller: row.caller.clone(),
+        callsite_stable_key: interner.intern(row.callsite_stable_key_text.clone()),
+        algorithm,
+        callees,
+        abstract_callee,
+        candidates: (row.candidates > 0).then_some(row.candidates),
+        relative_file: location.relative_file,
+        file: location.file,
+    }))
+}
+
+fn lower_param(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticParamFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticParamFact {
+        id: GoSemanticParamId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        function: row.function.clone(),
+        index: row.index,
+        name: row.name.clone(),
+        type_name: row.type_name.clone(),
+        variadic: row.variadic,
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_route(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticRouteFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticRouteFact {
+        id: GoSemanticRouteId(0),
+        stable_key: harvest_stable_key(interner, row),
+        framework: row.framework.clone(),
+        transport: if row.transport == "message" {
+            GoRouteTransport::Message
+        } else {
+            GoRouteTransport::Http
+        },
+        method: row.method.clone(),
+        path: row.path.clone(),
+        path_complete: row.path_complete,
+        registered_path: row.registered_path.clone(),
+        name: non_empty(row.name.as_str()),
+        handlers: row.handlers.iter().map(lower_route_function).collect(),
+        middleware: row.middleware.iter().map(lower_route_function).collect(),
+        middleware_complete: row.middleware_complete,
+        routers: row.routers.clone(),
+        router_roots: row.router_roots.clone(),
+        function: row.function.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_route_function(frame: &GoSemanticRouteFunctionFrame) -> GoRouteFunction {
+    GoRouteFunction {
+        name: frame.name.clone(),
+        kind: match frame.kind.as_str() {
+            "function" => GoRouteFunctionKind::Function,
+            "literal" => GoRouteFunctionKind::Literal,
+            "factory" => GoRouteFunctionKind::Factory,
+            "field" => GoRouteFunctionKind::Field,
+            _ => GoRouteFunctionKind::Unknown,
+        },
+        field: non_empty(frame.field.as_str()),
+    }
+}
+
+fn lower_route_serve(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticRouteServeFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticRouteServeFact {
+        id: GoSemanticRouteServeId(0),
+        stable_key: harvest_stable_key(interner, row),
+        function: row.function.clone(),
+        router_roots: row.router_roots.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_instantiation(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticInstantiationFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticInstantiationFact {
+        id: GoSemanticInstantiationId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        generic: row.generic.clone(),
+        generic_kind: match row.generic_kind.as_str() {
+            "type" => GoGenericKind::Type,
+            _ => GoGenericKind::Func,
+        },
+        type_args: row.type_args.clone(),
+        type_name: row.type_name.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_conversion(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticConversionFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticConversionFact {
+        id: GoSemanticConversionId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        type_name: row.type_name.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_dead_call(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticDeadCallFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticDeadCallFact {
+        id: GoSemanticDeadCallId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        caller: row.caller.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_builtin_call(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> Result<Option<GoSemanticBuiltinCallFact>, GoSemanticLowerError> {
+    let Some(location) = lower_optional_file_span(row, files)? else {
+        return Ok(None);
+    };
+    Ok(Some(GoSemanticBuiltinCallFact {
+        id: GoSemanticBuiltinCallId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        name: row.name.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }))
+}
+
+fn lower_interface(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> GoSemanticInterfaceFact {
+    let location = declaration_location(row, files);
+    GoSemanticInterfaceFact {
+        id: GoSemanticInterfaceId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        type_name: row.type_name.clone(),
+        methods: row.methods.clone(),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }
+}
+
+fn lower_implements(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+) -> GoSemanticImplementsFact {
+    GoSemanticImplementsFact {
+        id: GoSemanticImplementsId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        type_name: row.type_name.clone(),
+        interface: row.interface.clone(),
+        via_pointer: row.via_pointer,
+    }
+}
+
+fn lower_field(
+    interner: &crate::internal_core::StableKeyInterner,
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> GoSemanticFieldFact {
+    let location = declaration_location(row, files);
+    GoSemanticFieldFact {
+        id: GoSemanticFieldId(0),
+        stable_key: harvest_stable_key(interner, row),
+        package_id: row.package_id.clone(),
+        owner: row.type_name.clone(),
+        name: row.name.clone(),
+        index: row.index,
+        field_type: row.field_type.clone(),
+        embedded: row.embedded,
+        tag: non_empty(row.tag.as_str()),
+        relative_file: location.relative_file,
+        file: location.file,
+        span: location.span,
+    }
+}
+
+/// Where a declaration row is, when the scan discovered its file; otherwise no
+/// location, since a declaration is kept whatever the scope.
+fn declaration_location(
+    row: &GoSemanticRawFrame,
+    files: &BTreeMap<&str, FileId>,
+) -> LoweredLocation {
+    match lower_optional_file_span(row, files) {
+        Ok(Some(location)) => location,
+        _ => LoweredLocation {
+            relative_file: None,
+            file: None,
+            span: None,
+        },
+    }
 }
 
 fn lower_method_set(
@@ -393,9 +769,9 @@ mod tests {
     fn lower_accepts_in_repository_path() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"main.go","span":{"start_byte":1,"end_byte":2,"start_line":1,"start_column":1,"end_line":1,"end_column":2}}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"function","package_id":"example.com/p","package_path":"example.com/p","name":"F","qualified":"example.com/p.F","stable_key":"fn","file":"main.go","span":{"start_byte":1,"end_byte":2,"start_line":1,"start_column":1,"end_line":1,"end_column":2}}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -407,12 +783,12 @@ mod tests {
     fn lower_harvests_rta_signal_rows() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F","stable_key":"at"}
-{"schema":"polint-go-semantic-3","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","stable_key":"it"}
-{"schema":"polint-go-semantic-3","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.call","callsite_stable_key":"cs","interface_type":"example.com/p.I","method":"M","stable_key":"dd"}
-{"schema":"polint-go-semantic-3","kind":"rta_edge","package_id":"example.com/p","package_path":"example.com/p","caller":"main","callee":"init$1","edge_kind":"dynamic function call","stable_key":"rta"}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F","stable_key":"at"}
+{"schema":"polint-go-semantic-4","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","stable_key":"it"}
+{"schema":"polint-go-semantic-4","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.call","callsite_stable_key":"cs","interface_type":"example.com/p.I","method":"M","stable_key":"dd"}
+{"schema":"polint-go-semantic-4","kind":"rta_edge","package_id":"example.com/p","package_path":"example.com/p","caller":"main","callee":"init$1","edge_kind":"dynamic function call","stable_key":"rta"}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -446,9 +822,9 @@ mod tests {
         // fatal here.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F"}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"address_taken","package_id":"example.com/p","package_path":"example.com/p","function":"example.com/p.F"}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -474,9 +850,9 @@ mod tests {
         // FINDING B/C: same row-resilient contract for the instantiated_type harvest row.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T"}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"instantiated_type","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T"}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -502,9 +878,9 @@ mod tests {
         // package's types onto one key). With a stable_key present, it is used as-is.
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"method_set","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","methods":["M"],"stable_key":"ms|example.com/p.T"}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"method_set","package_id":"example.com/p","package_path":"example.com/p","type":"example.com/p.T","methods":["M"],"stable_key":"ms|example.com/p.T"}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -522,9 +898,9 @@ mod tests {
     fn lower_dynamic_dispatch_func_value_carries_signature() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.apply","callsite_stable_key":"cs2","signature":"func()","stable_key":"dd2"}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"dynamic_dispatch","package_id":"example.com/p","package_path":"example.com/p","caller":"example.com/p.apply","callsite_stable_key":"cs2","signature":"func()","stable_key":"dd2"}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -694,9 +1070,9 @@ mod tests {
     fn lower_preserves_package_load_errors() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"load failed"}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"load failed"}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");
@@ -708,10 +1084,10 @@ mod tests {
     fn lower_package_error_fallback_stable_key_includes_message() {
         let db = db_with_go_file("main.go");
         let output = decode_ndjson_str(
-            r#"{"schema":"polint-go-semantic-3","kind":"session_begin"}
-{"schema":"polint-go-semantic-3","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"first"}
-{"schema":"polint-go-semantic-3","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"second"}
-{"schema":"polint-go-semantic-3","kind":"session_end"}
+            r#"{"schema":"polint-go-semantic-4","kind":"session_begin"}
+{"schema":"polint-go-semantic-4","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"first"}
+{"schema":"polint-go-semantic-4","kind":"package_error","package_id":"example.com/p","package_path":"example.com/p","message":"second"}
+{"schema":"polint-go-semantic-4","kind":"session_end"}
 "#,
         )
         .expect("valid protocol");

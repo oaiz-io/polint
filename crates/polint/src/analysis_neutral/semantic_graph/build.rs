@@ -29,7 +29,14 @@ pub struct SemanticGraphBuilder {
     /// pre-sort SemanticNodeId (as index) -> node stable key, the O(1) reverse of
     /// `node_by_key` so `node_key_for` (called twice per edge) never linear-scans.
     key_by_node: Vec<StableKeyId>,
+    /// A language whose functions, packages, call sites, scopes and values the
+    /// projections leave out: a run that derives no points-to facts for it has
+    /// no reader for them.
+    excluded_language: Option<crate::internal_core::Language>,
 }
+
+/// The `origin` of a constraint projected from a TypeScript direct binding.
+pub(crate) const TS_DIRECT_BINDING_ORIGIN: &str = "ts_direct_binding";
 
 impl SemanticGraphBuilder {
     pub fn intern_node(
@@ -107,6 +114,26 @@ impl SemanticGraphBuilder {
         );
     }
 
+    /// A constraint projected from a fact of another analysis, with that analysis
+    /// named in the key: the identity, a fact's own key, is embedded by digest
+    /// when long, so the key would not otherwise say where the constraint came
+    /// from.
+    pub(crate) fn push_constraint_with_origin(
+        &mut self,
+        interner: &StableKeyInterner,
+        kind: ConstraintKind,
+        identity: &str,
+        origin: &'static str,
+    ) {
+        self.push_constraint_parts(
+            interner,
+            kind,
+            identity,
+            Some(origin),
+            PointsToPrecision::FlowInsensitive,
+        );
+    }
+
     pub(crate) fn push_constraint_with_precision(
         &mut self,
         interner: &StableKeyInterner,
@@ -114,16 +141,26 @@ impl SemanticGraphBuilder {
         identity: &str,
         precision: PointsToPrecision,
     ) {
-        let stable_key = interner.intern(
-            semantic_stable_key(
-                FactFamily::PointsToConstraint,
-                &[
-                    ("constraint_kind", kind.as_str().to_string()),
-                    ("identity", identity.to_string()),
-                ],
-            )
-            .into_string(),
-        );
+        self.push_constraint_parts(interner, kind, identity, None, precision);
+    }
+
+    fn push_constraint_parts(
+        &mut self,
+        interner: &StableKeyInterner,
+        kind: ConstraintKind,
+        identity: &str,
+        origin: Option<&'static str>,
+        precision: PointsToPrecision,
+    ) {
+        let mut parts = vec![
+            ("constraint_kind", kind.as_str().to_string()),
+            ("identity", identity.to_string()),
+        ];
+        if let Some(origin) = origin {
+            parts.push(("origin", origin.to_string()));
+        }
+        let stable_key = interner
+            .intern(semantic_stable_key(FactFamily::PointsToConstraint, &parts).into_string());
         self.constraints.push(ConstraintFact {
             id: Default::default(),
             kind,
@@ -155,22 +192,43 @@ impl SemanticGraphBuilder {
 
     // -- node projection ----------------------------------------------------
 
+    /// Leaves `language` out of every projection; see `excluded_language`.
+    pub fn exclude_language(&mut self, language: crate::internal_core::Language) {
+        self.excluded_language = Some(language);
+    }
+
+    fn projects(&self, language: crate::internal_core::Language) -> bool {
+        self.excluded_language != Some(language)
+    }
+
     pub fn project_nodes(&mut self, db: &impl AnalysisHost) {
         let interner_handle = db.stable_key_interner();
         let interner = &interner_handle;
         for function in db.functions() {
+            if !self.projects(function.language) {
+                continue;
+            }
             let key = function_node_key(db, function);
             self.intern_node(interner, NodeKind::Function(function.id), key);
         }
         for package in db.packages() {
+            if !self.projects(package.language) {
+                continue;
+            }
             let key = package_node_key(db, package);
             self.intern_node(interner, NodeKind::Package(package.id), key);
         }
         for site in db.call_sites() {
+            if !self.projects(site.language) {
+                continue;
+            }
             let key = node_key_from_identity("callsite", &interner.resolve(site.stable_key));
             self.intern_node(interner, NodeKind::Callsite(site.id), key);
         }
         for scope in db.semantic_scopes() {
+            if !self.projects(scope.language) {
+                continue;
+            }
             let key = node_key_from_identity("scope", &interner.resolve(scope.stable_key));
             self.intern_node(interner, NodeKind::Scope(ScopeId(scope.id.0)), key);
         }
@@ -203,6 +261,9 @@ impl SemanticGraphBuilder {
             .collect();
 
         for site in db.call_sites() {
+            if !self.projects(site.language) {
+                continue;
+            }
             let site_key = node_key_from_identity("callsite", &interner.resolve(site.stable_key));
             let Some(&callsite_node) = self.node_by_key.get(&interner.intern(site_key)) else {
                 continue;
@@ -267,6 +328,9 @@ impl SemanticGraphBuilder {
             .collect();
 
         for scope in db.semantic_scopes() {
+            if !self.projects(scope.language) {
+                continue;
+            }
             let Some(package) = scope.package else {
                 continue;
             };

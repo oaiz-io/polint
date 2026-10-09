@@ -39,9 +39,14 @@ fn is_go_sidecar_runtime_artifact(relative: &str) -> bool {
     !relative.contains('/')
         && (matches!(
             relative,
-            ".complete" | "polint-go-frontend" | "polint-go-frontend.exe"
+            ".complete"
+                | "polint-go-frontend"
+                | "polint-go-frontend.exe"
+                | "polint-go-symbols"
+                | "polint-go-symbols.exe"
         ) || relative.starts_with(".build-")
             || relative.starts_with(".polint-go-frontend-")
+            || relative.starts_with(".polint-go-symbols-")
             || relative.starts_with(".binary-")
             || relative.starts_with(".binary-lock-")
             || relative.starts_with(".binary-receipt-"))
@@ -62,6 +67,9 @@ mod tests {
             ".polint-go-frontend-abcdef",
             "polint-go-frontend",
             "polint-go-frontend.exe",
+            ".polint-go-symbols-abcdef",
+            "polint-go-symbols",
+            "polint-go-symbols.exe",
         ] {
             assert!(
                 is_go_sidecar_runtime_artifact(artifact),
@@ -72,7 +80,13 @@ mod tests {
 
     #[test]
     fn embedded_sources_and_nested_paths_are_not_runtime_artifacts() {
-        for source in ["go.mod", "go.sum", "main.go", "internal/semantic/emit.go"] {
+        for source in [
+            "go.mod",
+            "go.sum",
+            "main.go",
+            "internal/semantic/emit.go",
+            "internal/symbols/emit.go",
+        ] {
             assert!(
                 !is_go_sidecar_runtime_artifact(source),
                 "{source} is embedded source and must be verified"

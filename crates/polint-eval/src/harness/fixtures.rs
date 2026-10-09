@@ -452,7 +452,11 @@ pub(crate) fn run_cfg_core_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -577,7 +581,11 @@ pub(crate) fn run_abstract_domains_core_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -652,7 +660,11 @@ pub(crate) fn run_direct_summaries_core_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -705,7 +717,11 @@ pub(crate) fn run_direct_summaries_scc_closure_fixture_for_test(
     let started = std::time::Instant::now();
     let fixture = load_native_fixture(fixture_dir)?;
     let temp = crate::eval::observed::copy_fixture_repo_for_test(&fixture)?;
-    let plan = crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["calls"]);
+    // A calls plan stops at call resolution and builds none of the CFG
+    // relations, domain facts or summaries this fixture observes; control
+    // flow is the cheapest plan that builds them.
+    let plan =
+        crate::analysis_plan::AnalysisPlan::from_capability_names_for_test(&["control_flow"]);
 
     let cold_observed = crate::eval::observed::observe_kernel_fixture_repo_with_plan_for_test(
         &fixture,
@@ -1752,9 +1768,9 @@ mod eval_native_fixture_runner_tests {
                 ("provider_order.4", "polint.symbol_graph"),
                 ("provider_order.5", "polint.module_topology"),
                 ("provider_order.6", "polint.semantic_mir"),
-                ("provider_order.7", "polint.cfg"),
-                ("provider_order.8", "polint.calls"),
-                ("provider_order.9", "polint.go.semantic"),
+                ("provider_order.7", "polint.go.semantic"),
+                ("provider_order.8", "polint.cfg"),
+                ("provider_order.9", "polint.calls"),
                 ("provider_order.10", "polint.ts.types"),
                 ("provider_order.11", "polint.identity"),
                 ("provider_order.12", "polint.abstract_domains"),
@@ -3065,7 +3081,7 @@ mod cfg_core {
                 .iter()
                 .any(|(family, key, status, precision)| {
                     *family == "UnsupportedControlFlow"
-                        && key.contains("throw")
+                        && key.contains("construct=3:try")
                         && *status == Some(ObservedStatus::Unsupported)
                         && *precision == Some("unsupported")
                 })
@@ -3127,19 +3143,17 @@ mod direct_calls_core {
         "direct_calls.counts.by_algorithm.DirectReference.nonzero",
         "direct_calls.counts.by_algorithm.ImportBinding.nonzero",
         "direct_calls.counts.by_algorithm.ConstructorBinding.nonzero",
-        "direct_calls.counts.by_algorithm.DirectMember.nonzero",
+        "direct_calls.counts.by_algorithm.GoStatic.nonzero",
+        "direct_calls.counts.by_algorithm.GoVta.nonzero",
+        "direct_calls.counts.by_algorithm.GoCha.nonzero",
+        "direct_calls.counts.by_algorithm.TypeHierarchy.nonzero",
         "direct_calls.counts.by_status.Resolved.nonzero",
         "direct_calls.counts.by_status.Unresolved.nonzero",
-        "direct_calls.counts.by_status.Unsupported.nonzero",
-        "direct_calls.counts.by_status.SetupMissing.nonzero",
-        "direct_calls.counts.by_unresolved_reason.FunctionValue.nonzero",
         "direct_calls.counts.by_unresolved_reason.DynamicProperty.nonzero",
-        "direct_calls.counts.by_unresolved_reason.Reflection.nonzero",
-        "direct_calls.counts.by_unresolved_reason.GoroutineBoundary.nonzero",
+        "direct_calls.counts.by_unresolved_reason.MissingSemanticReference.nonzero",
         "direct_calls.counts.by_unresolved_reason.Eval.nonzero",
         "direct_calls.counts.by_unresolved_reason.DynamicImport.nonzero",
         "direct_calls.counts.by_unresolved_reason.CallApplyBind.nonzero",
-        "direct_calls.counts.by_unresolved_reason.SetupMissing.nonzero",
         "direct_calls.counts.by_provider.polint.calls.nonzero",
     ];
 
@@ -3164,38 +3178,38 @@ mod direct_calls_core {
         DirectCallFeature {
             marker: "direct-calls/go/direct-function",
             family: "CallTarget",
-            stable_key_fragment: "DirectReference",
+            stable_key_fragment: "go_static",
             status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
             marker: "direct-calls/go/method-call",
             family: "CallTarget",
-            stable_key_fragment: "DirectMember",
+            stable_key_fragment: "concreteWorker).Work",
             status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
             marker: "direct-calls/go/function-value",
-            family: "UnresolvedCall",
-            stable_key_fragment: "FunctionValue",
-            status: ObservedStatus::Unresolved,
+            family: "CallTarget",
+            stable_key_fragment: "go_vta",
+            status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
             marker: "direct-calls/go/goroutine-boundary",
-            family: "UnresolvedCall",
-            stable_key_fragment: "GoroutineBoundary",
-            status: ObservedStatus::Unsupported,
+            family: "CallTarget",
+            stable_key_fragment: "go_static",
+            status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
             marker: "direct-calls/go/reflection",
-            family: "UnresolvedCall",
-            stable_key_fragment: "Reflection",
-            status: ObservedStatus::Unsupported,
+            family: "CallTarget",
+            stable_key_fragment: "go:interface-method:reflect.Type.String",
+            status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
-            marker: "direct-calls/go/setup-missing-interface",
-            family: "UnresolvedCall",
-            stable_key_fragment: "SetupMissing",
-            status: ObservedStatus::SetupMissing,
+            marker: "direct-calls/go/interface-dispatch",
+            family: "CallTarget",
+            stable_key_fragment: "go_cha",
+            status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
             marker: "direct-calls/ts/local-function",
@@ -3212,7 +3226,7 @@ mod direct_calls_core {
         DirectCallFeature {
             marker: "direct-calls/ts/static-member",
             family: "CallTarget",
-            stable_key_fragment: "DirectMember",
+            stable_key_fragment: "Formatter.normalize",
             status: ObservedStatus::Resolved,
         },
         DirectCallFeature {
@@ -3229,14 +3243,14 @@ mod direct_calls_core {
         },
         DirectCallFeature {
             marker: "direct-calls/ts/instance-member",
-            family: "CallTarget",
-            stable_key_fragment: "DirectMember",
-            status: ObservedStatus::Resolved,
+            family: "UnresolvedCall",
+            stable_key_fragment: "reason=15:DynamicProperty",
+            status: ObservedStatus::Unresolved,
         },
         DirectCallFeature {
             marker: "direct-calls/ts/function-value",
             family: "UnresolvedCall",
-            stable_key_fragment: "FunctionValue",
+            stable_key_fragment: "reason=24:MissingSemanticReference",
             status: ObservedStatus::Unresolved,
         },
         DirectCallFeature {
@@ -3302,7 +3316,11 @@ mod direct_calls_core {
 
         for required in [
             ("CallSite", "directFunction", Some(ObservedStatus::Resolved)),
-            ("CallSite", "handler", Some(ObservedStatus::Resolved)),
+            (
+                "CallSite",
+                "identifier:localTarget",
+                Some(ObservedStatus::Resolved),
+            ),
             (
                 "CallTarget",
                 "DirectReference",
@@ -3314,11 +3332,13 @@ mod direct_calls_core {
                 Some(ObservedStatus::Resolved),
             ),
             ("CallTarget", "Constructor", Some(ObservedStatus::Resolved)),
-            ("CallTarget", "DirectMember", Some(ObservedStatus::Resolved)),
+            ("CallTarget", "go_static", Some(ObservedStatus::Resolved)),
+            ("CallTarget", "go_vta", Some(ObservedStatus::Resolved)),
+            ("CallTarget", "go_cha", Some(ObservedStatus::Resolved)),
             (
-                "UnresolvedCall",
-                "FunctionValue",
-                Some(ObservedStatus::Unresolved),
+                "CallTarget",
+                "type_hierarchy",
+                Some(ObservedStatus::Resolved),
             ),
             (
                 "UnresolvedCall",
@@ -3327,13 +3347,8 @@ mod direct_calls_core {
             ),
             (
                 "UnresolvedCall",
-                "Reflection",
-                Some(ObservedStatus::Unsupported),
-            ),
-            (
-                "UnresolvedCall",
-                "GoroutineBoundary",
-                Some(ObservedStatus::Unsupported),
+                "MissingSemanticReference",
+                Some(ObservedStatus::Unresolved),
             ),
             ("UnresolvedCall", "Eval", Some(ObservedStatus::Unresolved)),
             (
@@ -3345,11 +3360,6 @@ mod direct_calls_core {
                 "UnresolvedCall",
                 "CallApplyBind",
                 Some(ObservedStatus::Unresolved),
-            ),
-            (
-                "UnresolvedCall",
-                "SetupMissing",
-                Some(ObservedStatus::SetupMissing),
             ),
         ] {
             assert!(
@@ -3567,7 +3577,7 @@ mod abstract_domains_core {
         },
         AbstractDomainFeature {
             marker: "abstract-domains/go/unknown-call-havoc",
-            stable_key_fragment: "unknown",
+            stable_key_fragment: "DomainObservation",
             status: ObservedStatus::Unknown,
             precision: "unknown",
         },
@@ -3597,7 +3607,7 @@ mod abstract_domains_core {
         },
         AbstractDomainFeature {
             marker: "abstract-domains/ts/dynamic-write-havoc",
-            stable_key_fragment: "unsupported",
+            stable_key_fragment: "DomainObservation",
             status: ObservedStatus::Unsupported,
             precision: "unsupported",
         },
@@ -3675,12 +3685,12 @@ mod abstract_domains_core {
             ),
             (
                 "DomainObservation",
-                "unknown",
+                "DomainObservation",
                 Some(ObservedStatus::Unknown),
             ),
             (
                 "DomainObservation",
-                "unsupported",
+                "DomainObservation",
                 Some(ObservedStatus::Unsupported),
             ),
             (

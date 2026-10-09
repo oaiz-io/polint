@@ -1536,3 +1536,142 @@ type Plain struct {
     assert_eq!(parsed.go_types.len(), 1);
     assert_eq!(parsed.go_types[0].body_range, facts.go_types[0].body_range);
 }
+
+const GO_1_26_NEW_EXPR_SOURCES: &[(&str, &str)] = &[
+    (
+        "new_int.go",
+        "package models\n\nfunc Example() { _ = new(int) }\n",
+    ),
+    (
+        "new_literal.go",
+        "package models\n\nfunc Example() { _ = new(1) }\n",
+    ),
+    (
+        "new_qualified_type.go",
+        "package models\n\nfunc Example() { _ = new(types.Cost) }\n",
+    ),
+    (
+        "new_call.go",
+        "package models\n\nfunc Example() { _ = new(types.NewCost(0.35)) }\n",
+    ),
+];
+
+#[test]
+fn go_1_26_new_expr_forms_should_not_emit_parser_diagnostics() {
+    for (path, source) in GO_1_26_NEW_EXPR_SOURCES {
+        let mut db = db_with_go_file(path, source);
+        let diagnostics = analyze(&mut db);
+        let parser_errors = diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.rule_id == "parser/go")
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            parser_errors,
+            Vec::<&str>::new(),
+            "{path} should not emit parser/go"
+        );
+        assert_eq!(db.packages()[0].name, "models");
+        assert_eq!(db.functions()[0].name, "Example");
+    }
+}
+
+#[test]
+fn go_1_26_new_expr_should_extract_same_syntax_facts_as_new_type() {
+    let old_style = r#"package payment
+
+import "fmt"
+
+func Authorize() {
+	x := new(int)
+	_ = fmt.Sprintf("blocked")
+	_ = x
+}
+"#;
+    let new_style = r#"package payment
+
+import "fmt"
+
+func Authorize() {
+	x := new(1)
+	_ = fmt.Sprintf("blocked")
+	_ = x
+}
+"#;
+    let mut old_db = db_with_go_file("payment.go", old_style);
+    let mut new_db = db_with_go_file("payment.go", new_style);
+    assert!(analyze(&mut old_db).is_empty());
+    assert!(analyze(&mut new_db).is_empty());
+
+    let names = |db: &LocalFactDb| {
+        db.functions()
+            .iter()
+            .map(|fact| fact.name.clone())
+            .collect::<Vec<_>>()
+    };
+    let imports = |db: &LocalFactDb| {
+        db.imports()
+            .iter()
+            .map(|fact| fact.path.clone())
+            .collect::<Vec<_>>()
+    };
+    let strings = |db: &LocalFactDb| {
+        db.string_literals()
+            .iter()
+            .map(|fact| fact.value.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(names(&new_db), names(&old_db));
+    assert_eq!(imports(&new_db), imports(&old_db));
+    assert_eq!(strings(&new_db), strings(&old_db));
+}
+
+#[test]
+fn struct_literal_field_new_expr_should_parse_and_extract_functions() {
+    let source = r#"package models
+
+import "example.com/app/money"
+
+type Pricing struct {
+	PerUnit *money.Amount
+}
+
+func Example() Pricing {
+	return Pricing{
+		PerUnit: new(money.NewAmount(2.50)),
+	}
+}
+
+func Budget() *string {
+	return new("budget exceeded")
+}
+
+func Ones() *int {
+	return new(1)
+}
+"#;
+    let mut db = db_with_go_file("pricing.go", source);
+    let diagnostics = analyze(&mut db);
+    let parser_errors = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.rule_id == "parser/go")
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        parser_errors,
+        Vec::<&str>::new(),
+        "struct-literal new(expr) fields should not emit parser/go"
+    );
+    let function_names: Vec<_> = db
+        .functions()
+        .iter()
+        .map(|fact| fact.name.as_str())
+        .collect();
+    assert_eq!(function_names, ["Example", "Budget", "Ones"]);
+    assert_eq!(db.imports()[0].path, "example.com/app/money");
+    assert!(
+        db.string_literals()
+            .iter()
+            .any(|literal| literal.value == "budget exceeded")
+    );
+}

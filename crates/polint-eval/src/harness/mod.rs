@@ -24,6 +24,8 @@ pub(crate) mod runner;
 #[cfg(all(test, feature = "lang-typescript"))]
 pub(crate) mod semantic_graph_snapshot;
 pub(crate) mod suite;
+#[cfg(test)]
+pub(crate) mod taint_corpus;
 pub(crate) mod tiers;
 #[cfg(test)]
 pub(crate) mod ts_object_model;

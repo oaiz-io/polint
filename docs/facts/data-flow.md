@@ -7,10 +7,11 @@ See [policy-queries.md](policy-queries.md) for the shared query-object style,
 evidence header, precision/status vocabulary, unknown semantics, and template
 starter workflow.
 
-The public surface is intentionally policy-level. Rules construct one
-`FlowQuery`, run `flow.forbidden(query)`, and report returned
-`PolicyViolation` values. polint does not expose raw data-flow nodes, graph
-edges, solver IDs, provider rows, MIR IDs, or `AnalysisDb` to rule authors.
+The public surface is intentionally policy-level. A rule either asks a
+bounded question with one `FlowQuery` and `flow.forbidden(query)`, or, for Go,
+an interprocedural one with a `FlowSpec` and `flow.flows(&spec)` (see
+[Flows](#flows)). polint does not expose raw data-flow nodes, graph edges,
+solver IDs, summaries, provider rows, MIR IDs, or `AnalysisDb` to rule authors.
 
 ```rust
 #[polint::rule(id = "local/no-secret-logs", description = "Secret logs", severity = "error")]
@@ -47,8 +48,9 @@ pub(crate) fn no_secret_logs(ctx: &mut RuleCtx<'_>, flow: DataFlow<'_>) -> RuleR
   precision is below the found-path threshold, so uncertainty is not turned into
   a silent pass.
 
-There is no alternate fluent builder, string query language, closure filter, or
-public graph traversal API.
+`FlowQuery` has no alternate builder, string query language, closure filter, or
+public graph traversal API; `FlowSpec` is the separate question type of
+[`flows`](#flows).
 
 ## Template Starters
 
@@ -68,7 +70,10 @@ deserialization, analytics, or file paths.
 
 ## Supported Patterns
 
-Phase 58 backs these patterns:
+`forbidden` backs these patterns. With the Go program's flow bodies loaded (any
+plan that requests `dataflow` on Go sources), Go results come from the same
+solver as [`flows`](#flows): one result per sink reached, its evidence path
+located step by step; other languages keep the value-flow graph search below.
 
 - `SourcePattern::http_request()` matches trust-boundary source models for HTTP
   route params, query strings, request bodies, request headers, and cookies. The
@@ -121,7 +126,7 @@ visible policy results instead of silently passing.
 
 ## Limits
 
-Phase 58 is useful for repo-local policies such as secret-to-log and
+`forbidden` is useful for repo-local policies such as secret-to-log and
 request-to-dangerous-call checks, but it is still preview:
 
 - It does not prove perfect sanitizer semantics or taint-killing transfer
@@ -130,5 +135,169 @@ request-to-dangerous-call checks, but it is still preview:
   SSRF URLs, file paths, analytics, PII, and outbound network clients.
 - It does not expose context-sensitivity controls.
 - Extension/model-pack authoring remains internal.
-- Raw `Cfg<'_>`, raw `CallGraph<'_>`, and raw data-flow graph APIs remain
-  reserved.
+- Raw `Cfg<'_>` and raw data-flow graph APIs remain reserved. Call edges are
+  public through the separate `CallGraph<'_>` view ([call-graph.md](call-graph.md)).
+
+## Flows
+
+`flow.flows(&spec)` answers an interprocedural question over a Go program and
+returns a `FlowAnswer`: every sink the tracked values reach, one `Flow` per sink
+site, and the unknowns that limited the search anywhere.
+
+```rust
+#[polint::rule(id = "local/request-to-sql", description = "Request data must not build SQL text", severity = "error")]
+pub(crate) fn request_to_sql(ctx: &mut RuleCtx<'_>, flow: DataFlow<'_>) -> RuleResult {
+    let spec = FlowSpec::new()
+        .source(FlowSource::model("http_request"))
+        .sink(FlowSink::model("sql"))
+        .sanitizer("example.com/app/sqlsafe.Quote")
+        .untracked(FlowValueKind::Context)
+        .untracked(FlowValueKind::Boolean)
+        .untracked(FlowValueKind::Number);
+    let answer = flow.flows(&spec);
+    for found in &answer.flows {
+        if found.precision <= FlowPrecision::SetupAware {
+            ctx.report(found.diagnostic(ctx.rule_id(), "request data builds SQL text"));
+        }
+    }
+    Ok(())
+}
+```
+
+### Questions
+
+- Sources: `FlowSource::model(kind)` (the built-in `http_request` and
+  `message_payload`, or a repository kind), `call_result(function)`,
+  `call_argument_pointee(function, argument)` (what a pointer argument points to
+  after the call, such as a binder's target), `parameter_of_type(type)`,
+  `named(names)` (parameters, address-taken locals, package variables and
+  struct fields read whose names contain one of the names, ignoring case: a
+  heuristic) and `callback_parameter(function, argument, parameter)` (a
+  transaction callback's handle).
+- Sinks: `FlowSink::model(kind)` (the built-in `sql`, `exec`, `log` and
+  `publish`, or a repository kind), `call(function)` (any argument or the
+  receiver), `call_argument(function, position)` (counted from 0, without the
+  receiver) and `returned()` (a value the function holding the source returns).
+- Functions are named by qualified name (`example.com/app.F`,
+  `(*example.com/app.Store).Find`), by `Type.Method`, or by last name.
+- `sanitizer(function)`: the result of a call to it carries none of its
+  arguments' taint. The models' sanitizers always apply.
+- `untracked(kind)`: values of that kind (`Context`, `Boolean`, `Number`) never
+  carry taint and never reach a sink. Injection questions usually declare all
+  three; a question about a context, or a value stored in one, must not declare
+  `Context`.
+- `deeper_paths()`: three field steps per access path instead of two.
+
+### Answers
+
+A `Flow` has its `source` and `sink` (`FlowStep`: file, path, line, column,
+function), the `sink_argument` it reaches, its `steps` source to sink, its
+`precision` and its `unknowns`. `flow.diagnostic(rule_id, message)` reports at
+the sink with the path as structured evidence, one located step per edge, which
+SARIF output renders as a code flow.
+
+`precision` is the least certain step:
+
+- `Exact`: every call passed has one known callee, and every library function
+  passed is modelled.
+- `SetupAware`: a call was resolved by variable-type analysis.
+- `Conservative`: the path passes a class-hierarchy candidate, a call with no
+  known callee, a package variable, or a library function without a model,
+  which is assumed to pass its arguments to its result.
+- `Heuristic`: the path enters a function literal assumed to be called by the
+  library function it was passed to.
+
+`FlowAnswer::unknowns` and `Flow::unknowns` name what limited the search: a
+package's step budget (`UnitBudget`), the question's deadline (`Deadline`),
+calls nested too deep or a recursive cycle that did not settle (`CallDepth`),
+dynamic calls with no known callee (`UnresolvedCall`), and a typed Go frontend
+that loaded no package for the scan's Go files (`NoProgram`). A flow a budget
+cut off is missing from the answer; `is_complete()` is false whenever a budget,
+the deadline or the depth limit cut anything, or no program was loaded, so an
+empty answer is then "not proved", not "no flow".
+
+### How Go is analysed
+
+The typed Go frontend lowers every function the program builds (its packages,
+closures, generic instances and the wrappers the compiler synthesizes) from SSA
+into a flow program: value slots, and the copies, loads and stores through
+field, element and pointer steps, calls with their candidate callees (the static
+callee, else variable-type analysis, else the class hierarchy up to a limit),
+returns and closures. Branches whose condition is a constant are pruned first.
+The solver then:
+
+- follows a value through a function and through memory: an access path is a
+  slot and up to two field steps (three with `deeper_paths`); a path cut there
+  covers everything below it;
+- enters a callee with the tracked part of an argument and reuses that callee's
+  summary for every caller entering it the same way; summaries of recursive
+  functions are recomputed until none changes, and one recomputed to the same
+  answer wakes no caller;
+- returns taint that reaches a source function's results or what its pointer
+  parameters point to to every caller of it, and taint written to a package
+  variable to every function using it;
+- reports one flow per sink site, through the summary nearest the source.
+
+Memory is not flow-sensitive: a field, element or map entry that once held a
+tracked value keeps it after it is overwritten, and a map's keys and values
+share one place. Values flow into a function literal through its captured
+variables; one passed to a library function is assumed called by it
+(`Heuristic`). Questions are answered at rule time, a few seconds each on a
+program of hundreds of packages; each package has a step budget of two million
+facts per question and each question a two-minute deadline.
+
+TypeScript programs get no flows from `flows` yet.
+
+### Setup
+
+Go flows need the Go toolchain and a `go.mod` module root for the scanned Go
+files, like `GoTypes<'_>` ([Go types](go-semantic-types.md#setup)). On a scan
+of Go sources only, when the frontend loaded no package, `dataflow` is
+unavailable: a rule that requests `DataFlow<'_>` is not run and `polint check`
+reports a `polint/capability` diagnostic with status `setup_missing`. On a scan
+that also has other languages the rule runs (`forbidden` still answers from the
+value-flow graph) and `flows` answers no flows with a `NoProgram` unknown.
+Go files the frontend did not load inside a loaded program — files outside
+every module root, files excluded by build tags, `_test.go` files without
+`[languages.go] include_tests` — have no flows and add no unknown.
+
+### Models
+
+The built-in models (request data a gin or net/http handler reads, Watermill
+message payloads, GORM and `database/sql` query text, commands run, standard
+and structured logging, Watermill publishing, `strconv` and `uuid` parsers as
+sanitizers, comparisons as opaque, JSON and XML decoding as propagators) apply
+alongside a repository's own tables in `.polint/models/*.toml`:
+
+```toml
+[[go_flow_source]]
+kind = "tenant"
+receivers = ["example.com/app/auth.Actor"]
+methods = ["TenantID"]
+
+[[go_flow_sink]]
+kind = "sql"
+function = "example.com/app/db.Raw"
+arguments = [0]
+
+[[go_flow_sanitizer]]
+function = "example.com/app/sqlsafe.Quote"
+
+[[go_flow_opaque]]
+function = "example.com/app/text.Equal"
+
+[[go_flow_propagator]]
+function = "example.com/app/codec.Decode"
+from = 0
+to = 1
+```
+
+A table names functions by `function` (or `functions`), or by `receivers` and
+`methods` (a method of a named type, through a pointer or not, or an interface
+method). Sources take `output = "result"` (the default) or
+`output = "argument"` with an `argument`, or a `parameter_type`; sinks take
+`arguments` or `arguments_from`; propagators move taint from argument `from`
+(or `"receiver"`) into what argument `to` points to. An invalid table is a
+`polint/flow-model` warning and is left out; the other models still apply. The
+models take part in the run's analysis digests.
+

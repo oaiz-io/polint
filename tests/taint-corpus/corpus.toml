@@ -1,0 +1,425 @@
+schema = "polint-taint-corpus-1"
+
+[[case]]
+id = "request-sql-sprintf"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_sprintf/positive"
+twins = ["cases/request_sql_sprintf/twin_sanitized", "cases/request_sql_sprintf/twin_bind_parameter"]
+
+[[case]]
+id = "request-sql-concat"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_concat/positive"
+twins = ["cases/request_sql_concat/twin_constant"]
+
+[[case]]
+id = "request-sql-bound-struct"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_bound_struct/positive"
+twins = ["cases/request_sql_bound_struct/twin_placeholder"]
+
+[[case]]
+id = "request-sql-helper"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_helper/positive"
+twins = ["cases/request_sql_helper/twin_helper_parses"]
+
+[[case]]
+id = "request-sql-interface"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_interface/positive"
+twins = ["cases/request_sql_interface/twin_safe_store"]
+
+[[case]]
+id = "request-sql-struct-field"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_struct_field/positive"
+twins = ["cases/request_sql_struct_field/twin_other_field"]
+
+[[case]]
+id = "request-sql-closure"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_closure/positive"
+twins = ["cases/request_sql_closure/twin_closure_ignores"]
+
+[[case]]
+id = "request-sql-goroutine"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_goroutine/positive"
+twins = ["cases/request_sql_goroutine/twin_fixed"]
+
+[[case]]
+id = "request-sql-map"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_map/positive"
+twins = ["cases/request_sql_map/twin_other_map"]
+
+[[case]]
+id = "request-sql-append-join"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_append_join/positive"
+twins = ["cases/request_sql_append_join/twin_constants"]
+
+[[case]]
+id = "request-exec-gin"
+category = "request-to-exec"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/request_exec_gin/positive"
+twins = ["cases/request_exec_gin/twin_allowlist"]
+
+[[case]]
+id = "request-exec-nethttp"
+category = "request-to-exec"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/request_exec_nethttp/positive"
+twins = ["cases/request_exec_nethttp/twin_constant"]
+
+[[case]]
+id = "secret-field-log"
+category = "secret-to-log"
+source = { named = ["secret", "token", "password"] }
+sink = { model = "log" }
+positive = "cases/secret_field_log/positive"
+twins = ["cases/secret_field_log/twin_other_field"]
+
+[[case]]
+id = "secret-global-log"
+category = "secret-to-log"
+source = { named = ["secret", "token", "password"] }
+sink = { model = "log" }
+positive = "cases/secret_global_log/positive"
+twins = ["cases/secret_global_log/twin_length"]
+
+[[case]]
+id = "secret-helper-log"
+category = "secret-to-log"
+source = { named = ["secret", "token", "password"] }
+sink = { model = "log" }
+positive = "cases/secret_helper_log/positive"
+twins = ["cases/secret_helper_log/twin_masked"]
+
+[[case]]
+id = "payload-sql"
+category = "payload-to-sql"
+source = { model = "message_payload" }
+sink = { model = "sql" }
+positive = "cases/payload_sql/positive"
+twins = ["cases/payload_sql/twin_parsed"]
+
+[[case]]
+id = "payload-unmarshal-exec"
+category = "payload-to-exec"
+source = { model = "message_payload" }
+sink = { model = "exec" }
+positive = "cases/payload_unmarshal_exec/positive"
+twins = ["cases/payload_unmarshal_exec/twin_fixed_command"]
+
+[[case]]
+id = "publish-error-returned"
+category = "error-flow"
+source = { call_result = "Publisher.Publish" }
+sink = { returned = true }
+positive = "cases/publish_error_returned/positive"
+twins = ["cases/publish_error_returned/twin_swallowed"]
+
+[[case]]
+id = "publish-error-wrapped"
+category = "error-flow"
+source = { call_result = "Publisher.Publish" }
+sink = { returned = true }
+positive = "cases/publish_error_wrapped/positive"
+twins = ["cases/publish_error_wrapped/twin_logged"]
+
+[[case]]
+id = "publish-error-helper"
+category = "error-flow"
+source = { call_result = "Publisher.Publish" }
+sink = { returned = true }
+positive = "cases/publish_error_helper/positive"
+twins = ["cases/publish_error_helper/twin_helper_drops"]
+
+[[case]]
+id = "publish-error-second-result"
+category = "error-flow"
+source = { call_result = "Publisher.Publish" }
+sink = { returned = true }
+positive = "cases/publish_error_second_result/positive"
+twins = ["cases/publish_error_second_result/twin_nil"]
+
+[[case]]
+id = "publish-error-callback"
+category = "error-flow"
+source = { call_result = "Publisher.Publish" }
+sink = { returned = true }
+positive = "cases/publish_error_callback/positive"
+twins = ["cases/publish_error_callback/twin_callback_drops"]
+
+[[case]]
+id = "tx-appender"
+category = "transaction"
+source = { callback_parameter = { callee = "DB.Transaction", argument = 0, parameter = 0 } }
+sink = { call_argument = { callee = "Repo.Append", argument = 0 } }
+positive = "cases/tx_appender/positive"
+twins = ["cases/tx_appender/twin_outer_db"]
+
+[[case]]
+id = "tx-helper"
+category = "transaction"
+source = { callback_parameter = { callee = "DB.Transaction", argument = 0, parameter = 0 } }
+sink = { call_argument = { callee = "Repo.Append", argument = 0 } }
+positive = "cases/tx_helper/positive"
+twins = ["cases/tx_helper/twin_helper_shared_db"]
+
+[[case]]
+id = "tx-struct"
+category = "transaction"
+source = { callback_parameter = { callee = "DB.Transaction", argument = 0, parameter = 0 } }
+sink = { call_argument = { callee = "Repo.Append", argument = 0 } }
+positive = "cases/tx_struct/positive"
+twins = ["cases/tx_struct/twin_outer_in_struct"]
+
+[[case]]
+id = "tx-with-context"
+category = "transaction"
+source = { callback_parameter = { callee = "DB.Transaction", argument = 0, parameter = 0 } }
+sink = { call_argument = { callee = "Repo.Append", argument = 0 } }
+positive = "cases/tx_with_context/positive"
+twins = ["cases/tx_with_context/twin_outer_with_context"]
+
+[[case]]
+id = "context-gorm"
+category = "context"
+source = { parameter_type = "context.Context" }
+sink = { call_argument = { callee = "DB.WithContext", argument = 0 } }
+positive = "cases/context_gorm/positive"
+twins = ["cases/context_gorm/twin_background"]
+
+[[case]]
+id = "context-helper"
+category = "context"
+source = { parameter_type = "context.Context" }
+sink = { call_argument = { callee = "DB.WithContext", argument = 0 } }
+positive = "cases/context_helper/positive"
+twins = ["cases/context_helper/twin_helper_todo"]
+
+[[case]]
+id = "context-struct"
+category = "context"
+source = { parameter_type = "context.Context" }
+sink = { call_argument = { callee = "DB.WithContext", argument = 0 } }
+positive = "cases/context_struct/positive"
+twins = ["cases/context_struct/twin_struct_background"]
+
+[[case]]
+id = "context-with-timeout"
+category = "context"
+source = { parameter_type = "context.Context" }
+sink = { call_argument = { callee = "DB.WithContext", argument = 0 } }
+positive = "cases/context_with_timeout/positive"
+twins = ["cases/context_with_timeout/twin_timeout_background"]
+
+[[case]]
+id = "tenant-where"
+category = "tenant-scope"
+source = { call_result = "Actor.TenantID" }
+sink = { call_argument = { callee = "DB.Where" } }
+positive = "cases/tenant_where/positive"
+twins = ["cases/tenant_where/twin_request_value"]
+
+[[case]]
+id = "tenant-scope-closure"
+category = "tenant-scope"
+source = { call_result = "Actor.TenantID" }
+sink = { call_argument = { callee = "DB.Where" } }
+positive = "cases/tenant_scope_closure/positive"
+twins = ["cases/tenant_scope_closure/twin_fixed_scope"]
+
+[[case]]
+id = "tenant-inline-scope"
+category = "tenant-scope"
+source = { call_result = "Actor.TenantID" }
+sink = { call_argument = { callee = "DB.Where" } }
+positive = "cases/tenant_inline_scope/positive"
+twins = ["cases/tenant_inline_scope/twin_inline_fixed"]
+
+[[case]]
+id = "tenant-conditions-map"
+category = "tenant-scope"
+source = { call_result = "Actor.TenantID" }
+sink = { call_argument = { callee = "DB.Where" } }
+positive = "cases/tenant_conditions_map/positive"
+twins = ["cases/tenant_conditions_map/twin_conditions_from_request"]
+
+[[case]]
+id = "tenant-context-value"
+category = "tenant-scope"
+source = { call_result = "Actor.TenantID" }
+sink = { call_argument = { callee = "DB.Where" } }
+positive = "cases/tenant_context_value/positive"
+twins = ["cases/tenant_context_value/twin_context_fixed"]
+
+[[case]]
+id = "memory-field-sensitivity"
+category = "precision"
+source = { named = ["secret", "token", "password"] }
+sink = { model = "log" }
+positive = "cases/memory_field_sensitivity/positive"
+twins = ["cases/memory_field_sensitivity/twin_other_field"]
+
+[[case]]
+id = "reassigned-value"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/reassigned_value/positive"
+twins = ["cases/reassigned_value/twin_reassigned"]
+
+[[case]]
+id = "slice-element"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/slice_element/positive"
+twins = ["cases/slice_element/twin_other_slice"]
+
+[[case]]
+id = "interface-dispatch"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/interface_dispatch/positive"
+twins = ["cases/interface_dispatch/twin_noop_runner"]
+
+[[case]]
+id = "function-value"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/function_value/positive"
+twins = ["cases/function_value/twin_noop_value"]
+
+[[case]]
+id = "embedded-field"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/embedded_field/positive"
+twins = ["cases/embedded_field/twin_other_field"]
+
+[[case]]
+id = "setter-getter"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/setter_getter/positive"
+twins = ["cases/setter_getter/twin_constant_set"]
+
+[[case]]
+id = "returned-to-caller"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/returned_to_caller/positive"
+twins = ["cases/returned_to_caller/twin_constant_input"]
+
+[[case]]
+id = "global-variable"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/global_variable/positive"
+twins = ["cases/global_variable/twin_other_global"]
+
+[[case]]
+id = "dead-branch"
+category = "precision"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/dead_branch/positive"
+twins = ["cases/dead_branch/twin_dead_branch"]
+
+[[case]]
+id = "request-sql-two-hops"
+category = "request-to-sql"
+source = { model = "http_request" }
+sink = { model = "sql" }
+positive = "cases/request_sql_two_hops/positive"
+twins = ["cases/request_sql_two_hops/twin_two_hops_fixed"]
+
+[[case]]
+id = "request-log-header"
+category = "request-to-log"
+source = { model = "http_request" }
+sink = { model = "log" }
+positive = "cases/request_log_header/positive"
+twins = ["cases/request_log_header/twin_static_log"]
+
+[[case]]
+id = "payload-publish"
+category = "payload-to-publish"
+source = { model = "message_payload" }
+sink = { model = "publish" }
+positive = "cases/payload_publish/positive"
+twins = ["cases/payload_publish/twin_new_payload"]
+
+[[case]]
+id = "overwritten-field"
+category = "limitation"
+source = { named = ["secret", "token", "password"] }
+sink = { model = "log" }
+positive = "cases/overwritten_field/positive"
+twins = ["cases/overwritten_field/twin_overwritten_in_place"]
+
+[[case]]
+id = "same-slice-other-element"
+category = "limitation"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/same_slice_other_element/positive"
+twins = ["cases/same_slice_other_element/twin_other_element"]
+
+[[case]]
+id = "map-key-versus-value"
+category = "limitation"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/map_key_versus_value/positive"
+twins = ["cases/map_key_versus_value/twin_tainted_key_only"]
+
+[[case]]
+id = "same-helper-two-contexts"
+category = "limitation"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/same_helper_two_contexts/positive"
+twins = ["cases/same_helper_two_contexts/twin_clean_context"]
+
+[[case]]
+id = "unknown-implementation"
+category = "limitation"
+source = { model = "http_request" }
+sink = { model = "exec" }
+positive = "cases/unknown_implementation/positive"
+twins = ["cases/unknown_implementation/twin_runner_from_caller"]

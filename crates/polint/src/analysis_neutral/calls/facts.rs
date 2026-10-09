@@ -5,7 +5,7 @@ use crate::internal_core::{
     FileId, FunctionId, Language, ReferenceId, Span, StableKeyId, SymbolId,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallSiteFact {
     pub id: CallSiteId,
     pub language: Language,
@@ -30,13 +30,18 @@ pub struct CallSiteFact {
     pub stable_key: StableKeyId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallTargetFact {
     pub id: CallTargetId,
     pub site: CallSiteId,
     pub caller: FunctionId,
     pub target_function: Option<FunctionId>,
     pub target_symbol: Option<SymbolId>,
+    /// The callee's identity when it has neither an in-repository function nor a
+    /// symbol: a dependency's function or method named by the typed frontend
+    /// (`fmt.Println`), or a `go:`-prefixed label for a call expression that is a
+    /// builtin or a conversion.
+    pub synthetic_target: Option<String>,
     pub edge_kind: CallEdgeKind,
     pub algorithm: CallAlgorithm,
     pub status: CallTargetStatus,
@@ -46,7 +51,7 @@ pub struct CallTargetFact {
     pub stable_key: StableKeyId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnresolvedCallFact {
     pub site: CallSiteId,
     pub caller: FunctionId,
@@ -149,6 +154,9 @@ pub enum CallTargetStatus {
     SetupMissing,
     BudgetExceeded,
     Rejected,
+    /// A call that cannot run in the analysed build: a constant condition rules
+    /// out the branch it is written in. It has no targets and is not unresolved.
+    Unreachable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -263,6 +271,7 @@ mod tests {
             caller: site.caller,
             target_function: Some(FunctionId::from_raw(10)),
             target_symbol: Some(SymbolId::from_raw(11)),
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Direct,
             algorithm: CallAlgorithm::DirectReference,
             status: CallTargetStatus::Resolved,

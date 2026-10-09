@@ -250,7 +250,7 @@ impl GoRtaInputs {
 /// within the bucket makes the indexed `.find()` / `.min_by_key()` pick the exact same
 /// element the full-slice scan did — the result is identical in every case, ties
 /// included.
-struct GoCoreIndex<'a> {
+pub(crate) struct GoCoreIndex<'a> {
     /// `(file, name)` -> the Go core `FunctionFact`s with that file+name, in
     /// `db.functions()` storage order. Restricted to `Language::Go`. Keyed by an owned
     /// `String` name (not a borrow of `db`) so a lookup by a shorter-lived `&str` query is
@@ -278,7 +278,7 @@ struct GoCoreIndex<'a> {
 impl<'a> GoCoreIndex<'a> {
     /// Build all four indexes from the db in a single pass each, preserving storage order
     /// within every bucket (the determinism contract above).
-    fn build(db: &'a AnalysisDb) -> Self {
+    pub(crate) fn build(db: &'a AnalysisDb) -> Self {
         let mut core_functions_by_file_name: BTreeMap<(FileId, String), Vec<&'a FunctionFact>> =
             BTreeMap::new();
         let mut core_function_by_id: BTreeMap<crate::core::FunctionId, &'a FunctionFact> =
@@ -471,7 +471,7 @@ fn qualified_for_function_id_indexed(
 /// first-match-wins scan, so the fallback both requires a zero-width
 /// point and is the narrowest match available. Honest by construction: `name` + `file`
 /// disambiguate and the exact match is tried first.
-fn matching_core_function_indexed<'a>(
+pub(crate) fn matching_core_function_indexed<'a>(
     index: &GoCoreIndex<'a>,
     semantic_function: &GoSemanticFunctionFact,
 ) -> Option<&'a FunctionFact> {

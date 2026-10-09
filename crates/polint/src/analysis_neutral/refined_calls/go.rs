@@ -8,7 +8,10 @@ use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallEdgeKind, CallPrecision, CallProvenance, CallTargetFact, CallTargetStatus,
     UnresolvedCallFact, UnresolvedCallReason,
 };
-use crate::analysis_neutral::ids::{PlaceId, RefinedCallEdgeId};
+use std::collections::HashMap;
+
+use crate::analysis_neutral::calls::facts::CallSiteFact;
+use crate::analysis_neutral::ids::{CallSiteId, PlaceId, PtVarId, RefinedCallEdgeId};
 use crate::analysis_neutral::points_to::facts::{
     PointsToBudgetStatus, PointsToSetFact, PointsToStatus,
 };
@@ -20,6 +23,7 @@ pub fn derive_go_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut edges = Vec::new();
+    let index = GoRefinementIndex::build(db);
 
     for site in db
         .call_sites()
@@ -27,14 +31,10 @@ pub fn derive_go_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
         .filter(|site| site.language == Language::Go)
     {
         if let Some(receiver) = site.receiver {
-            let receiver_types = type_facts_for_place(db, receiver);
-            let receiver_points_to = points_to_sets_for_place(db, receiver);
+            let receiver_types = index.type_facts(receiver);
+            let receiver_points_to = index.points_to_sets(receiver);
 
-            for target in db
-                .call_targets()
-                .iter()
-                .filter(|target| target.site == site.id)
-            {
+            for target in index.targets(site.id) {
                 if receiver_types
                     .iter()
                     .any(|fact| fact.status == TypeStatus::Present)
@@ -79,16 +79,14 @@ pub fn derive_go_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
                 | UnresolvedCallReason::DynamicProperty
         )
     }) {
-        if let Some(site) = db
-            .call_sites()
-            .iter()
-            .find(|site| site.id == unresolved.site && site.language == Language::Go)
-        {
+        if let Some(site) = index.go_site(unresolved.site) {
             let mut emitted_status_edge = false;
-            if site
-                .receiver
-                .is_some_and(|receiver| has_setup_missing_type(db, receiver))
-            {
+            if site.receiver.is_some_and(|receiver| {
+                index
+                    .type_facts(receiver)
+                    .iter()
+                    .any(|fact| fact.status == TypeStatus::SetupMissing)
+            }) {
                 edges.push(unresolved_go_edge(
                     db,
                     unresolved,
@@ -101,7 +99,7 @@ pub fn derive_go_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
             }
 
             if site.receiver.is_some_and(|receiver| {
-                points_to_sets_for_place(db, receiver).iter().any(|set| {
+                index.points_to_sets(receiver).iter().any(|set| {
                     set.status == PointsToStatus::BudgetExceeded
                         || set.budget == PointsToBudgetStatus::BudgetExceeded
                 })
@@ -131,6 +129,75 @@ pub fn derive_go_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
     }
 
     RefinedCallOutput { edges }.normalized(interner)
+}
+
+/// Lookups the Go tier makes once per call site, built once per run.
+///
+/// Every bucket keeps the facts in storage order, which is the order the
+/// per-site scans of the whole fact families they replace returned them in, so
+/// the tier picks the same facts and emits the same edges.
+struct GoRefinementIndex<'db> {
+    targets_by_site: HashMap<CallSiteId, Vec<&'db CallTargetFact>>,
+    type_facts_by_place: HashMap<PlaceId, Vec<&'db TypeFact>>,
+    points_to_by_variable: HashMap<PtVarId, Vec<&'db PointsToSetFact>>,
+    go_sites: HashMap<CallSiteId, &'db CallSiteFact>,
+}
+
+impl<'db> GoRefinementIndex<'db> {
+    fn build(db: &'db impl AnalysisHost) -> Self {
+        let mut targets_by_site = HashMap::<_, Vec<_>>::new();
+        for target in db.call_targets() {
+            targets_by_site.entry(target.site).or_default().push(target);
+        }
+        let mut type_facts_by_place = HashMap::<_, Vec<_>>::new();
+        for fact in db.type_facts() {
+            if let TypeSubject::Place(place) = fact.subject {
+                type_facts_by_place.entry(place).or_default().push(fact);
+            }
+        }
+        let mut points_to_by_variable = HashMap::<_, Vec<_>>::new();
+        for set in db.points_to_sets() {
+            points_to_by_variable
+                .entry(set.variable)
+                .or_default()
+                .push(set);
+        }
+        let mut go_sites = HashMap::new();
+        for site in db
+            .call_sites()
+            .iter()
+            .filter(|site| site.language == Language::Go)
+        {
+            // The first site with an id, as a scan for it would find.
+            go_sites.entry(site.id).or_insert(site);
+        }
+        Self {
+            targets_by_site,
+            type_facts_by_place,
+            points_to_by_variable,
+            go_sites,
+        }
+    }
+
+    fn targets(&self, site: CallSiteId) -> &[&'db CallTargetFact] {
+        self.targets_by_site.get(&site).map_or(&[], Vec::as_slice)
+    }
+
+    fn type_facts(&self, place: PlaceId) -> &[&'db TypeFact] {
+        self.type_facts_by_place
+            .get(&place)
+            .map_or(&[], Vec::as_slice)
+    }
+
+    fn points_to_sets(&self, place: PlaceId) -> &[&'db PointsToSetFact] {
+        self.points_to_by_variable
+            .get(&place_var(place))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    fn go_site(&self, site: CallSiteId) -> Option<&'db CallSiteFact> {
+        self.go_sites.get(&site).copied()
+    }
 }
 
 fn type_edge_from_target(
@@ -227,7 +294,7 @@ fn edge_from_target(
         caller: target.caller,
         target_function: target.target_function,
         target_symbol: target.target_symbol,
-        synthetic_target: None,
+        synthetic_target: target.synthetic_target.clone(),
         language: Language::Go,
         edge_kind: target.edge_kind,
         algorithm: refinement.algorithm,
@@ -304,27 +371,6 @@ fn unresolved_go_edge(
     }
 }
 
-fn type_facts_for_place(db: &impl AnalysisHost, place: PlaceId) -> Vec<&TypeFact> {
-    db.type_facts()
-        .iter()
-        .filter(|fact| matches!(fact.subject, TypeSubject::Place(subject) if subject == place))
-        .collect()
-}
-
-fn points_to_sets_for_place(db: &impl AnalysisHost, place: PlaceId) -> Vec<&PointsToSetFact> {
-    let var = place_var(place);
-    db.points_to_sets()
-        .iter()
-        .filter(|set| set.variable == var)
-        .collect()
-}
-
-fn has_setup_missing_type(db: &impl AnalysisHost, place: PlaceId) -> bool {
-    type_facts_for_place(db, place)
-        .iter()
-        .any(|fact| fact.status == TypeStatus::SetupMissing)
-}
-
 fn type_precision(precision: TypePrecision) -> CallPrecision {
     match precision {
         TypePrecision::ExactLocal | TypePrecision::SetupAware => CallPrecision::SetupAware,
@@ -343,7 +389,8 @@ fn confidence_for_status(status: CallTargetStatus) -> RefinedCallConfidence {
         | CallTargetStatus::Unsupported
         | CallTargetStatus::SetupMissing
         | CallTargetStatus::BudgetExceeded
-        | CallTargetStatus::Rejected => RefinedCallConfidence::Low,
+        | CallTargetStatus::Rejected
+        | CallTargetStatus::Unreachable => RefinedCallConfidence::Low,
     }
 }
 
@@ -606,6 +653,7 @@ mod tests {
             caller: FunctionId::from_raw(0),
             target_function: Some(FunctionId::from_raw(1)),
             target_symbol: Some(SymbolId::from_raw(0)),
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Method,
             algorithm: CallAlgorithm::GoStatic,
             status: CallTargetStatus::Resolved,

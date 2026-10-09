@@ -669,6 +669,9 @@ pub(crate) fn hard_dependencies(provider_id: &str) -> &'static [&'static str] {
         "polint.module_topology" => &[MOD, SYM],
         "polint.semantic_mir" => &[GO, TOP, SYM, TS],
         "polint.cfg" => &[GO, MIR, TS],
+        // The Go semantic sidecar is deliberately absent: its per-site callees are
+        // optional precision. Without them every Go site keeps the name-based
+        // resolution, so a sidecar that could not run must not block call sites.
         "polint.calls" => &[CFG, GO, TOP, MIR, SYM, TS],
         "polint.go.semantic" => &[GO],
         "polint.ts.types" => &[TS],

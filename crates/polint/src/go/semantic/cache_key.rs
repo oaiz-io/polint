@@ -63,7 +63,18 @@ pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
     // it stores an empty output, so a different budget can produce a different
     // outcome from identical sources.
     let mut parts = vec![
-        format!("include_tests={}", config.include_tests),
+        format!("include_tests={}", config.semantic_include_tests),
+        format!("call_graph={}", config.semantic_call_graph),
+        format!("routes={}", config.semantic_routes),
+        // The repository's route models decide which calls register routes.
+        format!(
+            "route_models={}",
+            config
+                .route_models
+                .as_deref()
+                .map(|models| crate::go::hash::stable_hash(&[models]))
+                .unwrap_or_default()
+        ),
         format!("offline={}", config.offline),
         format!("rta_edges={}", config.emit_rta_edges),
         // The scan scope decides which rows the sidecar emits, so two scopes are two
@@ -83,6 +94,11 @@ pub fn go_semantic_lifecycle_digest(config: &GoAnalysisConfig) -> String {
             crate::go::semantic::budget::semantic_timeout(config.semantic_timeout_ms).as_millis()
         ),
     ];
+    // Present only when asked for, so every run that reads no data flow keeps
+    // the key it had before flow programs existed.
+    if config.semantic_dataflow {
+        parts.push("dataflow=true".to_string());
+    }
     parts.extend(
         config
             .module_roots
@@ -199,7 +215,7 @@ mod tests {
             },
             GoSemanticCacheInputs {
                 lifecycle: GoAnalysisConfig {
-                    include_tests: false,
+                    semantic_include_tests: !base.lifecycle.semantic_include_tests,
                     ..base.lifecycle.clone()
                 },
                 ..base.clone()
@@ -250,7 +266,23 @@ mod tests {
                 ..base.clone()
             },
             GoAnalysisConfig {
-                include_tests: false,
+                semantic_include_tests: !base.semantic_include_tests,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                semantic_call_graph: !base.semantic_call_graph,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                semantic_routes: !base.semantic_routes,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                semantic_dataflow: !base.semantic_dataflow,
+                ..base.clone()
+            },
+            GoAnalysisConfig {
+                route_models: Some("{\"models\":[]}".to_string()),
                 ..base.clone()
             },
             GoAnalysisConfig {
@@ -319,7 +351,12 @@ mod tests {
             package_patterns: vec!["./...".to_string()],
             build_tags: Vec::new(),
             include_tests: true,
+            semantic_include_tests: false,
             offline: false,
+            semantic_call_graph: false,
+            semantic_routes: false,
+            semantic_dataflow: false,
+            route_models: None,
             semantic_timeout_ms: None,
             emit_rta_edges: false,
             symbol_rooted_patterns: vec!["./...".to_string()],

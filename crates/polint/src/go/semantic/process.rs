@@ -32,6 +32,34 @@ const EMBEDDED_GO_FRONTEND_FILES: &[(&str, &str)] = &[
         "internal/semantic/emit.go",
         include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/emit.go"),
     ),
+    (
+        "internal/semantic/rss_unix.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/rss_unix.go"),
+    ),
+    (
+        "internal/semantic/rss_other.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/rss_other.go"),
+    ),
+    (
+        "internal/semantic/typed.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/typed.go"),
+    ),
+    (
+        "internal/semantic/routes.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/routes.go"),
+    ),
+    (
+        "internal/semantic/prune.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/prune.go"),
+    ),
+    (
+        "internal/semantic/flow.go",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/flow.go"),
+    ),
+    (
+        "internal/semantic/route_models.json",
+        include_str!("../../go-sidecar/polint-go-frontend/internal/semantic/route_models.json"),
+    ),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -218,11 +246,16 @@ fn skip_frontend_digest_dir(path: &Path) -> bool {
     )
 }
 
+/// Files that decide what a frontend source directory builds: its module
+/// files, its Go sources, and the JSON data files it embeds.
 fn is_frontend_digest_source(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|name| name.to_str()),
         Some("go.mod" | "go.sum")
-    ) || path.extension().and_then(|extension| extension.to_str()) == Some("go")
+    ) || matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("go" | "json")
+    )
 }
 
 fn stable_bytes_hash(bytes: &[u8]) -> String {
@@ -254,14 +287,80 @@ pub fn command_for_frontend(
     }
 }
 
+/// What tells one embedded Go sidecar's cached build apart from another's.
+///
+/// Every embedded sidecar is built the same way: once, with the local toolchain
+/// pinned, into its private materialized source directory, and then executed
+/// directly. Executing the built binary, rather than `go run`, matters for what
+/// the sidecar does next: the toolchain pin stays on the build, so the go command
+/// the sidecar starts to load the analyzed modules honours their own `go` and
+/// `toolchain` lines exactly as a `go build` inside those modules would.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct GoSidecarBinary {
+    /// Program name of the sidecar; the cached build is a dot file named after it.
+    program: &'static str,
+    /// Version label of the cache key. Changing the build recipe changes it.
+    cache_context: &'static str,
+    /// Version label of the receipt published beside the cached build.
+    receipt_label: &'static str,
+    /// How build and cache errors name the sidecar.
+    label: &'static str,
+}
+
+/// The Go semantic frontend.
+pub(crate) const SEMANTIC_FRONTEND_BINARY: GoSidecarBinary = GoSidecarBinary {
+    program: "polint-go-frontend",
+    cache_context: "polint-go-frontend-binary-v2",
+    receipt_label: "polint-go-frontend-receipt-v1",
+    label: "embedded frontend",
+};
+
+/// The Go symbol sidecar.
+pub(crate) const SYMBOLS_SIDECAR_BINARY: GoSidecarBinary = GoSidecarBinary {
+    program: "polint-go-symbols",
+    cache_context: "polint-go-symbols-binary-v1",
+    receipt_label: "polint-go-symbols-receipt-v1",
+    label: "embedded symbol sidecar",
+};
+
+impl GoSidecarBinary {
+    fn file_name(self) -> String {
+        if cfg!(windows) {
+            format!("{}.exe", self.program)
+        } else {
+            self.program.to_string()
+        }
+    }
+}
+
 fn ensure_frontend_binary(
     source_dir: &Path,
     offline: bool,
     timeout: Duration,
 ) -> Result<PathBuf, GoSemanticProcessError> {
-    ensure_frontend_binary_with_program(source_dir, offline, timeout, OsStr::new("go"))
+    ensure_go_sidecar_binary(&SEMANTIC_FRONTEND_BINARY, source_dir, offline, timeout)
 }
 
+/// Builds the embedded sidecar in `source_dir` once per toolchain and host target
+/// and returns the cached, verified binary.
+pub(crate) fn ensure_go_sidecar_binary(
+    sidecar: &GoSidecarBinary,
+    source_dir: &Path,
+    offline: bool,
+    timeout: Duration,
+) -> Result<PathBuf, GoSemanticProcessError> {
+    ensure_sidecar_binary_with_program_and_hooks(
+        sidecar,
+        source_dir,
+        offline,
+        timeout,
+        OsStr::new("go"),
+        || {},
+        || {},
+    )
+}
+
+#[cfg(test)]
 fn ensure_frontend_binary_with_program(
     source_dir: &Path,
     offline: bool,
@@ -278,6 +377,7 @@ fn ensure_frontend_binary_with_program(
     )
 }
 
+#[cfg(test)]
 fn ensure_frontend_binary_with_program_and_hooks<AfterPublish, OnContention>(
     source_dir: &Path,
     offline: bool,
@@ -290,34 +390,62 @@ where
     AfterPublish: FnOnce(),
     OnContention: FnOnce(),
 {
+    ensure_sidecar_binary_with_program_and_hooks(
+        &SEMANTIC_FRONTEND_BINARY,
+        source_dir,
+        offline,
+        timeout,
+        go_program,
+        after_binary_publish,
+        on_lock_contention,
+    )
+}
+
+fn ensure_sidecar_binary_with_program_and_hooks<AfterPublish, OnContention>(
+    sidecar: &GoSidecarBinary,
+    source_dir: &Path,
+    offline: bool,
+    timeout: Duration,
+    go_program: &OsStr,
+    after_binary_publish: AfterPublish,
+    on_lock_contention: OnContention,
+) -> Result<PathBuf, GoSemanticProcessError>
+where
+    AfterPublish: FnOnce(),
+    OnContention: FnOnce(),
+{
+    let label = sidecar.label;
     let toolchain = local_go_toolchain_version_with_program(go_program)?;
     if !go_version_at_least(&toolchain, 1, 25) {
         return Err(GoSemanticProcessError::VersionUnsupported(format!(
-            "polint-go-frontend source mode requires Go 1.25 or newer on PATH; found {toolchain}"
+            "{} source mode requires Go 1.25 or newer on PATH; found {toolchain}",
+            sidecar.program
         )));
     }
     let (goos, goarch) = execution_host_go_target()?;
     verify_local_go_target_with_program(go_program, offline, goos, goarch)?;
-    let cache_key = frontend_binary_cache_key(
+    let cache_key = sidecar_binary_cache_key(
+        sidecar,
         std::env::consts::OS,
         std::env::consts::ARCH,
         &toolchain,
         goos,
         goarch,
     );
-    let binary = source_dir.join(format!(".{}-{cache_key}", frontend_binary_name()));
+    let binary = source_dir.join(format!(".{}-{cache_key}", sidecar.file_name()));
     let receipt_path = source_dir.join(format!(".binary-receipt-{cache_key}"));
-    if cached_binary_matches(&binary, &receipt_path, &cache_key) {
+    if cached_binary_matches(sidecar, &binary, &receipt_path, &cache_key) {
         return Ok(binary);
     }
 
-    let _cache_lock = lock_frontend_binary_cache(source_dir, &cache_key, on_lock_contention)?;
-    if cached_binary_matches(&binary, &receipt_path, &cache_key) {
+    let _cache_lock =
+        lock_frontend_binary_cache(sidecar, source_dir, &cache_key, on_lock_contention)?;
+    if cached_binary_matches(sidecar, &binary, &receipt_path, &cache_key) {
         return Ok(binary);
     }
     if binary.exists() || receipt_path.exists() {
         return Err(GoSemanticProcessError::CommandFailed(format!(
-            "embedded frontend cache contains an unverifiable immutable entry `{}`",
+            "{label} cache contains an unverifiable immutable entry `{}`",
             binary.display()
         )));
     }
@@ -328,16 +456,20 @@ where
         unique_build_suffix()
     ));
     let command = frontend_build_command(go_program, source_dir, &staging, offline, goos, goarch);
-    let output = run_bounded(command, timeout, "go build of embedded semantic frontend")
-        .map_err(map_process_error)?;
+    let output = run_bounded(
+        command,
+        timeout,
+        &format!("go build of {}", sidecar.program),
+    )
+    .map_err(map_process_error)?;
     if !output.status.success() {
         let _ = fs::remove_file(&staging);
         return Err(GoSemanticProcessError::CommandFailed(format!(
-            "go build of embedded frontend failed: {}",
+            "go build of {label} failed: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
-    make_binary_private_executable(&staging)?;
+    make_binary_private_executable(sidecar, &staging)?;
 
     // Platforms where cache-file ownership cannot be verified never execute a
     // persistent binary from the cache. The unique just-built output is used
@@ -352,7 +484,7 @@ where
     {
         let bytes = fs::read(&staging).map_err(|error| {
             GoSemanticProcessError::CommandFailed(format!(
-                "failed to hash built embedded frontend `{}`: {error}",
+                "failed to hash built {label} `{}`: {error}",
                 staging.display()
             ))
         })?;
@@ -362,29 +494,29 @@ where
             Ok(()) => {
                 let _ = fs::remove_file(&staging);
                 after_binary_publish();
-                publish_binary_receipt(&receipt_path, &cache_key, &digest)?;
+                publish_binary_receipt(sidecar, &receipt_path, &cache_key, &digest)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let _ = fs::remove_file(&staging);
-                if cached_binary_matches(&binary, &receipt_path, &cache_key) {
+                if cached_binary_matches(sidecar, &binary, &receipt_path, &cache_key) {
                     return Ok(binary);
                 }
                 return Err(GoSemanticProcessError::CommandFailed(format!(
-                    "embedded frontend cache contains an unverifiable immutable binary `{}`",
+                    "{label} cache contains an unverifiable immutable binary `{}`",
                     binary.display()
                 )));
             }
             Err(error) => {
                 let _ = fs::remove_file(&staging);
                 return Err(GoSemanticProcessError::CommandFailed(format!(
-                    "failed to publish embedded frontend binary `{}`: {error}",
+                    "failed to publish {label} binary `{}`: {error}",
                     binary.display()
                 )));
             }
         }
-        if !cached_binary_matches(&binary, &receipt_path, &cache_key) {
+        if !cached_binary_matches(sidecar, &binary, &receipt_path, &cache_key) {
             return Err(GoSemanticProcessError::CommandFailed(format!(
-                "published embedded frontend binary `{}` failed receipt or ownership verification",
+                "published {label} binary `{}` failed receipt or ownership verification",
                 binary.display()
             )));
         }
@@ -392,7 +524,26 @@ where
     }
 }
 
+#[cfg(test)]
 fn frontend_binary_cache_key(
+    execution_os: &str,
+    execution_arch: &str,
+    toolchain: &str,
+    goos: &str,
+    goarch: &str,
+) -> String {
+    sidecar_binary_cache_key(
+        &SEMANTIC_FRONTEND_BINARY,
+        execution_os,
+        execution_arch,
+        toolchain,
+        goos,
+        goarch,
+    )
+}
+
+fn sidecar_binary_cache_key(
+    sidecar: &GoSidecarBinary,
     execution_os: &str,
     execution_arch: &str,
     toolchain: &str,
@@ -415,7 +566,7 @@ fn frontend_binary_cache_key(
         )
     });
     let mut context = vec![
-        "polint-go-frontend-binary-v2",
+        sidecar.cache_context,
         execution_os,
         execution_arch,
         toolchain,
@@ -427,10 +578,12 @@ fn frontend_binary_cache_key(
 }
 
 fn lock_frontend_binary_cache(
+    sidecar: &GoSidecarBinary,
     source_dir: &Path,
     cache_context: &str,
     on_contention: impl FnOnce(),
 ) -> Result<fs::File, GoSemanticProcessError> {
+    let label = sidecar.label;
     let lock_path = source_dir.join(format!(".binary-lock-{cache_context}"));
     let mut options = fs::OpenOptions::new();
     options.read(true).write(true).create(true);
@@ -441,7 +594,7 @@ fn lock_frontend_binary_cache(
     }
     let lock = options.open(&lock_path).map_err(|error| {
         GoSemanticProcessError::CommandFailed(format!(
-            "failed to open embedded frontend binary cache lock `{}`: {error}",
+            "failed to open {label} binary cache lock `{}`: {error}",
             lock_path.display()
         ))
     })?;
@@ -450,7 +603,7 @@ fn lock_frontend_binary_cache(
     // contents are irrelevant; only its private regular-file identity matters.
     verify_private_file(&lock_path).map_err(|reason| {
         GoSemanticProcessError::CommandFailed(format!(
-            "refusing untrusted embedded frontend binary cache lock `{}`: {reason}",
+            "refusing untrusted {label} binary cache lock `{}`: {reason}",
             lock_path.display()
         ))
     })?;
@@ -461,14 +614,14 @@ fn lock_frontend_binary_cache(
             on_contention();
             lock.lock().map_err(|error| {
                 GoSemanticProcessError::CommandFailed(format!(
-                    "failed to wait for embedded frontend binary cache lock `{}`: {error}",
+                    "failed to wait for {label} binary cache lock `{}`: {error}",
                     lock_path.display()
                 ))
             })?;
         }
         Err(fs::TryLockError::Error(error)) => {
             return Err(GoSemanticProcessError::CommandFailed(format!(
-                "failed to acquire embedded frontend binary cache lock `{}`: {error}",
+                "failed to acquire {label} binary cache lock `{}`: {error}",
                 lock_path.display()
             )));
         }
@@ -502,46 +655,60 @@ fn frontend_build_command(
 }
 
 #[cfg(unix)]
-fn cached_binary_matches(binary: &Path, receipt_path: &Path, cache_key: &str) -> bool {
+fn cached_binary_matches(
+    sidecar: &GoSidecarBinary,
+    binary: &Path,
+    receipt_path: &Path,
+    cache_key: &str,
+) -> bool {
     let Ok(actual_receipt) = read_verified_private_file(receipt_path) else {
         return false;
     };
     let Ok(bytes) = read_verified_private_file(binary) else {
         return false;
     };
-    actual_receipt == binary_receipt(cache_key, &stable_bytes_hash(&bytes)).as_bytes()
+    actual_receipt == binary_receipt(sidecar, cache_key, &stable_bytes_hash(&bytes)).as_bytes()
 }
 
 #[cfg(not(unix))]
-fn cached_binary_matches(_binary: &Path, _receipt_path: &Path, _cache_key: &str) -> bool {
+fn cached_binary_matches(
+    _sidecar: &GoSidecarBinary,
+    _binary: &Path,
+    _receipt_path: &Path,
+    _cache_key: &str,
+) -> bool {
     false
 }
 
-fn binary_receipt(cache_key: &str, digest: &str) -> String {
-    format!("polint-go-frontend-receipt-v1\n{cache_key}\n{digest}\n")
+fn binary_receipt(sidecar: &GoSidecarBinary, cache_key: &str, digest: &str) -> String {
+    format!("{}\n{cache_key}\n{digest}\n", sidecar.receipt_label)
 }
 
 #[cfg(unix)]
 fn publish_binary_receipt(
+    sidecar: &GoSidecarBinary,
     path: &Path,
     cache_key: &str,
     digest: &str,
 ) -> Result<(), GoSemanticProcessError> {
+    let label = sidecar.label;
     let staging = path.with_extension(format!(
         "receipt-{}-{}",
         std::process::id(),
         unique_build_suffix()
     ));
-    write_private_file(&staging, binary_receipt(cache_key, digest).as_bytes()).map_err(
-        |reason| {
-            GoSemanticProcessError::CommandFailed(format!(
-                "failed to stage embedded frontend binary receipt: {reason}"
-            ))
-        },
-    )?;
+    write_private_file(
+        &staging,
+        binary_receipt(sidecar, cache_key, digest).as_bytes(),
+    )
+    .map_err(|reason| {
+        GoSemanticProcessError::CommandFailed(format!(
+            "failed to stage {label} binary receipt: {reason}"
+        ))
+    })?;
     let result = fs::hard_link(&staging, path).map_err(|error| {
         GoSemanticProcessError::CommandFailed(format!(
-            "failed to publish immutable embedded frontend binary receipt `{}`: {error}",
+            "failed to publish immutable {label} binary receipt `{}`: {error}",
             path.display()
         ))
     });
@@ -549,19 +716,23 @@ fn publish_binary_receipt(
     result
 }
 
-fn make_binary_private_executable(path: &Path) -> Result<(), GoSemanticProcessError> {
+fn make_binary_private_executable(
+    sidecar: &GoSidecarBinary,
+    path: &Path,
+) -> Result<(), GoSemanticProcessError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|error| {
             GoSemanticProcessError::CommandFailed(format!(
-                "failed to secure embedded frontend binary `{}`: {error}",
+                "failed to secure {} binary `{}`: {error}",
+                sidecar.label,
                 path.display()
             ))
         })?;
     }
     #[cfg(not(unix))]
-    let _ = path;
+    let _ = (sidecar, path);
     Ok(())
 }
 
@@ -584,6 +755,15 @@ fn map_process_error(error: GoProcessError) -> GoSemanticProcessError {
 
 pub fn local_go_toolchain_version() -> Result<String, GoSemanticProcessError> {
     local_go_toolchain_version_with_program(OsStr::new("go"))
+}
+
+/// Whether a test that needs the typed Go frontend can go on: the frontend
+/// loaded at least one package of the test's module. It cannot where `go` is
+/// missing or the embedded frontend cannot be built (the language-feature CI
+/// matrix); such tests skip with a note, as the sidecar-backed symbol tests do.
+#[cfg(test)]
+pub(crate) fn typed_frontend_loaded_for_tests(db: &crate::core::AnalysisDb) -> bool {
+    !db.go_semantic_packages().is_empty()
 }
 
 fn local_go_toolchain_version_with_program(
@@ -746,6 +926,48 @@ mod tests {
                 "embedded Go semantic frontend drifted at {relative_path}"
             );
         }
+    }
+
+    /// The embedded list is what a release build compiles; a source or embedded
+    /// data file missing from it builds in the workspace and fails only at a
+    /// user's first deep run.
+    #[test]
+    fn every_workspace_frontend_source_is_embedded() {
+        let workspace_frontend =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/go-sidecar/polint-go-frontend");
+        let mut pending = vec![workspace_frontend.clone()];
+        let mut sources = Vec::new();
+        while let Some(directory) = pending.pop() {
+            for entry in fs::read_dir(&directory).expect("read frontend directory") {
+                let path = entry.expect("frontend entry").path();
+                if path.is_dir() {
+                    pending.push(path);
+                    continue;
+                }
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("");
+                // `go:embed` data files are compiled in like sources.
+                if (name.ends_with(".go") && !name.ends_with("_test.go")) || name.ends_with(".json")
+                {
+                    let relative = path
+                        .strip_prefix(&workspace_frontend)
+                        .expect("under the frontend")
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    sources.push(relative);
+                }
+            }
+        }
+        sources.sort();
+        let mut embedded = EMBEDDED_GO_FRONTEND_FILES
+            .iter()
+            .map(|(relative, _)| (*relative).to_string())
+            .filter(|relative| relative.ends_with(".go") || relative.ends_with(".json"))
+            .collect::<Vec<_>>();
+        embedded.sort();
+        assert_eq!(sources, embedded);
     }
 
     #[test]
@@ -1009,7 +1231,12 @@ printf 'fake concurrent frontend' > "$out"
             .expect("second publisher thread")
             .expect("reuse published pair");
         assert_eq!(first_binary, second_binary);
-        assert!(cached_binary_matches(&second_binary, &receipt, &cache_key));
+        assert!(cached_binary_matches(
+            &SEMANTIC_FRONTEND_BINARY,
+            &second_binary,
+            &receipt,
+            &cache_key
+        ));
         assert_eq!(
             fs::read_to_string(build_log)
                 .expect("read build log")
@@ -1028,16 +1255,31 @@ printf 'fake concurrent frontend' > "$out"
         let cache_key =
             frontend_binary_cache_key("test-os", "test-arch", "go1.25", "goos", "goarch");
         write_private_file(&binary, b"trusted binary").expect("write binary");
-        make_binary_private_executable(&binary).expect("secure binary");
+        make_binary_private_executable(&SEMANTIC_FRONTEND_BINARY, &binary).expect("secure binary");
         write_private_file(
             &receipt,
-            binary_receipt(&cache_key, &stable_bytes_hash(b"trusted binary")).as_bytes(),
+            binary_receipt(
+                &SEMANTIC_FRONTEND_BINARY,
+                &cache_key,
+                &stable_bytes_hash(b"trusted binary"),
+            )
+            .as_bytes(),
         )
         .expect("write receipt");
-        assert!(cached_binary_matches(&binary, &receipt, &cache_key));
+        assert!(cached_binary_matches(
+            &SEMANTIC_FRONTEND_BINARY,
+            &binary,
+            &receipt,
+            &cache_key
+        ));
 
         fs::write(&binary, b"changed binary").expect("tamper binary");
-        assert!(!cached_binary_matches(&binary, &receipt, &cache_key));
+        assert!(!cached_binary_matches(
+            &SEMANTIC_FRONTEND_BINARY,
+            &binary,
+            &receipt,
+            &cache_key
+        ));
     }
 
     #[cfg(not(unix))]
@@ -1049,11 +1291,20 @@ printf 'fake concurrent frontend' > "$out"
         fs::write(&binary, b"attacker binary").expect("write binary");
         fs::write(
             &receipt,
-            binary_receipt("attacker-key", &stable_bytes_hash(b"attacker binary")),
+            binary_receipt(
+                &SEMANTIC_FRONTEND_BINARY,
+                "attacker-key",
+                &stable_bytes_hash(b"attacker binary"),
+            ),
         )
         .expect("write receipt");
 
-        assert!(!cached_binary_matches(&binary, &receipt, "attacker-key"));
+        assert!(!cached_binary_matches(
+            &SEMANTIC_FRONTEND_BINARY,
+            &binary,
+            &receipt,
+            "attacker-key"
+        ));
     }
 
     #[cfg(unix)]

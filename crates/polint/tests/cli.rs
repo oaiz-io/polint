@@ -143,9 +143,10 @@ fn facts_list_json_is_stable_and_public_only() {
         assert_eq!(stability_for(capability), "preview");
         assert_eq!(view_for(capability)["unknowns"], true);
     }
-    for capability in ["cfg", "call_graph"] {
-        assert_eq!(stability_for(capability), "reserved");
+    for capability in ["call_graph", "go_types"] {
+        assert_eq!(stability_for(capability), "preview");
     }
+    assert_eq!(stability_for("cfg"), "reserved");
 
     for marker in [
         "polint.data_flow",
@@ -468,13 +469,14 @@ exclude = []
     );
     let missing_frontend = temp.path().join("missing-polint-go-frontend");
 
+    // A stage that did not run is an error, not an empty answer.
     let value = stdout_json(
         polint_cmd()
             .current_dir(temp.path())
             .env("POLINT_GO_FRONTEND", &missing_frontend)
             .args(["inspect", "unknowns", "--format", "json"])
             .assert()
-            .success(),
+            .code(1),
     );
     let rows = value["rows"].as_array().expect("unknown rows");
 
@@ -484,6 +486,13 @@ exclude = []
             && row.get("provider").is_none()
             && row.get("family").is_none()
             && row.get("source_stable_key").is_none()
+    }));
+    assert!(rows.iter().any(|row| {
+        row["category"] == "provider_failed"
+            && row["file"] == "<workspace>"
+            && row["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.starts_with("the Go semantic sidecar did not run"))
     }));
     let rendered = serde_json::to_string(&value).unwrap();
     assert!(!rendered.contains("polint.go.semantic"));
@@ -1278,7 +1287,8 @@ func dangerous() {}
                     "target",
                     "example.com/policyquery/src.dangerous",
                 )
-                && diagnostic_has_evidence(diagnostic, "policy_precision", "setup_aware")
+                // The typed Go frontend resolves a call of a package function exactly.
+                && diagnostic_has_evidence(diagnostic, "policy_precision", "exact")
         }),
         "missing event diagnostic evidence: {json:#?}"
     );
@@ -3534,7 +3544,6 @@ fn direct_calls_internals_stay_private() {
     }
     assert_direct_calls_public_surfaces_are_private();
     assert_direct_calls_cli_help_is_private();
-    assert!(!repo_root().join("docs/facts/call-graph.md").exists());
 
     let source = fs::read_to_string(temp.path().join(".polint/rules/src/main.rs")).unwrap();
     assert!(source.contains("use polint::sdk::prelude::*;"));
@@ -3631,10 +3640,25 @@ fn abstract_domain_internals_stay_private() {
     assert_abstract_domains_public_rule_source(&source);
 }
 
+/// Whether `text` mentions `marker`. A view marker such as `Types<'_>` names
+/// that view, so a longer view name ending the same way (`GoTypes<'_>`, the
+/// typed Go frontend's view) does not count as a mention.
+fn mentions_marker(text: &str, marker: &str) -> bool {
+    if !marker.ends_with("<'_>") {
+        return text.contains(marker);
+    }
+    text.match_indices(marker).any(|(at, _)| {
+        !text[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|before| before.is_alphanumeric() || before == '_')
+    })
+}
+
 fn assert_type_value_alias_public_output_is_private(output: &str) {
     for marker in TYPE_VALUE_ALIAS_INTERNAL_PUBLIC_MARKERS {
         assert!(
-            !output.contains(marker),
+            !mentions_marker(output, marker),
             "public output must not leak type/value/alias internal marker `{marker}`:\n{output}"
         );
     }
@@ -3679,7 +3703,7 @@ fn assert_type_value_alias_public_surfaces_are_private() {
 
     for marker in TYPE_VALUE_ALIAS_INTERNAL_PUBLIC_MARKERS {
         assert!(
-            !public_surface.contains(marker),
+            !mentions_marker(&public_surface, marker),
             "public README/docs/facts/CLI/SDK/runner/crate-root source must not expose type/value/alias marker `{marker}`"
         );
     }
@@ -3717,7 +3741,7 @@ fn assert_type_value_alias_cli_help_is_private() {
     for help in help_outputs {
         for marker in TYPE_VALUE_ALIAS_INTERNAL_PUBLIC_MARKERS {
             assert!(
-                !help.contains(marker),
+                !mentions_marker(&help, marker),
                 "public CLI help must not expose type/value/alias marker `{marker}`:\n{help}"
             );
         }
@@ -5181,11 +5205,307 @@ export const value = token;
     write_file(&root.join("src/token.ts"), r#"export const token = "ok";"#);
 }
 
-fn write_call_graph_capability_rule_repo(root: &Path) {
-    let polint_path = repo_root()
-        .join("crates/polint")
-        .to_string_lossy()
-        .replace('\\', "/");
+fn write_routes_rule_repo(root: &Path) {
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["app/**", "cmd/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_file(
+        &root.join("go.mod"),
+        "module example.com/routed\n\ngo 1.22\n\nrequire github.com/gin-gonic/gin v1.0.0\n\nreplace github.com/gin-gonic/gin => ./stubs/gin\n",
+    );
+    write_file(
+        &root.join("stubs/gin/go.mod"),
+        "module github.com/gin-gonic/gin\n\ngo 1.22\n",
+    );
+    write_file(
+        &root.join("stubs/gin/gin.go"),
+        r#"package gin
+
+type Context struct{}
+
+type HandlerFunc func(*Context)
+
+type IRoutes interface {
+	Use(...HandlerFunc) IRoutes
+	GET(string, ...HandlerFunc) IRoutes
+	POST(string, ...HandlerFunc) IRoutes
+}
+
+type RouterGroup struct{ Handlers []HandlerFunc }
+
+func (group *RouterGroup) Use(middleware ...HandlerFunc) IRoutes { return group }
+
+func (group *RouterGroup) Group(path string, handlers ...HandlerFunc) *RouterGroup { return group }
+
+func (group *RouterGroup) GET(path string, handlers ...HandlerFunc) IRoutes { return group }
+
+func (group *RouterGroup) POST(path string, handlers ...HandlerFunc) IRoutes { return group }
+
+type Engine struct{ RouterGroup }
+
+func New() *Engine { return &Engine{} }
+"#,
+    );
+    write_file(
+        &root.join("app/app.go"),
+        r#"package app
+
+import "github.com/gin-gonic/gin"
+
+type Server struct {
+	Router *gin.Engine
+	Auth   gin.HandlerFunc
+}
+
+func Authenticate() gin.HandlerFunc { return func(*gin.Context) {} }
+
+func NewServer() *Server {
+	return &Server{Router: gin.New(), Auth: Authenticate()}
+}
+
+func (s *Server) Routes() {
+	s.Router.POST("/webhook", s.webhook)
+	api := s.Router.Group("/api")
+	api.Use(s.Auth)
+	api.POST("/items", decorate(s.create))
+	api.GET("/items", s.list)
+}
+
+func decorate(handler gin.HandlerFunc) gin.HandlerFunc { return handler }
+
+func (s *Server) webhook(c *gin.Context) {}
+
+func (s *Server) create(c *gin.Context) {}
+
+func (s *Server) list(c *gin.Context) {}
+"#,
+    );
+    write_file(
+        &root.join("cmd/server/main.go"),
+        r#"package main
+
+import "example.com/routed/app"
+
+func main() {
+	s := app.NewServer()
+	s.Routes()
+}
+"#,
+    );
+    write_file(
+        &root.join(".polint/models/routes.toml"),
+        r#"
+[[go_route]]
+framework = "local"
+role = "passthrough"
+function = "example.com/routed/app.decorate"
+argument = 0
+"#,
+    );
+    write_phase41_rule_pack(
+        root,
+        r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::mutating_routes_require_auth(), rule::optional_routes()])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
+
+#[polint::rule(id = "local/mutating-routes-require-auth", description = "Mutating routes require authentication", severity = "error")]
+pub(crate) fn mutating_routes_require_auth(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    routes: Routes<'_>,
+) -> RuleResult {
+    for route in routes.http().filter(|route| route.method != "GET") {
+        let (Some(file), Some(span)) = (route.file, route.span) else {
+            continue;
+        };
+        let handler = route
+            .handlers()
+            .filter_map(|handler| handler.function)
+            .filter_map(|id| functions.iter().find(|function| function.id == id))
+            .map(|function| function.name.clone())
+            .collect::<Vec<_>>()
+            .join(",");
+        let auth = route
+            .middleware()
+            .find(|middleware| middleware.name.ends_with(".Authenticate"));
+        let diagnostic = match auth {
+            Some(auth) => Diagnostic::warning(
+                ctx.rule_id(),
+                ctx.file_path(file),
+                span.diagnostic_range(),
+                format!("{} {} is authenticated", route.method, route.path),
+            )
+            .with_evidence("auth_field", auth.field.unwrap_or("")),
+            None => Diagnostic::error(
+                ctx.rule_id(),
+                ctx.file_path(file),
+                span.diagnostic_range(),
+                format!("{} {} does not require authentication", route.method, route.path),
+            ),
+        };
+        ctx.report(
+            diagnostic
+                .with_evidence("handler", handler)
+                .with_evidence("complete", (route.path_complete && route.middleware_complete).to_string()),
+        );
+    }
+    Ok(())
+}
+
+#[polint::rule(id = "local/optional-routes", description = "Optional routes", severity = "warn")]
+pub(crate) fn optional_routes(ctx: &mut RuleCtx<'_>, routes: Option<Routes<'_>>) -> RuleResult {
+    let message = match routes {
+        Some(routes) => format!("routes available: {}", routes.http().count()),
+        None => "routes unavailable".to_string(),
+    };
+    ctx.report(Diagnostic::warning(
+        ctx.rule_id(),
+        "<workspace>",
+        DiagnosticRange::point(1, 1),
+        message,
+    ));
+    Ok(())
+}
+"#,
+    );
+}
+
+fn write_dataflow_rule_repo(root: &Path) {
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["app/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_file(
+        &root.join("go.mod"),
+        "module example.com/flows\n\ngo 1.22\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.0.0\n\tgorm.io/gorm v1.0.0\n)\n\nreplace github.com/gin-gonic/gin => ./stubs/gin\n\nreplace gorm.io/gorm => ./stubs/gorm\n",
+    );
+    write_file(
+        &root.join("stubs/gin/go.mod"),
+        "module github.com/gin-gonic/gin\n\ngo 1.22\n",
+    );
+    write_file(
+        &root.join("stubs/gin/gin.go"),
+        r#"package gin
+
+type Context struct{}
+
+func (c *Context) Query(key string) string { return "" }
+"#,
+    );
+    write_file(
+        &root.join("stubs/gorm/go.mod"),
+        "module gorm.io/gorm\n\ngo 1.22\n",
+    );
+    write_file(
+        &root.join("stubs/gorm/gorm.go"),
+        r#"package gorm
+
+type DB struct{}
+
+func (db *DB) Raw(sql string, values ...interface{}) *DB { return db }
+"#,
+    );
+    write_file(
+        &root.join("app/store.go"),
+        r#"package app
+
+import (
+	"fmt"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+type Store struct{ db *gorm.DB }
+
+func (s *Store) find(name string) {
+	s.db.Raw(fmt.Sprintf("SELECT * FROM items WHERE name = '%s'", name))
+}
+
+func (s *Store) findBound(name string) {
+	s.db.Raw("SELECT * FROM items WHERE name = ?", name)
+}
+
+func (s *Store) findEscaped(name string) {
+	s.db.Raw("SELECT * FROM items WHERE name = '" + name + "'")
+}
+
+func escape(value string) string { return value }
+
+func (s *Store) Search(c *gin.Context) {
+	name := c.Query("name")
+	s.find(name)
+	s.findBound(name)
+	s.findEscaped(escape(name))
+}
+"#,
+    );
+    write_file(
+        &root.join(".polint/models/flows.toml"),
+        r#"
+[[go_flow_sanitizer]]
+function = "example.com/flows/app.escape"
+"#,
+    );
+    write_phase41_rule_pack(
+        root,
+        r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::request_to_sql()])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
+
+#[polint::rule(id = "local/request-to-sql", description = "Request data must not build SQL text", severity = "error")]
+pub(crate) fn request_to_sql(ctx: &mut RuleCtx<'_>, flow: DataFlow<'_>) -> RuleResult {
+    let spec = FlowSpec::new()
+        .source(FlowSource::model("http_request"))
+        .sink(FlowSink::model("sql"))
+        .untracked(FlowValueKind::Context)
+        .untracked(FlowValueKind::Number);
+    let answer = flow.flows(&spec);
+    for found in &answer.flows {
+        ctx.report(
+            found
+                .diagnostic(ctx.rule_id(), format!("request data builds SQL text in {}", found.sink.function))
+                .with_evidence("source_function", found.source.function.clone()),
+        );
+    }
+    ctx.report(Diagnostic::warning(
+        ctx.rule_id(),
+        "<workspace>",
+        DiagnosticRange::point(1, 1),
+        format!("complete: {}", answer.is_complete()),
+    ));
+    Ok(())
+}
+"#,
+    );
+}
+
+fn write_typed_go_views_rule_repo(root: &Path, with_module: bool) {
     write_file(
         &root.join(".polint.toml"),
         r#"
@@ -5197,53 +5517,161 @@ exclude = []
 paths = [".polint/rules"]
 "#,
     );
-    write_file(
-        &root.join(".polint/rules/Cargo.toml"),
-        &format!(
-            r#"[package]
-name = "polint-local-rules"
-version = "0.1.0"
-edition = "2024"
-publish = false
-
-[dependencies]
-polint = {{ path = "{polint_path}" }}
-
-[workspace]
-"#,
-        ),
-    );
-    write_file(
-        &root.join(".polint/rules/src/main.rs"),
+    if with_module {
+        write_file(
+            &root.join("go.mod"),
+            "module example.com/views\n\ngo 1.22\n",
+        );
+    }
+    write_phase41_rule_pack(
+        root,
         r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![
+        rule::handlers_reach_admin_gate(),
+        rule::db_constructors(),
+        rule::optional_types(),
+    ])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
 
-use polint::sdk::prelude::*;
+fn algorithm_name(algorithm: CallEdgeAlgorithm) -> &'static str {
+    match algorithm {
+        CallEdgeAlgorithm::Static => "static",
+        CallEdgeAlgorithm::VariableTypeAnalysis => "vta",
+        CallEdgeAlgorithm::ClassHierarchy => "cha",
+        _ => "other",
+    }
+}
 
-#[polint::rule(
-    id = "local/needs-call-graph",
-    description = "Needs call graph facts.",
-    severity = "warn"
-)]
-fn needs_call_graph(ctx: &mut RuleCtx<'_>, _call_graph: CallGraph<'_>) -> RuleResult {
+#[polint::rule(id = "local/handlers-reach-admin-gate", description = "Handlers reach the admin gate", severity = "error")]
+pub(crate) fn handlers_reach_admin_gate(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    graph: CallGraph<'_>,
+) -> RuleResult {
+    let Some(gate) = functions.iter().find(|function| function.name == "requireAdmin") else {
+        return Ok(());
+    };
+    let walk = CallGraphWalk::new(4).with_min_precision(CallEdgePrecision::SetupAware);
+    for handler in functions.iter().filter(|function| function.name.starts_with("Handle")) {
+        let range = handler.span.diagnostic_range();
+        let file = ctx.file_path(handler.file);
+        let diagnostic = match graph.reachable(handler.id, walk).path_to(gate.id) {
+            Some(path) => Diagnostic::warning(
+                ctx.rule_id(),
+                file,
+                range,
+                format!("{} reaches requireAdmin", handler.name),
+            )
+            .with_evidence(
+                "path",
+                path.iter()
+                    .map(|edge| algorithm_name(edge.algorithm))
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+            None => Diagnostic::error(
+                ctx.rule_id(),
+                file,
+                range,
+                format!("{} does not reach requireAdmin", handler.name),
+            ),
+        };
+        ctx.report(diagnostic);
+    }
+    Ok(())
+}
+
+#[polint::rule(id = "local/db-constructors", description = "Constructors that take a database", severity = "warn")]
+pub(crate) fn db_constructors(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    types: GoTypes<'_>,
+) -> RuleResult {
+    for function in functions.iter().filter(|function| function.name.starts_with("New")) {
+        for parameter in types.parameters(function.id) {
+            if !parameter.type_name.ends_with(".DB") {
+                continue;
+            }
+            let fields = types
+                .fields_of("example.com/views/src.Repo")
+                .map(|field| match field.tag {
+                    Some(tag) => format!("{}:{}:{tag}", field.name, field.type_name),
+                    None => format!("{}:{}", field.name, field.type_name),
+                })
+                .collect::<Vec<_>>()
+                .join(";");
+            let implementers = types
+                .implementers("example.com/views/src.Store")
+                .map(|implementation| implementation.type_name)
+                .collect::<Vec<_>>()
+                .join(",");
+            ctx.report(
+                Diagnostic::warning(
+                    ctx.rule_id(),
+                    ctx.file_path(function.file),
+                    function.span.diagnostic_range(),
+                    format!("{} takes {} as {}", function.name, parameter.type_name, parameter.name),
+                )
+                .with_evidence("repo_fields", fields)
+                .with_evidence("store_implementers", implementers),
+            );
+        }
+    }
+    Ok(())
+}
+
+#[polint::rule(id = "local/optional-types", description = "Optional Go types", severity = "warn")]
+pub(crate) fn optional_types(ctx: &mut RuleCtx<'_>, types: Option<GoTypes<'_>>) -> RuleResult {
+    let message = match types {
+        Some(types) => format!("go types available: {} fields", types.fields().count()),
+        None => "go types unavailable".to_string(),
+    };
     ctx.report(Diagnostic::warning(
         ctx.rule_id(),
         "<workspace>",
         DiagnosticRange::point(1, 1),
-        "this should not run while call_graph is unsupported",
+        message,
     ));
     Ok(())
-}
-
-fn main() -> ExitCode {
-    polint::runner::run_cli(vec![needs_call_graph()])
 }
 "#,
     );
     write_file(
-        &root.join("src/component.ts"),
-        r#"export function component() {
-  return "ok";
+        &root.join("src/app.go"),
+        r#"package src
+
+import "fmt"
+
+type DB struct{ dsn string }
+
+type Store interface{ Save(id string) error }
+
+type Repo struct {
+	db    *DB
+	Label string `json:"label"`
 }
+
+func NewRepo(db *DB, label string) *Repo { return &Repo{db: db, Label: label} }
+
+func (r *Repo) Save(id string) error {
+	requireAdmin(id)
+	return nil
+}
+
+func requireAdmin(id string) { fmt.Println(id) }
+
+func list() []string { return nil }
+
+func HandleSave(store Store, id string) error { return store.Save(id) }
+
+func HandleList() []string { return list() }
+
+func Wire() error { return HandleSave(NewRepo(&DB{}, "x"), "1") }
 "#,
     );
 }
@@ -8884,6 +9312,113 @@ rules = []
 }
 
 #[test]
+fn check_go_1_26_new_expr_repro_forms_have_no_parser_diagnostic() {
+    let temp = tempfile::tempdir().unwrap();
+    write_file(
+        &temp.path().join(".polint.toml"),
+        r#"
+[profiles.phase4]
+rules = []
+"#,
+    );
+    for (name, source) in [
+        (
+            "new_int.go",
+            "package models\n\nfunc Example() { _ = new(int) }\n",
+        ),
+        (
+            "new_literal.go",
+            "package models\n\nfunc Example() { _ = new(1) }\n",
+        ),
+        (
+            "new_qualified_type.go",
+            "package models\n\nfunc Example() { _ = new(types.Cost) }\n",
+        ),
+        (
+            "new_call.go",
+            "package models\n\nfunc Example() { _ = new(types.NewCost(0.35)) }\n",
+        ),
+    ] {
+        write_file(&temp.path().join(name), source);
+    }
+
+    let json = stdout_json(
+        polint_cmd()
+            .current_dir(temp.path())
+            .args([
+                "check",
+                "--profile",
+                "phase4",
+                "--format",
+                "json",
+                "--fail-on",
+                "none",
+            ])
+            .assert()
+            .success(),
+    );
+
+    assert!(
+        !diagnostics(&json)
+            .iter()
+            .any(|diagnostic| diagnostic["rule_id"] == "parser/go"),
+        "Go 1.26 new(expr) repro forms should not emit parser/go: {json:#?}"
+    );
+}
+
+#[test]
+fn check_go_1_26_new_expr_in_struct_literal_field_has_no_parser_diagnostic() {
+    let temp = tempfile::tempdir().unwrap();
+    write_file(
+        &temp.path().join(".polint.toml"),
+        r#"
+[profiles.phase4]
+rules = []
+"#,
+    );
+    write_file(
+        &temp.path().join("pricing.go"),
+        r#"package models
+
+import "example.com/app/money"
+
+type Pricing struct {
+	PerUnit *money.Amount
+}
+
+func Example() Pricing {
+	return Pricing{
+		PerUnit: new(money.NewAmount(2.50)),
+	}
+}
+"#,
+    );
+
+    let json = stdout_json(
+        polint_cmd()
+            .current_dir(temp.path())
+            .args([
+                "check",
+                "--profile",
+                "phase4",
+                "--format",
+                "json",
+                "--fail-on",
+                "none",
+            ])
+            .assert()
+            .success(),
+    );
+
+    assert!(
+        !diagnostics(&json)
+            .iter()
+            .any(|diagnostic| diagnostic["rule_id"] == "parser/go"),
+        "Go 1.26 new(expr) in a struct-literal field should not emit parser/go: {json:#?}"
+    );
+}
+
+#[test]
 fn check_go_named_profile_uses_branch_and_test_facts() {
     let temp = tempfile::tempdir().unwrap();
     write_file(
@@ -9918,9 +10453,122 @@ mod capability_planning {
     }
 
     #[test]
-    fn call_graph_capability_remains_unsupported() {
+    fn call_graph_and_go_types_views_answer_an_outside_rule() {
         let temp = tempfile::tempdir().unwrap();
-        write_call_graph_capability_rule_repo(temp.path());
+        write_typed_go_views_rule_repo(temp.path(), true);
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let reach = diagnostics_for_rule(&json, "local/handlers-reach-admin-gate");
+        assert_eq!(reach.len(), 2, "{json:#?}");
+        assert!(
+            reach.iter().any(|diagnostic| {
+                diagnostic["message"] == "HandleSave reaches requireAdmin"
+                    && diagnostic_has_evidence(diagnostic, "path", "vta,static")
+            }),
+            "the interface call should resolve by variable-type analysis: {json:#?}"
+        );
+        assert!(
+            reach.iter().any(|diagnostic| {
+                diagnostic["message"] == "HandleList does not reach requireAdmin"
+                    && diagnostic["severity"] == "error"
+            }),
+            "{json:#?}"
+        );
+
+        let constructors = diagnostics_for_rule(&json, "local/db-constructors");
+        assert_eq!(constructors.len(), 1, "{json:#?}");
+        assert_eq!(
+            constructors[0]["message"],
+            "NewRepo takes *example.com/views/src.DB as db"
+        );
+        assert!(diagnostic_has_evidence(
+            constructors[0],
+            "repo_fields",
+            "db:*example.com/views/src.DB;Label:string:json:\"label\""
+        ));
+        assert!(diagnostic_has_evidence(
+            constructors[0],
+            "store_implementers",
+            "example.com/views/src.Repo"
+        ));
+
+        let optional = diagnostics_for_rule(&json, "local/optional-types");
+        assert_eq!(optional.len(), 1, "{json:#?}");
+        assert_eq!(optional[0]["message"], "go types available: 3 fields");
+
+        assert!(
+            diagnostics_for_rule(&json, "polint/capability").is_empty(),
+            "both views should be available with a go.mod: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn routes_view_answers_an_outside_rule_with_repository_models() {
+        let temp = tempfile::tempdir().unwrap();
+        write_routes_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let routes = diagnostics_for_rule(&json, "local/mutating-routes-require-auth");
+        assert_eq!(routes.len(), 2, "{json:#?}");
+        assert!(
+            routes.iter().any(|diagnostic| {
+                diagnostic["message"] == "POST /api/items is authenticated"
+                    && diagnostic["severity"] == "warn"
+                    && diagnostic_has_evidence(diagnostic, "handler", "Server.create")
+                    && diagnostic_has_evidence(
+                        diagnostic,
+                        "auth_field",
+                        "example.com/routed/app.Server.Auth",
+                    )
+                    && diagnostic_has_evidence(diagnostic, "complete", "true")
+            }),
+            "the group's middleware and the repository's pass-through model apply: {json:#?}"
+        );
+        assert!(
+            routes.iter().any(|diagnostic| {
+                diagnostic["message"] == "POST /webhook does not require authentication"
+                    && diagnostic["severity"] == "error"
+                    && diagnostic_has_evidence(diagnostic, "handler", "Server.webhook")
+            }),
+            "a route registered before the group has none of its middleware: {json:#?}"
+        );
+
+        let optional = diagnostics_for_rule(&json, "local/optional-routes");
+        assert_eq!(optional.len(), 1, "{json:#?}");
+        assert_eq!(optional[0]["message"], "routes available: 3");
+        assert!(
+            diagnostics_for_rule(&json, "polint/capability").is_empty(),
+            "{json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "polint/route-model").is_empty(),
+            "{json:#?}"
+        );
+    }
+
+    /// Go data flow is answered from the typed frontend's flow programs. A
+    /// Go-only repository without a `go.mod` loads no package, so the rule is
+    /// blocked with the setup diagnostic instead of running against no
+    /// program and reporting nothing.
+    #[test]
+    fn dataflow_rules_need_a_module_root_on_a_go_only_scan() {
+        let temp = tempfile::tempdir().unwrap();
+        write_dataflow_rule_repo(temp.path());
+        std::fs::remove_file(temp.path().join("go.mod")).unwrap();
 
         let json = stdout_json(
             polint_cmd()
@@ -9931,76 +10579,148 @@ mod capability_planning {
         );
 
         assert!(
-            diagnostics_for_rule(&json, "local/needs-call-graph").is_empty(),
-            "rule requesting unsupported call_graph must not execute with fabricated facts: {json:#?}"
+            diagnostics_for_rule(&json, "local/request-to-sql").is_empty(),
+            "a blocked rule reports nothing: {json:#?}"
         );
-        let diagnostic = diagnostics(&json)
-            .iter()
-            .find(|diagnostic| diagnostic["rule_id"] == "polint/capability")
-            .unwrap_or_else(|| panic!("expected call_graph capability diagnostic: {json:#?}"));
+        // The dependency capabilities (`module_graph`, `resolved_imports`)
+        // report their own setup rows without a module root; the data-flow
+        // row is the one this test is about.
+        let capability = diagnostics_for_rule(&json, "polint/capability")
+            .into_iter()
+            .filter(|diagnostic| diagnostic_has_evidence(diagnostic, "capability", "dataflow"))
+            .collect::<Vec<_>>();
+        assert_eq!(capability.len(), 1, "{json:#?}");
         assert!(
-            diagnostic["message"]
+            capability[0]["message"]
                 .as_str()
-                .is_some_and(|message| message.contains("unsupported capability `call_graph`")),
-            "{diagnostic:#?}"
-        );
-        assert!(
-            diagnostic["help"]
-                .as_str()
-                .is_some_and(|help| help.contains("docs/facts/capability-plans.md")),
-            "{diagnostic:#?}"
+                .is_some_and(|message| message.contains("`dataflow`")
+                    && message.contains("loaded no package")),
+            "{json:#?}"
         );
         assert!(diagnostic_has_evidence(
-            diagnostic,
+            capability[0],
+            "status",
+            "setup_missing"
+        ));
+        assert!(diagnostic_has_evidence(
+            capability[0],
             "rule",
-            "local/needs-call-graph"
+            "local/request-to-sql"
         ));
-        assert!(diagnostic_has_evidence(
-            diagnostic,
-            "capability",
-            "call_graph"
-        ));
-        assert!(diagnostic_has_evidence(diagnostic, "status", "unsupported"));
     }
 
     #[test]
-    fn reserved_cfg_and_call_graph_remain_unsupported() {
-        let cfg_temp = tempfile::tempdir().unwrap();
-        write_plan_capability_rule_repo(cfg_temp.path());
-        let cfg_json = stdout_json(
+    fn dataflow_flows_answer_an_outside_rule_with_repository_models() {
+        let temp = tempfile::tempdir().unwrap();
+        write_dataflow_rule_repo(temp.path());
+
+        let json = stdout_json(
             polint_cmd()
-                .current_dir(cfg_temp.path())
+                .current_dir(temp.path())
                 .args(["check", "--format", "json", "--fail-on", "none"])
                 .assert()
                 .success(),
-        );
-        assert!(
-            diagnostics_for_rule(&cfg_json, "polint/capability")
-                .iter()
-                .any(
-                    |diagnostic| diagnostic_has_evidence(diagnostic, "capability", "cfg")
-                        && diagnostic_has_evidence(diagnostic, "status", "unsupported")
-                ),
-            "Cfg<'_> should stay a reserved raw capability: {cfg_json:#?}"
         );
 
-        let call_temp = tempfile::tempdir().unwrap();
-        write_call_graph_capability_rule_repo(call_temp.path());
-        let call_json = stdout_json(
+        let flows = diagnostics_for_rule(&json, "local/request-to-sql")
+            .into_iter()
+            .filter(|diagnostic| diagnostic["severity"] == "error")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            flows.len(),
+            1,
+            "only the formatted query is a flow: {json:#?}"
+        );
+        assert_eq!(
+            flows[0]["message"],
+            "request data builds SQL text in (*example.com/flows/app.Store).find"
+        );
+        assert!(diagnostic_has_evidence(
+            flows[0],
+            "source_function",
+            "(*example.com/flows/app.Store).Search"
+        ));
+        assert!(
+            diagnostic_has_evidence(flows[0], "flow_precision", "conservative"),
+            "fmt.Sprintf has no model, so the flow is conservative: {json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "local/request-to-sql")
+                .iter()
+                .any(|diagnostic| diagnostic["message"] == "complete: true"),
+            "{json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "polint/capability").is_empty(),
+            "{json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "polint/flow-model").is_empty(),
+            "{json:#?}"
+        );
+
+        let sarif = stdout_json(
             polint_cmd()
-                .current_dir(call_temp.path())
+                .current_dir(temp.path())
+                .args(["check", "--format", "sarif", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+        let located = sarif["runs"][0]["results"]
+            .as_array()
+            .expect("sarif results")
+            .iter()
+            .filter(|result| {
+                result["ruleId"] == "local/request-to-sql" && result["level"] == "error"
+            })
+            .flat_map(|result| {
+                result["codeFlows"][0]["threadFlows"][0]["locations"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            located.len() >= 2,
+            "the flow's path is a code flow from the request read to the query: {sarif:#?}"
+        );
+        assert!(located.iter().all(|location| {
+            location["location"]["physicalLocation"]["artifactLocation"]["uri"]
+                .as_str()
+                .is_some_and(|uri| uri.ends_with("app/store.go"))
+        }));
+    }
+
+    #[test]
+    fn go_types_need_a_module_root_and_optional_requests_run_without_one() {
+        let temp = tempfile::tempdir().unwrap();
+        write_typed_go_views_rule_repo(temp.path(), false);
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
                 .args(["check", "--format", "json", "--fail-on", "none"])
                 .assert()
                 .success(),
         );
+
+        let optional = diagnostics_for_rule(&json, "local/optional-types");
+        assert_eq!(optional.len(), 1, "{json:#?}");
+        assert_eq!(optional[0]["message"], "go types unavailable");
+
         assert!(
-            diagnostics_for_rule(&call_json, "polint/capability")
+            diagnostics_for_rule(&json, "local/db-constructors").is_empty(),
+            "a rule requiring GoTypes must not run on unloaded types: {json:#?}"
+        );
+        assert!(
+            diagnostics_for_rule(&json, "polint/capability")
                 .iter()
-                .any(
-                    |diagnostic| diagnostic_has_evidence(diagnostic, "capability", "call_graph")
-                        && diagnostic_has_evidence(diagnostic, "status", "unsupported")
-                ),
-            "CallGraph<'_> should stay a reserved raw capability: {call_json:#?}"
+                .any(|diagnostic| {
+                    diagnostic_has_evidence(diagnostic, "rule", "local/db-constructors")
+                        && diagnostic_has_evidence(diagnostic, "capability", "go_types")
+                        && diagnostic_has_evidence(diagnostic, "status", "setup_missing")
+                }),
+            "{json:#?}"
         );
     }
 

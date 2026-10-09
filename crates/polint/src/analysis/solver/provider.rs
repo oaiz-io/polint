@@ -55,6 +55,7 @@ pub(crate) struct SolverProviderRunOutput {
 ///    surface as evidence-bearing diagnostics, never silent drops,
 /// 5. `db.replace_solver_facts(...)` stores + referentially validates,
 /// 6. on store error return `output_digest: None`.
+#[cfg(test)]
 pub(crate) fn derive_solver_with_cache_stats(
     db: &mut AnalysisDb,
     input_snapshot: &InputSnapshot,
@@ -64,6 +65,36 @@ pub(crate) fn derive_solver_with_cache_stats(
     type_value_alias_output_digest: Digest,
     go_semantic_output_digest: Digest,
 ) -> SolverProviderRunOutput {
+    derive_solver_with_go_points_to(
+        db,
+        input_snapshot,
+        manifest,
+        budget,
+        semantic_graph_output_digest,
+        type_value_alias_output_digest,
+        go_semantic_output_digest,
+        true,
+    )
+}
+
+/// [`derive_solver_with_cache_stats`], running the Go RTA policy only when
+/// `go_points_to` is set; see `analysis_kernel::provider::go_points_to_requested`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn derive_solver_with_go_points_to(
+    db: &mut AnalysisDb,
+    input_snapshot: &InputSnapshot,
+    manifest: &ProviderManifest,
+    budget: SolverBudget,
+    semantic_graph_output_digest: Digest,
+    type_value_alias_output_digest: Digest,
+    go_semantic_output_digest: Digest,
+    go_points_to: bool,
+) -> SolverProviderRunOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = SOLVER_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, SOLVER_PROVIDER_ID);
@@ -77,8 +108,10 @@ pub(crate) fn derive_solver_with_cache_stats(
     // The TS policy projects the semantic graph into the shared Andersen domain and
     // is the only indirect-call resolver for JavaScript and TypeScript.
     let constraints = db.semantic_constraints().to_vec();
-    let engine = SolverEngine::new(solver_policies_for_db(db, &budget), budget);
+    let engine = SolverEngine::new(solver_policies(db, &budget, go_points_to), budget);
+    checkpoint("policies");
     let output = engine.run_to_solver_output(interner, &constraints);
+    checkpoint("engine");
 
     // Step: digest over the stored stable KEYS + upstream digests + the budget.
     let output_digest = solver_output_digest(
@@ -106,13 +139,16 @@ pub(crate) fn derive_solver_with_cache_stats(
         diagnostics.push(budget_exceeded_diagnostic(&output.budget_reasons));
     }
 
+    checkpoint("digest_validate");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
     // Step: store (assigns dense IDs + referentially validates inside
     // from_output). On store error the db keeps its prior state and the facts the
     // digest certifies were not persisted, so return output_digest: None.
-    match db.replace_solver_facts(output) {
+    let replaced = db.replace_solver_facts(output);
+    checkpoint("store_metadata");
+    match replaced {
         Ok(()) => SolverProviderRunOutput {
             diagnostics,
             cache_stats,
@@ -134,16 +170,28 @@ pub(crate) fn derive_solver_with_cache_stats(
     }
 }
 
-fn solver_policies_for_db(db: &AnalysisDb, _budget: &SolverBudget) -> Vec<Box<dyn SolverPolicy>> {
+#[cfg(test)]
+fn solver_policies_for_db(db: &AnalysisDb, budget: &SolverBudget) -> Vec<Box<dyn SolverPolicy>> {
+    solver_policies(db, budget, true)
+}
+
+fn solver_policies(
+    db: &AnalysisDb,
+    _budget: &SolverBudget,
+    go_points_to: bool,
+) -> Vec<Box<dyn SolverPolicy>> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let policies: Vec<Box<dyn SolverPolicy>> = vec![
+    let mut policies: Vec<Box<dyn SolverPolicy>> = Vec::new();
+    if go_points_to {
         // The real Go RTA policy (GO-05): contributes resolved call edges.
-        Box::new(GoRtaPolicy::new(GoRtaInputs::from_db(interner, db))),
-        Box::new(TsPointsToPolicy::new(
-            super::policy::ts_points_to_inputs_from_db(db),
-        )),
-    ];
+        policies.push(Box::new(GoRtaPolicy::new(GoRtaInputs::from_db(
+            interner, db,
+        ))));
+    }
+    policies.push(Box::new(TsPointsToPolicy::new(
+        super::policy::ts_points_to_inputs_from_db(db),
+    )));
     policies
 }
 

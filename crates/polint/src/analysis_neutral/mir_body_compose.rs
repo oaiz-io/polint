@@ -28,6 +28,16 @@ pub fn merge_language_outputs(
     merged.normalized(interner)
 }
 
+/// Concatenates outputs whose ids each start at zero into one output with
+/// disjoint ids, in the order given; nothing is sorted or renumbered.
+pub fn concat_outputs(outputs: impl IntoIterator<Item = MirOutput>) -> MirOutput {
+    let mut merged = MirOutput::default();
+    for output in outputs {
+        append_language_output(&mut merged, output);
+    }
+    merged
+}
+
 fn append_language_output(merged: &mut MirOutput, mut output: MirOutput) {
     let body_offset = merged.bodies.len() as u64;
     let block_offset = merged.blocks.len() as u64;

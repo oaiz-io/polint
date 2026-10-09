@@ -98,18 +98,43 @@ fn extract_identity_records(
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut records = Vec::new();
+    // Every record asks for its file's package and every call-site record for its
+    // caller's name; resolve both once instead of scanning per record. A Go file
+    // the semantic sidecar gave no package path falls back to its first package
+    // clause, as `package_or_module_for_record` would.
+    let mut package_paths = go_semantic_package_paths.clone();
+    let mut clause_files = std::collections::BTreeSet::new();
+    for package in db
+        .packages()
+        .iter()
+        .filter(|package| package.language == Language::Go)
+    {
+        if !clause_files.insert(package.file) {
+            continue;
+        }
+        if package_paths
+            .get(&package.file)
+            .is_none_or(|path| path.is_empty())
+        {
+            package_paths.insert(package.file, package.name.clone());
+        }
+    }
+    let mut function_names = std::collections::HashMap::new();
+    for function in db.functions() {
+        function_names
+            .entry(function.id)
+            .or_insert(function.name.as_str());
+    }
 
     for function in db.functions() {
-        if let Some(record) =
-            function_identity_record(db, interner, function, go_semantic_package_paths)
-        {
+        if let Some(record) = function_identity_record(db, interner, function, &package_paths) {
             records.push(record);
         }
     }
 
     for site in db.call_sites() {
         if let Some(record) =
-            callsite_identity_record(db, interner, site, go_semantic_package_paths)
+            callsite_identity_record(db, interner, site, &package_paths, &function_names)
         {
             records.push(record);
         }
@@ -152,6 +177,7 @@ fn callsite_identity_record(
     interner: &StableKeyInterner,
     site: &CallSiteFact,
     go_semantic_package_paths: &BTreeMap<FileId, String>,
+    function_names: &std::collections::HashMap<crate::internal_core::FunctionId, &str>,
 ) -> Option<IdentityRecord> {
     let language = language_tag(site.language)?;
     let package_or_module: Arc<str> = Arc::from(package_or_module_for_record(
@@ -160,8 +186,12 @@ fn callsite_identity_record(
         site.file,
         go_semantic_package_paths,
     ));
-    let container_path: Arc<str> =
-        Arc::from(callsite_container_path(db, site, go_semantic_package_paths));
+    let container_path: Arc<str> = Arc::from(callsite_container_path(
+        db,
+        site,
+        go_semantic_package_paths,
+        function_names,
+    ));
     let display_name: Arc<str> = Arc::from(callsite_display_name(site));
     Some(build_record(
         interner,
@@ -227,13 +257,13 @@ fn callsite_container_path(
     db: &impl AnalysisHost,
     site: &CallSiteFact,
     go_semantic_package_paths: &BTreeMap<FileId, String>,
+    function_names: &std::collections::HashMap<crate::internal_core::FunctionId, &str>,
 ) -> String {
     // The container is the enclosing caller function. Fall back to a file-scoped
     // container when the caller cannot be resolved by name.
-    db.functions()
-        .iter()
-        .find(|function| function.id == site.caller)
-        .map(|function| function.name.clone())
+    function_names
+        .get(&site.caller)
+        .map(|name| (*name).to_string())
         .unwrap_or_else(|| {
             format!(
                 "{}#<anon>",

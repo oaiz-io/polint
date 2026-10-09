@@ -25,6 +25,7 @@ const GO_PRODUCES: &[&str] = &[
     "imports",
     "go_tests",
     "go_types",
+    "routes",
     "branch_obligations",
 ];
 

@@ -9,10 +9,10 @@ path = "repo"
 max_runtime_ms = 120000
 
 [[expected]]
-fact = { family = "CallSite", stable_key = "directFunction", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
+fact = { family = "CallSite", stable_key = "directFunction", mode = "partial", producer_id = "polint.calls", precision = "exact", status = "resolved" }
 
 [[expected]]
-fact = { family = "CallSite", stable_key = "handler", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
+fact = { family = "CallSite", stable_key = "identifier:localTarget", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
 
 [[expected]]
 fact = { family = "CallTarget", stable_key = "DirectReference", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
@@ -21,22 +21,25 @@ fact = { family = "CallTarget", stable_key = "DirectReference", mode = "partial"
 fact = { family = "CallTarget", stable_key = "ImportBinding", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
 
 [[expected]]
-fact = { family = "CallTarget", stable_key = "DirectMember", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
-
-[[expected]]
 fact = { family = "CallTarget", stable_key = "Constructor", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
 
 [[expected]]
-fact = { family = "UnresolvedCall", stable_key = "FunctionValue", mode = "partial", producer_id = "polint.calls", precision = "unknown", status = "unresolved" }
+fact = { family = "CallTarget", stable_key = "go_static", mode = "partial", producer_id = "polint.calls", precision = "exact", status = "resolved" }
+
+[[expected]]
+fact = { family = "CallTarget", stable_key = "go_vta", mode = "partial", producer_id = "polint.calls", precision = "setup_aware", status = "resolved" }
+
+[[expected]]
+fact = { family = "CallTarget", stable_key = "go_cha", mode = "partial", producer_id = "polint.calls", precision = "conservative", status = "resolved" }
+
+[[expected]]
+fact = { family = "CallTarget", stable_key = "type_hierarchy", mode = "partial", producer_id = "polint.calls", precision = "conservative", status = "resolved" }
 
 [[expected]]
 fact = { family = "UnresolvedCall", stable_key = "DynamicProperty", mode = "partial", producer_id = "polint.calls", precision = "unknown", status = "unresolved" }
 
 [[expected]]
-fact = { family = "UnresolvedCall", stable_key = "Reflection", mode = "partial", producer_id = "polint.calls", precision = "unsupported", status = "unsupported" }
-
-[[expected]]
-fact = { family = "UnresolvedCall", stable_key = "GoroutineBoundary", mode = "partial", producer_id = "polint.calls", precision = "unsupported", status = "unsupported" }
+fact = { family = "UnresolvedCall", stable_key = "MissingSemanticReference", mode = "partial", producer_id = "polint.calls", precision = "unknown", status = "unresolved" }
 
 [[expected]]
 fact = { family = "UnresolvedCall", stable_key = "Eval", mode = "partial", producer_id = "polint.calls", precision = "unknown", status = "unresolved" }
@@ -46,9 +49,6 @@ fact = { family = "UnresolvedCall", stable_key = "DynamicImport", mode = "partia
 
 [[expected]]
 fact = { family = "UnresolvedCall", stable_key = "CallApplyBind", mode = "partial", producer_id = "polint.calls", precision = "unknown", status = "unresolved" }
-
-[[expected]]
-fact = { family = "UnresolvedCall", stable_key = "SetupMissing", mode = "partial", producer_id = "polint.calls", precision = "unsupported", status = "setup_missing" }
 
 [[expected]]
 invariant = { name = "direct_calls.current_determinism", value = "cold_warm_no_cache_equal", mode = "exact" }
@@ -78,7 +78,16 @@ invariant = { name = "direct_calls.counts.by_algorithm.ImportBinding.nonzero", v
 invariant = { name = "direct_calls.counts.by_algorithm.ConstructorBinding.nonzero", value = "true", mode = "exact" }
 
 [[expected]]
-invariant = { name = "direct_calls.counts.by_algorithm.DirectMember.nonzero", value = "true", mode = "exact" }
+invariant = { name = "direct_calls.counts.by_algorithm.GoStatic.nonzero", value = "true", mode = "exact" }
+
+[[expected]]
+invariant = { name = "direct_calls.counts.by_algorithm.GoVta.nonzero", value = "true", mode = "exact" }
+
+[[expected]]
+invariant = { name = "direct_calls.counts.by_algorithm.GoCha.nonzero", value = "true", mode = "exact" }
+
+[[expected]]
+invariant = { name = "direct_calls.counts.by_algorithm.TypeHierarchy.nonzero", value = "true", mode = "exact" }
 
 [[expected]]
 invariant = { name = "direct_calls.counts.by_status.Resolved.nonzero", value = "true", mode = "exact" }
@@ -87,22 +96,10 @@ invariant = { name = "direct_calls.counts.by_status.Resolved.nonzero", value = "
 invariant = { name = "direct_calls.counts.by_status.Unresolved.nonzero", value = "true", mode = "exact" }
 
 [[expected]]
-invariant = { name = "direct_calls.counts.by_status.Unsupported.nonzero", value = "true", mode = "exact" }
-
-[[expected]]
-invariant = { name = "direct_calls.counts.by_status.SetupMissing.nonzero", value = "true", mode = "exact" }
-
-[[expected]]
-invariant = { name = "direct_calls.counts.by_unresolved_reason.FunctionValue.nonzero", value = "true", mode = "exact" }
-
-[[expected]]
 invariant = { name = "direct_calls.counts.by_unresolved_reason.DynamicProperty.nonzero", value = "true", mode = "exact" }
 
 [[expected]]
-invariant = { name = "direct_calls.counts.by_unresolved_reason.Reflection.nonzero", value = "true", mode = "exact" }
-
-[[expected]]
-invariant = { name = "direct_calls.counts.by_unresolved_reason.GoroutineBoundary.nonzero", value = "true", mode = "exact" }
+invariant = { name = "direct_calls.counts.by_unresolved_reason.MissingSemanticReference.nonzero", value = "true", mode = "exact" }
 
 [[expected]]
 invariant = { name = "direct_calls.counts.by_unresolved_reason.Eval.nonzero", value = "true", mode = "exact" }
@@ -112,9 +109,6 @@ invariant = { name = "direct_calls.counts.by_unresolved_reason.DynamicImport.non
 
 [[expected]]
 invariant = { name = "direct_calls.counts.by_unresolved_reason.CallApplyBind.nonzero", value = "true", mode = "exact" }
-
-[[expected]]
-invariant = { name = "direct_calls.counts.by_unresolved_reason.SetupMissing.nonzero", value = "true", mode = "exact" }
 
 [[expected]]
 invariant = { name = "direct_calls.counts.by_provider.polint.calls.nonzero", value = "true", mode = "exact" }

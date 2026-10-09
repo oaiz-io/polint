@@ -14,4 +14,4 @@ pub(crate) use embedded_cache::{
     SidecarCacheFamily, materialize_embedded_sources, read_verified_private_file,
     verify_private_file, write_private_file,
 };
-pub(crate) use runner::{SubprocessError, SubprocessOutput, run_bounded};
+pub(crate) use runner::{SubprocessError, SubprocessOutput, run_bounded, run_bounded_to_file};

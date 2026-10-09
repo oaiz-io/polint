@@ -65,7 +65,7 @@ pub struct RefinedCallsProviderOutput {
 
 #[allow(clippy::too_many_arguments)]
 pub fn derive_refined_calls_with_cache_stats(
-    db: &mut impl AnalysisHost,
+    db: &mut (impl AnalysisHost + Sync),
     input_snapshot: &InputSnapshot,
     manifest: &ProviderManifest,
     calls_output_digest: Digest,
@@ -80,6 +80,32 @@ pub fn derive_refined_calls_with_cache_stats(
     ts_type_callees: &[TsTypeCalleeInput],
     ts_type_file_densities: &[TsTypeFileDensityInput],
 ) -> RefinedCallsProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = REFINED_CALLS_PROVIDER_ID, step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
+    // How many edges each tier adds, and how many of those are Go's, so a
+    // stage log can say which tiers a scan actually depends on.
+    let mut tier_edges_seen = 0_usize;
+    let mut tier_edges = |tier: &'static str, edges: &[RefinedCallEdgeFact]| {
+        let added = &edges[tier_edges_seen.min(edges.len())..];
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            provider = REFINED_CALLS_PROVIDER_ID,
+            tier,
+            added = added.len(),
+            go = added.iter().filter(|edge| edge.language == Language::Go).count(),
+            go_resolved = added
+                .iter()
+                .filter(|edge| {
+                    edge.language == Language::Go && edge.status == CallTargetStatus::Resolved
+                })
+                .count(),
+            "refined tier edges"
+        );
+        tier_edges_seen = edges.len();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, REFINED_CALLS_PROVIDER_ID);
@@ -118,15 +144,23 @@ pub fn derive_refined_calls_with_cache_stats(
             site_key,
         ));
     }
+    checkpoint("base_targets");
+    tier_edges("base_targets", &output.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::framework::derive_framework_refinements(db).edges,
     );
+    checkpoint("framework");
+    tier_edges("framework", &output.edges);
     output
         .edges
         .extend(crate::analysis_neutral::refined_calls::go::derive_go_refinements(db).edges);
+    checkpoint("go");
+    tier_edges("go", &output.edges);
     output
         .edges
         .extend(crate::analysis_neutral::refined_calls::ts_js::derive_ts_js_refinements(db).edges);
+    checkpoint("ts_js");
+    tier_edges("ts_js", &output.edges);
     // The typed tier runs alongside the points-to tier rather than replacing
     // it: both describe the same call sites, and a consumer picks by tier. The
     // heap tier is the fallback whenever the sidecar produced nothing.
@@ -150,18 +184,27 @@ pub fn derive_refined_calls_with_cache_stats(
         );
     }
     output.edges.extend(ts_typed.edges);
+    checkpoint("ts_types");
+    tier_edges("ts_types", &output.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::summaries::derive_summary_assisted_refinements(db)
             .edges,
     );
+    checkpoint("summaries");
+    tier_edges("summaries", &output.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::extensions::derive_extension_refinements(db).edges,
     );
+    checkpoint("extensions");
+    tier_edges("extensions", &output.edges);
     output.edges.extend(
         derive_solver_refinements_with_inputs(db, go_semantic_functions, go_semantic_callsites)
             .edges,
     );
+    checkpoint("solver");
+    tier_edges("solver", &output.edges);
     output = finalized_output(interner, output);
+    checkpoint("normalize");
 
     let output_digest = match refined_calls_output_digest(
         db,
@@ -179,10 +222,13 @@ pub fn derive_refined_calls_with_cache_stats(
         Ok(digest) => digest,
         Err(error) => return failed_provider_output(error.to_string()),
     };
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
 
-    match db.replace_refined_call_facts(output) {
+    let replaced = db.replace_refined_call_facts(output);
+    checkpoint("store_metadata");
+    match replaced {
         Ok(()) => RefinedCallsProviderOutput {
             diagnostics: Vec::new(),
             cache_stats,
@@ -228,7 +274,7 @@ fn refined_edge_from_base_target(
         caller: target.caller,
         target_function: target.target_function,
         target_symbol: target.target_symbol,
-        synthetic_target: None,
+        synthetic_target: target.synthetic_target.clone(),
         language,
         edge_kind: target.edge_kind,
         algorithm: target.algorithm,
@@ -679,15 +725,31 @@ fn validation_for_target(target: &CallTargetFact) -> RefinedCallValidation {
     }
 }
 
+/// The most any refined edge built on `target` may claim. A candidate the Go
+/// frontend's variable-type, class-hierarchy or rapid-type analysis found for a
+/// call through an interface or a function value may be called there; only a
+/// callee the call names must be.
+pub(crate) fn target_confidence_ceiling(target: &CallTargetFact) -> RefinedCallConfidence {
+    if matches!(
+        target.algorithm,
+        CallAlgorithm::GoVta | CallAlgorithm::GoCha | CallAlgorithm::GoRta
+    ) {
+        RefinedCallConfidence::Medium
+    } else {
+        RefinedCallConfidence::High
+    }
+}
+
 fn confidence_for_target(target: &CallTargetFact) -> RefinedCallConfidence {
     match target.status {
-        CallTargetStatus::Resolved => RefinedCallConfidence::High,
+        CallTargetStatus::Resolved => target_confidence_ceiling(target),
         CallTargetStatus::Ambiguous => RefinedCallConfidence::Medium,
         CallTargetStatus::Unresolved
         | CallTargetStatus::Unsupported
         | CallTargetStatus::SetupMissing
         | CallTargetStatus::BudgetExceeded
-        | CallTargetStatus::Rejected => RefinedCallConfidence::Low,
+        | CallTargetStatus::Rejected
+        | CallTargetStatus::Unreachable => RefinedCallConfidence::Low,
     }
 }
 
@@ -710,7 +772,7 @@ pub fn stable_refined_call_key(
 
 #[allow(clippy::too_many_arguments)]
 pub fn refined_calls_output_digest(
-    db: &impl AnalysisHost,
+    db: &(impl AnalysisHost + Sync),
     interner: &StableKeyInterner,
     manifest: &ProviderManifest,
     input_snapshot: &InputSnapshot,
@@ -760,23 +822,63 @@ pub fn refined_calls_output_digest(
     extend_component_parts(&mut parts, "model", &input_snapshot.models);
     extend_component_parts(&mut parts, "extension", &input_snapshot.extensions);
     extend_component_parts(&mut parts, "tool", &input_snapshot.tool_invocations);
-    for edge in &output.edges {
-        parts.push(format!(
-            "refined_call_edge={}",
-            refined_call_edge_payload(db, interner, edge)?
-        ));
-    }
+    let relations = RelationIndex::build(db);
     if output.edges.is_empty() {
         parts.push("refined_calls_output=empty".to_string());
     }
+    // Every relation is checked before any edge is hashed, so a dangling one
+    // still fails the digest and the hashing itself cannot.
+    for edge in &output.edges {
+        check_edge_relations(&relations, edge)?;
+    }
+    // Edges are hashed in storage order, in parallel: `finalized_output` sorts
+    // them by stable-key text and numbers them, so the order is a function of
+    // the edges.
+    let edges = Digest::of_rows(
+        DigestKind::ProviderOutput,
+        "refined_call_edge",
+        &output.edges,
+        || (),
+        |digest, (), edge| match refined_call_edge_payload(db, interner, &relations, edge) {
+            Ok(payload) => digest.part(&payload),
+            Err(error) => digest.part(&error.to_string()),
+        },
+    );
 
     parts.sort();
     let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    Ok(Digest::from_parts(
-        DigestKind::ProviderOutput,
-        "refined_calls_output",
-        &refs,
-    ))
+    let mut digest = Digest::builder(DigestKind::ProviderOutput, "refined_calls_output");
+    for part in refs {
+        digest.part(part);
+    }
+    digest.part(&edges.value);
+    Ok(digest.finish())
+}
+
+/// Fails on the first relation of `edge` that names no fact.
+fn check_edge_relations(
+    relations: &RelationIndex<'_>,
+    edge: &RefinedCallEdgeFact,
+) -> Result<(), crate::analysis_neutral::error::AnalysisError> {
+    let related = [
+        Some((FactFamily::CallSite, edge.site.0)),
+        edge.base_target
+            .map(|target| (FactFamily::CallTarget, target.0)),
+        Some((FactFamily::Function, edge.caller.0)),
+        edge.target_function
+            .map(|function| (FactFamily::Function, function.0)),
+        edge.target_symbol
+            .map(|symbol| (FactFamily::Symbol, symbol.0)),
+    ];
+    for (family, run_id) in related.into_iter().flatten() {
+        if !relations.contains(family, run_id) {
+            return Err(crate::analysis_neutral::error::AnalysisError::InvalidFact {
+                provider: REFINED_CALLS_PROVIDER_ID,
+                reason: format!("dangling {} relation with run id {run_id}", family.label()),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[InputComponent]) {
@@ -795,23 +897,36 @@ fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[I
 fn refined_call_edge_payload(
     db: &impl AnalysisHost,
     interner: &StableKeyInterner,
+    relations: &RelationIndex<'_>,
     edge: &RefinedCallEdgeFact,
 ) -> Result<String, crate::analysis_neutral::error::AnalysisError> {
     let stable_key = interner.resolve(edge.stable_key);
     let payload = RefinedCallEdgeDigest {
-        site_key: relation_stable_key(db, interner, FactFamily::CallSite, edge.site.0)?,
+        site_key: relation_stable_key(db, interner, relations, FactFamily::CallSite, edge.site.0)?,
         base_target_key: edge
             .base_target
-            .map(|target| relation_stable_key(db, interner, FactFamily::CallTarget, target.0))
+            .map(|target| {
+                relation_stable_key(db, interner, relations, FactFamily::CallTarget, target.0)
+            })
             .transpose()?,
-        caller_key: relation_stable_key(db, interner, FactFamily::Function, edge.caller.0)?,
+        caller_key: relation_stable_key(
+            db,
+            interner,
+            relations,
+            FactFamily::Function,
+            edge.caller.0,
+        )?,
         target_function_key: edge
             .target_function
-            .map(|function| relation_stable_key(db, interner, FactFamily::Function, function.0))
+            .map(|function| {
+                relation_stable_key(db, interner, relations, FactFamily::Function, function.0)
+            })
             .transpose()?,
         target_symbol_key: edge
             .target_symbol
-            .map(|symbol| relation_stable_key(db, interner, FactFamily::Symbol, symbol.0))
+            .map(|symbol| {
+                relation_stable_key(db, interner, relations, FactFamily::Symbol, symbol.0)
+            })
             .transpose()?,
         synthetic_target: edge.synthetic_target.as_deref(),
         language: edge.language,
@@ -836,23 +951,60 @@ fn refined_call_edge_payload(
     })
 }
 
+/// The rows an edge's digest payload names, by run id: the first row with each
+/// id, as a scan for it would find.
+struct RelationIndex<'db> {
+    call_sites: HashMap<u64, &'db crate::analysis_neutral::calls::facts::CallSiteFact>,
+    call_targets: HashMap<u64, &'db CallTargetFact>,
+    functions: HashMap<u64, &'db crate::analysis_api::FunctionFact>,
+    symbols: HashMap<u64, &'db crate::analysis_api::SymbolFact>,
+}
+
+impl<'db> RelationIndex<'db> {
+    fn build(db: &'db impl AnalysisHost) -> Self {
+        let mut call_sites = HashMap::new();
+        for site in db.call_sites() {
+            call_sites.entry(site.id.0).or_insert(site);
+        }
+        let mut call_targets = HashMap::new();
+        for target in db.call_targets() {
+            call_targets.entry(target.id.0).or_insert(target);
+        }
+        let mut functions = HashMap::new();
+        for function in db.functions() {
+            functions.entry(function.id.0).or_insert(function);
+        }
+        let mut symbols = HashMap::new();
+        for symbol in db.symbols() {
+            symbols.entry(symbol.id.0).or_insert(symbol);
+        }
+        Self {
+            call_sites,
+            call_targets,
+            functions,
+            symbols,
+        }
+    }
+
+    fn contains(&self, family: FactFamily, run_id: u64) -> bool {
+        match family {
+            FactFamily::CallSite => self.call_sites.contains_key(&run_id),
+            FactFamily::CallTarget => self.call_targets.contains_key(&run_id),
+            FactFamily::Function => self.functions.contains_key(&run_id),
+            FactFamily::Symbol => self.symbols.contains_key(&run_id),
+            _ => false,
+        }
+    }
+}
+
 fn relation_stable_key(
     db: &impl AnalysisHost,
     interner: &StableKeyInterner,
+    relations: &RelationIndex<'_>,
     family: FactFamily,
     run_id: u64,
 ) -> Result<String, crate::analysis_neutral::error::AnalysisError> {
-    let relation_exists = match family {
-        FactFamily::CallSite => db.call_sites().iter().any(|site| site.id.0 == run_id),
-        FactFamily::CallTarget => db.call_targets().iter().any(|target| target.id.0 == run_id),
-        FactFamily::Function => db
-            .functions()
-            .iter()
-            .any(|function| function.id.0 == run_id),
-        FactFamily::Symbol => db.symbols().iter().any(|symbol| symbol.id.0 == run_id),
-        _ => false,
-    };
-    if !relation_exists {
+    if !relations.contains(family, run_id) {
         return Err(crate::analysis_neutral::error::AnalysisError::InvalidFact {
             provider: REFINED_CALLS_PROVIDER_ID,
             reason: format!("dangling {} relation with run id {run_id}", family.label()),
@@ -863,35 +1015,28 @@ fn relation_stable_key(
     }
 
     let stable_key = match family {
-        FactFamily::CallSite => db
-            .call_sites()
-            .iter()
-            .find(|site| site.id.0 == run_id)
+        FactFamily::CallSite => relations
+            .call_sites
+            .get(&run_id)
             .map(|site| interner.resolve(site.stable_key).to_string()),
-        FactFamily::CallTarget => db
-            .call_targets()
-            .iter()
-            .find(|target| target.id.0 == run_id)
+        FactFamily::CallTarget => relations
+            .call_targets
+            .get(&run_id)
             .map(|target| interner.resolve(target.stable_key).to_string()),
-        FactFamily::Function => db
-            .functions()
-            .iter()
-            .find(|function| function.id.0 == run_id)
-            .map(|function| {
-                stable_key_text_from_parts(
-                    FactFamily::Function,
-                    &[
-                        ("path", db.path_for(function.file)),
-                        ("language", format!("{:?}", function.language)),
-                        ("name", function.name.clone()),
-                        ("span", stable_span(&function.span)),
-                    ],
-                )
-            }),
-        FactFamily::Symbol => db
-            .symbols()
-            .iter()
-            .find(|symbol| symbol.id.0 == run_id)
+        FactFamily::Function => relations.functions.get(&run_id).map(|function| {
+            stable_key_text_from_parts(
+                FactFamily::Function,
+                &[
+                    ("path", db.path_for(function.file)),
+                    ("language", format!("{:?}", function.language)),
+                    ("name", function.name.clone()),
+                    ("span", stable_span(&function.span)),
+                ],
+            )
+        }),
+        FactFamily::Symbol => relations
+            .symbols
+            .get(&run_id)
             .map(|symbol| interner.resolve(symbol.stable_key).to_string()),
         _ => None,
     };
@@ -1266,6 +1411,7 @@ mod tests {
                 caller,
                 target_function: Some(target),
                 target_symbol: Some(symbol),
+                synthetic_target: None,
                 edge_kind: CallEdgeKind::Direct,
                 algorithm: CallAlgorithm::DirectReference,
                 status: CallTargetStatus::Resolved,
@@ -1278,6 +1424,52 @@ mod tests {
         })
         .expect("complete call graph");
         db
+    }
+
+    /// A candidate the Go frontend found for an interface or function-value
+    /// call by analysing which values reach it may be called; a callee the call
+    /// names must be.
+    #[test]
+    fn analysis_found_go_targets_are_may_edges_and_named_callees_must_edges() {
+        use crate::analysis_neutral::calls::facts::{
+            CallEdgeKind, CallPrecision, CallProvenance, CallTargetStatus,
+        };
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let target = |algorithm, status| CallTargetFact {
+            id: CallTargetId(0),
+            site: CallSiteId(0),
+            caller: FunctionId::from_raw(0),
+            target_function: Some(FunctionId::from_raw(1)),
+            target_symbol: None,
+            synthetic_target: None,
+            edge_kind: CallEdgeKind::Direct,
+            algorithm,
+            status,
+            reason: None,
+            provenance: CallProvenance::Native,
+            precision: CallPrecision::SetupAware,
+            stable_key: interner.intern("call-target"),
+        };
+        for algorithm in [
+            CallAlgorithm::GoVta,
+            CallAlgorithm::GoCha,
+            CallAlgorithm::GoRta,
+        ] {
+            assert_eq!(
+                confidence_for_target(&target(algorithm, CallTargetStatus::Resolved)),
+                RefinedCallConfidence::Medium
+            );
+        }
+        for algorithm in [CallAlgorithm::GoStatic, CallAlgorithm::DirectReference] {
+            assert_eq!(
+                confidence_for_target(&target(algorithm, CallTargetStatus::Resolved)),
+                RefinedCallConfidence::High
+            );
+        }
+        assert_eq!(
+            confidence_for_target(&target(CallAlgorithm::GoVta, CallTargetStatus::Unreachable)),
+            RefinedCallConfidence::Low
+        );
     }
 
     #[test]

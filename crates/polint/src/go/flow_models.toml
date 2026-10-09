@@ -1,0 +1,136 @@
+# Built-in data-flow models for Go: where tainted data enters a program, where it
+# must not arrive, and what cleans, blocks or carries it in library functions the
+# program has no body of. A repository adds its own as `[[go_flow_source]]`,
+# `[[go_flow_sink]]`, `[[go_flow_sanitizer]]`, `[[go_flow_opaque]]` and
+# `[[go_flow_propagator]]` tables in `.polint/models/*.toml`, in this format;
+# see `docs/facts/data-flow.md`.
+#
+# A function is named by `function` (`os/exec.Command`) or by `receivers` and
+# `methods` (a method of a named type, pointer or not, or of an interface).
+# Argument positions count from 0 and never include the receiver.
+
+# --- Sources --------------------------------------------------------------------
+
+# Request data a gin handler reads.
+[[source]]
+kind = "http_request"
+receivers = ["github.com/gin-gonic/gin.Context"]
+methods = [
+  "Param", "Query", "DefaultQuery", "GetQuery", "QueryArray", "QueryMap",
+  "PostForm", "DefaultPostForm", "GetPostForm", "PostFormArray", "PostFormMap",
+  "GetHeader", "Cookie", "GetRawData", "FormFile", "ClientIP",
+]
+output = "result"
+
+# What a gin binder fills in.
+[[source]]
+kind = "http_request"
+receivers = ["github.com/gin-gonic/gin.Context"]
+methods = [
+  "ShouldBind", "ShouldBindJSON", "ShouldBindQuery", "ShouldBindUri",
+  "ShouldBindHeader", "ShouldBindXML", "ShouldBindYAML", "ShouldBindWith",
+  "Bind", "BindJSON", "BindQuery", "BindUri", "BindHeader", "BindXML", "BindYAML", "BindWith",
+]
+output = "argument"
+argument = 0
+
+# A net/http handler's request.
+[[source]]
+kind = "http_request"
+parameter_type = "*net/http.Request"
+
+# A message handler's message.
+[[source]]
+kind = "message_payload"
+parameter_type = "*github.com/ThreeDotsLabs/watermill/message.Message"
+
+# --- Sinks ----------------------------------------------------------------------
+
+# SQL text.
+[[sink]]
+kind = "sql"
+receivers = ["gorm.io/gorm.DB"]
+methods = ["Raw", "Exec", "Where", "Or", "Not", "Order", "Select", "Having", "Joins", "Group", "Distinct"]
+arguments = [0]
+
+[[sink]]
+kind = "sql"
+receivers = ["database/sql.DB", "database/sql.Tx", "database/sql.Conn"]
+methods = ["Query", "QueryRow", "Exec", "Prepare"]
+arguments = [0]
+
+[[sink]]
+kind = "sql"
+receivers = ["database/sql.DB", "database/sql.Tx", "database/sql.Conn"]
+methods = ["QueryContext", "QueryRowContext", "ExecContext", "PrepareContext"]
+arguments = [1]
+
+# Commands run.
+[[sink]]
+kind = "exec"
+function = "os/exec.Command"
+
+[[sink]]
+kind = "exec"
+function = "os/exec.CommandContext"
+arguments_from = 1
+
+# Logs.
+[[sink]]
+kind = "log"
+functions = [
+  "log.Print", "log.Printf", "log.Println", "log.Fatal", "log.Fatalf", "log.Fatalln",
+  "log.Panic", "log.Panicf", "log.Panicln",
+  "log/slog.Debug", "log/slog.Info", "log/slog.Warn", "log/slog.Error", "log/slog.Log",
+  "log/slog.DebugContext", "log/slog.InfoContext", "log/slog.WarnContext", "log/slog.ErrorContext",
+]
+
+[[sink]]
+kind = "log"
+receivers = ["log.Logger", "log/slog.Logger"]
+methods = [
+  "Print", "Printf", "Println", "Fatal", "Fatalf", "Fatalln", "Panic", "Panicf", "Panicln",
+  "Debug", "Info", "Warn", "Error", "Log", "DebugContext", "InfoContext", "WarnContext", "ErrorContext",
+]
+
+# Messages published.
+[[sink]]
+kind = "publish"
+receivers = ["github.com/ThreeDotsLabs/watermill/message.Publisher"]
+methods = ["Publish"]
+
+# --- Sanitizers: the result carries none of the arguments' taint ----------------
+
+[[sanitizer]]
+functions = [
+  "strconv.Atoi", "strconv.ParseInt", "strconv.ParseUint", "strconv.ParseFloat", "strconv.ParseBool",
+  "github.com/google/uuid.Parse", "github.com/google/uuid.MustParse", "github.com/google/uuid.ParseBytes",
+]
+
+# --- Opaque: nothing of the arguments flows anywhere (tests, comparisons) -------
+
+[[opaque]]
+functions = [
+  "strings.HasPrefix", "strings.HasSuffix", "strings.Contains", "strings.ContainsAny",
+  "strings.EqualFold", "strings.Compare", "strings.Count", "strings.Index", "strings.LastIndex",
+  "bytes.Equal", "bytes.HasPrefix", "bytes.HasSuffix", "bytes.Contains",
+  "errors.Is", "errors.As", "reflect.DeepEqual", "unicode/utf8.RuneCountInString",
+]
+
+# --- Propagators: taint moves from one argument into what another points to ----
+
+[[propagator]]
+function = "encoding/json.Unmarshal"
+from = 0
+to = 1
+
+[[propagator]]
+function = "encoding/xml.Unmarshal"
+from = 0
+to = 1
+
+[[propagator]]
+receivers = ["encoding/json.Decoder"]
+methods = ["Decode"]
+from = "receiver"
+to = 0

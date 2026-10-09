@@ -164,6 +164,18 @@ impl PolicyViolation {
         self
     }
 
+    /// Attaches engine-built structured evidence; one that does not validate is
+    /// left out rather than attached.
+    pub(crate) fn with_structured_evidence(
+        mut self,
+        evidence: Result<StructuredEvidenceV1, String>,
+    ) -> Self {
+        if let Ok(evidence) = evidence {
+            self.structured_evidence = Some(evidence);
+        }
+        self
+    }
+
     pub(crate) fn stable_key(&self) -> String {
         let mut parts = vec![
             format!("query={}", encode_str(self.query.label())),

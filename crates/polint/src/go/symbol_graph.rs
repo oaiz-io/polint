@@ -16,6 +16,9 @@ use crate::analysis_neutral::symbol_graph::{
 use crate::go::embedded_cache::materialize_embedded_sources;
 use crate::go::lifecycle::{self, GoAnalysisConfig};
 use crate::go::process_runner::{GO_SUBPROCESS_TIMEOUT, GoProcessError, run_bounded};
+use crate::go::semantic::process::{
+    GoSemanticProcessError, SYMBOLS_SIDECAR_BINARY, ensure_go_sidecar_binary,
+};
 use crate::internal_core::{
     Diagnostic, DiagnosticRange as TextRange, FileId, Language, Span, SymbolId,
 };
@@ -284,6 +287,7 @@ fn derive_go_symbols_with_runner(
     let stdout = match runner(&config) {
         Ok(stdout) => stdout,
         Err(error) => {
+            warn_sidecar_failure(&error);
             return setup_missing_output(
                 interner,
                 builder,
@@ -298,6 +302,7 @@ fn derive_go_symbols_with_runner(
     let sidecar = match parse_sidecar_output(&stdout).map(|output| validate_paths(output, db)) {
         Ok(output) => output,
         Err(error) => {
+            warn_sidecar_failure(&error);
             return setup_missing_output(
                 interner,
                 builder,
@@ -322,6 +327,19 @@ fn derive_go_symbols_with_runner(
         .extend(package_error_diagnostics(&sidecar.errors));
 
     output
+}
+
+/// A sidecar that cannot load the repository leaves every Go symbol and
+/// reference setup-missing, and every member call that depends on them
+/// unresolved. The rows say "setup missing" one file at a time; this says why,
+/// once, where an operator reading the log will see it.
+fn warn_sidecar_failure(error: &GoSidecarFailure) {
+    tracing::warn!(
+        target: "polint::kernel",
+        provider = "polint.symbol_graph",
+        reason = %error.reason(),
+        "Go symbol sidecar failed; Go symbols and references are setup-missing"
+    );
 }
 
 impl GoSidecarFailure {
@@ -350,23 +368,31 @@ fn files_matching_paths<'a>(
 
 fn run_go_sidecar(root: &Path, config: &GoAnalysisConfig) -> Result<Vec<u8>, GoSidecarFailure> {
     let sidecar = resolve_go_sidecar()?;
-    let mut command = match sidecar {
-        GoSidecarCommand::Binary(path) => {
-            let mut command = Command::new(path);
-            command.current_dir(root);
-            command
-        }
-        GoSidecarCommand::SourceDir(path) => {
-            let mut command = Command::new("go");
-            command
-                .arg("run")
-                .arg(".")
-                .current_dir(path)
-                .env("GOWORK", "off")
-                .env("GOTOOLCHAIN", "local");
-            command
-        }
+    let binary = match sidecar {
+        GoSidecarCommand::Binary(path) => path,
+        // Built once and executed, never `go run` with the toolchain pinned: a
+        // pin on `go run` is inherited by the go command the sidecar starts, which
+        // then refuses any module that asks for a newer Go than the local one
+        // instead of switching to the toolchain that module names.
+        GoSidecarCommand::SourceDir(path) => ensure_go_sidecar_binary(
+            &SYMBOLS_SIDECAR_BINARY,
+            &path,
+            config.offline,
+            GO_SUBPROCESS_TIMEOUT,
+        )
+        .map_err(|error| match error {
+            GoSemanticProcessError::CommandUnavailable(reason)
+            | GoSemanticProcessError::VersionUnsupported(reason) => {
+                GoSidecarFailure::CommandUnavailable(reason)
+            }
+            GoSemanticProcessError::CommandFailed(reason) => {
+                GoSidecarFailure::CommandFailed(reason)
+            }
+            GoSemanticProcessError::Timeout(reason) => GoSidecarFailure::Timeout(reason),
+        })?,
     };
+    let mut command = Command::new(binary);
+    command.current_dir(root);
 
     lifecycle::apply_go_offline_env(&mut command, config.offline);
     command

@@ -124,11 +124,12 @@ fn constraint_rows(db: &impl AnalysisHost) -> Vec<ConstraintRow> {
         .map(|constraint: &ConstraintFact| ConstraintRow {
             kind: constraint.kind.as_str().to_string(),
             status: format!("{:?}", constraint.status),
-            source: if interner
-                .resolve(constraint.stable_key)
-                .contains("ts_direct_binding")
-            {
-                "ts_direct_binding".to_string()
+            source: if interner.resolve(constraint.stable_key).contains(&format!(
+                "|6:origin={}:{}",
+                super::build::TS_DIRECT_BINDING_ORIGIN.len(),
+                super::build::TS_DIRECT_BINDING_ORIGIN
+            )) {
+                super::build::TS_DIRECT_BINDING_ORIGIN.to_string()
             } else {
                 "semantic_graph".to_string()
             },
@@ -191,7 +192,7 @@ mod tests {
                 },
                 status: PointsToStatus::Present,
                 precision: PointsToPrecision::FlowInsensitive,
-                stable_key: interner.intern("constraint:ts_direct_binding:copy"),
+                stable_key: interner.intern("16:PointsToConstraint|6:origin=17:ts_direct_binding"),
             }],
         };
         crate::analysis_neutral::AnalysisHost::replace_semantic_graph_facts(&mut db, output)

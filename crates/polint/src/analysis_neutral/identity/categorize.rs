@@ -111,7 +111,9 @@ pub fn category_for_unresolved(reason: UnresolvedCallReason) -> IdentityCategory
 pub fn category_for_unsupported(status: CallTargetStatus) -> Option<IdentityCategory> {
     match status {
         // Not failures: success and multi-match precision concerns.
-        CallTargetStatus::Resolved | CallTargetStatus::Ambiguous => None,
+        CallTargetStatus::Resolved
+        | CallTargetStatus::Ambiguous
+        | CallTargetStatus::Unreachable => None,
         CallTargetStatus::Unresolved => Some(IdentityCategory::UnresolvedEdge),
         CallTargetStatus::Unsupported => Some(IdentityCategory::UnsupportedEdge),
         // Go packages couldn't load is the canonical SetupMissing case (D-16).

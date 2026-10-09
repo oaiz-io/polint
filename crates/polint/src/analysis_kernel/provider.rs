@@ -317,6 +317,8 @@ impl Provider for CfgProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
+        let derived_relations = control_or_data_flow_requested(&ctx.plan, ctx.db);
+        let lower_go = go_control_flow_requested(&ctx.plan, ctx.db);
         let derivation = crate::analysis::cfg::provider::derive_cfg_with_cache_stats(
             ctx.db,
             &ctx.input_snapshot,
@@ -326,6 +328,8 @@ impl Provider for CfgProvider {
                 ctx.dependency_digest("polint.go.syntax"),
                 ctx.dependency_digest("polint.ts.syntax"),
             ],
+            derived_relations,
+            lower_go,
         );
         ProviderRunResult {
             counts: Default::default(),
@@ -346,6 +350,20 @@ impl Provider for CallsProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
+        // The Go semantic sidecar runs first so its per-site callees can resolve Go
+        // call sites; when it did not run, the inputs are empty and every site keeps
+        // the name-based resolution.
+        #[cfg(feature = "lang-go")]
+        let typed_inputs = crate::go::typed_calls::go_typed_call_inputs(
+            ctx.db,
+            ctx.loaded
+                .config
+                .solver
+                .to_go_sub_budget()
+                .max_candidates_per_callsite,
+        );
+        #[cfg(not(feature = "lang-go"))]
+        let typed_inputs = crate::analysis_neutral::calls::typed::TypedCallInputs::default();
         // Capability-closure only schedules this provider when the deep stack runs;
         // SEMANTIC/CFG/FULL triggers are identical, so the call-sites-only path is gone.
         let derivation = crate::analysis::calls::provider::derive_calls_with_cache_stats(
@@ -360,6 +378,10 @@ impl Provider for CallsProvider {
                 ctx.dependency_digest("polint.go.syntax"),
                 ctx.dependency_digest("polint.ts.syntax"),
             ],
+            crate::analysis_neutral::calls::provider::TypedCalls {
+                inputs: &typed_inputs,
+                output_digest: ctx.dependency_digest("polint.go.semantic"),
+            },
         );
         ProviderRunResult {
             counts: Default::default(),
@@ -400,6 +422,7 @@ impl Provider for GoSemanticProvider {
             crate::go::semantic::provider::GoSemanticSidecarAccess {
                 cache_dir: sidecar_cache_dir.as_deref(),
                 prefetch,
+                request: go_semantic_request(&ctx.plan, &root),
             },
         );
         ProviderRunResult {
@@ -482,17 +505,30 @@ impl Provider for AbstractDomainsProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
-        let compact_domain_materialization = ctx.plan.rules().iter().any(|rule| {
-            rule.requested_capabilities
-                .iter()
-                .any(|c| c == "control_flow")
-        }) && !ctx.plan.rules().iter().any(|rule| {
-            rule.requested_capabilities
-                .iter()
-                .any(|c| c == "calls" || c == "dataflow")
-        });
-        let derivation = if compact_domain_materialization {
-            crate::analysis::domains::provider::derive_summary_input_abstract_domains_with_cache_stats(ctx.db,
+        // The summaries are the only shipped reader of domain facts, and they read
+        // function-entry and block-entry reachability, so control flow and data
+        // flow get that compact materialization. A plan that stops at call
+        // resolution builds no summaries and gets no domain facts at all. The
+        // per-point states, which on a calls or dataflow run used to be most of
+        // the run's time and memory, are kept only when a plan asks for them.
+        let derivation = if ctx.plan.requests_per_point_domain_facts() {
+            crate::analysis::domains::provider::derive_abstract_domains_with_cache_stats(
+                ctx.db,
+                &ctx.input_snapshot,
+                self.manifest(),
+                ctx.dependency_digest("polint.semantic_mir"),
+                ctx.dependency_digest("polint.cfg"),
+                ctx.dependency_digest("polint.calls"),
+                ctx.dependency_digest("polint.symbol_graph"),
+                ctx.dependency_digest("polint.module_topology"),
+                vec![
+                    ctx.dependency_digest("polint.go.syntax"),
+                    ctx.dependency_digest("polint.ts.syntax"),
+                ],
+            )
+        } else if !control_or_data_flow_requested(&ctx.plan, ctx.db) {
+            crate::analysis::domains::provider::derive_skipped_abstract_domains_with_cache_stats(
+                ctx.db,
                 &ctx.input_snapshot,
                 self.manifest(),
                 ctx.dependency_digest("polint.semantic_mir"),
@@ -506,8 +542,7 @@ impl Provider for AbstractDomainsProvider {
                 ],
             )
         } else {
-            crate::analysis::domains::provider::derive_abstract_domains_with_cache_stats(
-                ctx.db,
+            crate::analysis::domains::provider::derive_summary_input_abstract_domains_with_cache_stats(ctx.db,
                 &ctx.input_snapshot,
                 self.manifest(),
                 ctx.dependency_digest("polint.semantic_mir"),
@@ -540,6 +575,9 @@ impl Provider for DirectSummariesProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let mut ctx = CtxHandle::from_ctx(ctx);
+        if !control_or_data_flow_requested(&ctx.plan, ctx.db) {
+            return skipped_summaries(&mut ctx, self.manifest());
+        }
         let derivation =
             crate::analysis::summaries::provider::derive_direct_summaries_with_cache_stats(
                 ctx.db,
@@ -560,6 +598,7 @@ impl Provider for DirectSummariesProvider {
         let mut diagnostics = derivation.diagnostics;
         let cache_stats = derivation.cache_stats;
 
+        let started = std::time::Instant::now();
         let scc_closure = crate::analysis::summaries::provider::run_scc_closure_with_cache(
             ctx.db,
             &ctx.cache,
@@ -567,6 +606,7 @@ impl Provider for DirectSummariesProvider {
             ctx.rule_digest,
             ctx.plan.digest(),
         );
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.direct_summaries", step = "scc_closure", elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
         diagnostics.extend(scc_closure.diagnostics.clone());
         ctx.scc_closure = Some(scc_closure);
 
@@ -693,6 +733,44 @@ impl Provider for ExtensionsProvider {
     }
 }
 
+/// Stores no summaries, for a run whose capabilities stop at call resolution:
+/// data flow and the control-flow queries read summaries, call resolution does
+/// not. The digest still names the domains it was built over, whose skipped
+/// materialisation is part of their own digest.
+fn skipped_summaries(
+    ctx: &mut CtxHandle<'_>,
+    manifest: &'static ProviderManifest,
+) -> ProviderRunResult {
+    let empty = crate::analysis::summaries::store::SummaryOutput::default();
+    ctx.db.replace_summary_facts(empty.clone());
+    let go_ts = [
+        ctx.dependency_digest("polint.go.syntax"),
+        ctx.dependency_digest("polint.ts.syntax"),
+    ];
+    let interner = ctx.db.stable_key_interner();
+    let output_digest = crate::analysis::summaries::provider::direct_summaries_output_digest(
+        manifest,
+        &ctx.input_snapshot,
+        &ctx.dependency_digest("polint.semantic_mir"),
+        &ctx.dependency_digest("polint.cfg"),
+        &ctx.dependency_digest("polint.calls"),
+        &ctx.dependency_digest("polint.abstract_domains"),
+        &ctx.dependency_digest("polint.symbol_graph"),
+        &ctx.dependency_digest("polint.module_topology"),
+        &go_ts,
+        &interner,
+        &crate::analysis::summaries::provider::callable_stable_key_map(ctx.db),
+        &empty,
+    );
+    ProviderRunResult {
+        counts: Default::default(),
+        diagnostics: Vec::new(),
+        cache_stats: CacheStats::default(),
+        output_digest: Some(output_digest),
+        execution: Default::default(),
+    }
+}
+
 fn solver_budget_from_loaded(
     loaded: &LoadedConfig,
 ) -> crate::analysis::solver::budget::SolverBudget {
@@ -711,24 +789,27 @@ impl Provider for TypeValueAliasProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
-        let derivation = crate::analysis::types::provider::derive_type_value_alias_with_cache_stats(
-            ctx.db,
-            &ctx.input_snapshot,
-            self.manifest(),
-            ctx.dependency_digest("polint.semantic_mir"),
-            ctx.dependency_digest("polint.cfg"),
-            ctx.dependency_digest("polint.calls"),
-            ctx.dependency_digest("polint.abstract_domains"),
-            ctx.dependency_digest("polint.direct_summaries"),
-            ctx.dependency_digest("polint.entrypoints"),
-            ctx.dependency_digest("polint.extensions"),
-            ctx.dependency_digest("polint.symbol_graph"),
-            ctx.dependency_digest("polint.module_topology"),
-            vec![
-                ctx.dependency_digest("polint.go.syntax"),
-                ctx.dependency_digest("polint.ts.syntax"),
-            ],
-        );
+        let go_points_to = go_points_to_requested(&ctx.plan, ctx.db);
+        let derivation =
+            crate::analysis::types::provider::derive_type_value_alias_with_go_points_to(
+                ctx.db,
+                &ctx.input_snapshot,
+                self.manifest(),
+                ctx.dependency_digest("polint.semantic_mir"),
+                ctx.dependency_digest("polint.cfg"),
+                ctx.dependency_digest("polint.calls"),
+                ctx.dependency_digest("polint.abstract_domains"),
+                ctx.dependency_digest("polint.direct_summaries"),
+                ctx.dependency_digest("polint.entrypoints"),
+                ctx.dependency_digest("polint.extensions"),
+                ctx.dependency_digest("polint.symbol_graph"),
+                ctx.dependency_digest("polint.module_topology"),
+                vec![
+                    ctx.dependency_digest("polint.go.syntax"),
+                    ctx.dependency_digest("polint.ts.syntax"),
+                ],
+                go_points_to,
+            );
         ProviderRunResult {
             counts: Default::default(),
             diagnostics: derivation.diagnostics,
@@ -749,8 +830,9 @@ impl Provider for SemanticGraphProvider {
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
         let solver_budget = solver_budget_from_loaded(&ctx.loaded);
+        let go_points_to = go_points_to_requested(&ctx.plan, ctx.db);
         let derivation =
-            crate::analysis::semantic_graph::provider::derive_semantic_graph_with_cache_stats(
+            crate::analysis::semantic_graph::provider::derive_semantic_graph_with_go_points_to(
                 ctx.db,
                 &ctx.loaded,
                 solver_budget.adaptation,
@@ -768,6 +850,7 @@ impl Provider for SemanticGraphProvider {
                 ctx.dependency_digest("polint.ts.syntax"),
                 ctx.dependency_digest("polint.semantic_mir"),
                 ctx.dependency_digest("polint.go.semantic"),
+                go_points_to,
             );
         ProviderRunResult {
             counts: Default::default(),
@@ -788,7 +871,8 @@ impl Provider for SolverProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
-        let derivation = crate::analysis::solver::provider::derive_solver_with_cache_stats(
+        let go_points_to = go_points_to_requested(&ctx.plan, ctx.db);
+        let derivation = crate::analysis::solver::provider::derive_solver_with_go_points_to(
             ctx.db,
             &ctx.input_snapshot,
             self.manifest(),
@@ -796,6 +880,7 @@ impl Provider for SolverProvider {
             ctx.dependency_digest("polint.semantic_graph"),
             ctx.dependency_digest("polint.type_value_alias"),
             ctx.dependency_digest("polint.go.semantic"),
+            go_points_to,
         );
         ProviderRunResult {
             counts: Default::default(),
@@ -847,6 +932,7 @@ impl Provider for DataFlowProvider {
 
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
+        let graph = graph_data_flow_requested(&ctx.plan, ctx.db);
         let derivation = crate::analysis::data_flow::provider::derive_data_flow_with_cache_stats(
             ctx.db,
             &ctx.input_snapshot,
@@ -859,6 +945,7 @@ impl Provider for DataFlowProvider {
             ctx.dependency_digest("polint.type_value_alias"),
             ctx.dependency_digest("polint.entrypoints"),
             ctx.dependency_digest("polint.extensions"),
+            graph,
         );
         ProviderRunResult {
             counts: Default::default(),
@@ -1045,6 +1132,135 @@ pub(crate) fn run_named_provider(id: &str, ctx: &mut ProviderCtx<'_>) -> Provide
     }
 }
 
+/// Whether a plan reads call targets, which is when the Go semantic sidecar
+/// computes the candidate callees of interface and function-value calls.
+/// What `plan` asks the semantic sidecar for: the call graph for plans that read
+/// call targets, and routes (with the repository's route models) for plans that
+/// read routes.
+pub(crate) fn go_semantic_request(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    root: &std::path::Path,
+) -> crate::go::semantic::provider::GoSemanticRequest {
+    let routes = plan.requests_capability("routes");
+    let dataflow = go_semantic_dataflow_requested(plan);
+    let models = if routes {
+        crate::go::route_models::load_repository_route_models(root)
+    } else {
+        crate::go::route_models::RepositoryRouteModels::default()
+    };
+    crate::go::semantic::provider::GoSemanticRequest {
+        call_graph: go_semantic_call_graph_requested(plan),
+        routes,
+        route_models: models.json,
+        route_model_problems: models.problems,
+        dataflow,
+        flow_models: dataflow
+            .then(|| std::sync::Arc::new(crate::go::flow_models::load_flow_models(root))),
+    }
+}
+
+pub(crate) fn go_semantic_call_graph_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
+    plan.requests_any_capability(&["calls", "dataflow", "call_graph"])
+}
+
+/// Whether the semantic sidecar emits flow programs: for a plan that reads data
+/// flow, whose Go queries the taint solver answers over them.
+pub(crate) fn go_semantic_dataflow_requested(plan: &crate::analysis_plan::AnalysisPlan) -> bool {
+    plan.requests_capability("dataflow")
+}
+
+/// Whether the run's deep capabilities reach past call resolution.
+///
+/// Control-flow guard queries read the CFG, its dominance relations and alias
+/// answers, and data flow over the value-flow graph reads the summaries and the
+/// domains they are built from. Call resolution reads none of these: its
+/// queries walk call edges, and the only refinement the summaries add to a call
+/// edge is a second copy of it. Neither do Go data-flow questions, which the
+/// taint solver answers over the typed frontend's flow programs.
+pub(crate) fn control_or_data_flow_requested(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    plan.requests_capability("control_flow") || graph_data_flow_requested(plan, db)
+}
+
+/// Whether the run's data-flow questions read the value-flow graph: a plan that
+/// reads data flow over sources in a language other than Go.
+pub(crate) fn graph_data_flow_requested(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    plan.requests_capability("dataflow")
+        && db
+            .files()
+            .iter()
+            .any(|file| file.language != crate::core::Language::Go)
+}
+
+/// Whether the CFG lowers Go bodies: always for control flow and for data flow
+/// over the value-flow graph, for an explicit request for per-point domain
+/// states, which are computed over the CFG, and for call resolution only when
+/// no typed Go call facts answer it (see [`go_points_to_requested`]).
+pub(crate) fn go_control_flow_requested(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    control_or_data_flow_requested(plan, db)
+        || plan.requests_per_point_domain_facts()
+        || db.go_semantic_callsites().is_empty()
+}
+
+/// Whether a run derives Go points-to facts: the type, value and alias facts of
+/// Go places, the Go part of the semantic graph, and the Go RTA edges.
+///
+/// Control-flow guard checks read alias answers and data flow reads the value
+/// graph, so plans asking for either always derive them. A plan that asks only
+/// for call resolution reads them only as refinements of call targets, and the
+/// typed call layer already answers every Go call site it joins — static
+/// callees exactly, dynamic ones by variable-type analysis or the class
+/// hierarchy — so on such a plan the points-to tiers would only re-label its
+/// targets. They remain the fallback when the typed layer produced nothing.
+pub(crate) fn go_points_to_requested(
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    control_or_data_flow_requested(plan, db) || db.go_semantic_callsites().is_empty()
+}
+
+/// Whether the scan has Go sources but the typed Go frontend loaded no package
+/// for them, which is what happens when no `go.mod` module root covers them.
+/// The frontend then succeeds with no rows, and a type question answered from
+/// those rows would read "no such field" where the truth is "not analyzed".
+/// Whether `capability` is answered from the typed Go frontend alone, so it is
+/// unavailable when that frontend loaded no package.
+pub(crate) fn reads_typed_go_frontend(capability: &str) -> bool {
+    matches!(capability, "go_types" | "routes")
+}
+
+/// Whether `capability` has nothing to answer it when the typed Go frontend
+/// loaded no package: the capabilities answered from that frontend alone, and
+/// data flow on a scan of Go sources only, whose questions the taint solver
+/// answers over the frontend's flow programs. A scan with other languages still
+/// builds the value-flow graph, which answers `forbidden` for every file, so
+/// data flow stays available there and `flows` reports the missing program as
+/// an unknown instead.
+pub(crate) fn unanswerable_without_typed_go_frontend(
+    capability: &str,
+    plan: &crate::analysis_plan::AnalysisPlan,
+    db: &AnalysisDb,
+) -> bool {
+    reads_typed_go_frontend(capability)
+        || (capability == "dataflow" && !graph_data_flow_requested(plan, db))
+}
+
+pub(crate) fn go_types_unloaded(db: &AnalysisDb) -> bool {
+    db.go_semantic_packages().is_empty()
+        && db
+            .files()
+            .iter()
+            .any(|file| file.language == crate::core::Language::Go)
+}
+
 /// Providers always present in today's `run()` schedule (graphs + metrics).
 const BASELINE_PROVIDER_SEEDS: &[&str] = &[
     "polint.module_graph",
@@ -1101,6 +1317,18 @@ pub(crate) fn providers_enabled_by_boolean_gates(
     if requested.contains("dataflow") {
         enabled.extend(["polint.data_flow", "polint.evidence"]);
     }
+    if requested.contains("call_graph") {
+        enabled.extend([
+            "polint.module_topology",
+            "polint.semantic_mir",
+            "polint.cfg",
+            "polint.calls",
+            "polint.go.semantic",
+        ]);
+    }
+    if requested.contains("go_types") || requested.contains("routes") {
+        enabled.insert("polint.go.semantic");
+    }
     enabled
 }
 
@@ -1122,6 +1350,8 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
             DATAFLOW_SEEDS
         }
         "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
+        "call_graph" => &["polint.calls"],
+        "go_types" | "routes" => &["polint.go.semantic"],
         _ => &[],
     }
 }
@@ -1130,6 +1360,21 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
 /// manifest dependency edges (input fact produced by provider).
 pub(crate) fn providers_enabled_by_capability_closure(
     requested: &std::collections::BTreeSet<&str>,
+) -> std::collections::BTreeSet<&'static str> {
+    providers_closure(requested, true)
+}
+
+/// The providers `requested` actually reads: their seeds and everything those
+/// depend on, without the baseline providers every run schedules regardless.
+pub(crate) fn providers_required_by_capabilities(
+    requested: &std::collections::BTreeSet<&str>,
+) -> std::collections::BTreeSet<&'static str> {
+    providers_closure(requested, false)
+}
+
+fn providers_closure(
+    requested: &std::collections::BTreeSet<&str>,
+    with_baseline: bool,
 ) -> std::collections::BTreeSet<&'static str> {
     use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -1141,7 +1386,11 @@ pub(crate) fn providers_enabled_by_capability_closure(
         }
     }
 
-    let mut seeds: BTreeSet<&'static str> = BASELINE_PROVIDER_SEEDS.iter().copied().collect();
+    let mut seeds: BTreeSet<&'static str> = if with_baseline {
+        BASELINE_PROVIDER_SEEDS.iter().copied().collect()
+    } else {
+        BTreeSet::new()
+    };
     for &capability in requested {
         seeds.extend(seed_providers_for_capability(capability).iter().copied());
     }
@@ -1487,6 +1736,43 @@ const PROVIDER_MANIFESTS: &[ProviderManifest] = &[
         precision_ceiling: PrecisionCeiling::SetupAware,
     },
     ProviderManifest {
+        id: "polint.go.semantic",
+        kind: ProviderKind::WholeRepoDerived,
+        inputs: &[
+            "source_files",
+            "packages",
+            "functions",
+            "go.module_roots",
+            "go.package_patterns",
+            "go.build_tags",
+            "go.include_tests",
+            "go.offline",
+        ],
+        outputs: &[
+            "go_semantic_packages",
+            "go_semantic_functions",
+            "go_semantic_callsites",
+            "go_semantic_method_sets",
+            "go_semantic_address_taken",
+            "go_semantic_instantiated_types",
+            "go_semantic_dynamic_dispatch",
+            "go_semantic_rta_edges",
+            "go_semantic_package_errors",
+            "go_semantic_call_edges",
+            "go_semantic_interfaces",
+            "go_semantic_implements",
+            "go_semantic_instantiations",
+            "go_semantic_conversions",
+            "go_semantic_builtin_calls",
+            "go_semantic_fields",
+            "go_semantic_params",
+        ],
+        language_ids: crate::frontend::LANGUAGE_IDS_GO,
+        cache_policy: CachePolicy::InMemoryDerived,
+        schema_versions: GO_SEMANTIC_SCHEMA,
+        precision_ceiling: PrecisionCeiling::SetupAware,
+    },
+    ProviderManifest {
         id: "polint.cfg",
         kind: ProviderKind::WholeRepoDerived,
         inputs: &[
@@ -1530,40 +1816,16 @@ const PROVIDER_MANIFESTS: &[ProviderManifest] = &[
             "places",
             "cfg_functions",
             "cfg_edges",
+            "go_semantic_functions",
+            "go_semantic_callsites",
+            "go_semantic_call_edges",
+            "go_semantic_conversions",
+            "go_semantic_builtin_calls",
         ],
         outputs: &["call_sites", "call_targets", "unresolved_calls"],
         language_ids: crate::frontend::LANGUAGE_IDS_GO_AND_TS,
         cache_policy: CachePolicy::InMemoryDerived,
         schema_versions: CALLS_SCHEMA,
-        precision_ceiling: PrecisionCeiling::SetupAware,
-    },
-    ProviderManifest {
-        id: "polint.go.semantic",
-        kind: ProviderKind::WholeRepoDerived,
-        inputs: &[
-            "source_files",
-            "packages",
-            "functions",
-            "go.module_roots",
-            "go.package_patterns",
-            "go.build_tags",
-            "go.include_tests",
-            "go.offline",
-        ],
-        outputs: &[
-            "go_semantic_packages",
-            "go_semantic_functions",
-            "go_semantic_callsites",
-            "go_semantic_method_sets",
-            "go_semantic_address_taken",
-            "go_semantic_instantiated_types",
-            "go_semantic_dynamic_dispatch",
-            "go_semantic_rta_edges",
-            "go_semantic_package_errors",
-        ],
-        language_ids: crate::frontend::LANGUAGE_IDS_GO,
-        cache_policy: CachePolicy::InMemoryDerived,
-        schema_versions: GO_SEMANTIC_SCHEMA,
         precision_ceiling: PrecisionCeiling::SetupAware,
     },
     ProviderManifest {
@@ -2075,6 +2337,9 @@ mod tests {
             "module_graph",
             "symbols",
             "references",
+            "call_graph",
+            "go_types",
+            "routes",
             "calls",
             "control_flow",
             "dataflow",
@@ -2135,9 +2400,9 @@ mod tests {
                 "polint.symbol_graph",
                 "polint.module_topology",
                 "polint.semantic_mir",
+                "polint.go.semantic",
                 "polint.cfg",
                 "polint.calls",
-                "polint.go.semantic",
                 "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
@@ -2168,9 +2433,9 @@ mod tests {
                 "polint.symbol_graph",
                 "polint.module_topology",
                 "polint.semantic_mir",
+                "polint.go.semantic",
                 "polint.cfg",
                 "polint.calls",
-                "polint.go.semantic",
                 "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
@@ -2228,9 +2493,9 @@ mod tests {
                 "polint.symbol_graph",
                 "polint.module_topology",
                 "polint.semantic_mir",
+                "polint.go.semantic",
                 "polint.cfg",
                 "polint.calls",
-                "polint.go.semantic",
                 "polint.ts.types",
                 "polint.identity",
                 "polint.abstract_domains",
@@ -2419,6 +2684,40 @@ mod tests {
                     ],
                 },
                 ProviderOrderRow {
+                    id: "polint.go.semantic",
+                    kind: "whole_repo_derived",
+                    language_scope: "go",
+                    inputs: vec![
+                        "source_files",
+                        "packages",
+                        "functions",
+                        "go.module_roots",
+                        "go.package_patterns",
+                        "go.build_tags",
+                        "go.include_tests",
+                        "go.offline",
+                    ],
+                    outputs: vec![
+                        "go_semantic_packages",
+                        "go_semantic_functions",
+                        "go_semantic_callsites",
+                        "go_semantic_method_sets",
+                        "go_semantic_address_taken",
+                        "go_semantic_instantiated_types",
+                        "go_semantic_dynamic_dispatch",
+                        "go_semantic_rta_edges",
+                        "go_semantic_package_errors",
+                        "go_semantic_call_edges",
+                        "go_semantic_interfaces",
+                        "go_semantic_implements",
+                        "go_semantic_instantiations",
+                        "go_semantic_conversions",
+                        "go_semantic_builtin_calls",
+                        "go_semantic_fields",
+                        "go_semantic_params",
+                    ],
+                },
+                ProviderOrderRow {
                     id: "polint.cfg",
                     kind: "whole_repo_derived",
                     language_scope: "multi_language",
@@ -2460,34 +2759,13 @@ mod tests {
                         "places",
                         "cfg_functions",
                         "cfg_edges",
-                    ],
-                    outputs: vec!["call_sites", "call_targets", "unresolved_calls"],
-                },
-                ProviderOrderRow {
-                    id: "polint.go.semantic",
-                    kind: "whole_repo_derived",
-                    language_scope: "go",
-                    inputs: vec![
-                        "source_files",
-                        "packages",
-                        "functions",
-                        "go.module_roots",
-                        "go.package_patterns",
-                        "go.build_tags",
-                        "go.include_tests",
-                        "go.offline",
-                    ],
-                    outputs: vec![
-                        "go_semantic_packages",
                         "go_semantic_functions",
                         "go_semantic_callsites",
-                        "go_semantic_method_sets",
-                        "go_semantic_address_taken",
-                        "go_semantic_instantiated_types",
-                        "go_semantic_dynamic_dispatch",
-                        "go_semantic_rta_edges",
-                        "go_semantic_package_errors",
+                        "go_semantic_call_edges",
+                        "go_semantic_conversions",
+                        "go_semantic_builtin_calls",
                     ],
+                    outputs: vec!["call_sites", "call_targets", "unresolved_calls"],
                 },
                 ProviderOrderRow {
                     id: "polint.ts.types",

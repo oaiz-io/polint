@@ -15,7 +15,7 @@ fact = { family = "Type", stable_key = "language=10:typescript", mode = "partial
 fact = { family = "NarrowedType", stable_key = "NarrowedType", mode = "partial", producer_id = "polint.type_value_alias" }
 
 [[expected]]
-fact = { family = "Value", stable_key = "language=10:typescript", mode = "partial", producer_id = "polint.type_value_alias", status = "present" }
+fact = { family = "Value", stable_key = "language=5:ts-js", mode = "partial", producer_id = "polint.type_value_alias", status = "present" }
 
 [[expected]]
 fact = { family = "AllocationToken", stable_key = "language=10:typescript", mode = "partial", producer_id = "polint.type_value_alias", status = "present" }

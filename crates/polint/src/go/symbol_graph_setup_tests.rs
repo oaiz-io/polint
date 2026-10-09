@@ -109,7 +109,12 @@ include_tests = false
                 package_patterns: vec!["./cmd/...".to_string(), "./pkg/...".to_string()],
                 build_tags: vec!["enterprise".to_string(), "polint".to_string()],
                 include_tests: false,
+                semantic_include_tests: false,
                 offline: false,
+                semantic_call_graph: false,
+                semantic_routes: false,
+                semantic_dataflow: false,
+                route_models: None,
                 semantic_timeout_ms: None,
                 emit_rta_edges: false,
                 // `package_patterns` is configured, so the symbol sidecar keeps

@@ -973,6 +973,7 @@ mod tests {
             caller: FunctionId::from_raw(0),
             target_function: None,
             target_symbol: None,
+            synthetic_target: None,
             edge_kind: CallEdgeKind::Unknown,
             algorithm: CallAlgorithm::Unsupported,
             status,

@@ -21,6 +21,12 @@ pub(crate) struct AnalysisPlan {
     capabilities: Vec<PlannedCapability>,
     setup_checks: Vec<SetupCheck>,
     support_view: CapabilitySupportView,
+    /// Whether a reader needs the abstract domains' state before and after every
+    /// operation, rather than only the summary inputs the shipped deep
+    /// capabilities read (function-entry and block-entry reachability, and the
+    /// solver's events). No public capability asks for per-point states, so only
+    /// an internal request sets it.
+    per_point_domain_facts: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +47,8 @@ pub(crate) struct PlannedRule {
     pub(crate) description: String,
     pub(crate) severity: Severity,
     pub(crate) requested_capabilities: Vec<String>,
+    /// Requested capabilities the rule runs without when they are unavailable.
+    pub(crate) optional_capabilities: Vec<String>,
     pub(crate) files: Vec<String>,
     pub(crate) allow_files: Vec<String>,
     pub(crate) options_digest: String,
@@ -140,6 +148,11 @@ impl AnalysisPlan {
                     description: input.meta.description.clone(),
                     severity: rule_options.severity.unwrap_or(input.meta.severity),
                     requested_capabilities: capabilities,
+                    optional_capabilities: input
+                        .capabilities
+                        .optional_names()
+                        .map(str::to_string)
+                        .collect(),
                     files: rule_options.files.clone(),
                     allow_files: rule_options.allow_files.clone(),
                     options_digest,
@@ -184,6 +197,25 @@ impl AnalysisPlan {
             .any(|planned| planned.capability == capability)
     }
 
+    /// See [`AnalysisPlan::per_point_domain_facts`]: false for every plan built
+    /// from rules or capability names.
+    pub(crate) fn requests_per_point_domain_facts(&self) -> bool {
+        self.per_point_domain_facts
+    }
+
+    /// The same plan, asking the abstract domains for every per-point state.
+    #[cfg(all(test, feature = "lang-go"))]
+    pub(crate) fn with_per_point_domain_facts(mut self) -> Self {
+        self.per_point_domain_facts = true;
+        self.digest = plan_digest(
+            &self.rules,
+            &self.capabilities,
+            &self.setup_checks,
+            self.per_point_domain_facts,
+        );
+        self
+    }
+
     pub(crate) fn requests_any_capability(&self, capabilities: &[&str]) -> bool {
         capabilities
             .iter()
@@ -198,6 +230,27 @@ impl AnalysisPlan {
         self.rules
             .iter()
             .filter(|rule| rule_requests_capability(rule, capability))
+            .filter(|rule| rule_matches_any_file(rule, files))
+            .map(|rule| rule.id.clone())
+            .collect()
+    }
+
+    /// The rules matching any of `files` that name `capability` themselves, not
+    /// through another capability that depends on it: a deep analysis depends on
+    /// symbols and references, but a rule asking only for `calls` does not read
+    /// them.
+    pub(crate) fn rules_requesting_capability_directly_matching_files(
+        &self,
+        capability: &str,
+        files: &[&SourceFile],
+    ) -> Vec<String> {
+        self.rules
+            .iter()
+            .filter(|rule| {
+                rule.requested_capabilities
+                    .iter()
+                    .any(|requested| requested == capability)
+            })
             .filter(|rule| rule_matches_any_file(rule, files))
             .map(|rule| rule.id.clone())
             .collect()
@@ -335,6 +388,7 @@ impl AnalysisPlan {
             description: "Requested capability analysis".to_string(),
             severity: Severity::Warn,
             requested_capabilities: names.iter().map(|name| (*name).to_string()).collect(),
+            optional_capabilities: Vec::new(),
             files: Vec::new(),
             allow_files: Vec::new(),
             options_digest: deterministic_rule_options(&RuleOptions::default()),
@@ -353,6 +407,11 @@ impl AnalysisPlan {
     pub(crate) fn full_pipeline_for_test() -> Self {
         Self::from_capability_names_for_test(&[
             "dataflow",
+            // Go data flow is answered by the taint solver alone; control flow
+            // keeps the Go CFG, points-to, domains and summaries in the plan.
+            "control_flow",
+            "symbols",
+            "references",
             "file_metrics",
             "function_metrics",
             "complexity_metrics",
@@ -366,6 +425,7 @@ impl AnalysisPlan {
             description: "Test rule".to_string(),
             severity: Severity::Warn,
             requested_capabilities: names.iter().map(|name| (*name).to_string()).collect(),
+            optional_capabilities: Vec::new(),
             files: Vec::new(),
             allow_files: Vec::new(),
             options_digest: deterministic_rule_options(&RuleOptions::default()),
@@ -393,7 +453,7 @@ impl AnalysisPlan {
                 })
                 .collect(),
         );
-        let digest = plan_digest(&rules, &capabilities, &setup_checks);
+        let digest = plan_digest(&rules, &capabilities, &setup_checks, false);
 
         Self {
             digest,
@@ -401,6 +461,7 @@ impl AnalysisPlan {
             capabilities,
             setup_checks,
             support_view,
+            per_point_domain_facts: false,
         }
     }
 }
@@ -783,9 +844,9 @@ fn insert_capability_request(
     entry.rules.insert(rule_id.to_string());
 }
 
-fn capability_dependencies(capability: &str) -> &'static [&'static str] {
+pub(crate) fn capability_dependencies(capability: &str) -> &'static [&'static str] {
     match capability {
-        "calls" | "control_flow" | "dataflow" => {
+        "calls" | "control_flow" | "dataflow" | "call_graph" => {
             &["resolved_imports", "module_graph", "symbols", "references"]
         }
         "references" => &["symbols"],
@@ -833,7 +894,10 @@ fn support_for(capability: &str) -> CapabilityAccumulator {
             None,
             None,
         ),
-        "cfg" | "call_graph" | "coverage_facts" => (
+        "call_graph" | "go_types" | "routes" => {
+            (CapabilitySupportStatus::Supported, None, None, None)
+        }
+        "cfg" | "coverage_facts" => (
             CapabilitySupportStatus::Unsupported,
             Some("Capability is not currently supported.".to_string()),
             None,
@@ -870,9 +934,15 @@ fn plan_digest(
     rules: &[PlannedRule],
     capabilities: &[PlannedCapability],
     setup_checks: &[SetupCheck],
+    per_point_domain_facts: bool,
 ) -> String {
     let mut parts = Vec::new();
     parts.push(format!("schema={}", encode_str(ANALYSIS_PLAN_SCHEMA)));
+    // Only an internal request sets it, so every other plan keeps the digest it
+    // always had.
+    if per_point_domain_facts {
+        parts.push("domains=per_point".to_string());
+    }
 
     for rule in rules {
         parts.push(format!("rule.id={}", encode_str(&rule.id)));
@@ -889,6 +959,14 @@ fn plan_digest(
             "rule.capabilities={}",
             encode_str_list(&rule.requested_capabilities)
         ));
+        // Only an optional request adds a part, so every other plan keeps the
+        // digest it always had.
+        if !rule.optional_capabilities.is_empty() {
+            parts.push(format!(
+                "rule.optional_capabilities={}",
+                encode_str_list(&rule.optional_capabilities)
+            ));
+        }
     }
 
     for capability in capabilities {
@@ -1251,7 +1329,7 @@ mod tests {
 
     #[test]
     fn reserved_capabilities_remain_unsupported() {
-        let accumulator = support_for("call_graph");
+        let accumulator = support_for("cfg");
 
         assert_eq!(accumulator.status, CapabilitySupportStatus::Unsupported);
         assert_eq!(
@@ -1263,12 +1341,12 @@ mod tests {
             Some("docs/facts/capability-plans.md")
         );
 
-        let plan = AnalysisPlan::from_capability_names_for_test(&["call_graph"]);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["cfg"]);
         let capability = plan
             .capabilities()
             .iter()
-            .find(|capability| capability.capability == "call_graph")
-            .unwrap_or_else(|| panic!("expected call_graph capability row: {plan:#?}"));
+            .find(|capability| capability.capability == "cfg")
+            .unwrap_or_else(|| panic!("expected cfg capability row: {plan:#?}"));
         assert_eq!(capability.status, CapabilitySupportStatus::Unsupported);
         assert_eq!(
             capability.reason.as_deref(),
@@ -1573,6 +1651,7 @@ mod tests {
                 description: "Needs coverage".to_string(),
                 severity: Severity::Warn,
                 requested_capabilities: vec!["coverage_facts".to_string()],
+                optional_capabilities: Vec::new(),
                 files: Vec::new(),
                 allow_files: Vec::new(),
                 options_digest: "options".to_string(),

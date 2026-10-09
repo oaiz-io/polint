@@ -25,40 +25,99 @@ pub enum DominanceMaterialization {
     ImmediateOnly,
 }
 
+/// Function graphs one parallel task derives rows for.
+const GRAPHS_PER_TASK: usize = 64;
+
+/// Derives one family of rows for every function graph of `view`, in parallel.
+///
+/// `derive` appends a graph's rows, numbering them from the counter it is
+/// handed and interning their keys into the interner it is handed. Tasks run
+/// over consecutive graphs against interner overlays; their rows are joined in
+/// graph order, each task's ids shifted behind the rows before it and its keys
+/// moved onto `interner`, so every row gets the id and key id a sequential walk
+/// over the graphs would have given it.
+fn derive_rows_per_graph<T: Send>(
+    interner: &crate::internal_core::StableKeyInterner,
+    graphs: &[CfgGraph<'_>],
+    derive: impl Fn(&crate::internal_core::StableKeyInterner, &CfgGraph<'_>, &mut u64, &mut Vec<T>)
+    + Sync,
+    relabel: impl Fn(&mut T, u64, &crate::internal_core::StableKeyRemap),
+) -> Vec<T> {
+    use rayon::prelude::*;
+
+    let parts = graphs
+        .par_chunks(GRAPHS_PER_TASK)
+        .map(|chunk| {
+            let overlay = interner.overlay();
+            let mut next_id = 1;
+            let mut rows = Vec::new();
+            for graph in chunk {
+                derive(&overlay, graph, &mut next_id, &mut rows);
+            }
+            (rows, next_id - 1, overlay)
+        })
+        .collect::<Vec<_>>();
+    let mut facts = Vec::new();
+    let mut offset = 0;
+    for (mut rows, count, overlay) in parts {
+        let remap = interner.absorb(&overlay);
+        for row in &mut rows {
+            relabel(row, offset, &remap);
+        }
+        offset += count;
+        facts.append(&mut rows);
+    }
+    facts
+}
+
 pub fn derive_reachability(
     interner: &crate::internal_core::StableKeyInterner,
     output: &CfgOutput,
     view: CfgView,
 ) -> Vec<ReachabilityFact> {
-    let mut facts = Vec::new();
-    let mut next_id = 1;
     let index = CfgGraphIndex::new(interner, output);
-    for graph in index.graphs(view) {
-        let function = graph.function_id();
-        let function_key = graph.function_stable_key();
-        let reachable = reachable_blocks(&graph);
-        for block in graph.block_refs() {
-            facts.push(ReachabilityFact {
-                id: ReachabilityId(next_id),
-                cfg_function: function,
-                view,
-                block: block.id,
-                reachable: reachable.contains(&block.id),
-                stable_key: stable_key(
-                    interner,
-                    FactFamily::CfgReachability,
-                    &[
-                        ("function", function_key.clone()),
-                        ("view", format!("{view:?}")),
-                        ("block", interner.resolve(block.stable_key).to_string()),
-                    ],
-                ),
-                status: CfgStatus::Resolved,
-                precision: CfgPrecision::ExactLowered,
-            });
-            next_id += 1;
-        }
-    }
+    derive_reachability_for(interner, &index.graphs(view), view)
+}
+
+pub(crate) fn derive_reachability_for(
+    interner: &crate::internal_core::StableKeyInterner,
+    graphs: &[CfgGraph<'_>],
+    view: CfgView,
+) -> Vec<ReachabilityFact> {
+    let mut facts = derive_rows_per_graph(
+        interner,
+        graphs,
+        |interner, graph, next_id, facts| {
+            let function = graph.function_id();
+            let function_key = graph.function_stable_key();
+            let reachable = reachable_blocks(graph);
+            for block in graph.block_refs() {
+                facts.push(ReachabilityFact {
+                    id: ReachabilityId(*next_id),
+                    cfg_function: function,
+                    view,
+                    block: block.id,
+                    reachable: reachable.contains(&block.id),
+                    stable_key: stable_key(
+                        interner,
+                        FactFamily::CfgReachability,
+                        &[
+                            ("function", function_key.clone()),
+                            ("view", format!("{view:?}")),
+                            ("block", interner.resolve(block.stable_key).to_string()),
+                        ],
+                    ),
+                    status: CfgStatus::Resolved,
+                    precision: CfgPrecision::ExactLowered,
+                });
+                *next_id += 1;
+            }
+        },
+        |row, offset, remap| {
+            row.id = ReachabilityId(row.id.0 + offset);
+            row.stable_key = remap.apply(row.stable_key);
+        },
+    );
     facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
     facts
 }
@@ -69,59 +128,76 @@ pub fn derive_dominators(
     view: CfgView,
     materialization: DominanceMaterialization,
 ) -> Vec<DominatorFact> {
-    let mut facts = Vec::new();
-    let mut next_id = 1;
-    let mut row_sources = Vec::new();
     let index = CfgGraphIndex::new(interner, output);
-    for graph in index.graphs(view) {
-        let function = graph.function_id();
-        let function_key = graph.function_stable_key();
-        let block_keys = block_key_map(interner, &graph);
-        let Some(entry) = graph.entry_block() else {
-            continue;
-        };
-        let reachable = reachable_blocks(&graph);
-        let tree = dom_tree(
-            &graph,
-            entry,
-            Direction::Forward,
-            &reachable,
-            &BTreeSet::new(),
-        );
-        for dominated in tree.universe() {
-            let immediate = tree.immediate(dominated, false);
-            // Under the bound the tree edge is the whole emission, so nothing
-            // walks the closure at all; the full relation reads it off the tree.
-            row_sources.clear();
-            match materialization {
-                DominanceMaterialization::ImmediateOnly => row_sources.extend(immediate),
-                DominanceMaterialization::Full => row_sources.extend(tree.dominators(dominated)),
+    derive_dominators_for(interner, &index.graphs(view), view, materialization)
+}
+
+pub(crate) fn derive_dominators_for(
+    interner: &crate::internal_core::StableKeyInterner,
+    graphs: &[CfgGraph<'_>],
+    view: CfgView,
+    materialization: DominanceMaterialization,
+) -> Vec<DominatorFact> {
+    let mut facts = derive_rows_per_graph(
+        interner,
+        graphs,
+        |interner, graph, next_id, facts| {
+            let function = graph.function_id();
+            let function_key = graph.function_stable_key();
+            let block_keys = block_key_map(interner, graph);
+            let Some(entry) = graph.entry_block() else {
+                return;
+            };
+            let reachable = reachable_blocks(graph);
+            let tree = dom_tree(
+                graph,
+                entry,
+                Direction::Forward,
+                &reachable,
+                &BTreeSet::new(),
+            );
+            let mut row_sources = Vec::new();
+            for dominated in tree.universe() {
+                let immediate = tree.immediate(dominated, false);
+                // Under the bound the tree edge is the whole emission, so nothing
+                // walks the closure at all; the full relation reads it off the tree.
+                row_sources.clear();
+                match materialization {
+                    DominanceMaterialization::ImmediateOnly => row_sources.extend(immediate),
+                    DominanceMaterialization::Full => {
+                        row_sources.extend(tree.dominators(dominated))
+                    }
+                }
+                for dominator in row_sources.iter().copied() {
+                    facts.push(DominatorFact {
+                        id: DominatorId(*next_id),
+                        cfg_function: function,
+                        view,
+                        dominator,
+                        dominated,
+                        immediate: immediate == Some(dominator),
+                        stable_key: stable_key(
+                            interner,
+                            FactFamily::CfgDominator,
+                            &[
+                                ("function", function_key.clone()),
+                                ("view", format!("{view:?}")),
+                                ("dominator", stable_block_key(&block_keys, dominator)),
+                                ("dominated", stable_block_key(&block_keys, dominated)),
+                            ],
+                        ),
+                        status: CfgStatus::Resolved,
+                        precision: CfgPrecision::ExactLowered,
+                    });
+                    *next_id += 1;
+                }
             }
-            for dominator in row_sources.iter().copied() {
-                facts.push(DominatorFact {
-                    id: DominatorId(next_id),
-                    cfg_function: function,
-                    view,
-                    dominator,
-                    dominated,
-                    immediate: immediate == Some(dominator),
-                    stable_key: stable_key(
-                        interner,
-                        FactFamily::CfgDominator,
-                        &[
-                            ("function", function_key.clone()),
-                            ("view", format!("{view:?}")),
-                            ("dominator", stable_block_key(&block_keys, dominator)),
-                            ("dominated", stable_block_key(&block_keys, dominated)),
-                        ],
-                    ),
-                    status: CfgStatus::Resolved,
-                    precision: CfgPrecision::ExactLowered,
-                });
-                next_id += 1;
-            }
-        }
-    }
+        },
+        |row, offset, remap| {
+            row.id = DominatorId(row.id.0 + offset);
+            row.stable_key = remap.apply(row.stable_key);
+        },
+    );
     facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
     facts
 }
@@ -132,64 +208,79 @@ pub fn derive_postdominators(
     view: CfgView,
     materialization: DominanceMaterialization,
 ) -> Vec<PostDominatorFact> {
-    let mut facts = Vec::new();
-    let mut next_id = 1;
-    let mut row_sources = Vec::new();
     let index = CfgGraphIndex::new(interner, output);
-    for graph in index.graphs(view) {
-        let function = graph.function_id();
-        let function_key = graph.function_stable_key();
-        let block_keys = block_key_map(interner, &graph);
-        let Some(tree) = reverse_dom_tree(&graph) else {
-            continue;
-        };
-        let virtual_exit = virtual_exit_for(function);
-        for postdominated in tree.universe() {
-            if postdominated == virtual_exit {
-                continue;
-            }
-            let immediate = tree.immediate(postdominated, false);
-            row_sources.clear();
-            match materialization {
-                DominanceMaterialization::ImmediateOnly => row_sources.extend(immediate),
-                DominanceMaterialization::Full => {
-                    row_sources.extend(tree.dominators(postdominated));
-                }
-            }
-            for postdominator in row_sources.iter().copied() {
-                if postdominator == virtual_exit {
+    derive_postdominators_for(interner, &index.graphs(view), view, materialization)
+}
+
+pub(crate) fn derive_postdominators_for(
+    interner: &crate::internal_core::StableKeyInterner,
+    graphs: &[CfgGraph<'_>],
+    view: CfgView,
+    materialization: DominanceMaterialization,
+) -> Vec<PostDominatorFact> {
+    let mut facts = derive_rows_per_graph(
+        interner,
+        graphs,
+        |interner, graph, next_id, facts| {
+            let function = graph.function_id();
+            let function_key = graph.function_stable_key();
+            let block_keys = block_key_map(interner, graph);
+            let Some(tree) = reverse_dom_tree(graph) else {
+                return;
+            };
+            let virtual_exit = virtual_exit_for(function);
+            let mut row_sources = Vec::new();
+            for postdominated in tree.universe() {
+                if postdominated == virtual_exit {
                     continue;
                 }
-                facts.push(PostDominatorFact {
-                    id: PostDominatorId(next_id),
-                    cfg_function: function,
-                    view,
-                    postdominator,
-                    postdominated,
-                    immediate: immediate == Some(postdominator),
-                    stable_key: stable_key(
-                        interner,
-                        FactFamily::CfgPostDominator,
-                        &[
-                            ("function", function_key.clone()),
-                            ("view", format!("{view:?}")),
-                            (
-                                "postdominator",
-                                stable_block_key(&block_keys, postdominator),
-                            ),
-                            (
-                                "postdominated",
-                                stable_block_key(&block_keys, postdominated),
-                            ),
-                        ],
-                    ),
-                    status: CfgStatus::Resolved,
-                    precision: CfgPrecision::ExactLowered,
-                });
-                next_id += 1;
+                let immediate = tree.immediate(postdominated, false);
+                row_sources.clear();
+                match materialization {
+                    DominanceMaterialization::ImmediateOnly => row_sources.extend(immediate),
+                    DominanceMaterialization::Full => {
+                        row_sources.extend(tree.dominators(postdominated));
+                    }
+                }
+                for postdominator in row_sources.iter().copied() {
+                    if postdominator == virtual_exit {
+                        continue;
+                    }
+                    facts.push(PostDominatorFact {
+                        id: PostDominatorId(*next_id),
+                        cfg_function: function,
+                        view,
+                        postdominator,
+                        postdominated,
+                        immediate: immediate == Some(postdominator),
+                        stable_key: stable_key(
+                            interner,
+                            FactFamily::CfgPostDominator,
+                            &[
+                                ("function", function_key.clone()),
+                                ("view", format!("{view:?}")),
+                                (
+                                    "postdominator",
+                                    stable_block_key(&block_keys, postdominator),
+                                ),
+                                (
+                                    "postdominated",
+                                    stable_block_key(&block_keys, postdominated),
+                                ),
+                            ],
+                        ),
+                        status: CfgStatus::Resolved,
+                        precision: CfgPrecision::ExactLowered,
+                    });
+                    *next_id += 1;
+                }
             }
-        }
-    }
+        },
+        |row, offset, remap| {
+            row.id = PostDominatorId(row.id.0 + offset);
+            row.stable_key = remap.apply(row.stable_key);
+        },
+    );
     facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
     facts
 }
@@ -199,66 +290,81 @@ pub fn derive_control_dependence(
     output: &CfgOutput,
     view: CfgView,
 ) -> Vec<ControlDependenceFact> {
-    let mut facts = Vec::new();
-    let mut next_id = 1;
     let index = CfgGraphIndex::new(interner, output);
-    for graph in index.graphs(view) {
-        let function = graph.function_id();
-        let function_key = graph.function_stable_key();
-        let tree = reverse_dom_tree(&graph);
-        let block_keys = block_key_map(interner, &graph);
-        let mut seen = BTreeSet::new();
-        // The runner walks the post-dominator tree, which is acyclic — except
-        // through the vacuous blocks, where the immediate rule maps the smallest
-        // to the second smallest and every other one to the smallest. An edge
-        // from a reachable block into such a region makes the walk alternate
-        // between two of them forever, so it stops at the first repeat and keeps
-        // the facts it produced up to there.
-        let mut walked = Vec::new();
+    derive_control_dependence_for(interner, &index.graphs(view), view)
+}
 
-        for edge in graph.edge_refs() {
-            if edge.from_block == edge.to_block {
-                continue;
-            }
-            if tree
-                .as_ref()
-                .is_some_and(|tree| tree.dominates(edge.to_block, edge.from_block))
-            {
-                continue;
-            }
-            let stop = tree
-                .as_ref()
-                .and_then(|tree| tree.immediate(edge.from_block, true));
-            let mut runner = edge.to_block;
-            walked.clear();
-            while Some(runner) != stop {
-                if walked.contains(&runner) {
-                    break;
+pub(crate) fn derive_control_dependence_for(
+    interner: &crate::internal_core::StableKeyInterner,
+    graphs: &[CfgGraph<'_>],
+    view: CfgView,
+) -> Vec<ControlDependenceFact> {
+    let mut facts = derive_rows_per_graph(
+        interner,
+        graphs,
+        |interner, graph, next_id, facts| {
+            let function = graph.function_id();
+            let function_key = graph.function_stable_key();
+            let tree = reverse_dom_tree(graph);
+            let block_keys = block_key_map(interner, graph);
+            let mut seen = BTreeSet::new();
+            // The runner walks the post-dominator tree, which is acyclic — except
+            // through the vacuous blocks, where the immediate rule maps the smallest
+            // to the second smallest and every other one to the smallest. An edge
+            // from a reachable block into such a region makes the walk alternate
+            // between two of them forever, so it stops at the first repeat and keeps
+            // the facts it produced up to there.
+            let mut walked = Vec::new();
+
+            for edge in graph.edge_refs() {
+                if edge.from_block == edge.to_block {
+                    continue;
                 }
-                walked.push(runner);
-                let key = (edge.id, runner);
-                if seen.insert(key) {
-                    facts.push(control_dependence_fact(
-                        interner,
-                        next_id,
-                        function_key.as_str(),
-                        function,
-                        view,
-                        edge,
-                        (runner, stable_block_key(&block_keys, runner)),
-                    ));
-                    next_id += 1;
+                if tree
+                    .as_ref()
+                    .is_some_and(|tree| tree.dominates(edge.to_block, edge.from_block))
+                {
+                    continue;
                 }
-                let Some(next) = tree.as_ref().and_then(|tree| tree.immediate(runner, true)) else {
-                    break;
-                };
-                if next == runner {
-                    break;
+                let stop = tree
+                    .as_ref()
+                    .and_then(|tree| tree.immediate(edge.from_block, true));
+                let mut runner = edge.to_block;
+                walked.clear();
+                while Some(runner) != stop {
+                    if walked.contains(&runner) {
+                        break;
+                    }
+                    walked.push(runner);
+                    let key = (edge.id, runner);
+                    if seen.insert(key) {
+                        facts.push(control_dependence_fact(
+                            interner,
+                            *next_id,
+                            function_key.as_str(),
+                            function,
+                            view,
+                            edge,
+                            (runner, stable_block_key(&block_keys, runner)),
+                        ));
+                        *next_id += 1;
+                    }
+                    let Some(next) = tree.as_ref().and_then(|tree| tree.immediate(runner, true))
+                    else {
+                        break;
+                    };
+                    if next == runner {
+                        break;
+                    }
+                    runner = next;
                 }
-                runner = next;
             }
-        }
-    }
+        },
+        |row, offset, remap| {
+            row.id = ControlDependenceId(row.id.0 + offset);
+            row.stable_key = remap.apply(row.stable_key);
+        },
+    );
     facts.sort_by_cached_key(|row| interner.resolve(row.stable_key));
     facts
 }

@@ -120,6 +120,35 @@ pub struct MirOutput {
 }
 
 impl MirOutput {
+    /// Rewrites every stable-key id the output carries through `remap`.
+    ///
+    /// Used to move an output lowered against an interner overlay onto the
+    /// interner the overlay was absorbed into.
+    pub(crate) fn remap_stable_keys(&mut self, remap: impl Fn(StableKeyId) -> StableKeyId) {
+        for body in &mut self.bodies {
+            body.owner_stable_key = remap(body.owner_stable_key);
+            body.stable_key = remap(body.stable_key);
+        }
+        for block in &mut self.blocks {
+            block.stable_key = remap(block.stable_key);
+        }
+        for statement in &mut self.statements {
+            statement.stable_key = remap(statement.stable_key);
+        }
+        for terminator in &mut self.terminators {
+            terminator.stable_key = remap(terminator.stable_key);
+        }
+        for place in &mut self.places {
+            place.stable_key = remap(place.stable_key);
+        }
+        for operation in &mut self.operations {
+            operation.stable_key = remap(operation.stable_key);
+        }
+        for row in &mut self.unsupported {
+            row.stable_key = remap(row.stable_key);
+        }
+    }
+
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         self.bodies
             .sort_by_cached_key(|body| interner.resolve(body.stable_key));

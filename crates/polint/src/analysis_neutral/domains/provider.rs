@@ -41,6 +41,34 @@ pub fn derive_abstract_domains_with_cache_stats(
     )
 }
 
+/// Stores no domain facts, for a run none of whose capabilities reads them: the
+/// summaries are their only reader, and call resolution reads no summary.
+#[allow(clippy::too_many_arguments)]
+pub fn derive_skipped_abstract_domains_with_cache_stats(
+    db: &mut impl AnalysisHost,
+    input_snapshot: &InputSnapshot,
+    manifest: &ProviderManifest,
+    semantic_mir_output_digest: Digest,
+    cfg_output_digest: Digest,
+    calls_output_digest: Digest,
+    symbol_graph_output_digest: Digest,
+    module_topology_output_digest: Digest,
+    upstream_syntax_output_digests: Vec<Digest>,
+) -> AbstractDomainsProviderOutput {
+    derive_abstract_domains_with_materialization(
+        db,
+        input_snapshot,
+        manifest,
+        semantic_mir_output_digest,
+        cfg_output_digest,
+        calls_output_digest,
+        symbol_graph_output_digest,
+        module_topology_output_digest,
+        upstream_syntax_output_digests,
+        DomainMaterialization::Skipped,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn derive_summary_input_abstract_domains_with_cache_stats(
     db: &mut impl AnalysisHost,
@@ -80,25 +108,37 @@ fn derive_abstract_domains_with_materialization(
     upstream_syntax_output_digests: Vec<Digest>,
     materialization: DomainMaterialization,
 ) -> AbstractDomainsProviderOutput {
+    let mut started = std::time::Instant::now();
+    let mut checkpoint = |step: &'static str| {
+        tracing::debug!(target: "polint::kernel::stage", provider = "polint.abstract_domains", step, elapsed_ms = started.elapsed().as_millis() as u64, "provider step");
+        started = std::time::Instant::now();
+    };
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let solver = IdeDomainSolver::new(SolverPolicy::deterministic());
     let result = match materialization {
-        DomainMaterialization::Full => solver.solve(SolverInput::from(&*db)),
+        DomainMaterialization::Full => Some(solver.solve(SolverInput::from(&*db))),
         DomainMaterialization::SummaryInputs => {
-            solver.solve_summary_inputs(SolverInput::from(&*db))
+            Some(solver.solve_summary_inputs(SolverInput::from(&*db)))
         }
+        DomainMaterialization::Skipped => None,
     };
+    checkpoint("solve");
     let body_keys = body_stable_key_map(db);
     let block_keys = block_stable_key_map(db);
     let operation_keys = operation_stable_key_map(db);
     let place_keys = place_stable_key_map(db);
-    let output = DomainOutput::from_results_with_materialization(
-        interner,
-        result.results(),
-        Some(&place_keys),
-        materialization,
-    );
+    checkpoint("key_maps");
+    let output = match &result {
+        Some(result) => DomainOutput::from_results_with_materialization(
+            interner,
+            result.results(),
+            Some(&place_keys),
+            materialization,
+        ),
+        None => DomainOutput::empty(),
+    };
+    checkpoint("materialize");
     let output_digest = abstract_domains_output_digest(
         manifest,
         input_snapshot,
@@ -116,9 +156,11 @@ fn derive_abstract_domains_with_materialization(
         &output,
         materialization,
     );
+    checkpoint("digest");
     let mut cache_stats = CacheStats::default();
     cache_stats.record_recompute();
     db.replace_abstract_domain_facts(output);
+    checkpoint("store_metadata");
 
     AbstractDomainsProviderOutput {
         diagnostics: Vec::new(),
@@ -230,6 +272,7 @@ fn materialization_label(materialization: DomainMaterialization) -> &'static str
     match materialization {
         DomainMaterialization::Full => "full",
         DomainMaterialization::SummaryInputs => "summary_inputs",
+        DomainMaterialization::Skipped => "skipped",
     }
 }
 
