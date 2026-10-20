@@ -10,6 +10,6 @@
     "@scope/lib": "^2.3.0"
   },
   "devDependencies": {
-    "vitest": "^3.2.1"
+    "vitest": "^3.2.6"
   }
 }
