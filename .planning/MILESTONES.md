@@ -1,5 +1,16 @@
 # Milestones
 
+## v2.0 Static Analysis 2.0 Implementation (Re-scoped: 2026-11-02)
+
+**Phases completed:** 3 of 9, Phase 63 through Phase 65 (benchmarks and regression gates, SQLite store foundation, generation manifests with sealed outcomes and cold/warm parity).
+
+**Artifacts:** [roadmap archive](milestones/v2.0-ROADMAP.md), [requirements archive](milestones/v2.0-REQUIREMENTS.md), phase records under `phases/63-*`, `64-*`, `65-*`.
+
+**Disposition:** the surviving requirements (summary persistence and invalidation frontier, query engine, graph CLI, validation gates) are carried into v2.1 as file-based persistence and in-memory query services; provider metadata mirroring, whole-fact SQLite ingest, lexical search and SQLite scale benchmarks are cut. Research: `research/v2.1-engine/03-semantic-store-rescoping.md`.
+
+**Shipped outside the phase sequence while v2.0 was open:** the perf campaign (#129–#132) and Go deep analysis (#133), recorded as quick tasks in `STATE.md`.
+
+
 ## v1.3 Graph Engine Precision (Completed: 2026-06-06)
 
 **Phases completed:** 13 phases, Phase 42 through Phase 54

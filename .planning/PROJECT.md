@@ -61,20 +61,21 @@ Archived milestone records:
 - `.planning/milestones/v1.3-REQUIREMENTS.md`
 - `.planning/milestones/v1.4-ROADMAP.md`
 
-## Current Milestone: v2.0 Static Analysis 2.0 Implementation
+## Current Milestone: v2.1 Engine Depth
 
-**Goal:** Build the Static Analysis 2.0 implementation foundation that turns polint's existing private analysis engine into a durable, queryable local semantic layer for custom Rust rules, agentic review, and future local graph exploration.
+**Goal:** Make deep analysis usable in the inner loop, bring TypeScript/JavaScript to parity with Go, give AI agents an honest queryable graph, and cut the rule-pack build cost, without giving up byte-identical, deterministic output.
 
-**Target features:**
-- SQLite/rusqlite local semantic store skeleton with migrations, manifest, generation tracking, and private store facade.
-- Durable persistence for validated facts, graph adjacency/evidence indexes, summaries, provenance/status metadata, and invalidation dependencies.
-- Registry-ready package summary manifests and content-addressed payload seams, without building a remote registry yet.
-- Local CLI graph/query foundations for used-by, neighbors, callers/callees, paths, taint-style reachability, filters, and agent-shaped JSON envelopes.
-- Tantivy lexical-search boundary over stable semantic-store document IDs, with vector search deferred behind explicit model/chunker/provenance lockfiles.
-- Deterministic validation gates: cold/warm parity, crash/recovery behavior, query correctness fixtures, budget/unknown preservation, and benchmark coverage.
-- Strict public-boundary discipline: store tables, raw graph internals, provider IDs, parser IDs, and SQL remain private until intentionally promoted.
+**Position on 2026-11-02 (`main` at `338b570b`, v0.5.0):** v2.0 shipped phases 63–65 (benchmarks, store foundation, generation manifests) and was re-scoped. Between July and October the project shipped the perf campaign (#129–#132: OAIZ full-repo warm ~10 s → under 6 s, byte-identical) and Go deep analysis (#133: typed call graph, framework routes, SSA flow programs and a summary-based taint solver; taint corpus 0.946 precision / 1.000 recall). The measured gaps, researched in `.planning/research/v2.1-engine/`, are: the one-file edit tier equals cold (41.7 s calls / 68.2 s dataflow on OAIZ `core`), so deep capabilities are review/CI-only; TypeScript has no flow programs, typed calls in `polint.calls`, or route models (gated Jelly F1 0.79); and six kernel identity/outcome bugs (#86–#91) plus the absence of `polint graph` keep deep answers out of agents' hands.
 
-**Source context:** v1.2 built the private analysis substrate, v1.3 improved graph precision, v1.4 promoted policy-query SDK views, and the 2026-07-07 research pass locked the Static Analysis 2.0 product and technology direction. v2.0 starts by making the analysis graph durable and queryable locally while preserving future registry seams.
+**Target features (18 phases, 72–89, one pull request each):**
+- Kernel truth: identity and invalidation fixes, outcome truthfulness (72–73).
+- Go edit tier: sidecar instrumentation and edit cell, per-package shards, per-unit summary store with invalidation frontier, incremental VTA with persisted taint summaries, promotion of deep capabilities into the default `check` path (74–78).
+- Agent graph: `polint graph callers|callees|used-by|reach` then `path|taint` with a versioned envelope and honest status vocabulary (79, 84).
+- TypeScript parity: language-neutral contracts, Oxc-based flow programs and a TS taint corpus, type-directed enrichment, Express/Fastify/Hono routes (80–83).
+- Thin SDK: a measured spike, then SDK extraction, fact snapshot protocol and runner cutover if green (85–88).
+- Closeout with a determinism matrix and a benchmark report against gates G1–G8 (89).
+
+**Source context:** `.planning/ROADMAP.md`, `.planning/REQUIREMENTS.md`, `.planning/research/v2.1-engine/README.md`, archived v2.0 plan in `.planning/milestones/v2.0-*`.
 
 ## Requirements
 
@@ -137,7 +138,7 @@ Archived milestone records:
 
 ### Active
 
-v2.0 Static Analysis 2.0 Implementation requirements are approved in `.planning/REQUIREMENTS.md` (67 requirements: product boundaries, ground-truth benchmarks, pipeline cost discipline, store foundation, metadata/invalidation, summary persistence, warm review payoff, internal query engine, graph CLI, search boundary, validation/recovery/scale) and mapped to roadmap phases 63-71 in `.planning/ROADMAP.md`. The milestone is anchored on falsifiable outcome gates: scale (≤ +20% peak RSS / +25% cold wall-clock regression budget over the store-disabled baseline), latency (warm `polint review` recomputes only the instrumented invalidation frontier), honesty (unknown/budget states durable end to end), and accuracy visibility (persisted-graph recall baseline recorded, not raised). Phase 70 (Tantivy lexical search) is the designated scope-cut.
+v2.1 Engine Depth requirements are approved in `.planning/REQUIREMENTS.md` (41 requirements: kernel truth, Go edit tier, persistence, agent graph, TypeScript parity, thin SDK, product/validation) and mapped to roadmap phases 72–89 in `.planning/ROADMAP.md`. The milestone is anchored on eight falsifiable gates: edit tier (calls ≤ 15 s / dataflow ≤ 20 s on a one-file edit), inner loop, byte identity, TS parity (corpus precision/recall and route fixtures), agent graph (≤ 2 s warm answers with an honest envelope), honesty, ice-cold build (conditional on the thin-SDK spike), and the regression budget.
 
 ### Out of Scope
 
