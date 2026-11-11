@@ -1,0 +1,4554 @@
+{
+  "constructs": {
+    "cases": {
+      "callback/builtin-invoked": {
+        "base": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [
+            "main.js:11 -> square",
+            "main.js:12 -> arrow",
+            "main.js:12 -> isEven"
+          ],
+          "calls_found": 1,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 3,
+          "expected_calls": 1,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 9
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 9
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.75,
+            "without_target": 3,
+            "without_target_share": 0.75
+          }
+        },
+        "construct": "callback",
+        "description": "Functions passed to Array methods and to an inline arrow are invoked by the runtime, not by user code.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [
+            "main.js:11 -> square",
+            "main.js:12 -> arrow",
+            "main.js:12 -> isEven"
+          ],
+          "calls_found": 1,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 3,
+          "expected_calls": 1,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 9
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 9
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.75,
+            "without_target": 3,
+            "without_target_share": 0.75
+          }
+        }
+      },
+      "callback/higher-order-parameter": {
+        "base": {
+          "call_recall": 0.3333,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [
+            "main.js:3 -> double",
+            "main.js:11 -> double",
+            "main.js:11 -> increment",
+            "main.js:20 -> composed"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 6,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 14
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 14
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 7,
+            "marked_unresolved": 5,
+            "marked_unresolved_share": 0.7143,
+            "without_target": 5,
+            "without_target_share": 0.7143
+          }
+        },
+        "construct": "callback",
+        "description": "A user-written higher-order function calls the function it receives as a parameter.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.6667,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 4,
+          "calls_missed": [
+            "main.js:11 -> double",
+            "main.js:11 -> increment"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 6,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 4,
+          "references": {
+            "by_status": {
+              "Resolved": 14
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 14
+          },
+          "true_positive_edges": 4,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 7,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 0.2857,
+            "without_target": 2,
+            "without_target_share": 0.2857
+          }
+        }
+      },
+      "cjs-exports-property/function-expressions": {
+        "base": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "main.js:4 -> shout",
+            "strings.js:7 -> upper"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 3,
+              "Unresolved": 4
+            },
+            "not_resolved": 4,
+            "not_resolved_share": 0.5714,
+            "references": 7
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 4,
+            "marked_unresolved_share": 1.0,
+            "without_target": 4,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "cjs-exports-property",
+        "description": "Function expressions are assigned to exports.x and call each other through the exports object.",
+        "exports": {
+          "export_fact_rows": {
+            "CommonJsExportsProperty/Unsupported": 2
+          },
+          "facts": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 2,
+            "observed_names": 2,
+            "precision": 1.0,
+            "predicted_names": 2,
+            "recall": 1.0
+          },
+          "symbols": {
+            "files": 1,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 2,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": 0.0
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.5,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "strings.js:7 -> upper"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 3,
+              "Unresolved": 4
+            },
+            "not_resolved": 4,
+            "not_resolved_share": 0.5714,
+            "references": 7
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.75,
+            "without_target": 3,
+            "without_target_share": 0.75
+          }
+        }
+      },
+      "cjs-exports-property/renamed-destructuring": {
+        "base": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "main.js:4 -> next",
+            "main.js:5 -> reset"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 7,
+              "Unresolved": 3
+            },
+            "not_resolved": 3,
+            "not_resolved_share": 0.3,
+            "references": 10
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 1.0,
+            "without_target": 3,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "cjs-exports-property",
+        "description": "Declared functions are attached to exports.x and required through a destructuring pattern that renames one of them.",
+        "exports": {
+          "export_fact_rows": {
+            "CommonJsExportsProperty/Unsupported": 2
+          },
+          "facts": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 2,
+            "observed_names": 2,
+            "precision": 1.0,
+            "predicted_names": 2,
+            "recall": 1.0
+          },
+          "symbols": {
+            "files": 1,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 2,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": 0.0
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 7,
+              "Unresolved": 3
+            },
+            "not_resolved": 3,
+            "not_resolved_share": 0.3,
+            "references": 10
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.3333,
+            "without_target": 1,
+            "without_target_share": 0.3333
+          }
+        }
+      },
+      "cjs-module-exports/function-with-property": {
+        "base": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "logger.js:3 -> format",
+            "main.js:4 -> log",
+            "main.js:5 -> format"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 4,
+              "Unresolved": 4
+            },
+            "not_resolved": 4,
+            "not_resolved_share": 0.5,
+            "references": 8
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 4,
+            "marked_unresolved_share": 1.0,
+            "without_target": 4,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "cjs-module-exports",
+        "description": "module.exports is replaced by a function, and a helper is attached as a property of that function.",
+        "exports": {
+          "export_fact_rows": {
+            "CommonJsModuleExports/Unsupported": 1
+          },
+          "facts": {
+            "files": 1,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 1,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": 0.0
+          },
+          "symbols": {
+            "files": 1,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 1,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": 0.0
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": false,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.6667,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [
+            "logger.js:3 -> format"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 4,
+              "Unresolved": 4
+            },
+            "not_resolved": 4,
+            "not_resolved_share": 0.5,
+            "references": 8
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 0.5,
+            "without_target": 2,
+            "without_target_share": 0.5
+          }
+        }
+      },
+      "cjs-module-exports/object-literal": {
+        "base": {
+          "call_recall": 0.3333,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:5 -> mul",
+            "main.js:6 -> add"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 14,
+              "Unresolved": 3
+            },
+            "not_resolved": 3,
+            "not_resolved_share": 0.1765,
+            "references": 17
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 4,
+            "marked_unresolved_share": 0.8,
+            "without_target": 4,
+            "without_target_share": 0.8
+          }
+        },
+        "construct": "cjs-module-exports",
+        "description": "A CommonJS module assigns an object literal to module.exports; callers require it whole and destructured.",
+        "exports": {
+          "export_fact_rows": {
+            "CommonJsModuleExports/Unsupported": 1
+          },
+          "facts": {
+            "files": 1,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 2,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": 0.0
+          },
+          "symbols": {
+            "files": 1,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 2,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": 0.0
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 14,
+              "Unresolved": 3
+            },
+            "not_resolved": 3,
+            "not_resolved_share": 0.1765,
+            "references": 17
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 0.4,
+            "without_target": 2,
+            "without_target_share": 0.4
+          }
+        }
+      },
+      "class-method/instance-and-static": {
+        "base": {
+          "call_recall": 0.4,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [
+            "main.ts:11 -> Queue.push",
+            "main.ts:17 -> Queue.size",
+            "main.ts:25 -> Queue.push"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 5,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 7
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 7
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 6,
+            "marked_unresolved": 4,
+            "marked_unresolved_share": 0.6667,
+            "without_target": 4,
+            "without_target_share": 0.6667
+          }
+        },
+        "construct": "class-method",
+        "description": "A TypeScript class with a constructor, an instance method calling another through this, and a static factory.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 5,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 5,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 5,
+          "references": {
+            "by_status": {
+              "Resolved": 7
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 7
+          },
+          "true_positive_edges": 5,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 6,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.1667,
+            "without_target": 1,
+            "without_target_share": 0.1667
+          }
+        }
+      },
+      "class-method/subclass-override": {
+        "base": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:11 -> Shape.area",
+            "main.js:15 -> Shape.describe",
+            "shape.js:4 -> Square.area"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 4
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 4
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 4,
+            "marked_unresolved_share": 0.8,
+            "without_target": 4,
+            "without_target_share": 0.8
+          }
+        },
+        "construct": "class-method",
+        "description": "A subclass overrides a method that the base class calls through this, and calls the base implementation through super.",
+        "exports": {
+          "export_fact_rows": {
+            "Named/Resolved": 1
+          },
+          "facts": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 1,
+            "observed_names": 1,
+            "precision": 1.0,
+            "predicted_names": 1,
+            "recall": 1.0
+          },
+          "symbols": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 1,
+            "observed_names": 1,
+            "precision": 1.0,
+            "predicted_names": 1,
+            "recall": 1.0
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:11 -> Shape.area",
+            "main.js:15 -> Shape.describe",
+            "shape.js:4 -> Square.area"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 4
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 4
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 4,
+            "marked_unresolved_share": 0.8,
+            "without_target": 4,
+            "without_target_share": 0.8
+          }
+        }
+      },
+      "closure/captured-callback": {
+        "base": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:9 -> onEvent",
+            "main.js:19 -> on",
+            "main.js:20 -> emit"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 9
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 9
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.75,
+            "without_target": 3,
+            "without_target_share": 0.75
+          }
+        },
+        "construct": "closure",
+        "description": "A closure stores a callback in a captured variable and calls it later from a separate returned method.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.75,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [
+            "main.js:9 -> onEvent"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 9
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 9
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.25,
+            "without_target": 1,
+            "without_target_share": 0.25
+          }
+        }
+      },
+      "closure/factory-returned-function": {
+        "base": {
+          "call_recall": 0.6667,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [
+            "main.js:13 -> limited"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 7,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.125,
+            "references": 8
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.25,
+            "without_target": 2,
+            "without_target_share": 0.5
+          }
+        },
+        "construct": "closure",
+        "description": "A factory returns an inner function that captures a variable and a helper; callers invoke the returned function.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 7,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.125,
+            "references": 8
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 0,
+            "marked_unresolved_share": 0.0,
+            "without_target": 1,
+            "without_target_share": 0.25
+          }
+        }
+      },
+      "dynamic-import/computed-specifier": {
+        "base": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 2,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.3333,
+            "references": 3
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 4,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "dynamic-import",
+        "description": "import() receives a specifier assembled at run time, so the loaded module and the called function are hidden.",
+        "exports": {
+          "export_fact_rows": {
+            "Named/Resolved": 1
+          },
+          "facts": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 1,
+            "observed_names": 1,
+            "precision": 1.0,
+            "predicted_names": 1,
+            "recall": 1.0
+          },
+          "symbols": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 1,
+            "observed_names": 1,
+            "precision": 1.0,
+            "predicted_names": 1,
+            "recall": 1.0
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": [
+            "main.js:4 -> greet"
+          ]
+        },
+        "refined": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 2,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.3333,
+            "references": 3
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 4,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        }
+      },
+      "dynamic-import/literal-specifier": {
+        "base": {
+          "call_recall": 0.5,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:4 -> activate"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 3
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 3
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.5,
+            "without_target": 1,
+            "without_target_share": 0.5
+          }
+        },
+        "construct": "dynamic-import",
+        "description": "A module is loaded with import() of a string literal and a function from the loaded namespace is called.",
+        "exports": {
+          "export_fact_rows": {
+            "Named/Resolved": 1
+          },
+          "facts": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 1,
+            "observed_names": 1,
+            "precision": 1.0,
+            "predicted_names": 1,
+            "recall": 1.0
+          },
+          "symbols": {
+            "files": 1,
+            "files_exact": 1,
+            "matched_names": 1,
+            "observed_names": 1,
+            "precision": 1.0,
+            "predicted_names": 1,
+            "recall": 1.0
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.5,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:4 -> activate"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 3
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 3
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.5,
+            "without_target": 1,
+            "without_target_share": 0.5
+          }
+        }
+      },
+      "dynamic-property/computed-key-known-set": {
+        "base": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "main.js:12 -> add",
+            "main.js:12 -> sub"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 6
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 6
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "dynamic-property",
+        "description": "Methods are called through computed keys taken from a constant list in the same file.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "main.js:12 -> add",
+            "main.js:12 -> sub"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 6
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 6
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        }
+      },
+      "dynamic-property/key-from-input": {
+        "base": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 2,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.3333,
+            "references": 3
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 12,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "dynamic-property",
+        "description": "A method is called through a key read from the environment, so the target is not visible in the source.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": [
+            "main.js:12 -> build"
+          ]
+        },
+        "refined": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 2,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.3333,
+            "references": 3
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 12,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        }
+      },
+      "esm-reexport/named-barrel": {
+        "base": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "main.js:4 -> parse",
+            "main.js:4 -> render"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [
+            "main.js:4",
+            "main.js:4"
+          ],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 4,
+              "Unresolved": 2
+            },
+            "not_resolved": 2,
+            "not_resolved_share": 0.3333,
+            "references": 6
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 0.5,
+            "without_target": 4,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "esm-reexport",
+        "description": "An index module re-exports named functions from two modules; the caller imports through the barrel.",
+        "exports": {
+          "export_fact_rows": {
+            "Named/Resolved": 2,
+            "Namespace/Unresolved": 2
+          },
+          "facts": {
+            "files": 3,
+            "files_exact": 3,
+            "matched_names": 4,
+            "observed_names": 4,
+            "precision": 1.0,
+            "predicted_names": 4,
+            "recall": 1.0
+          },
+          "symbols": {
+            "files": 3,
+            "files_exact": 2,
+            "matched_names": 2,
+            "observed_names": 4,
+            "precision": 1.0,
+            "predicted_names": 2,
+            "recall": 0.5
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 4,
+              "Unresolved": 2
+            },
+            "not_resolved": 2,
+            "not_resolved_share": 0.3333,
+            "references": 6
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 0.5,
+            "without_target": 2,
+            "without_target_share": 0.5
+          }
+        }
+      },
+      "esm-reexport/star-and-alias": {
+        "base": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "main.js:5 -> circleArea",
+            "main.js:6 -> squareArea"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [
+            "main.js:6"
+          ],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 6,
+              "Unresolved": 2
+            },
+            "not_resolved": 2,
+            "not_resolved_share": 0.25,
+            "references": 8
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.5,
+            "without_target": 2,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "esm-reexport",
+        "description": "A barrel uses export * for one module and an aliased re-export for another function with the same local name.",
+        "exports": {
+          "export_fact_rows": {
+            "Named/Resolved": 2,
+            "Namespace/Unresolved": 1,
+            "StarReexport/Unresolved": 1
+          },
+          "facts": {
+            "files": 3,
+            "files_exact": 2,
+            "matched_names": 3,
+            "observed_names": 4,
+            "precision": 1.0,
+            "predicted_names": 3,
+            "recall": 0.75
+          },
+          "symbols": {
+            "files": 3,
+            "files_exact": 2,
+            "matched_names": 2,
+            "observed_names": 4,
+            "precision": 1.0,
+            "predicted_names": 2,
+            "recall": 0.5
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 6,
+              "Unresolved": 2
+            },
+            "not_resolved": 2,
+            "not_resolved_share": 0.25,
+            "references": 8
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 0,
+            "marked_unresolved_share": 0.0,
+            "without_target": 0,
+            "without_target_share": 0.0
+          }
+        }
+      },
+      "eval/direct-eval": {
+        "base": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 1,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.5,
+            "references": 2
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 7,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "eval",
+        "description": "Direct eval runs a string that calls a function in scope; the call exists only inside the string.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": [
+            "main.js:7 -> secret"
+          ]
+        },
+        "refined": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 1,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.5,
+            "references": 2
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 7,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 1,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 1.0,
+            "without_target": 1,
+            "without_target_share": 1.0
+          }
+        }
+      },
+      "eval/function-constructor": {
+        "base": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 3,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.25,
+            "references": 4
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 7,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 1.0,
+            "without_target": 2,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "eval",
+        "description": "new Function builds a function from a string; the built function calls a callback passed to it.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": [
+            "main.js:7 -> visit"
+          ]
+        },
+        "refined": {
+          "call_recall": null,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 3,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.25,
+            "references": 4
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [
+            {
+              "detail": "marked unresolved",
+              "file": "main.js",
+              "line": 7,
+              "verdict": "reported-unknown"
+            }
+          ],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 1.0,
+            "without_target": 2,
+            "without_target_share": 1.0
+          }
+        }
+      },
+      "object-of-functions/literal-methods": {
+        "base": {
+          "call_recall": 0.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 0,
+          "calls_missed": [
+            "main.js:4 -> format",
+            "main.js:9 -> get"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": null,
+          "predicted_labelled_edges": 0,
+          "references": {
+            "by_status": {
+              "Resolved": 4
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 4
+          },
+          "true_positive_edges": 0,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 1.0,
+            "without_target": 2,
+            "without_target_share": 1.0
+          }
+        },
+        "construct": "object-of-functions",
+        "description": "An object literal holds shorthand methods and arrow-function properties that call one another through the object.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 4
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 4
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 0,
+            "marked_unresolved_share": 0.0,
+            "without_target": 0,
+            "without_target_share": 0.0
+          }
+        }
+      },
+      "object-of-functions/registry-built-later": {
+        "base": {
+          "call_recall": 0.3333,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:13 -> start",
+            "main.js:14 -> stop"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 6
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 6
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 0.6667,
+            "without_target": 2,
+            "without_target_share": 0.6667
+          }
+        },
+        "construct": "object-of-functions",
+        "description": "An empty object is filled with function properties after creation and passed to another function that calls through it.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 6
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 6
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 0,
+            "marked_unresolved_share": 0.0,
+            "without_target": 0,
+            "without_target_share": 0.0
+          }
+        }
+      },
+      "promise/async-await": {
+        "base": {
+          "call_recall": 0.6667,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [
+            "main.js:10 -> fetchRole"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 9
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 9
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.3333,
+            "without_target": 1,
+            "without_target_share": 0.3333
+          }
+        },
+        "construct": "promise",
+        "description": "An async function awaits other async functions and an async arrow stored in a constant.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.6667,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 2,
+          "calls_missed": [
+            "main.js:10 -> fetchRole"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 2,
+          "references": {
+            "by_status": {
+              "Resolved": 9
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 9
+          },
+          "true_positive_edges": 2,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.3333,
+            "without_target": 1,
+            "without_target_share": 0.3333
+          }
+        }
+      },
+      "promise/then-chain": {
+        "base": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [
+            "main.js:15 -> scale"
+          ],
+          "calls_found": 1,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 1,
+          "expected_calls": 1,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 7,
+              "Unresolved": 2
+            },
+            "not_resolved": 2,
+            "not_resolved_share": 0.2222,
+            "references": 9
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.6,
+            "without_target": 4,
+            "without_target_share": 0.8
+          }
+        },
+        "construct": "promise",
+        "description": "Named functions are passed to then and catch on a promise chain and run as reactions.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [
+            "main.js:15 -> scale"
+          ],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [
+            "main.js:15 -> scale"
+          ],
+          "calls_found": 1,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 1,
+          "expected_calls": 1,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 7,
+              "Unresolved": 2
+            },
+            "not_resolved": 2,
+            "not_resolved_share": 0.2222,
+            "references": 9
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.6,
+            "without_target": 4,
+            "without_target_share": 0.8
+          }
+        }
+      },
+      "prototype/constructor-function": {
+        "base": {
+          "call_recall": 0.3333,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:8 -> report",
+            "main.js:16 -> increment"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 5
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 5
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 2,
+            "marked_unresolved_share": 0.6667,
+            "without_target": 2,
+            "without_target_share": 0.6667
+          }
+        },
+        "construct": "prototype",
+        "description": "A constructor function gets methods on its prototype; an instance created with new calls them.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 3,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 5
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 5
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 3,
+            "marked_unresolved": 0,
+            "marked_unresolved_share": 0.0,
+            "without_target": 0,
+            "without_target_share": 0.0
+          }
+        }
+      },
+      "prototype/inherited-method": {
+        "base": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:7 -> sound",
+            "main.js:11 -> Animal",
+            "main.js:20 -> describe"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 9,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.1,
+            "references": 10
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.6,
+            "without_target": 4,
+            "without_target_share": 0.8
+          }
+        },
+        "construct": "prototype",
+        "description": "Object.create links a child prototype to a parent; the child instance calls a method found only on the parent prototype.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:7 -> sound",
+            "main.js:11 -> Animal",
+            "main.js:20 -> describe"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 9,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.1,
+            "references": 10
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 5,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.6,
+            "without_target": 4,
+            "without_target_share": 0.8
+          }
+        }
+      }
+    },
+    "false_complete": {
+      "base": 0,
+      "hidden_lines": 4,
+      "refined": 0
+    },
+    "summary": {
+      "callback": {
+        "base": {
+          "call_sites": 11,
+          "callbacks_found": 0,
+          "calls_found": 3,
+          "expected_callbacks": 3,
+          "expected_calls": 7,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 8,
+          "predicted_labelled_edges": 3,
+          "references": 23,
+          "references_not_resolved": 0,
+          "true_positive_edges": 3
+        },
+        "cases": [
+          "callback/builtin-invoked",
+          "callback/higher-order-parameter"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [],
+        "refined": {
+          "call_sites": 11,
+          "callbacks_found": 0,
+          "calls_found": 5,
+          "expected_callbacks": 3,
+          "expected_calls": 7,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 5,
+          "predicted_labelled_edges": 5,
+          "references": 23,
+          "references_not_resolved": 0,
+          "true_positive_edges": 5
+        }
+      },
+      "cjs-exports-property": {
+        "base": {
+          "call_sites": 7,
+          "callbacks_found": 0,
+          "calls_found": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 7,
+          "predicted_labelled_edges": 0,
+          "references": 17,
+          "references_not_resolved": 7,
+          "true_positive_edges": 0
+        },
+        "cases": [
+          "cjs-exports-property/function-expressions",
+          "cjs-exports-property/renamed-destructuring"
+        ],
+        "exports_symbols": {
+          "files": 2,
+          "files_exact": 0
+        },
+        "held_out_cases": [],
+        "refined": {
+          "call_sites": 7,
+          "callbacks_found": 0,
+          "calls_found": 3,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 4,
+          "predicted_labelled_edges": 3,
+          "references": 17,
+          "references_not_resolved": 7,
+          "true_positive_edges": 3
+        }
+      },
+      "cjs-module-exports": {
+        "base": {
+          "call_sites": 9,
+          "callbacks_found": 0,
+          "calls_found": 1,
+          "expected_callbacks": 0,
+          "expected_calls": 6,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 8,
+          "predicted_labelled_edges": 1,
+          "references": 25,
+          "references_not_resolved": 7,
+          "true_positive_edges": 1
+        },
+        "cases": [
+          "cjs-module-exports/object-literal"
+        ],
+        "exports_symbols": {
+          "files": 2,
+          "files_exact": 0
+        },
+        "held_out_cases": [
+          "cjs-module-exports/function-with-property"
+        ],
+        "refined": {
+          "call_sites": 9,
+          "callbacks_found": 0,
+          "calls_found": 5,
+          "expected_callbacks": 0,
+          "expected_calls": 6,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 4,
+          "predicted_labelled_edges": 5,
+          "references": 25,
+          "references_not_resolved": 7,
+          "true_positive_edges": 5
+        }
+      },
+      "class-method": {
+        "base": {
+          "call_sites": 11,
+          "callbacks_found": 0,
+          "calls_found": 3,
+          "expected_callbacks": 0,
+          "expected_calls": 9,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 8,
+          "predicted_labelled_edges": 3,
+          "references": 11,
+          "references_not_resolved": 0,
+          "true_positive_edges": 3
+        },
+        "cases": [
+          "class-method/instance-and-static"
+        ],
+        "exports_symbols": {
+          "files": 1,
+          "files_exact": 1
+        },
+        "held_out_cases": [
+          "class-method/subclass-override"
+        ],
+        "refined": {
+          "call_sites": 11,
+          "callbacks_found": 0,
+          "calls_found": 6,
+          "expected_callbacks": 0,
+          "expected_calls": 9,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 5,
+          "predicted_labelled_edges": 6,
+          "references": 11,
+          "references_not_resolved": 0,
+          "true_positive_edges": 6
+        }
+      },
+      "closure": {
+        "base": {
+          "call_sites": 8,
+          "callbacks_found": 0,
+          "calls_found": 3,
+          "expected_callbacks": 0,
+          "expected_calls": 7,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 4,
+          "predicted_labelled_edges": 3,
+          "references": 17,
+          "references_not_resolved": 1,
+          "true_positive_edges": 3
+        },
+        "cases": [
+          "closure/captured-callback",
+          "closure/factory-returned-function"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [],
+        "refined": {
+          "call_sites": 8,
+          "callbacks_found": 0,
+          "calls_found": 6,
+          "expected_callbacks": 0,
+          "expected_calls": 7,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 1,
+          "predicted_labelled_edges": 6,
+          "references": 17,
+          "references_not_resolved": 1,
+          "true_positive_edges": 6
+        }
+      },
+      "dynamic-import": {
+        "base": {
+          "call_sites": 3,
+          "callbacks_found": 0,
+          "calls_found": 1,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 2,
+          "predicted_labelled_edges": 1,
+          "references": 6,
+          "references_not_resolved": 1,
+          "true_positive_edges": 1,
+          "unknown_reported-unknown": 1
+        },
+        "cases": [
+          "dynamic-import/computed-specifier",
+          "dynamic-import/literal-specifier"
+        ],
+        "exports_symbols": {
+          "files": 2,
+          "files_exact": 2
+        },
+        "held_out_cases": [],
+        "refined": {
+          "call_sites": 3,
+          "callbacks_found": 0,
+          "calls_found": 1,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 2,
+          "predicted_labelled_edges": 1,
+          "references": 6,
+          "references_not_resolved": 1,
+          "true_positive_edges": 1,
+          "unknown_reported-unknown": 1
+        }
+      },
+      "dynamic-property": {
+        "base": {
+          "call_sites": 2,
+          "callbacks_found": 0,
+          "calls_found": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 2,
+          "predicted_labelled_edges": 0,
+          "references": 9,
+          "references_not_resolved": 1,
+          "true_positive_edges": 0,
+          "unknown_reported-unknown": 1
+        },
+        "cases": [
+          "dynamic-property/computed-key-known-set"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [
+          "dynamic-property/key-from-input"
+        ],
+        "refined": {
+          "call_sites": 2,
+          "callbacks_found": 0,
+          "calls_found": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 2,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 2,
+          "predicted_labelled_edges": 0,
+          "references": 9,
+          "references_not_resolved": 1,
+          "true_positive_edges": 0,
+          "unknown_reported-unknown": 1
+        }
+      },
+      "esm-reexport": {
+        "base": {
+          "call_sites": 6,
+          "callbacks_found": 0,
+          "calls_found": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "import_binding_stops": 3,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 3,
+          "predicted_labelled_edges": 0,
+          "references": 14,
+          "references_not_resolved": 4,
+          "true_positive_edges": 0
+        },
+        "cases": [
+          "esm-reexport/named-barrel"
+        ],
+        "exports_symbols": {
+          "files": 6,
+          "files_exact": 4
+        },
+        "held_out_cases": [
+          "esm-reexport/star-and-alias"
+        ],
+        "refined": {
+          "call_sites": 6,
+          "callbacks_found": 0,
+          "calls_found": 4,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 2,
+          "predicted_labelled_edges": 4,
+          "references": 14,
+          "references_not_resolved": 4,
+          "true_positive_edges": 4
+        }
+      },
+      "eval": {
+        "base": {
+          "call_sites": 3,
+          "callbacks_found": 0,
+          "calls_found": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 3,
+          "predicted_labelled_edges": 0,
+          "references": 6,
+          "references_not_resolved": 2,
+          "true_positive_edges": 0,
+          "unknown_reported-unknown": 2
+        },
+        "cases": [
+          "eval/direct-eval"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [
+          "eval/function-constructor"
+        ],
+        "refined": {
+          "call_sites": 3,
+          "callbacks_found": 0,
+          "calls_found": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 0,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 3,
+          "predicted_labelled_edges": 0,
+          "references": 6,
+          "references_not_resolved": 2,
+          "true_positive_edges": 0,
+          "unknown_reported-unknown": 2
+        }
+      },
+      "object-of-functions": {
+        "base": {
+          "call_sites": 5,
+          "callbacks_found": 0,
+          "calls_found": 1,
+          "expected_callbacks": 0,
+          "expected_calls": 5,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 4,
+          "predicted_labelled_edges": 1,
+          "references": 10,
+          "references_not_resolved": 0,
+          "true_positive_edges": 1
+        },
+        "cases": [
+          "object-of-functions/literal-methods",
+          "object-of-functions/registry-built-later"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [],
+        "refined": {
+          "call_sites": 5,
+          "callbacks_found": 0,
+          "calls_found": 5,
+          "expected_callbacks": 0,
+          "expected_calls": 5,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 0,
+          "predicted_labelled_edges": 5,
+          "references": 10,
+          "references_not_resolved": 0,
+          "true_positive_edges": 5
+        }
+      },
+      "promise": {
+        "base": {
+          "call_sites": 8,
+          "callbacks_found": 0,
+          "calls_found": 3,
+          "expected_callbacks": 1,
+          "expected_calls": 4,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 4,
+          "predicted_labelled_edges": 3,
+          "references": 18,
+          "references_not_resolved": 2,
+          "true_positive_edges": 3
+        },
+        "cases": [
+          "promise/then-chain"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [
+          "promise/async-await"
+        ],
+        "refined": {
+          "call_sites": 8,
+          "callbacks_found": 0,
+          "calls_found": 3,
+          "expected_callbacks": 1,
+          "expected_calls": 4,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 4,
+          "predicted_labelled_edges": 3,
+          "references": 18,
+          "references_not_resolved": 2,
+          "true_positive_edges": 3
+        }
+      },
+      "prototype": {
+        "base": {
+          "call_sites": 8,
+          "callbacks_found": 0,
+          "calls_found": 2,
+          "expected_callbacks": 0,
+          "expected_calls": 7,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 5,
+          "predicted_labelled_edges": 2,
+          "references": 15,
+          "references_not_resolved": 1,
+          "true_positive_edges": 2
+        },
+        "cases": [
+          "prototype/constructor-function"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [
+          "prototype/inherited-method"
+        ],
+        "refined": {
+          "call_sites": 8,
+          "callbacks_found": 0,
+          "calls_found": 4,
+          "expected_callbacks": 0,
+          "expected_calls": 7,
+          "import_binding_stops": 0,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 3,
+          "predicted_labelled_edges": 4,
+          "references": 15,
+          "references_not_resolved": 1,
+          "true_positive_edges": 4
+        }
+      }
+    }
+  },
+  "cost": {
+    "check": {
+      "async": {
+        "cold": {
+          "analysis_peak_rss_bytes": 78794752,
+          "analysis_wall_ms": 962,
+          "analysis_wall_ms_per_mb": 3001,
+          "process_peak_rss_bytes": 78794752,
+          "process_wall_ms": 1369,
+          "process_wall_ms_per_mb": 4271
+        },
+        "source_bytes": 320550,
+        "stored_bytes": 14169377,
+        "stored_bytes_per_mb": 44203329,
+        "stored_gzip_bytes": 1108347,
+        "stored_gzip_bytes_per_mb": 3457642,
+        "warm": {
+          "analysis_peak_rss_bytes": 78901248,
+          "analysis_wall_ms": 869,
+          "analysis_wall_ms_per_mb": 2711,
+          "process_peak_rss_bytes": 78901248,
+          "process_wall_ms": 1175,
+          "process_wall_ms_per_mb": 3666
+        }
+      },
+      "axios": {
+        "cold": {
+          "analysis_peak_rss_bytes": 90370048,
+          "analysis_wall_ms": 608,
+          "analysis_wall_ms_per_mb": 2156,
+          "process_peak_rss_bytes": 90370048,
+          "process_wall_ms": 742,
+          "process_wall_ms_per_mb": 2631
+        },
+        "source_bytes": 282016,
+        "stored_bytes": 21249950,
+        "stored_bytes_per_mb": 75350157,
+        "stored_gzip_bytes": 1505889,
+        "stored_gzip_bytes_per_mb": 5339729,
+        "warm": {
+          "analysis_peak_rss_bytes": 92274688,
+          "analysis_wall_ms": 421,
+          "analysis_wall_ms_per_mb": 1493,
+          "process_peak_rss_bytes": 92274688,
+          "process_wall_ms": 549,
+          "process_wall_ms_per_mb": 1947
+        }
+      },
+      "chalk": {
+        "cold": {
+          "analysis_peak_rss_bytes": 73793536,
+          "analysis_wall_ms": 156,
+          "analysis_wall_ms_per_mb": 16385,
+          "process_peak_rss_bytes": 73793536,
+          "process_wall_ms": 439,
+          "process_wall_ms_per_mb": 46109
+        },
+        "source_bytes": 9521,
+        "stored_bytes": 827790,
+        "stored_bytes_per_mb": 86943598,
+        "stored_gzip_bytes": 65733,
+        "stored_gzip_bytes_per_mb": 6904002,
+        "warm": {
+          "analysis_peak_rss_bytes": 73342976,
+          "analysis_wall_ms": 129,
+          "analysis_wall_ms_per_mb": 13549,
+          "process_peak_rss_bytes": 73342976,
+          "process_wall_ms": 454,
+          "process_wall_ms_per_mb": 47684
+        }
+      },
+      "commander": {
+        "cold": {
+          "analysis_peak_rss_bytes": 73867264,
+          "analysis_wall_ms": 580,
+          "analysis_wall_ms_per_mb": 4582,
+          "process_peak_rss_bytes": 73867264,
+          "process_wall_ms": 796,
+          "process_wall_ms_per_mb": 6288
+        },
+        "source_bytes": 126592,
+        "stored_bytes": 5598158,
+        "stored_bytes_per_mb": 44222052,
+        "stored_gzip_bytes": 404179,
+        "stored_gzip_bytes_per_mb": 3192769,
+        "warm": {
+          "analysis_peak_rss_bytes": 72855552,
+          "analysis_wall_ms": 343,
+          "analysis_wall_ms_per_mb": 2709,
+          "process_peak_rss_bytes": 72855552,
+          "process_wall_ms": 559,
+          "process_wall_ms_per_mb": 4416
+        }
+      },
+      "constructs (all cases)": {
+        "cold": {
+          "analysis_peak_rss_bytes": 72769536,
+          "analysis_wall_ms": 68,
+          "analysis_wall_ms_per_mb": 8222,
+          "process_peak_rss_bytes": 72769536,
+          "process_wall_ms": 185,
+          "process_wall_ms_per_mb": 22370
+        },
+        "source_bytes": 8270,
+        "stored_bytes": 895456,
+        "stored_bytes_per_mb": 108277630,
+        "stored_gzip_bytes": 91742,
+        "stored_gzip_bytes_per_mb": 11093349,
+        "warm": {
+          "analysis_peak_rss_bytes": 71888896,
+          "analysis_wall_ms": 32,
+          "analysis_wall_ms_per_mb": 3869,
+          "process_peak_rss_bytes": 71888896,
+          "process_wall_ms": 153,
+          "process_wall_ms_per_mb": 18501
+        }
+      },
+      "dayjs": {
+        "cold": {
+          "analysis_peak_rss_bytes": 73605120,
+          "analysis_wall_ms": 73,
+          "analysis_wall_ms_per_mb": 10194,
+          "process_peak_rss_bytes": 73605120,
+          "process_wall_ms": 275,
+          "process_wall_ms_per_mb": 38402
+        },
+        "source_bytes": 7161,
+        "stored_bytes": 1587474,
+        "stored_bytes_per_mb": 221683284,
+        "stored_gzip_bytes": 91749,
+        "stored_gzip_bytes_per_mb": 12812317,
+        "warm": {
+          "analysis_peak_rss_bytes": 73011200,
+          "analysis_wall_ms": 43,
+          "analysis_wall_ms_per_mb": 6005,
+          "process_peak_rss_bytes": 73011200,
+          "process_wall_ms": 250,
+          "process_wall_ms_per_mb": 34911
+        }
+      },
+      "underscore": {
+        "cold": {
+          "analysis_peak_rss_bytes": 73351168,
+          "analysis_wall_ms": 374,
+          "analysis_wall_ms_per_mb": 5427,
+          "process_peak_rss_bytes": 73351168,
+          "process_wall_ms": 595,
+          "process_wall_ms_per_mb": 8634
+        },
+        "source_bytes": 68916,
+        "stored_bytes": 6271368,
+        "stored_bytes_per_mb": 91000174,
+        "stored_gzip_bytes": 401268,
+        "stored_gzip_bytes_per_mb": 5822567,
+        "warm": {
+          "analysis_peak_rss_bytes": 73334784,
+          "analysis_wall_ms": 254,
+          "analysis_wall_ms_per_mb": 3686,
+          "process_peak_rss_bytes": 73334784,
+          "process_wall_ms": 479,
+          "process_wall_ms_per_mb": 6950
+        }
+      },
+      "zod": {
+        "cold": {
+          "analysis_peak_rss_bytes": 1011621888,
+          "analysis_wall_ms": 13217,
+          "analysis_wall_ms_per_mb": 4280,
+          "process_peak_rss_bytes": 1011621888,
+          "process_wall_ms": 13484,
+          "process_wall_ms_per_mb": 4367
+        },
+        "source_bytes": 3087749,
+        "stored_bytes": 296044379,
+        "stored_bytes_per_mb": 95877087,
+        "stored_gzip_bytes": 20937295,
+        "stored_gzip_bytes_per_mb": 6780763,
+        "warm": {
+          "analysis_peak_rss_bytes": 992018432,
+          "analysis_wall_ms": 12521,
+          "analysis_wall_ms_per_mb": 4055,
+          "process_peak_rss_bytes": 992018432,
+          "process_wall_ms": 12765,
+          "process_wall_ms_per_mb": 4134
+        }
+      }
+    },
+    "dump": {
+      "async": {
+        "base": {
+          "error": null,
+          "peak_rss_bytes": 93233152,
+          "wall_ms": 460
+        },
+        "refined": {
+          "error": null,
+          "peak_rss_bytes": 266792960,
+          "wall_ms": 2113
+        }
+      },
+      "axios": {
+        "base": {
+          "error": null,
+          "peak_rss_bytes": 105222144,
+          "wall_ms": 655
+        },
+        "refined": {
+          "error": null,
+          "peak_rss_bytes": 234082304,
+          "wall_ms": 2257
+        }
+      },
+      "chalk": {
+        "base": {
+          "error": null,
+          "peak_rss_bytes": 31883264,
+          "wall_ms": 53
+        },
+        "refined": {
+          "error": null,
+          "peak_rss_bytes": 40075264,
+          "wall_ms": 96
+        }
+      },
+      "commander": {
+        "base": {
+          "error": null,
+          "peak_rss_bytes": 61546496,
+          "wall_ms": 301
+        },
+        "refined": {
+          "error": null,
+          "peak_rss_bytes": 143560704,
+          "wall_ms": 1806
+        }
+      },
+      "dayjs": {
+        "base": {
+          "error": null,
+          "peak_rss_bytes": 32849920,
+          "wall_ms": 38
+        },
+        "refined": {
+          "error": null,
+          "peak_rss_bytes": 35098624,
+          "wall_ms": 96
+        }
+      },
+      "underscore": {
+        "base": {
+          "error": null,
+          "peak_rss_bytes": 53116928,
+          "wall_ms": 224
+        },
+        "refined": {
+          "error": null,
+          "peak_rss_bytes": 118419456,
+          "wall_ms": 743
+        }
+      },
+      "zod": {
+        "base": {
+          "error": null,
+          "peak_rss_bytes": 1269645312,
+          "wall_ms": 11514
+        },
+        "refined": {
+          "error": "timed out after 600 s",
+          "peak_rss_bytes": 2321301504,
+          "wall_ms": 600181
+        }
+      }
+    },
+    "machine": {
+      "cpus": 32,
+      "git_head": "338b570b5914f121f03b9bcd9b3b9198a531885d",
+      "launcher_peak_rss_bytes": 27320320,
+      "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+      "python": "3.12.3"
+    },
+    "runs": 3
+  },
+  "decisions": [
+    "Construct edges are identified by (file, line of the call expression's start, callee label); labels cannot express how many sites on one line call the same callee, so precision is counted per (line, callee).",
+    "When one line labels a callee both as a direct call and as a callback, the callback counts as found only when a second distinct call site on that line reaches it.",
+    "Predicted edges to functions without an @fn label are counted apart and are neither true nor false positives.",
+    "A labelled hidden path (@unknown) is 'reported-unknown' when a call site on that line carries an unresolved marker, 'false-complete' when it has resolved targets and no marker, and 'silent' when polint has no call site there or one with neither. For the refined column the refined layer's own status decides; sites it has no row for keep the base layer's marker.",
+    "A base edge whose target is an import binding rather than a function is a miss, counted as 'stops at import binding'.",
+    "Observed package edges are mapped to polint by exact call-expression span (falling back to the polint call site in the same file ending at the same byte) and by callee end byte (innermost polint function in the same file ending there).",
+    "Observed edges whose site or callee has no polint counterpart stay in the denominator: recall is over every observed edge.",
+    "Export accuracy compares exported names per file; star re-export rows and the CommonJS whole-value `module.exports` row carry no name and are left out of the export-fact names but counted by status.",
+    "Refined edges are counted when they carry a target function, whatever their status.",
+    "Polint models a class as one function spanning the class body and has no separate constructor function, so a `Class.constructor` label and an observed constructor callee map to the class function.",
+    "Observed implicit edges (accessors, coercions, iterator protocol) have a position but no call expression; they are reported by kind but left out of the headline package recall, which is over calls and callbacks.",
+    "Packages are analysed with polint's default discovery, so its default excludes (for example `**/vendor/**`) apply; observed edges touching such files count as 'site or callee in a file polint does not analyse'.",
+    "Missing call sites and functions are not worked around: functions under a unary operator, functions declared inside try, catch or if blocks, and calls in exported variable initializers are reported as misses.",
+    "Process peak RSS is measured with `wait4` like the matrix runner does. Linux carries the parent's resident size into the child's peak at fork, so every process is launched before the report loads any fact dump, and the launcher's own peak is recorded with the cost section. The in-process analysis peak has no such floor.",
+    "Each fact dump has a wall-clock limit (`--dump-timeout`, 600 s by default); a tree whose dump exceeds it is reported as timed out for that plan and has no scores in that column."
+  ],
+  "packages": {
+    "async": {
+      "base": {
+        "by_kind": {
+          "call": {
+            "found": 319,
+            "observed": 622,
+            "recall": 0.5129
+          },
+          "callback": {
+            "found": 0,
+            "observed": 15,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 4,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "expression": {
+            "found": 0,
+            "observed": 157,
+            "recall": 0.0
+          },
+          "identifier": {
+            "found": 319,
+            "observed": 403,
+            "recall": 0.7916
+          },
+          "member": {
+            "found": 0,
+            "observed": 73,
+            "recall": 0.0
+          },
+          "new": {
+            "found": 0,
+            "observed": 4,
+            "recall": 0.0
+          }
+        },
+        "found": 319,
+        "observed_edges": 637,
+        "observed_implicit_edges": 4,
+        "outcomes": {
+          "callee not a polint function": 1,
+          "found": 319,
+          "no target, marked unresolved": 317
+        },
+        "recall": 0.5008,
+        "references": {
+          "by_status": {
+            "Resolved": 3644,
+            "Unresolved": 1328
+          },
+          "not_resolved": 1328,
+          "not_resolved_share": 0.2671,
+          "references": 4972
+        },
+        "unresolved_calls": {
+          "call_sites": 1605,
+          "marked_unresolved": 1014,
+          "marked_unresolved_share": 0.6318,
+          "without_target": 1171,
+          "without_target_share": 0.7296
+        }
+      },
+      "exports": {
+        "export_fact_rows": {
+          "CommonJsExportsProperty/Unsupported": 347,
+          "CommonJsModuleExports/Unsupported": 125
+        },
+        "facts": {
+          "files": 129,
+          "files_exact": 4,
+          "matched_names": 116,
+          "observed_names": 116,
+          "precision": 0.4813,
+          "predicted_names": 241,
+          "recall": 1.0
+        },
+        "symbols": {
+          "files": 4,
+          "files_exact": 0,
+          "matched_names": 0,
+          "observed_names": 116,
+          "precision": null,
+          "predicted_names": 0,
+          "recall": 0.0
+        }
+      },
+      "files": 129,
+      "files_selected": 129,
+      "format": "CommonJS transpiled from ESM",
+      "functions": 628,
+      "licence": "MIT",
+      "observed": {
+        "edges_by_kind": {
+          "call": 622,
+          "callback": 15,
+          "implicit": 4
+        },
+        "failures": 0,
+        "instrumented_files": 102,
+        "instrumented_functions": 412,
+        "transformed_not_instrumented": []
+      },
+      "origin": "https://registry.npmjs.org/async/-/async-3.2.6.tgz",
+      "refined": {
+        "by_kind": {
+          "call": {
+            "found": 323,
+            "observed": 622,
+            "recall": 0.5193
+          },
+          "callback": {
+            "found": 0,
+            "observed": 15,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 4,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "expression": {
+            "found": 0,
+            "observed": 157,
+            "recall": 0.0
+          },
+          "identifier": {
+            "found": 319,
+            "observed": 403,
+            "recall": 0.7916
+          },
+          "member": {
+            "found": 4,
+            "observed": 73,
+            "recall": 0.0548
+          },
+          "new": {
+            "found": 0,
+            "observed": 4,
+            "recall": 0.0
+          }
+        },
+        "found": 323,
+        "observed_edges": 637,
+        "observed_implicit_edges": 4,
+        "outcomes": {
+          "callee not a polint function": 1,
+          "found": 323,
+          "no target, marked unresolved": 313
+        },
+        "recall": 0.5071,
+        "references": {
+          "by_status": {
+            "Resolved": 3644,
+            "Unresolved": 1328
+          },
+          "not_resolved": 1328,
+          "not_resolved_share": 0.2671,
+          "references": 4972
+        },
+        "unresolved_calls": {
+          "call_sites": 1605,
+          "marked_unresolved": 1009,
+          "marked_unresolved_share": 0.6287,
+          "without_target": 1165,
+          "without_target_share": 0.7259
+        }
+      },
+      "sha256": "6bb45cfba08cd2eea39eb3ce6eaa94113070fe137ec0bd4a9f122be9a0250e6f",
+      "source_bytes": 320550,
+      "version": "3.2.6"
+    },
+    "axios": {
+      "base": {
+        "by_kind": {
+          "call": {
+            "found": 86,
+            "observed": 632,
+            "recall": 0.1361
+          },
+          "callback": {
+            "found": 0,
+            "observed": 43,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 6,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 2,
+            "recall": 0.0
+          },
+          "expression": {
+            "found": 5,
+            "observed": 8,
+            "recall": 0.625
+          },
+          "identifier": {
+            "found": 75,
+            "observed": 317,
+            "recall": 0.2366
+          },
+          "member": {
+            "found": 1,
+            "observed": 326,
+            "recall": 0.0031
+          },
+          "new": {
+            "found": 5,
+            "observed": 21,
+            "recall": 0.2381
+          },
+          "super": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "found": 86,
+        "observed_edges": 675,
+        "observed_implicit_edges": 6,
+        "outcomes": {
+          "callee not a polint function": 12,
+          "found": 86,
+          "no target, marked unresolved": 388,
+          "no target, no unresolved marker": 5,
+          "other targets, no unresolved marker": 3,
+          "site not a polint call site": 141,
+          "stops at import binding": 40
+        },
+        "recall": 0.1274,
+        "references": {
+          "by_status": {
+            "Ambiguous": 2,
+            "Resolved": 6526,
+            "Unresolved": 614
+          },
+          "not_resolved": 616,
+          "not_resolved_share": 0.0863,
+          "references": 7142
+        },
+        "unresolved_calls": {
+          "call_sites": 1613,
+          "marked_unresolved": 1239,
+          "marked_unresolved_share": 0.7681,
+          "without_target": 1448,
+          "without_target_share": 0.8977
+        }
+      },
+      "exports": {
+        "export_fact_rows": {
+          "Default/Resolved": 67,
+          "Named/Resolved": 28
+        },
+        "facts": {
+          "files": 72,
+          "files_exact": 5,
+          "matched_names": 95,
+          "observed_names": 162,
+          "precision": 1.0,
+          "predicted_names": 95,
+          "recall": 0.5864
+        },
+        "symbols": {
+          "files": 72,
+          "files_exact": 4,
+          "matched_names": 27,
+          "observed_names": 162,
+          "precision": 0.3553,
+          "predicted_names": 76,
+          "recall": 0.1667
+        }
+      },
+      "files": 72,
+      "files_selected": 72,
+      "format": "ESM source, Node and browser adapters",
+      "functions": 523,
+      "licence": "MIT",
+      "observed": {
+        "edges_by_kind": {
+          "call": 632,
+          "callback": 43,
+          "implicit": 6
+        },
+        "failures": 0,
+        "instrumented_files": 65,
+        "instrumented_functions": 533,
+        "transformed_not_instrumented": []
+      },
+      "origin": "https://registry.npmjs.org/axios/-/axios-1.21.1.tgz",
+      "refined": {
+        "by_kind": {
+          "call": {
+            "found": 86,
+            "observed": 632,
+            "recall": 0.1361
+          },
+          "callback": {
+            "found": 0,
+            "observed": 43,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 6,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 2,
+            "recall": 0.0
+          },
+          "expression": {
+            "found": 5,
+            "observed": 8,
+            "recall": 0.625
+          },
+          "identifier": {
+            "found": 75,
+            "observed": 317,
+            "recall": 0.2366
+          },
+          "member": {
+            "found": 1,
+            "observed": 326,
+            "recall": 0.0031
+          },
+          "new": {
+            "found": 5,
+            "observed": 21,
+            "recall": 0.2381
+          },
+          "super": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "found": 86,
+        "observed_edges": 675,
+        "observed_implicit_edges": 6,
+        "outcomes": {
+          "callee not a polint function": 12,
+          "found": 86,
+          "no target, marked unresolved": 388,
+          "no target, no unresolved marker": 45,
+          "other targets, no unresolved marker": 3,
+          "site not a polint call site": 141
+        },
+        "recall": 0.1274,
+        "references": {
+          "by_status": {
+            "Ambiguous": 2,
+            "Resolved": 6526,
+            "Unresolved": 614
+          },
+          "not_resolved": 616,
+          "not_resolved_share": 0.0863,
+          "references": 7142
+        },
+        "unresolved_calls": {
+          "call_sites": 1613,
+          "marked_unresolved": 1239,
+          "marked_unresolved_share": 0.7681,
+          "without_target": 1448,
+          "without_target_share": 0.8977
+        }
+      },
+      "sha256": "5659acb8c9414ad88aa539db8e529947c9bac8cdf55973e314a078fc0205751c",
+      "source_bytes": 282016,
+      "version": "1.21.1"
+    },
+    "chalk": {
+      "base": {
+        "by_kind": {
+          "call": {
+            "found": 1,
+            "observed": 71,
+            "recall": 0.0141
+          },
+          "callback": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 10,
+            "recall": 0.0
+          },
+          "identifier": {
+            "found": 1,
+            "observed": 43,
+            "recall": 0.0233
+          },
+          "member": {
+            "found": 0,
+            "observed": 19,
+            "recall": 0.0
+          }
+        },
+        "found": 1,
+        "observed_edges": 72,
+        "observed_implicit_edges": 1,
+        "outcomes": {
+          "found": 1,
+          "no target, marked unresolved": 21,
+          "site not a polint call site": 1,
+          "site or callee in a file polint does not analyse": 47,
+          "stops at import binding": 2
+        },
+        "recall": 0.0139,
+        "references": {
+          "by_status": {
+            "Resolved": 245,
+            "Unresolved": 24
+          },
+          "not_resolved": 24,
+          "not_resolved_share": 0.0892,
+          "references": 269
+        },
+        "unresolved_calls": {
+          "call_sites": 59,
+          "marked_unresolved": 45,
+          "marked_unresolved_share": 0.7627,
+          "without_target": 58,
+          "without_target_share": 0.9831
+        }
+      },
+      "exports": {
+        "export_fact_rows": {
+          "Default/Resolved": 1,
+          "Named/Resolved": 6,
+          "Namespace/Unresolved": 9
+        },
+        "facts": {
+          "files": 5,
+          "files_exact": 1,
+          "matched_names": 16,
+          "observed_names": 29,
+          "precision": 1.0,
+          "predicted_names": 16,
+          "recall": 0.5517
+        },
+        "symbols": {
+          "files": 5,
+          "files_exact": 1,
+          "matched_names": 4,
+          "observed_names": 29,
+          "precision": 0.5714,
+          "predicted_names": 7,
+          "recall": 0.1379
+        }
+      },
+      "files": 2,
+      "files_selected": 5,
+      "format": "ESM only, with subpath imports",
+      "functions": 30,
+      "licence": "MIT",
+      "observed": {
+        "edges_by_kind": {
+          "call": 71,
+          "callback": 1,
+          "implicit": 1
+        },
+        "failures": 0,
+        "instrumented_files": 4,
+        "instrumented_functions": 51,
+        "transformed_not_instrumented": []
+      },
+      "origin": "https://registry.npmjs.org/chalk/-/chalk-6.0.1.tgz",
+      "refined": {
+        "by_kind": {
+          "call": {
+            "found": 4,
+            "observed": 71,
+            "recall": 0.0563
+          },
+          "callback": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 10,
+            "recall": 0.0
+          },
+          "identifier": {
+            "found": 4,
+            "observed": 43,
+            "recall": 0.093
+          },
+          "member": {
+            "found": 0,
+            "observed": 19,
+            "recall": 0.0
+          }
+        },
+        "found": 4,
+        "observed_edges": 72,
+        "observed_implicit_edges": 1,
+        "outcomes": {
+          "found": 4,
+          "no target, marked unresolved": 20,
+          "site not a polint call site": 1,
+          "site or callee in a file polint does not analyse": 47
+        },
+        "recall": 0.0556,
+        "references": {
+          "by_status": {
+            "Resolved": 245,
+            "Unresolved": 24
+          },
+          "not_resolved": 24,
+          "not_resolved_share": 0.0892,
+          "references": 269
+        },
+        "unresolved_calls": {
+          "call_sites": 59,
+          "marked_unresolved": 44,
+          "marked_unresolved_share": 0.7458,
+          "without_target": 55,
+          "without_target_share": 0.9322
+        }
+      },
+      "sha256": "22a5b05d62a304c950f24dedb466ea07fb4b458e58bb37b2fe2c69ed2c9ba6c3",
+      "source_bytes": 9521,
+      "version": "6.0.1"
+    },
+    "commander": {
+      "base": {
+        "by_kind": {
+          "call": {
+            "found": 14,
+            "observed": 264,
+            "recall": 0.053
+          },
+          "callback": {
+            "found": 0,
+            "observed": 54,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "identifier": {
+            "found": 13,
+            "observed": 35,
+            "recall": 0.3714
+          },
+          "member": {
+            "found": 0,
+            "observed": 274,
+            "recall": 0.0
+          },
+          "new": {
+            "found": 1,
+            "observed": 8,
+            "recall": 0.125
+          },
+          "super": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "found": 14,
+        "observed_edges": 318,
+        "observed_implicit_edges": 0,
+        "outcomes": {
+          "callee not a polint function": 1,
+          "found": 14,
+          "no target, marked unresolved": 303
+        },
+        "recall": 0.044,
+        "references": {
+          "by_status": {
+            "Resolved": 1690,
+            "Unresolved": 180
+          },
+          "not_resolved": 180,
+          "not_resolved_share": 0.0963,
+          "references": 1870
+        },
+        "unresolved_calls": {
+          "call_sites": 809,
+          "marked_unresolved": 764,
+          "marked_unresolved_share": 0.9444,
+          "without_target": 789,
+          "without_target_share": 0.9753
+        }
+      },
+      "exports": {
+        "export_fact_rows": {
+          "CommonJsExportsProperty/Unsupported": 22
+        },
+        "facts": {
+          "files": 7,
+          "files_exact": 7,
+          "matched_names": 22,
+          "observed_names": 22,
+          "precision": 1.0,
+          "predicted_names": 22,
+          "recall": 1.0
+        },
+        "symbols": {
+          "files": 7,
+          "files_exact": 0,
+          "matched_names": 0,
+          "observed_names": 22,
+          "precision": null,
+          "predicted_names": 0,
+          "recall": 0.0
+        }
+      },
+      "files": 7,
+      "files_selected": 7,
+      "format": "CommonJS only",
+      "functions": 298,
+      "licence": "MIT",
+      "observed": {
+        "edges_by_kind": {
+          "call": 264,
+          "callback": 54
+        },
+        "failures": 0,
+        "instrumented_files": 7,
+        "instrumented_functions": 296,
+        "transformed_not_instrumented": []
+      },
+      "origin": "https://registry.npmjs.org/commander/-/commander-14.0.3.tgz",
+      "refined": {
+        "by_kind": {
+          "call": {
+            "found": 117,
+            "observed": 264,
+            "recall": 0.4432
+          },
+          "callback": {
+            "found": 0,
+            "observed": 54,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "identifier": {
+            "found": 20,
+            "observed": 35,
+            "recall": 0.5714
+          },
+          "member": {
+            "found": 90,
+            "observed": 274,
+            "recall": 0.3285
+          },
+          "new": {
+            "found": 7,
+            "observed": 8,
+            "recall": 0.875
+          },
+          "super": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "found": 117,
+        "observed_edges": 318,
+        "observed_implicit_edges": 0,
+        "outcomes": {
+          "callee not a polint function": 1,
+          "found": 117,
+          "no target, marked unresolved": 200
+        },
+        "recall": 0.3679,
+        "references": {
+          "by_status": {
+            "Resolved": 1690,
+            "Unresolved": 180
+          },
+          "not_resolved": 180,
+          "not_resolved_share": 0.0963,
+          "references": 1870
+        },
+        "unresolved_calls": {
+          "call_sites": 809,
+          "marked_unresolved": 609,
+          "marked_unresolved_share": 0.7528,
+          "without_target": 634,
+          "without_target_share": 0.7837
+        }
+      },
+      "sha256": "5849703c500e0f324eb01340d8bda1f9ec48fc37bb7be9712eb0dd52aad92f6c",
+      "source_bytes": 126592,
+      "version": "14.0.3"
+    },
+    "dayjs": {
+      "base": {
+        "by_kind": {
+          "call": {
+            "found": 0,
+            "observed": 115,
+            "recall": 0.0
+          },
+          "callback": {
+            "found": 0,
+            "observed": 2,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 3,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          },
+          "expression": {
+            "found": 0,
+            "observed": 5,
+            "recall": 0.0
+          },
+          "identifier": {
+            "found": 0,
+            "observed": 35,
+            "recall": 0.0
+          },
+          "member": {
+            "found": 0,
+            "observed": 75,
+            "recall": 0.0
+          },
+          "new": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "found": 0,
+        "observed_edges": 117,
+        "observed_implicit_edges": 3,
+        "outcomes": {
+          "callee not a polint function": 1,
+          "site not a polint call site": 116
+        },
+        "recall": 0.0,
+        "references": {
+          "by_status": {
+            "Resolved": 559,
+            "Unresolved": 39
+          },
+          "not_resolved": 39,
+          "not_resolved_share": 0.0652,
+          "references": 598
+        },
+        "unresolved_calls": {
+          "call_sites": 1,
+          "marked_unresolved": 1,
+          "marked_unresolved_share": 1.0,
+          "without_target": 1,
+          "without_target_share": 1.0
+        }
+      },
+      "exports": {
+        "export_fact_rows": {},
+        "facts": {
+          "files": 1,
+          "files_exact": 0,
+          "matched_names": 0,
+          "observed_names": 7,
+          "precision": null,
+          "predicted_names": 0,
+          "recall": 0.0
+        },
+        "symbols": {
+          "files": 1,
+          "files_exact": 0,
+          "matched_names": 0,
+          "observed_names": 7,
+          "precision": null,
+          "predicted_names": 0,
+          "recall": 0.0
+        }
+      },
+      "files": 1,
+      "files_selected": 1,
+      "format": "minified UMD",
+      "functions": 1,
+      "licence": "MIT",
+      "observed": {
+        "edges_by_kind": {
+          "call": 115,
+          "callback": 2,
+          "implicit": 3
+        },
+        "failures": 0,
+        "instrumented_files": 1,
+        "instrumented_functions": 57,
+        "transformed_not_instrumented": []
+      },
+      "origin": "https://registry.npmjs.org/dayjs/-/dayjs-1.11.23.tgz",
+      "refined": {
+        "by_kind": {
+          "call": {
+            "found": 0,
+            "observed": 115,
+            "recall": 0.0
+          },
+          "callback": {
+            "found": 0,
+            "observed": 2,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 3,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          },
+          "expression": {
+            "found": 0,
+            "observed": 5,
+            "recall": 0.0
+          },
+          "identifier": {
+            "found": 0,
+            "observed": 35,
+            "recall": 0.0
+          },
+          "member": {
+            "found": 0,
+            "observed": 75,
+            "recall": 0.0
+          },
+          "new": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          }
+        },
+        "found": 0,
+        "observed_edges": 117,
+        "observed_implicit_edges": 3,
+        "outcomes": {
+          "callee not a polint function": 1,
+          "site not a polint call site": 116
+        },
+        "recall": 0.0,
+        "references": {
+          "by_status": {
+            "Resolved": 559,
+            "Unresolved": 39
+          },
+          "not_resolved": 39,
+          "not_resolved_share": 0.0652,
+          "references": 598
+        },
+        "unresolved_calls": {
+          "call_sites": 1,
+          "marked_unresolved": 1,
+          "marked_unresolved_share": 1.0,
+          "without_target": 1,
+          "without_target_share": 1.0
+        }
+      },
+      "sha256": "7da0ff55ddb6d4050b91ea0a11a8e9d92c048305155039387373f20be080e594",
+      "source_bytes": 7161,
+      "version": "1.11.23"
+    },
+    "underscore": {
+      "base": {
+        "by_kind": {
+          "call": {
+            "found": 156,
+            "observed": 257,
+            "recall": 0.607
+          },
+          "callback": {
+            "found": 0,
+            "observed": 5,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "expression": {
+            "found": 2,
+            "observed": 2,
+            "recall": 1.0
+          },
+          "identifier": {
+            "found": 153,
+            "observed": 234,
+            "recall": 0.6538
+          },
+          "member": {
+            "found": 0,
+            "observed": 25,
+            "recall": 0.0
+          },
+          "new": {
+            "found": 1,
+            "observed": 1,
+            "recall": 1.0
+          }
+        },
+        "found": 156,
+        "observed_edges": 262,
+        "observed_implicit_edges": 0,
+        "outcomes": {
+          "found": 156,
+          "no target, marked unresolved": 106
+        },
+        "recall": 0.5954,
+        "references": {
+          "by_status": {
+            "Resolved": 2077,
+            "Unresolved": 123
+          },
+          "not_resolved": 123,
+          "not_resolved_share": 0.0559,
+          "references": 2200
+        },
+        "unresolved_calls": {
+          "call_sites": 455,
+          "marked_unresolved": 251,
+          "marked_unresolved_share": 0.5516,
+          "without_target": 265,
+          "without_target_share": 0.5824
+        }
+      },
+      "exports": {
+        "export_fact_rows": {},
+        "facts": {
+          "files": 1,
+          "files_exact": 0,
+          "matched_names": 0,
+          "observed_names": 147,
+          "precision": null,
+          "predicted_names": 0,
+          "recall": 0.0
+        },
+        "symbols": {
+          "files": 1,
+          "files_exact": 0,
+          "matched_names": 0,
+          "observed_names": 147,
+          "precision": null,
+          "predicted_names": 0,
+          "recall": 0.0
+        }
+      },
+      "files": 1,
+      "files_selected": 1,
+      "format": "bundled UMD (Rollup)",
+      "functions": 187,
+      "licence": "MIT",
+      "observed": {
+        "edges_by_kind": {
+          "call": 257,
+          "callback": 5
+        },
+        "failures": 0,
+        "instrumented_files": 1,
+        "instrumented_functions": 186,
+        "transformed_not_instrumented": []
+      },
+      "origin": "https://registry.npmjs.org/underscore/-/underscore-1.13.8.tgz",
+      "refined": {
+        "by_kind": {
+          "call": {
+            "found": 157,
+            "observed": 257,
+            "recall": 0.6109
+          },
+          "callback": {
+            "found": 0,
+            "observed": 5,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "expression": {
+            "found": 2,
+            "observed": 2,
+            "recall": 1.0
+          },
+          "identifier": {
+            "found": 154,
+            "observed": 234,
+            "recall": 0.6581
+          },
+          "member": {
+            "found": 0,
+            "observed": 25,
+            "recall": 0.0
+          },
+          "new": {
+            "found": 1,
+            "observed": 1,
+            "recall": 1.0
+          }
+        },
+        "found": 157,
+        "observed_edges": 262,
+        "observed_implicit_edges": 0,
+        "outcomes": {
+          "found": 157,
+          "no target, marked unresolved": 102,
+          "other targets, no unresolved marker": 3
+        },
+        "recall": 0.5992,
+        "references": {
+          "by_status": {
+            "Resolved": 2077,
+            "Unresolved": 123
+          },
+          "not_resolved": 123,
+          "not_resolved_share": 0.0559,
+          "references": 2200
+        },
+        "unresolved_calls": {
+          "call_sites": 455,
+          "marked_unresolved": 248,
+          "marked_unresolved_share": 0.5451,
+          "without_target": 262,
+          "without_target_share": 0.5758
+        }
+      },
+      "sha256": "6547214df2878ae60cc552422ef14af38b8d4e3aa613be5bfe9c52b775d96f7a",
+      "source_bytes": 68916,
+      "version": "1.13.8"
+    },
+    "zod": {
+      "base": {
+        "by_kind": {
+          "call": {
+            "found": 100,
+            "observed": 1265,
+            "recall": 0.0791
+          },
+          "callback": {
+            "found": 0,
+            "observed": 43,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 18,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 5,
+            "recall": 0.0
+          },
+          "expression": {
+            "found": 0,
+            "observed": 1,
+            "recall": 0.0
+          },
+          "identifier": {
+            "found": 99,
+            "observed": 408,
+            "recall": 0.2426
+          },
+          "member": {
+            "found": 0,
+            "observed": 829,
+            "recall": 0.0
+          },
+          "new": {
+            "found": 1,
+            "observed": 65,
+            "recall": 0.0154
+          }
+        },
+        "found": 100,
+        "observed_edges": 1308,
+        "observed_implicit_edges": 18,
+        "outcomes": {
+          "callee not a polint function": 6,
+          "found": 100,
+          "no target, marked unresolved": 391,
+          "no target, no unresolved marker": 1,
+          "site not a polint call site": 793,
+          "stops at import binding": 17
+        },
+        "recall": 0.0765,
+        "references": {
+          "by_status": {
+            "Ambiguous": 184,
+            "Resolved": 73731,
+            "Unresolved": 5118
+          },
+          "not_resolved": 5302,
+          "not_resolved_share": 0.0671,
+          "references": 79033
+        },
+        "unresolved_calls": {
+          "call_sites": 46973,
+          "marked_unresolved": 32539,
+          "marked_unresolved_share": 0.6927,
+          "without_target": 45058,
+          "without_target_share": 0.9592
+        }
+      },
+      "exports": {
+        "export_fact_rows": {
+          "Default/Resolved": 73,
+          "Named/Resolved": 2090,
+          "Namespace/Unresolved": 226,
+          "StarReexport/Unresolved": 46
+        },
+        "facts": {
+          "files": 122,
+          "files_exact": 15,
+          "matched_names": 1280,
+          "observed_names": 3935,
+          "precision": 0.6268,
+          "predicted_names": 2042,
+          "recall": 0.3253
+        },
+        "symbols": {
+          "files": 122,
+          "files_exact": 10,
+          "matched_names": 940,
+          "observed_names": 3935,
+          "precision": 0.5405,
+          "predicted_names": 1739,
+          "recall": 0.2389
+        }
+      },
+      "files": 332,
+      "files_selected": 332,
+      "format": "TypeScript ESM source",
+      "functions": 8616,
+      "licence": "MIT",
+      "observed": {
+        "edges_by_kind": {
+          "call": 1265,
+          "callback": 43,
+          "implicit": 18
+        },
+        "failures": 0,
+        "instrumented_files": 110,
+        "instrumented_functions": 1988,
+        "transformed_not_instrumented": [
+          "src/v3/helpers/errorUtil.ts",
+          "src/v3/helpers/util.ts",
+          "src/v3/types.ts",
+          "src/v4/classic/compat.ts"
+        ]
+      },
+      "origin": "https://registry.npmjs.org/zod/-/zod-4.6.7.tgz",
+      "refined": {
+        "error": "timed out after 600 s"
+      },
+      "sha256": "84efd155bed93270286e793fc951be270b536cbd5b0eeb111f0fa3967201d698",
+      "source_bytes": 3087749,
+      "version": "4.6.7"
+    }
+  },
+  "plans": {
+    "base": [
+      "syntax",
+      "call_graph",
+      "symbols",
+      "references"
+    ],
+    "refined": [
+      "syntax",
+      "calls",
+      "control_flow",
+      "dataflow",
+      "call_graph",
+      "symbols",
+      "references"
+    ]
+  },
+  "polint_version": "0.5.0",
+  "schema": "polint-js-analysis-bench-report-1"
+}

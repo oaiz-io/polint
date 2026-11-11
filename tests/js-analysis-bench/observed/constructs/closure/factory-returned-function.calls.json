@@ -1,0 +1,33 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@215..234",
+      "syntax": "identifier",
+      "callee": "main.js@12..103",
+      "callee_name": "clamp"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@277..292",
+      "syntax": "identifier",
+      "callee": "main.js@105..258",
+      "callee_name": "makeLimiter"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@316..328",
+      "syntax": "identifier",
+      "callee": "main.js@163..255",
+      "callee_name": "limited"
+    }
+  ]
+}

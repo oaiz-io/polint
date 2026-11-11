@@ -1384,6 +1384,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "polint-js-analysis-bench-rules"
+version = "0.5.0"
+dependencies = [
+ "polint",
+]
+
+[[package]]
 name = "polint-macros"
 version = "0.5.0"
 dependencies = [

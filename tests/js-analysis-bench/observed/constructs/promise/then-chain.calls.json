@@ -1,0 +1,19 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@229..235",
+      "syntax": "identifier",
+      "callee": "main.js@12..85",
+      "callee_name": "load"
+    }
+  ]
+}

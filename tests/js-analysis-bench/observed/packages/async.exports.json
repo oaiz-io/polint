@@ -1,0 +1,772 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "all.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "allLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "allSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "any.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "anyLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "anySeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "apply.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "applyEach.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "applyEachSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "asyncify.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "auto.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "autoInject.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "cargo.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "cargoQueue.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "compose.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "concat.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "concatLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "concatSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "constant.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "detect.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "detectLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "detectSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "dir.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "doDuring.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "doUntil.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "doWhilst.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "during.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "each.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "eachLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "eachOf.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "eachOfLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "eachOfSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "eachSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "ensureAsync.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "every.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "everyLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "everySeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "filter.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "filterLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "filterSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "find.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "findLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "findSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "flatMap.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "flatMapLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "flatMapSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "foldl.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "foldr.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "forEach.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "forEachLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "forEachOf.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "forEachOfLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "forEachOfSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "forEachSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "forever.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "groupBy.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "groupByLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "groupBySeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "index.js": {
+      "system": "cjs",
+      "names": [
+        "all",
+        "allLimit",
+        "allSeries",
+        "any",
+        "anyLimit",
+        "anySeries",
+        "apply",
+        "applyEach",
+        "applyEachSeries",
+        "asyncify",
+        "auto",
+        "autoInject",
+        "cargo",
+        "cargoQueue",
+        "compose",
+        "concat",
+        "concatLimit",
+        "concatSeries",
+        "constant",
+        "default",
+        "detect",
+        "detectLimit",
+        "detectSeries",
+        "dir",
+        "doDuring",
+        "doUntil",
+        "doWhilst",
+        "during",
+        "each",
+        "eachLimit",
+        "eachOf",
+        "eachOfLimit",
+        "eachOfSeries",
+        "eachSeries",
+        "ensureAsync",
+        "every",
+        "everyLimit",
+        "everySeries",
+        "filter",
+        "filterLimit",
+        "filterSeries",
+        "find",
+        "findLimit",
+        "findSeries",
+        "flatMap",
+        "flatMapLimit",
+        "flatMapSeries",
+        "foldl",
+        "foldr",
+        "forEach",
+        "forEachLimit",
+        "forEachOf",
+        "forEachOfLimit",
+        "forEachOfSeries",
+        "forEachSeries",
+        "forever",
+        "groupBy",
+        "groupByLimit",
+        "groupBySeries",
+        "inject",
+        "log",
+        "map",
+        "mapLimit",
+        "mapSeries",
+        "mapValues",
+        "mapValuesLimit",
+        "mapValuesSeries",
+        "memoize",
+        "nextTick",
+        "parallel",
+        "parallelLimit",
+        "priorityQueue",
+        "queue",
+        "race",
+        "reduce",
+        "reduceRight",
+        "reflect",
+        "reflectAll",
+        "reject",
+        "rejectLimit",
+        "rejectSeries",
+        "retry",
+        "retryable",
+        "select",
+        "selectLimit",
+        "selectSeries",
+        "seq",
+        "series",
+        "setImmediate",
+        "some",
+        "someLimit",
+        "someSeries",
+        "sortBy",
+        "timeout",
+        "times",
+        "timesLimit",
+        "timesSeries",
+        "transform",
+        "tryEach",
+        "unmemoize",
+        "until",
+        "waterfall",
+        "whilst",
+        "wrapSync"
+      ],
+      "whole_value": "object"
+    },
+    "inject.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/DoublyLinkedList.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/Heap.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/applyEach.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/asyncEachOfLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/awaitify.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/breakLoop.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "object"
+    },
+    "internal/consoleFunc.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/createTester.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/eachOfLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/filter.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/getIterator.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/initialParams.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/isArrayLike.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/iterator.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/map.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/once.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/onlyOnce.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/parallel.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/promiseCallback.js": {
+      "system": "cjs",
+      "names": [
+        "PROMISE_SYMBOL",
+        "promiseCallback"
+      ],
+      "whole_value": "object"
+    },
+    "internal/queue.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/range.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/reject.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/setImmediate.js": {
+      "system": "cjs",
+      "names": [
+        "default",
+        "fallback",
+        "hasNextTick",
+        "hasQueueMicrotask",
+        "hasSetImmediate",
+        "wrap"
+      ],
+      "whole_value": "object"
+    },
+    "internal/withoutIndex.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "internal/wrapAsync.js": {
+      "system": "cjs",
+      "names": [
+        "default",
+        "isAsync",
+        "isAsyncGenerator",
+        "isAsyncIterable"
+      ],
+      "whole_value": "object"
+    },
+    "log.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "map.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "mapLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "mapSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "mapValues.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "mapValuesLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "mapValuesSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "memoize.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "nextTick.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "parallel.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "parallelLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "priorityQueue.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "queue.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "race.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "reduce.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "reduceRight.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "reflect.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "reflectAll.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "reject.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "rejectLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "rejectSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "retry.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "retryable.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "select.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "selectLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "selectSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "seq.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "series.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "setImmediate.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "some.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "someLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "someSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "sortBy.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "timeout.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "times.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "timesLimit.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "timesSeries.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "transform.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "tryEach.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "unmemoize.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "until.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "waterfall.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "whilst.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "wrapSync.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    }
+  }
+}

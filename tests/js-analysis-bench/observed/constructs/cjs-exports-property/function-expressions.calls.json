@@ -1,0 +1,27 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js",
+    "strings.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@64..83",
+      "syntax": "member",
+      "callee": "strings.js@138..227",
+      "callee_name": "shout"
+    },
+    {
+      "kind": "call",
+      "site": "strings.js@183..202",
+      "syntax": "member",
+      "callee": "strings.js@40..119",
+      "callee_name": "upper"
+    }
+  ]
+}

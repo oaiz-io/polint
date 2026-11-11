@@ -1,0 +1,29 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js",
+    "shapes/circle.js",
+    "shapes/index.js",
+    "shapes/square.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@106..120",
+      "syntax": "member",
+      "callee": "shapes/circle.js@24..97",
+      "callee_name": "area"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@143..156",
+      "syntax": "identifier",
+      "callee": "shapes/square.js@24..87",
+      "callee_name": "area"
+    }
+  ]
+}

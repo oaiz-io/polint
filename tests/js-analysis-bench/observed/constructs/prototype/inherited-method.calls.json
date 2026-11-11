@@ -1,0 +1,40 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@171..183",
+      "syntax": "member",
+      "callee": "main.js@368..418",
+      "callee_name": "sound"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@239..262",
+      "syntax": "member",
+      "callee": "main.js@12..71",
+      "callee_name": "Animal"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@433..447",
+      "syntax": "new",
+      "callee": "main.js@205..282",
+      "callee_name": "Dog"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@463..477",
+      "syntax": "member",
+      "callee": "main.js@101..202",
+      "callee_name": "describe"
+    }
+  ]
+}

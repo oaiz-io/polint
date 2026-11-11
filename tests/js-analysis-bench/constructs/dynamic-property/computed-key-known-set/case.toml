@@ -1,0 +1,3 @@
+construct = "dynamic-property"
+held_out = false
+description = "Methods are called through computed keys taken from a constant list in the same file."

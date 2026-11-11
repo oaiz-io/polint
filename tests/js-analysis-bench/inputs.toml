@@ -1,0 +1,96 @@
+# Inputs of the JS/TS analysis benchmark.
+#
+# Real packages are benchmark inputs only: each is pinned to one exact tarball
+# by URL and two content hashes, fetched once by `bench.py fetch`, and read
+# offline afterwards. `analysed` lists the files polint analyses and the
+# recorder instruments, as globs relative to the package root; `exports_skip`
+# removes files whose module scope cannot load on its own (test suites and
+# benchmarks that import their runners).
+schema_version = "polint-js-analysis-bench-inputs-1"
+
+# Every package tree and construct case runs only inside this image, with no
+# network, no credentials, a read-only root and all capabilities dropped.
+[sandbox]
+image = "node@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54"
+node_version = "v24.22.3"
+
+[[package]]
+name = "axios"
+version = "1.21.1"
+format = "ESM source, Node and browser adapters"
+licence = "MIT"
+origin = "https://registry.npmjs.org/axios/-/axios-1.21.1.tgz"
+integrity = "sha512-6eI5Q/Y4u/Um9dDlsRoq5pY2rxnUTv+L4PpLitnbk/i4jb3MxLZ5CsN5Ih3IysbeRYK4pR+P7qfMsOQl9fwwFQ=="
+sha256 = "5659acb8c9414ad88aa539db8e529947c9bac8cdf55973e314a078fc0205751c"
+analysed = ["lib/**/*.js"]
+driver = "drivers/axios.mjs"
+# Imported by the Node adapter at load time; the driver never sends a request,
+# so placeholder modules stand in for them.
+stubs = ["follow-redirects", "form-data", "https-proxy-agent", "proxy-from-env"]
+
+[[package]]
+name = "zod"
+version = "4.6.7"
+format = "TypeScript ESM source"
+licence = "MIT"
+origin = "https://registry.npmjs.org/zod/-/zod-4.6.7.tgz"
+integrity = "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="
+sha256 = "84efd155bed93270286e793fc951be270b536cbd5b0eeb111f0fa3967201d698"
+analysed = ["src/**/*.ts"]
+exports_skip = ["src/**/tests/**", "src/v3/benchmarks/**"]
+driver = "drivers/zod.mjs"
+
+[[package]]
+name = "commander"
+version = "14.0.3"
+format = "CommonJS only"
+licence = "MIT"
+origin = "https://registry.npmjs.org/commander/-/commander-14.0.3.tgz"
+integrity = "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw=="
+sha256 = "5849703c500e0f324eb01340d8bda1f9ec48fc37bb7be9712eb0dd52aad92f6c"
+analysed = ["index.js", "lib/*.js"]
+driver = "drivers/commander.mjs"
+
+[[package]]
+name = "async"
+version = "3.2.6"
+format = "CommonJS transpiled from ESM"
+licence = "MIT"
+origin = "https://registry.npmjs.org/async/-/async-3.2.6.tgz"
+integrity = "sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA=="
+sha256 = "6bb45cfba08cd2eea39eb3ce6eaa94113070fe137ec0bd4a9f122be9a0250e6f"
+analysed = ["*.js", "internal/*.js"]
+driver = "drivers/async.mjs"
+
+[[package]]
+name = "chalk"
+version = "6.0.1"
+format = "ESM only, with subpath imports"
+licence = "MIT"
+origin = "https://registry.npmjs.org/chalk/-/chalk-6.0.1.tgz"
+integrity = "sha512-/Ce6KNm3vIbWdMlNna6RVIZ/ICQxnJxCicet5LBKK9ZffBkqzDw0xh9EiKSljdRtiIQ1S1z4YgcscUUGzNCWrA=="
+sha256 = "22a5b05d62a304c950f24dedb466ea07fb4b458e58bb37b2fe2c69ed2c9ba6c3"
+analysed = ["source/**/*.js"]
+driver = "drivers/chalk.mjs"
+
+[[package]]
+name = "dayjs"
+version = "1.11.23"
+format = "minified UMD"
+licence = "MIT"
+origin = "https://registry.npmjs.org/dayjs/-/dayjs-1.11.23.tgz"
+integrity = "sha512-QDTCU0M0MxR3hQfnlDJfwekQiaanm1ubOD231u73WBckQ/fsamwRLiE2GBz6D3a/xF1NgfiDLJjXBa1hYOYTtQ=="
+sha256 = "7da0ff55ddb6d4050b91ea0a11a8e9d92c048305155039387373f20be080e594"
+analysed = ["dayjs.min.js"]
+driver = "drivers/dayjs.mjs"
+
+[[package]]
+name = "underscore"
+version = "1.13.8"
+format = "bundled UMD (Rollup)"
+licence = "MIT"
+origin = "https://registry.npmjs.org/underscore/-/underscore-1.13.8.tgz"
+integrity = "sha512-DXtD3ZtEQzc7M8m4cXotyHR+FAS18C64asBYY5vqZexfYryNNnDc02W4hKg3rdQuqOYas1jkseX0+nZXjTXnvQ=="
+sha256 = "6547214df2878ae60cc552422ef14af38b8d4e3aa613be5bfe9c52b775d96f7a"
+analysed = ["underscore-umd.js"]
+driver = "drivers/underscore.mjs"

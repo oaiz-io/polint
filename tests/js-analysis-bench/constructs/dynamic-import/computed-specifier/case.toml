@@ -1,0 +1,3 @@
+construct = "dynamic-import"
+held_out = false
+description = "import() receives a specifier assembled at run time, so the loaded module and the called function are hidden."

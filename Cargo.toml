@@ -22,6 +22,7 @@ members = [
     "examples/ts-complexity/.polint/rules",
     "examples/ts-design-tokens/.polint/rules",
     "examples/ts-no-raw-api-calls/.polint/rules",
+    "tests/js-analysis-bench/rule-pack",
 ]
 # The public-surface leak probe is compiled separately from the workspace.
 # Keep the leak-gate probe OUT of normal workspace builds, lints, and tests; it

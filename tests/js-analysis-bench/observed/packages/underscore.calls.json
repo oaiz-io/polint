@@ -1,0 +1,1846 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "underscore-umd.js"
+  ],
+  "instrumented_functions": 186,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@1..68870",
+      "syntax": "expression",
+      "callee": "underscore-umd.js@1..451",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@10381..10394",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3747..3866",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@10903..10917",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@11055..11075",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@11065..11074",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@112..121",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@459..68868",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@11209..11220",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@11794..11806",
+      "syntax": "new",
+      "callee": "underscore-umd.js@11695..11836",
+      "callee_name": "_$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@15667..15684",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@8429..8755",
+      "callee_name": "isTypedArray"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@17542..17549",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@17705..17712",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@17857..17870",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@6615..6702",
+      "callee_name": "has$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@18074..18087",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3747..3866",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@19739..19755",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@19819..19839",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@19895..19911",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@19932..19952",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@20048..20057",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@20375..20384",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@20701..20710",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@21002..21024",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@5181..5250",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@21449..21465",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@21449..21465",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@18041..18253",
+      "callee_name": "allKeys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@21773..21796",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@21140..21681",
+      "callee_name": "createAssigner"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@22002..22022",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@21140..21681",
+      "callee_name": "createAssigner"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@22095..22124",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@21140..21681",
+      "callee_name": "createAssigner"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@22374..22393",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3747..3866",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@22813..22834",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@22332..22591",
+      "callee_name": "baseCreate"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@22851..22875",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@21197..21676",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@22989..23002",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3747..3866",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@23056..23071",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@21197..21676",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@23717..23733",
+      "syntax": "member",
+      "callee": "underscore-umd.js@23482..23553",
+      "callee_name": "toPath$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@24316..24345",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@23816..24022",
+      "callee_name": "deepGet"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@24332..24344",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@23682..23738",
+      "callee_name": "toPath"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@24358..24376",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3998..4056",
+      "callee_name": "isUndefined"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@24675..24687",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@23682..23738",
+      "callee_name": "toPath"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@24794..24809",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@6615..6702",
+      "callee_name": "has$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@25132..25152",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@21197..21676",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@25194..25213",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@11159..11472",
+      "callee_name": "isMatch"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@25430..25442",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@23682..23738",
+      "callee_name": "toPath"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@25484..25502",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@23816..24022",
+      "callee_name": "deepGet"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@26686..26705",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@5181..5250",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@26714..26750",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25690..26352",
+      "callee_name": "optimizeCb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@26760..26775",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3747..3866",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@26803..26817",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25094..25225",
+      "callee_name": "matcher"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@26830..26845",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25393..25514",
+      "callee_name": "property"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@27117..27155",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@26588..26850",
+      "callee_name": "baseIteratee"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@27445..27483",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@26588..26850",
+      "callee_name": "baseIteratee"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@27680..27701",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@27719..27728",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@28247..28261",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@24257..24404",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@28403..28435",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25690..26352",
+      "callee_name": "optimizeCb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@29189..29198",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@29736..29760",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@29003..29476",
+      "callee_name": "createEscaper"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@29835..29852",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@20641..20842",
+      "callee_name": "invert"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@29935..29961",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@29003..29476",
+      "callee_name": "createEscaper"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@31575..31619",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@21197..21676",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3323..3344",
+      "syntax": "member",
+      "callee": "underscore-umd.js@36327..36431",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3323..3344",
+      "syntax": "member",
+      "callee": "underscore-umd.js@41308..41550",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3323..3344",
+      "syntax": "member",
+      "callee": "underscore-umd.js@61638..61708",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3323..3344",
+      "syntax": "member",
+      "callee": "underscore-umd.js@62340..62582",
+      "callee_name": "unzip"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3369..3404",
+      "syntax": "member",
+      "callee": "underscore-umd.js@35537..36018",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3369..3404",
+      "syntax": "member",
+      "callee": "underscore-umd.js@37917..38201",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3369..3404",
+      "syntax": "member",
+      "callee": "underscore-umd.js@57170..57714",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3369..3404",
+      "syntax": "member",
+      "callee": "underscore-umd.js@57813..58193",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3369..3404",
+      "syntax": "member",
+      "callee": "underscore-umd.js@60036..60190",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3369..3404",
+      "syntax": "member",
+      "callee": "underscore-umd.js@60305..60382",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@33853..33865",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@23682..23738",
+      "callee_name": "toPath"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@34217..34235",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@5181..5250",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3429..3478",
+      "syntax": "member",
+      "callee": "underscore-umd.js@36178..36455",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@3429..3478",
+      "syntax": "member",
+      "callee": "underscore-umd.js@50638..51222",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@34617..34625",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@11695..11836",
+      "callee_name": "_$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@34997..35028",
+      "syntax": "member",
+      "callee": "underscore-umd.js@42859..43069",
+      "callee_name": "before"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@35523..36019",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@35945..35988",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@34864..35187",
+      "callee_name": "executeBound"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@36164..36456",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@36219..36237",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@5181..5250",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@36313..36432",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@36361..36424",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@34864..35187",
+      "callee_name": "executeBound"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@36747..36781",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7536..7787",
+      "callee_name": "createSizePropertyCheck"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@36988..37004",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@37197..37213",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@37354..37372",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@37395..37415",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4470..4532",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@37576..37592",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@37903..38202",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@37950..37979",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@36850..37689",
+      "callee_name": "flatten$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@38155..38174",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3042..3702",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@38450..38471",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@6615..6702",
+      "callee_name": "has$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@38731..38864",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@38973..38995",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3042..3702",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@41294..41551",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@41926..41948",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3042..3702",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@42083..42115",
+      "syntax": "member",
+      "callee": "underscore-umd.js@25165..25220",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@43218..43236",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3042..3702",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@43367..43389",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@43407..43416",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@43755..43777",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@43798..43814",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@43931..43968",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25165..25220",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@44111..44140",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@43645..44019",
+      "callee_name": "createPredicateIndexFinder"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@44236..44266",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@43645..44019",
+      "callee_name": "createPredicateIndexFinder"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@44492..44516",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@44534..44547",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@24943..24991",
+      "callee_name": "identity"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@44573..44589",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@44672..44692",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@24943..24991",
+      "callee_name": "identity"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@44973..44989",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4556..4575",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@45915..45959",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@44845..45661",
+      "callee_name": "createIndexFinder"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4595..4614",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@46107..46143",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@44845..45661",
+      "callee_name": "createIndexFinder"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@46264..46280",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@46318..46352",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@43699..44014",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4632..4649",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@46588..46613",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@46203..46412",
+      "callee_name": "find"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@46598..46612",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25094..25225",
+      "callee_name": "matcher"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4669..4688",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@46881..46910",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25690..26352",
+      "callee_name": "optimizeCb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@46939..46955",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47025..47049",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@49081..49179",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47025..47049",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@52164..52401",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47025..47049",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@55513..55630",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47025..47049",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@64437..64679",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47025..47049",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@64831..65181",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47025..47049",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@65277..65505",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4707..4725",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47090..47099",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47366..47387",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47406..47422",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4745..4764",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47637..47679",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25455..25509",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47637..47679",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@50883..51216",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@47637..47679",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@54836..54985",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4789..4813",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@48054..48070",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@4835..4856",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@48595..48656",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@47994..48484",
+      "callee_name": "reducer"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@48608..48640",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25690..26352",
+      "callee_name": "optimizeCb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@48781..48796",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@47791..48668",
+      "callee_name": "createReduce"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@48888..48904",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@47791..48668",
+      "callee_name": "createReduce"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49043..49065",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49071..49180",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@46826..47242",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49122..49151",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25165..25220",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49122..49151",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@42056..42122",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49122..49151",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@60125..60184",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49322..49365",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@48962..49205",
+      "callee_name": "filter"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49334..49355",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@42016..42127",
+      "callee_name": "negate"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49341..49354",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49494..49516",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49535..49551",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49941..49963",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@49982..49998",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@50389..50405",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@50499..50528",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@44918..45656",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@50624..51223",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@50701..50719",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@5181..5250",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@50768..50780",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@23682..23738",
+      "callee_name": "toPath"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@50874..51217",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@47312..47710",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@51345..51368",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@47312..47710",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@51354..51367",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25393..25514",
+      "callee_name": "property"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@51545..51572",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@48962..49205",
+      "callee_name": "filter"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@51557..51571",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25094..25225",
+      "callee_name": "matcher"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@52125..52146",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@52154..52402",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@46826..47242",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@52210..52234",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25455..25509",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@52210..52234",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@52733..52749",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@5312..5331",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@53540..53553",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4470..4532",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@53658..53674",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@53714..53725",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@20009..20222",
+      "callee_name": "values"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54207..54219",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@53437..53730",
+      "callee_name": "toArray"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54238..54255",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54389..54408",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@28584..28738",
+      "callee_name": "random"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54611..54632",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@54031..54545",
+      "callee_name": "sample"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54787..54808",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54821..55250",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@51307..51373",
+      "callee_name": "pluck"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54827..54986",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@47312..47710",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@54944..54970",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25455..25509",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55474..55495",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55503..55631",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@46826..47242",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55556..55583",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25455..25509",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55593..55621",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@55827..55942",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55593..55621",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@56107..56166",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55593..55621",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@56358..56457",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55593..55621",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@56636..56709",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55821..55943",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@55327..55664",
+      "callee_name": "group"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@55866..55884",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@6615..6702",
+      "callee_name": "has$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@56101..56167",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@55327..55664",
+      "callee_name": "group"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@56352..56458",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@55327..55664",
+      "callee_name": "group"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@56397..56415",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@6615..6702",
+      "callee_name": "has$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@56630..56716",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@55327..55664",
+      "callee_name": "group"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@56836..56852",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7599..7783",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@56868..56877",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@10351..10625",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57156..57715",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57277..57299",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@5181..5250",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57341..57370",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@25690..26352",
+      "callee_name": "optimizeCb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57385..57397",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@18041..18253",
+      "callee_name": "allKeys"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57452..57481",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@36850..37689",
+      "callee_name": "flatten$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57638..57663",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@57005..57068",
+      "callee_name": "keyInObj"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57638..57663",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@58074..58141",
+      "callee_name": "iteratee"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57799..58194",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@57880..57902",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@5181..5250",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@58013..58055",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@47312..47710",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@58017..58046",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@36850..37689",
+      "callee_name": "flatten$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@58113..58132",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@50331..50538",
+      "callee_name": "contains"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@58160..58188",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3042..3702",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@5818..5864",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4470..4532",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@58850..58882",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@58386..58516",
+      "callee_name": "initial"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@5921..5942",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4470..4532",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@59591..59613",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@48962..49205",
+      "callee_name": "filter"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@5965..5986",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@59825..59855",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@36850..37689",
+      "callee_name": "flatten$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60022..60191",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60071..60098",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@36850..37689",
+      "callee_name": "flatten$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60111..60185",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@48962..49205",
+      "callee_name": "filter"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60156..60177",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@50331..50538",
+      "callee_name": "contains"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60291..60383",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60347..60377",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@3042..3702",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60766..60785",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4093..4209",
+      "callee_name": "isBoolean"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@60909..60930",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@27322..27488",
+      "callee_name": "cb"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@61001..61017",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@61292..61316",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@50331..50538",
+      "callee_name": "contains"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@61409..61432",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@50331..50538",
+      "callee_name": "contains"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@61624..61709",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@61668..61703",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@60705..61500",
+      "callee_name": "uniq"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@61673..61702",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@36850..37689",
+      "callee_name": "flatten$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@61927..61943",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@62001..62023",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@50331..50538",
+      "callee_name": "contains"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@62102..62130",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@50331..50538",
+      "callee_name": "contains"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@62391..62412",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@51645..52432",
+      "callee_name": "max"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@62533..62552",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@51307..51373",
+      "callee_name": "pluck"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@62699..62719",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@2919..3707",
+      "callee_name": "restArguments"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@63043..63058",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64298..64306",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@11695..11836",
+      "callee_name": "_$1"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64298..64314",
+      "syntax": "member",
+      "callee": "underscore-umd.js@64522..64672",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64416..64680",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@46826..47242",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64421..64435",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@20919..21077",
+      "callee_name": "functions"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64623..64663",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@64231..64325",
+      "callee_name": "chainResult"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64641..64662",
+      "syntax": "member",
+      "callee": "underscore-umd.js@34576..34679",
+      "callee_name": "chain"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64641..64662",
+      "syntax": "member",
+      "callee": "underscore-umd.js@47312..47710",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64641..64662",
+      "syntax": "member",
+      "callee": "underscore-umd.js@51307..51373",
+      "callee_name": "pluck"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64641..64662",
+      "syntax": "member",
+      "callee": "underscore-umd.js@54711..55255",
+      "callee_name": "sortBy"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64641..64662",
+      "syntax": "member",
+      "callee": "underscore-umd.js@58676..58887",
+      "callee_name": "first"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@64760..65182",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@46826..47242",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@65147..65169",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@64231..64325",
+      "callee_name": "chainResult"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@65243..65506",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@46826..47242",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@6724..6746",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4393..4537",
+      "callee_name": "tagTester"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@68798..68815",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@64390..64701",
+      "callee_name": "mixin"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@6882..7023",
+      "syntax": "expression",
+      "callee": "underscore-umd.js@6882..7021",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@6904..6926",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4470..4532",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@7144..7157",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4470..4532",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@7277..7290",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@4470..4532",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@7647..7674",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7915..7982",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@8082..8111",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7872..7987",
+      "callee_name": "shallowProperty"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@8244..8282",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7536..7787",
+      "callee_name": "createSizePropertyCheck"
+    },
+    {
+      "kind": "call",
+      "site": "underscore-umd.js@8920..8945",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@7872..7987",
+      "callee_name": "shallowProperty"
+    },
+    {
+      "kind": "callback",
+      "site": "underscore-umd.js@29417..29455",
+      "syntax": "member",
+      "callee": "underscore-umd.js@29051..29099",
+      "callee_name": "escaper"
+    },
+    {
+      "kind": "callback",
+      "site": "underscore-umd.js@32012..32595",
+      "syntax": "member",
+      "callee": "underscore-umd.js@32034..32594",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "underscore-umd.js@33386..33414",
+      "syntax": "member",
+      "callee": "underscore-umd.js@46826..47242",
+      "callee_name": "each"
+    },
+    {
+      "kind": "callback",
+      "site": "underscore-umd.js@47025..47049",
+      "syntax": "identifier",
+      "callee": "underscore-umd.js@29309..29471",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "underscore-umd.js@54827..55240",
+      "syntax": "member",
+      "callee": "underscore-umd.js@54992..55239",
+      "callee_name": ""
+    }
+  ]
+}

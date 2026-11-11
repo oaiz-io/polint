@@ -1,0 +1,71 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "index.js": {
+      "system": "cjs",
+      "names": [
+        "Argument",
+        "Command",
+        "CommanderError",
+        "Help",
+        "InvalidArgumentError",
+        "InvalidOptionArgumentError",
+        "Option",
+        "createArgument",
+        "createCommand",
+        "createOption",
+        "program"
+      ],
+      "whole_value": "object"
+    },
+    "lib/argument.js": {
+      "system": "cjs",
+      "names": [
+        "Argument",
+        "humanReadableArgName"
+      ],
+      "whole_value": "object"
+    },
+    "lib/command.js": {
+      "system": "cjs",
+      "names": [
+        "Command",
+        "useColor"
+      ],
+      "whole_value": "object"
+    },
+    "lib/error.js": {
+      "system": "cjs",
+      "names": [
+        "CommanderError",
+        "InvalidArgumentError"
+      ],
+      "whole_value": "object"
+    },
+    "lib/help.js": {
+      "system": "cjs",
+      "names": [
+        "Help",
+        "stripColor"
+      ],
+      "whole_value": "object"
+    },
+    "lib/option.js": {
+      "system": "cjs",
+      "names": [
+        "DualOptions",
+        "Option"
+      ],
+      "whole_value": "object"
+    },
+    "lib/suggestSimilar.js": {
+      "system": "cjs",
+      "names": [
+        "suggestSimilar"
+      ],
+      "whole_value": "object"
+    }
+  }
+}

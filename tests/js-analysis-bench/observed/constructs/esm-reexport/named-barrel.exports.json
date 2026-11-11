@@ -1,0 +1,30 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "index.js": {
+      "system": "esm",
+      "names": [
+        "parse",
+        "render"
+      ]
+    },
+    "main.js": {
+      "system": "esm",
+      "names": []
+    },
+    "parse.js": {
+      "system": "esm",
+      "names": [
+        "parse"
+      ]
+    },
+    "render.js": {
+      "system": "esm",
+      "names": [
+        "render"
+      ]
+    }
+  }
+}

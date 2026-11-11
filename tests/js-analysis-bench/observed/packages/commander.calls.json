@@ -1,0 +1,2244 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "index.js",
+    "lib/argument.js",
+    "lib/command.js",
+    "lib/error.js",
+    "lib/help.js",
+    "lib/option.js",
+    "lib/suggestSimilar.js"
+  ],
+  "instrumented_functions": 296,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "index.js@285..298",
+      "syntax": "new",
+      "callee": "lib/command.js@619..3511",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/argument.js@2998..3008",
+      "syntax": "member",
+      "callee": "lib/argument.js@1194..1229",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@10731..10757",
+      "syntax": "member",
+      "callee": "lib/command.js@20934..21488",
+      "callee_name": "_registerCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@10786..10818",
+      "syntax": "member",
+      "callee": "lib/command.js@29330..29648",
+      "callee_name": "_checkForBrokenPassThrough"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@11241..11272",
+      "syntax": "new",
+      "callee": "lib/argument.js@398..1123",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@11920..11958",
+      "syntax": "member",
+      "callee": "lib/command.js@11194..11277",
+      "callee_name": "createArgument"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@12079..12105",
+      "syntax": "member",
+      "callee": "lib/argument.js@1640..1769",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@12117..12143",
+      "syntax": "member",
+      "callee": "lib/command.js@12769..13333",
+      "callee_name": "addArgument"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@12543..12564",
+      "syntax": "member",
+      "callee": "lib/command.js@11845..12165",
+      "callee_name": "argument"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@14577..14605",
+      "syntax": "member",
+      "callee": "lib/command.js@7310..7365",
+      "callee_name": "createCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@14611..14640",
+      "syntax": "member",
+      "callee": "lib/command.js@80570..81340",
+      "callee_name": "helpOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@14660..14691",
+      "syntax": "member",
+      "callee": "lib/command.js@12444..12596",
+      "callee_name": "arguments"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@14718..14758",
+      "syntax": "member",
+      "callee": "lib/command.js@71136..71393",
+      "callee_name": "description"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@16066..16091",
+      "syntax": "member",
+      "callee": "lib/command.js@53633..53794",
+      "callee_name": "_findCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@16182..16220",
+      "syntax": "member",
+      "callee": "lib/command.js@13988..14978",
+      "callee_name": "helpCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@17899..17962",
+      "syntax": "member",
+      "callee": "lib/command.js@17297..17494",
+      "callee_name": "_exitCallback"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@17918..17961",
+      "syntax": "new",
+      "callee": "lib/error.js@343..630",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@18786..18797",
+      "syntax": "member",
+      "callee": "lib/command.js@61489..61948",
+      "callee_name": "opts"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@19325..19355",
+      "syntax": "new",
+      "callee": "lib/option.js@227..1557",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@19679..19711",
+      "syntax": "member",
+      "callee": "lib/option.js@4994..5290",
+      "callee_name": "parseArg"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@19863..19926",
+      "syntax": "member",
+      "callee": "lib/command.js@62575..63210",
+      "callee_name": "error"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@20206..20236",
+      "syntax": "member",
+      "callee": "lib/command.js@53922..54002",
+      "callee_name": "_findOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@20263..20292",
+      "syntax": "member",
+      "callee": "lib/command.js@53922..54002",
+      "callee_name": "_findOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@20664..20693",
+      "syntax": "member",
+      "callee": "lib/command.js@75732..75874",
+      "callee_name": "_initOptionGroup"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21007..21017",
+      "syntax": "member",
+      "callee": "lib/command.js@74101..74201",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21026..21039",
+      "syntax": "member",
+      "callee": "lib/command.js@73116..73363",
+      "callee_name": "aliases"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21074..21090",
+      "syntax": "identifier",
+      "callee": "lib/command.js@20982..21047",
+      "callee_name": "knownBy"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21112..21135",
+      "syntax": "member",
+      "callee": "lib/command.js@53633..53794",
+      "callee_name": "_findCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21419..21450",
+      "syntax": "member",
+      "callee": "lib/command.js@75930..76061",
+      "callee_name": "_initCommandGroup"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21632..21660",
+      "syntax": "member",
+      "callee": "lib/command.js@20130..20729",
+      "callee_name": "_registerOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21681..21694",
+      "syntax": "member",
+      "callee": "lib/option.js@5381..5504",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21713..21735",
+      "syntax": "member",
+      "callee": "lib/option.js@5645..5787",
+      "callee_name": "attributeName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@21965..21999",
+      "syntax": "member",
+      "callee": "lib/command.js@53922..54002",
+      "callee_name": "_findOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@22011..22162",
+      "syntax": "member",
+      "callee": "lib/command.js@31096..31332",
+      "callee_name": "setOptionValueWithSource"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@22230..22297",
+      "syntax": "member",
+      "callee": "lib/command.js@31096..31332",
+      "callee_name": "setOptionValueWithSource"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@22712..22737",
+      "syntax": "member",
+      "callee": "lib/command.js@30455..30588",
+      "callee_name": "getOptionValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@22798..22860",
+      "syntax": "member",
+      "callee": "lib/command.js@19591..19962",
+      "callee_name": "_callParseArg"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@22928..22963",
+      "syntax": "member",
+      "callee": "lib/option.js@4611..4793",
+      "callee_name": "_collectValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@23147..23165",
+      "syntax": "member",
+      "callee": "lib/option.js@6356..6434",
+      "callee_name": "isBoolean"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@23347..23400",
+      "syntax": "member",
+      "callee": "lib/command.js@31096..31332",
+      "callee_name": "setOptionValueWithSource"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@23557..23607",
+      "syntax": "identifier",
+      "callee": "lib/command.js@22383..23407",
+      "callee_name": "handleOptionValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@24340..24377",
+      "syntax": "member",
+      "callee": "lib/command.js@19279..19360",
+      "callee_name": "createOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@24383..24429",
+      "syntax": "member",
+      "callee": "lib/option.js@4312..4406",
+      "callee_name": "makeOptionMandatory"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@24473..24501",
+      "syntax": "member",
+      "callee": "lib/option.js@1753..1882",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@24473..24515",
+      "syntax": "member",
+      "callee": "lib/option.js@4095..4155",
+      "callee_name": "argParser"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@24771..24789",
+      "syntax": "member",
+      "callee": "lib/option.js@1753..1882",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@24809..24831",
+      "syntax": "member",
+      "callee": "lib/command.js@21608..23913",
+      "callee_name": "addOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@25949..26011",
+      "syntax": "member",
+      "callee": "lib/command.js@24070..24836",
+      "callee_name": "_optionEx"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@2598..2608",
+      "syntax": "identifier",
+      "callee": "lib/command.js@86212..87128",
+      "callee_name": "useColor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@2705..2715",
+      "syntax": "identifier",
+      "callee": "lib/command.js@86212..87128",
+      "callee_name": "useColor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@2802..2817",
+      "syntax": "identifier",
+      "callee": "lib/help.js@20918..21074",
+      "callee_name": "stripColor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@35617..35640",
+      "syntax": "member",
+      "callee": "lib/command.js@37144..37297",
+      "callee_name": "_prepareForParse"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@35663..35704",
+      "syntax": "member",
+      "callee": "lib/command.js@32283..34221",
+      "callee_name": "_prepareUserArgs"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@35710..35742",
+      "syntax": "member",
+      "callee": "lib/command.js@50282..53535",
+      "callee_name": "_parseCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@37208..37235",
+      "syntax": "member",
+      "callee": "lib/command.js@37614..38039",
+      "callee_name": "saveStateBeforeParse"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@37256..37286",
+      "syntax": "member",
+      "callee": "lib/command.js@38307..39011",
+      "callee_name": "restoreStateBeforeParse"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@45068..45098",
+      "syntax": "member",
+      "callee": "lib/command.js@53633..53794",
+      "callee_name": "_findCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@45154..45183",
+      "syntax": "member",
+      "callee": "lib/command.js@37144..37297",
+      "callee_name": "_prepareForParse"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@45226..45325",
+      "syntax": "member",
+      "callee": "lib/command.js@49810..50142",
+      "callee_name": "_chainOrCallSubCommandHook"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@45346..45589",
+      "syntax": "member",
+      "callee": "lib/command.js@48602..48861",
+      "callee_name": "_chainOrCall"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@45530..45573",
+      "syntax": "member",
+      "callee": "lib/command.js@50282..53535",
+      "callee_name": "_parseCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@47447..47477",
+      "syntax": "member",
+      "callee": "lib/command.js@46297..46785",
+      "callee_name": "_checkNumberOfArguments"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@48852..48856",
+      "syntax": "identifier",
+      "callee": "lib/command.js@45378..45588",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@48852..48856",
+      "syntax": "identifier",
+      "callee": "lib/command.js@49521..49604",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@48852..48856",
+      "syntax": "identifier",
+      "callee": "lib/command.js@52130..52183",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@48852..48856",
+      "syntax": "identifier",
+      "callee": "lib/command.js@52274..52362",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@49089..49119",
+      "syntax": "member",
+      "callee": "lib/command.js@4681..4919",
+      "callee_name": "_getCommandAndAncestors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@49495..49605",
+      "syntax": "member",
+      "callee": "lib/command.js@48602..48861",
+      "callee_name": "_chainOrCall"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50336..50362",
+      "syntax": "member",
+      "callee": "lib/command.js@56460..61373",
+      "callee_name": "parseOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50368..50391",
+      "syntax": "member",
+      "callee": "lib/command.js@63360..64267",
+      "callee_name": "_parseOptionsEnv"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50454..50481",
+      "syntax": "member",
+      "callee": "lib/command.js@64381..65313",
+      "callee_name": "_parseOptionsImplied"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50625..50655",
+      "syntax": "member",
+      "callee": "lib/command.js@53633..53794",
+      "callee_name": "_findCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50672..50737",
+      "syntax": "member",
+      "callee": "lib/command.js@44991..45619",
+      "callee_name": "_dispatchSubcommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50760..50782",
+      "syntax": "member",
+      "callee": "lib/command.js@15901..16324",
+      "callee_name": "_getHelpCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50808..50830",
+      "syntax": "member",
+      "callee": "lib/command.js@15901..16324",
+      "callee_name": "_getHelpCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@50808..50837",
+      "syntax": "member",
+      "callee": "lib/command.js@74101..74201",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51422..51448",
+      "syntax": "member",
+      "callee": "lib/command.js@82319..82825",
+      "callee_name": "help"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51461..51504",
+      "syntax": "member",
+      "callee": "lib/command.js@84395..84756",
+      "callee_name": "_outputHelpIfRequested"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51510..51549",
+      "syntax": "member",
+      "callee": "lib/command.js@54175..54605",
+      "callee_name": "_checkForMissingMandatoryOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51555..51589",
+      "syntax": "member",
+      "callee": "lib/command.js@55653..55883",
+      "callee_name": "_checkForConflictingOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51779..51816",
+      "syntax": "member",
+      "callee": "lib/command.js@67881..68753",
+      "callee_name": "unknownOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51870..51881",
+      "syntax": "member",
+      "callee": "lib/command.js@74101..74201",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51922..51946",
+      "syntax": "identifier",
+      "callee": "lib/command.js@51724..51831",
+      "callee_name": "checkForUnknownOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@51954..51978",
+      "syntax": "member",
+      "callee": "lib/command.js@46907..48390",
+      "callee_name": "_processArguments"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@52026..52075",
+      "syntax": "member",
+      "callee": "lib/command.js@49001..49637",
+      "callee_name": "_chainOrCallHooks"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@52098..52192",
+      "syntax": "member",
+      "callee": "lib/command.js@48602..48861",
+      "callee_name": "_chainOrCall"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@52144..52183",
+      "syntax": "member",
+      "callee": "lib/command.js@18383..18883",
+      "callee_name": "listener"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@52242..52363",
+      "syntax": "member",
+      "callee": "lib/command.js@48602..48861",
+      "callee_name": "_chainOrCall"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@52394..52444",
+      "syntax": "member",
+      "callee": "lib/command.js@49001..49637",
+      "callee_name": "_chainOrCallHooks"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@52706..52728",
+      "syntax": "member",
+      "callee": "lib/command.js@53633..53794",
+      "callee_name": "_findCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@53061..53082",
+      "syntax": "member",
+      "callee": "lib/command.js@69368..69986",
+      "callee_name": "unknownCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@53220..53244",
+      "syntax": "identifier",
+      "callee": "lib/command.js@51724..51831",
+      "callee_name": "checkForUnknownOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@53982..53996",
+      "syntax": "member",
+      "callee": "lib/option.js@6106..6171",
+      "callee_name": "is"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@54303..54333",
+      "syntax": "member",
+      "callee": "lib/command.js@4681..4919",
+      "callee_name": "_getCommandAndAncestors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@54852..54874",
+      "syntax": "member",
+      "callee": "lib/option.js@5645..5787",
+      "callee_name": "attributeName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@54886..54916",
+      "syntax": "member",
+      "callee": "lib/command.js@30455..30588",
+      "callee_name": "getOptionValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@54977..55013",
+      "syntax": "member",
+      "callee": "lib/command.js@31498..31571",
+      "callee_name": "getOptionValueSource"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@55776..55806",
+      "syntax": "member",
+      "callee": "lib/command.js@4681..4919",
+      "callee_name": "_getCommandAndAncestors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@55832..55870",
+      "syntax": "member",
+      "callee": "lib/command.js@54720..55484",
+      "callee_name": "_checkForConflictingLocalOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@57620..57636",
+      "syntax": "identifier",
+      "callee": "lib/command.js@56646..56726",
+      "callee_name": "maybeOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@57640..57662",
+      "syntax": "identifier",
+      "callee": "lib/command.js@56758..57144",
+      "callee_name": "negativeNumberArg"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@57702..57729",
+      "syntax": "member",
+      "callee": "lib/option.js@5381..5504",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@57811..57827",
+      "syntax": "identifier",
+      "callee": "lib/command.js@56646..56726",
+      "callee_name": "maybeOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@57854..57875",
+      "syntax": "member",
+      "callee": "lib/command.js@53922..54002",
+      "callee_name": "_findOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@58166..58179",
+      "syntax": "member",
+      "callee": "lib/option.js@5381..5504",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@58666..58679",
+      "syntax": "member",
+      "callee": "lib/option.js@5381..5504",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@60298..60314",
+      "syntax": "identifier",
+      "callee": "lib/command.js@56646..56726",
+      "callee_name": "maybeOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@60671..60693",
+      "syntax": "member",
+      "callee": "lib/command.js@53633..53794",
+      "callee_name": "_findCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@60816..60838",
+      "syntax": "member",
+      "callee": "lib/command.js@15901..16324",
+      "callee_name": "_getHelpCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@62145..62175",
+      "syntax": "member",
+      "callee": "lib/command.js@4681..4919",
+      "callee_name": "_getCommandAndAncestors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@62247..62257",
+      "syntax": "member",
+      "callee": "lib/command.js@61489..61948",
+      "callee_name": "opts"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@63170..63205",
+      "syntax": "member",
+      "callee": "lib/command.js@17830..18046",
+      "callee_name": "_exit"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@6421..6445",
+      "syntax": "member",
+      "callee": "lib/command.js@7310..7365",
+      "callee_name": "createCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@64429..64458",
+      "syntax": "new",
+      "callee": "lib/option.js@6913..7418",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@68250..68281",
+      "syntax": "member",
+      "callee": "lib/command.js@7550..7628",
+      "callee_name": "createHelp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@68250..68316",
+      "syntax": "member",
+      "callee": "lib/help.js@2525..3585",
+      "callee_name": "visibleOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@6837..6856",
+      "syntax": "member",
+      "callee": "lib/command.js@12444..12596",
+      "callee_name": "arguments"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@68575..68611",
+      "syntax": "identifier",
+      "callee": "lib/suggestSimilar.js@1390..2731",
+      "callee_name": "suggestSimilar"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@6862..6888",
+      "syntax": "member",
+      "callee": "lib/command.js@20934..21488",
+      "callee_name": "_registerCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@68692..68748",
+      "syntax": "member",
+      "callee": "lib/command.js@62575..63210",
+      "callee_name": "error"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@6917..6948",
+      "syntax": "member",
+      "callee": "lib/command.js@3818..4624",
+      "callee_name": "copyInheritedSettings"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@69532..69549",
+      "syntax": "member",
+      "callee": "lib/command.js@7550..7628",
+      "callee_name": "createHelp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@69532..69580",
+      "syntax": "member",
+      "callee": "lib/help.js@1411..1868",
+      "callee_name": "visibleCommands"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@69643..69657",
+      "syntax": "member",
+      "callee": "lib/command.js@74101..74201",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@69706..69721",
+      "syntax": "member",
+      "callee": "lib/command.js@71885..72925",
+      "callee_name": "alias"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@69792..69835",
+      "syntax": "identifier",
+      "callee": "lib/suggestSimilar.js@1390..2731",
+      "callee_name": "suggestSimilar"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@69924..69981",
+      "syntax": "member",
+      "callee": "lib/command.js@62575..63210",
+      "callee_name": "error"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@70666..70703",
+      "syntax": "member",
+      "callee": "lib/command.js@19279..19360",
+      "callee_name": "createOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@70735..70764",
+      "syntax": "member",
+      "callee": "lib/option.js@5645..5787",
+      "callee_name": "attributeName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@70770..70805",
+      "syntax": "member",
+      "callee": "lib/command.js@20130..20729",
+      "callee_name": "_registerOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@70832..70852",
+      "syntax": "member",
+      "callee": "lib/option.js@5381..5504",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@70922..70961",
+      "syntax": "member",
+      "callee": "lib/command.js@17830..18046",
+      "callee_name": "_exit"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@72518..72550",
+      "syntax": "member",
+      "callee": "lib/command.js@53633..53794",
+      "callee_name": "_findCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@7343..7360",
+      "syntax": "new",
+      "callee": "lib/command.js@619..3511",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@73644..73669",
+      "syntax": "identifier",
+      "callee": "lib/argument.js@2940..3124",
+      "callee_name": "humanReadableArgName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@7590..7600",
+      "syntax": "new",
+      "callee": "lib/help.js@557..738",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@7602..7622",
+      "syntax": "member",
+      "callee": "lib/command.js@7943..8109",
+      "callee_name": "configureHelp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@77186..77203",
+      "syntax": "member",
+      "callee": "lib/command.js@7550..7628",
+      "callee_name": "createHelp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@77225..77263",
+      "syntax": "member",
+      "callee": "lib/command.js@77829..78621",
+      "callee_name": "_getOutputContext"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@77269..77405",
+      "syntax": "member",
+      "callee": "lib/help.js@1113..1220",
+      "callee_name": "prepareContext"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@77424..77455",
+      "syntax": "member",
+      "callee": "lib/help.js@12207..14906",
+      "callee_name": "formatHelp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@77508..77550",
+      "syntax": "member",
+      "callee": "lib/command.js@2793..2817",
+      "callee_name": "stripColor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@78110..78153",
+      "syntax": "member",
+      "callee": "lib/command.js@2691..2773",
+      "callee_name": "getErrHasColors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@78173..78216",
+      "syntax": "member",
+      "callee": "lib/command.js@2488..2559",
+      "callee_name": "getErrHelpWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@78317..78360",
+      "syntax": "member",
+      "callee": "lib/command.js@2584..2666",
+      "callee_name": "getOutHasColors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@78380..78423",
+      "syntax": "member",
+      "callee": "lib/command.js@2392..2463",
+      "callee_name": "getOutHelpWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@78488..78529",
+      "syntax": "member",
+      "callee": "lib/command.js@2793..2817",
+      "callee_name": "stripColor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@78544..78558",
+      "syntax": "identifier",
+      "callee": "lib/command.js@78042..78090",
+      "callee_name": "baseWrite"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@78544..78558",
+      "syntax": "identifier",
+      "callee": "lib/command.js@78249..78297",
+      "callee_name": "baseWrite"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@79102..79140",
+      "syntax": "member",
+      "callee": "lib/command.js@77829..78621",
+      "callee_name": "_getOutputContext"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@79310..79340",
+      "syntax": "member",
+      "callee": "lib/command.js@4681..4919",
+      "callee_name": "_getCommandAndAncestors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@79502..79554",
+      "syntax": "member",
+      "callee": "lib/command.js@77133..77555",
+      "callee_name": "helpInformation"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@79856..79892",
+      "syntax": "member",
+      "callee": "lib/command.js@78449..78565",
+      "callee_name": "write"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@79903..79924",
+      "syntax": "member",
+      "callee": "lib/command.js@81517..81703",
+      "callee_name": "_getHelpOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@79950..79971",
+      "syntax": "member",
+      "callee": "lib/command.js@81517..81703",
+      "callee_name": "_getHelpOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@80045..80075",
+      "syntax": "member",
+      "callee": "lib/command.js@4681..4919",
+      "callee_name": "_getCommandAndAncestors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@81107..81209",
+      "syntax": "member",
+      "callee": "lib/command.js@19279..19360",
+      "callee_name": "createOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@81626..81663",
+      "syntax": "member",
+      "callee": "lib/command.js@80570..81340",
+      "callee_name": "helpOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@82346..82377",
+      "syntax": "member",
+      "callee": "lib/command.js@78887..80157",
+      "callee_name": "outputHelp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@82766..82820",
+      "syntax": "member",
+      "callee": "lib/command.js@17830..18046",
+      "callee_name": "_exit"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@84449..84470",
+      "syntax": "member",
+      "callee": "lib/command.js@81517..81703",
+      "callee_name": "_getHelpOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@84531..84549",
+      "syntax": "member",
+      "callee": "lib/option.js@6106..6171",
+      "callee_name": "is"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@84583..84600",
+      "syntax": "member",
+      "callee": "lib/command.js@78887..80157",
+      "callee_name": "outputHelp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/command.js@84689..84745",
+      "syntax": "member",
+      "callee": "lib/command.js@17830..18046",
+      "callee_name": "_exit"
+    },
+    {
+      "kind": "call",
+      "site": "lib/error.js@882..928",
+      "syntax": "super",
+      "callee": "lib/error.js@343..630",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@11237..11263",
+      "syntax": "member",
+      "callee": "lib/help.js@15302..15339",
+      "callee_name": "styleTitle"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@11728..11742",
+      "syntax": "identifier",
+      "callee": "lib/help.js@13435..13484",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@11728..11742",
+      "syntax": "identifier",
+      "callee": "lib/help.js@14440..14479",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@11919..11933",
+      "syntax": "identifier",
+      "callee": "lib/help.js@13435..13484",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@11919..11933",
+      "syntax": "identifier",
+      "callee": "lib/help.js@14440..14479",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12255..12283",
+      "syntax": "member",
+      "callee": "lib/help.js@17290..17561",
+      "callee_name": "padWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12437..12492",
+      "syntax": "member",
+      "callee": "lib/help.js@18218..19432",
+      "callee_name": "formatItem"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12542..12569",
+      "syntax": "member",
+      "callee": "lib/help.js@15302..15339",
+      "callee_name": "styleTitle"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12573..12616",
+      "syntax": "member",
+      "callee": "lib/help.js@15343..15941",
+      "callee_name": "styleUsage"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12591..12615",
+      "syntax": "member",
+      "callee": "lib/help.js@7554..7979",
+      "callee_name": "commandUsage"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12688..12718",
+      "syntax": "member",
+      "callee": "lib/help.js@8092..8201",
+      "callee_name": "commandDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12800..12908",
+      "syntax": "member",
+      "callee": "lib/help.js@19664..20739",
+      "callee_name": "boxWrap"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12826..12876",
+      "syntax": "member",
+      "callee": "lib/help.js@15944..16021",
+      "callee_name": "styleCommandDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@12981..13009",
+      "syntax": "member",
+      "callee": "lib/help.js@4344..4889",
+      "callee_name": "visibleArguments"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13043..13210",
+      "syntax": "identifier",
+      "callee": "lib/help.js@12379..12499",
+      "callee_name": "callFormatItem"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13067..13122",
+      "syntax": "member",
+      "callee": "lib/help.js@16879..16947",
+      "callee_name": "styleArgumentTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13092..13121",
+      "syntax": "member",
+      "callee": "lib/help.js@5748..5804",
+      "callee_name": "argumentTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13132..13201",
+      "syntax": "member",
+      "callee": "lib/help.js@16186..16264",
+      "callee_name": "styleArgumentDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13164..13200",
+      "syntax": "member",
+      "callee": "lib/help.js@10201..10938",
+      "callee_name": "argumentDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13254..13309",
+      "syntax": "member",
+      "callee": "lib/help.js@11144..11283",
+      "callee_name": "formatItemList"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13359..13491",
+      "syntax": "member",
+      "callee": "lib/help.js@11529..12072",
+      "callee_name": "groupItems"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13401..13427",
+      "syntax": "member",
+      "callee": "lib/help.js@2525..3585",
+      "callee_name": "visibleOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13606..13767",
+      "syntax": "identifier",
+      "callee": "lib/help.js@12379..12499",
+      "callee_name": "callFormatItem"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13632..13681",
+      "syntax": "member",
+      "callee": "lib/help.js@16317..16381",
+      "callee_name": "styleOptionTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13655..13680",
+      "syntax": "member",
+      "callee": "lib/help.js@5561..5610",
+      "callee_name": "optionTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13693..13756",
+      "syntax": "member",
+      "callee": "lib/help.js@16024..16100",
+      "callee_name": "styleOptionDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13723..13755",
+      "syntax": "member",
+      "callee": "lib/help.js@8665..10057",
+      "callee_name": "optionDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13808..13854",
+      "syntax": "member",
+      "callee": "lib/help.js@11144..11283",
+      "callee_name": "formatItemList"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@13933..13974",
+      "syntax": "member",
+      "callee": "lib/help.js@3729..4207",
+      "callee_name": "visibleGlobalOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14238..14302",
+      "syntax": "member",
+      "callee": "lib/help.js@11144..11283",
+      "callee_name": "formatItemList"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14362..14486",
+      "syntax": "member",
+      "callee": "lib/help.js@11529..12072",
+      "callee_name": "groupItems"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14405..14432",
+      "syntax": "member",
+      "callee": "lib/help.js@1411..1868",
+      "callee_name": "visibleCommands"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14449..14464",
+      "syntax": "member",
+      "callee": "lib/command.js@74368..74515",
+      "callee_name": "helpGroup"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14602..14773",
+      "syntax": "identifier",
+      "callee": "lib/help.js@12379..12499",
+      "callee_name": "callFormatItem"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14628..14682",
+      "syntax": "member",
+      "callee": "lib/help.js@16384..16876",
+      "callee_name": "styleSubcommandTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14655..14681",
+      "syntax": "member",
+      "callee": "lib/help.js@5022..5431",
+      "callee_name": "subcommandTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14694..14762",
+      "syntax": "member",
+      "callee": "lib/help.js@16103..16183",
+      "callee_name": "styleSubcommandDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14728..14761",
+      "syntax": "member",
+      "callee": "lib/help.js@8400..8529",
+      "callee_name": "subcommandDescription"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@14814..14861",
+      "syntax": "member",
+      "callee": "lib/help.js@11144..11283",
+      "callee_name": "formatItemList"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@15118..15133",
+      "syntax": "identifier",
+      "callee": "lib/help.js@20918..21074",
+      "callee_name": "stripColor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@1530..1551",
+      "syntax": "member",
+      "callee": "lib/command.js@15901..16324",
+      "callee_name": "_getHelpCommand"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@15641..15667",
+      "syntax": "member",
+      "callee": "lib/help.js@16950..16992",
+      "callee_name": "styleOptionText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@15710..15740",
+      "syntax": "member",
+      "callee": "lib/help.js@17042..17088",
+      "callee_name": "styleSubcommandText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@15807..15835",
+      "syntax": "member",
+      "callee": "lib/help.js@16995..17039",
+      "callee_name": "styleArgumentText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@15852..15879",
+      "syntax": "member",
+      "callee": "lib/help.js@17091..17134",
+      "callee_name": "styleCommandText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@15986..16016",
+      "syntax": "member",
+      "callee": "lib/help.js@16267..16314",
+      "callee_name": "styleDescriptionText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@16065..16095",
+      "syntax": "member",
+      "callee": "lib/help.js@16267..16314",
+      "callee_name": "styleDescriptionText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@16148..16178",
+      "syntax": "member",
+      "callee": "lib/help.js@16267..16314",
+      "callee_name": "styleDescriptionText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@16229..16259",
+      "syntax": "member",
+      "callee": "lib/help.js@16267..16314",
+      "callee_name": "styleDescriptionText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@16351..16376",
+      "syntax": "member",
+      "callee": "lib/help.js@16950..16992",
+      "callee_name": "styleOptionText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@16739..16767",
+      "syntax": "member",
+      "callee": "lib/help.js@16995..17039",
+      "callee_name": "styleArgumentText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@16784..16814",
+      "syntax": "member",
+      "callee": "lib/help.js@17042..17088",
+      "callee_name": "styleSubcommandText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@16915..16942",
+      "syntax": "member",
+      "callee": "lib/help.js@16995..17039",
+      "callee_name": "styleArgumentText"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@17341..17384",
+      "syntax": "member",
+      "callee": "lib/help.js@6357..6597",
+      "callee_name": "longestOptionTermLength"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@17392..17441",
+      "syntax": "member",
+      "callee": "lib/help.js@6742..6994",
+      "callee_name": "longestGlobalOptionTermLength"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@17449..17496",
+      "syntax": "member",
+      "callee": "lib/help.js@5943..6219",
+      "callee_name": "longestSubcommandTermLength"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@17504..17549",
+      "syntax": "member",
+      "callee": "lib/help.js@7134..7407",
+      "callee_name": "longestArgumentTermLength"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@1787..1795",
+      "syntax": "member",
+      "callee": "lib/command.js@74101..74201",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@1810..1818",
+      "syntax": "member",
+      "callee": "lib/command.js@74101..74201",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@18541..18566",
+      "syntax": "member",
+      "callee": "lib/help.js@15087..15145",
+      "callee_name": "displayWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@18921..18953",
+      "syntax": "member",
+      "callee": "lib/help.js@17732..17791",
+      "callee_name": "preformatted"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@19050..19093",
+      "syntax": "member",
+      "callee": "lib/help.js@19664..20739",
+      "callee_name": "boxWrap"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@20110..20141",
+      "syntax": "member",
+      "callee": "lib/help.js@15087..15145",
+      "callee_name": "displayWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@20206..20230",
+      "syntax": "member",
+      "callee": "lib/help.js@15087..15145",
+      "callee_name": "displayWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@20606..20634",
+      "syntax": "member",
+      "callee": "lib/help.js@15087..15145",
+      "callee_name": "displayWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@2293..2306",
+      "syntax": "identifier",
+      "callee": "lib/help.js@2035..2280",
+      "callee_name": "getSortKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@2321..2334",
+      "syntax": "identifier",
+      "callee": "lib/help.js@2035..2280",
+      "callee_name": "getSortKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@2674..2694",
+      "syntax": "member",
+      "callee": "lib/command.js@81517..81703",
+      "callee_name": "_getHelpOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@2920..2953",
+      "syntax": "member",
+      "callee": "lib/command.js@53922..54002",
+      "callee_name": "_findOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@2999..3031",
+      "syntax": "member",
+      "callee": "lib/command.js@53922..54002",
+      "callee_name": "_findOption"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@5170..5195",
+      "syntax": "identifier",
+      "callee": "lib/argument.js@2940..3124",
+      "callee_name": "humanReadableArgName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@5784..5799",
+      "syntax": "member",
+      "callee": "lib/argument.js@1194..1229",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@5997..6024",
+      "syntax": "member",
+      "callee": "lib/help.js@1411..1868",
+      "callee_name": "visibleCommands"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6096..6194",
+      "syntax": "member",
+      "callee": "lib/help.js@15087..15145",
+      "callee_name": "displayWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6125..6183",
+      "syntax": "member",
+      "callee": "lib/help.js@16384..16876",
+      "callee_name": "styleSubcommandTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6152..6182",
+      "syntax": "member",
+      "callee": "lib/help.js@5022..5431",
+      "callee_name": "subcommandTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6407..6433",
+      "syntax": "member",
+      "callee": "lib/help.js@2525..3585",
+      "callee_name": "visibleOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6504..6572",
+      "syntax": "member",
+      "callee": "lib/help.js@15087..15145",
+      "callee_name": "displayWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6522..6571",
+      "syntax": "member",
+      "callee": "lib/help.js@16317..16381",
+      "callee_name": "styleOptionTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6545..6570",
+      "syntax": "member",
+      "callee": "lib/help.js@5561..5610",
+      "callee_name": "optionTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@6798..6830",
+      "syntax": "member",
+      "callee": "lib/help.js@3729..4207",
+      "callee_name": "visibleGlobalOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@7186..7214",
+      "syntax": "member",
+      "callee": "lib/help.js@4344..4889",
+      "callee_name": "visibleArguments"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@7287..7382",
+      "syntax": "member",
+      "callee": "lib/help.js@15087..15145",
+      "callee_name": "displayWidth"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@7316..7371",
+      "syntax": "member",
+      "callee": "lib/help.js@16879..16947",
+      "callee_name": "styleArgumentTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@7341..7370",
+      "syntax": "member",
+      "callee": "lib/help.js@5748..5804",
+      "callee_name": "argumentTerm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@7866..7884",
+      "syntax": "member",
+      "callee": "lib/command.js@74101..74201",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@7963..7974",
+      "syntax": "member",
+      "callee": "lib/command.js@73484..73979",
+      "callee_name": "usage"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@8179..8196",
+      "syntax": "member",
+      "callee": "lib/command.js@71136..71393",
+      "callee_name": "description"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@8490..8503",
+      "syntax": "member",
+      "callee": "lib/command.js@71537..71646",
+      "callee_name": "summary"
+    },
+    {
+      "kind": "call",
+      "site": "lib/help.js@8507..8524",
+      "syntax": "member",
+      "callee": "lib/command.js@71136..71393",
+      "callee_name": "description"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@5073..5172",
+      "syntax": "new",
+      "callee": "lib/error.js@855..1072",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@5699..5741",
+      "syntax": "identifier",
+      "callee": "lib/option.js@8109..8246",
+      "callee_name": "camelcase"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@5709..5720",
+      "syntax": "member",
+      "callee": "lib/option.js@5381..5504",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@5760..5782",
+      "syntax": "identifier",
+      "callee": "lib/option.js@8109..8246",
+      "callee_name": "camelcase"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@5770..5781",
+      "syntax": "member",
+      "callee": "lib/option.js@5381..5504",
+      "callee_name": "name"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@7140..7162",
+      "syntax": "member",
+      "callee": "lib/option.js@5645..5787",
+      "callee_name": "attributeName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@7221..7243",
+      "syntax": "member",
+      "callee": "lib/option.js@5645..5787",
+      "callee_name": "attributeName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/option.js@883..906",
+      "syntax": "identifier",
+      "callee": "lib/option.js@8348..10227",
+      "callee_name": "splitOptionFlags"
+    },
+    {
+      "kind": "call",
+      "site": "lib/suggestSimilar.js@1957..1986",
+      "syntax": "identifier",
+      "callee": "lib/suggestSimilar.js@24..1240",
+      "callee_name": "editDistance"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@12467..12574",
+      "syntax": "member",
+      "callee": "lib/command.js@12521..12573",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@21074..21142",
+      "syntax": "member",
+      "callee": "lib/command.js@21096..21135",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@46344..46497",
+      "syntax": "member",
+      "callee": "lib/command.js@46377..46496",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@47514..48345",
+      "syntax": "member",
+      "callee": "lib/command.js@47547..48344",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@49089..49201",
+      "syntax": "member",
+      "callee": "lib/command.js@49151..49200",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@49089..49378",
+      "syntax": "member",
+      "callee": "lib/command.js@49217..49377",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@49246..49368",
+      "syntax": "member",
+      "callee": "lib/command.js@49291..49367",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@49448..49613",
+      "syntax": "member",
+      "callee": "lib/command.js@49462..49612",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@53698..53789",
+      "syntax": "member",
+      "callee": "lib/command.js@53724..53782",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@53952..53997",
+      "syntax": "member",
+      "callee": "lib/command.js@53970..53996",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@54303..54600",
+      "syntax": "member",
+      "callee": "lib/command.js@54342..54599",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@54359..54592",
+      "syntax": "member",
+      "callee": "lib/command.js@54379..54591",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@54794..55035",
+      "syntax": "member",
+      "callee": "lib/command.js@54814..55034",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@55073..55162",
+      "syntax": "member",
+      "callee": "lib/command.js@55112..55155",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@55776..55878",
+      "syntax": "member",
+      "callee": "lib/command.js@55815..55877",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@57682..57737",
+      "syntax": "member",
+      "callee": "lib/command.js@23441..23614",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@58146..58189",
+      "syntax": "member",
+      "callee": "lib/command.js@23441..23614",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@58646..58682",
+      "syntax": "member",
+      "callee": "lib/command.js@23441..23614",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@58646..58682",
+      "syntax": "member",
+      "callee": "lib/command.js@70854..70968",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@62145..62275",
+      "syntax": "member",
+      "callee": "lib/command.js@62190..62258",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@63385..64262",
+      "syntax": "member",
+      "callee": "lib/command.js@63406..64261",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@64680..64963",
+      "syntax": "member",
+      "callee": "lib/command.js@64716..64954",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@68250..68359",
+      "syntax": "member",
+      "callee": "lib/command.js@68335..68358",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@68250..68399",
+      "syntax": "member",
+      "callee": "lib/command.js@68375..68398",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@69532..69771",
+      "syntax": "member",
+      "callee": "lib/command.js@69598..69770",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@73589..73679",
+      "syntax": "member",
+      "callee": "lib/command.js@73618..73678",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@79310..79430",
+      "syntax": "member",
+      "callee": "lib/command.js@79373..79429",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@80045..80152",
+      "syntax": "member",
+      "callee": "lib/command.js@80084..80145",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/command.js@84512..84550",
+      "syntax": "member",
+      "callee": "lib/command.js@84522..84549",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@11674..11803",
+      "syntax": "member",
+      "callee": "lib/help.js@11696..11802",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@11866..12048",
+      "syntax": "member",
+      "callee": "lib/help.js@11887..12047",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@12981..13218",
+      "syntax": "member",
+      "callee": "lib/help.js@13014..13217",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@13497..13863",
+      "syntax": "member",
+      "callee": "lib/help.js@13518..13862",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@13565..13777",
+      "syntax": "member",
+      "callee": "lib/help.js@13577..13776",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@14492..14870",
+      "syntax": "member",
+      "callee": "lib/help.js@14514..14869",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@14563..14783",
+      "syntax": "member",
+      "callee": "lib/help.js@14576..14782",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@1462..1504",
+      "syntax": "member",
+      "callee": "lib/help.js@1482..1503",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@15555..15919",
+      "syntax": "member",
+      "callee": "lib/help.js@15588..15918",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@16560..16854",
+      "syntax": "member",
+      "callee": "lib/help.js@16593..16853",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@1685..1829",
+      "syntax": "member",
+      "callee": "lib/help.js@1706..1828",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@19888..20697",
+      "syntax": "member",
+      "callee": "lib/help.js@19905..20696",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@20149..20644",
+      "syntax": "member",
+      "callee": "lib/help.js@20164..20643",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@2574..2620",
+      "syntax": "member",
+      "callee": "lib/help.js@2593..2619",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@3507..3547",
+      "syntax": "member",
+      "callee": "lib/help.js@1989..2340",
+      "callee_name": "compareOptions"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@4759..4823",
+      "syntax": "member",
+      "callee": "lib/help.js@4788..4822",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@5126..5196",
+      "syntax": "member",
+      "callee": "lib/help.js@5161..5195",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@5997..6214",
+      "syntax": "member",
+      "callee": "lib/help.js@6032..6210",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@6407..6592",
+      "syntax": "member",
+      "callee": "lib/help.js@6441..6588",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@7186..7402",
+      "syntax": "member",
+      "callee": "lib/help.js@7222..7398",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/help.js@8858..8915",
+      "syntax": "member",
+      "callee": "lib/help.js@8880..8914",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/option.js@7050..7268",
+      "syntax": "member",
+      "callee": "lib/option.js@7066..7267",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/option.js@7274..7413",
+      "syntax": "member",
+      "callee": "lib/option.js@7303..7412",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/suggestSimilar.js@1691..1740",
+      "syntax": "member",
+      "callee": "lib/suggestSimilar.js@1706..1739",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/suggestSimilar.js@1832..2404",
+      "syntax": "member",
+      "callee": "lib/suggestSimilar.js@1851..2403",
+      "callee_name": ""
+    }
+  ]
+}
