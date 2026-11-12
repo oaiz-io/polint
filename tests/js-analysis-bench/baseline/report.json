@@ -15,8 +15,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 3,
           "expected_calls": 1,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -82,8 +84,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 3,
           "expected_calls": 1,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -121,8 +125,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 6,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 5,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -187,8 +193,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 6,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 5,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 4,
@@ -224,8 +232,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -292,8 +302,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -330,8 +342,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -396,8 +410,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -435,8 +451,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -503,8 +521,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -541,8 +561,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -607,8 +629,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 3,
@@ -646,8 +670,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 5,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -709,8 +735,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 5,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 5,
@@ -747,8 +775,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -816,8 +846,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -854,8 +886,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -919,8 +953,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 3,
@@ -955,8 +991,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -1019,8 +1057,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 3,
@@ -1054,8 +1094,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1129,8 +1171,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1173,8 +1217,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -1240,8 +1286,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -1277,8 +1325,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1343,8 +1393,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1377,8 +1429,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1450,8 +1504,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1495,11 +1551,13 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [
             "main.js:4",
             "main.js:4"
           ],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1565,8 +1623,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -1603,10 +1663,12 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [
             "main.js:6"
           ],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1673,8 +1735,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -1708,8 +1772,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1781,8 +1847,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1823,8 +1891,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1896,8 +1966,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -1941,8 +2013,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": null,
           "predicted_labelled_edges": 0,
@@ -2004,8 +2078,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -2041,8 +2117,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -2104,8 +2182,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 3,
@@ -2140,8 +2220,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -2205,8 +2287,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 2,
@@ -2241,8 +2325,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 1,
           "expected_calls": 1,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -2309,8 +2395,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 1,
           "expected_calls": 1,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -2347,8 +2435,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -2410,8 +2500,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 3,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 3,
@@ -2448,8 +2540,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -2516,8 +2610,10 @@
           "edges_to_unlabelled_functions": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": [],
           "false_positive_edges": [],
           "import_binding_stops": [],
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": [],
           "precision": 1.0,
           "predicted_labelled_edges": 1,
@@ -2540,10 +2636,449 @@
             "without_target_share": 0.8
           }
         }
+      },
+      "returned-function/branch-returns": {
+        "base": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:19 -> double",
+            "main.js:19 -> negate",
+            "main.js:19 -> wrapped"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 2,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 11
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 11
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.5,
+            "without_target": 1,
+            "without_target_share": 0.5
+          }
+        },
+        "construct": "returned-function",
+        "description": "A function returns a declared function, a closure or its parameter from different branches; the caller invokes the result.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 4,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 2,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 4,
+          "references": {
+            "by_status": {
+              "Resolved": 11
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 11
+          },
+          "true_positive_edges": 4,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 0,
+            "marked_unresolved_share": 0.0,
+            "without_target": 0,
+            "without_target_share": 0.0
+          }
+        }
+      },
+      "returned-function/conditional-default": {
+        "base": {
+          "call_recall": 0.3333,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [
+            "main.js:19 -> custom",
+            "main.js:19 -> fallback",
+            "main.js:21 -> custom",
+            "main.js:21 -> fallback",
+            "main.js:23 -> custom",
+            "main.js:23 -> fallback"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 9,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 6,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 21,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.0455,
+            "references": 22
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 6,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.5,
+            "without_target": 3,
+            "without_target_share": 0.5
+          }
+        },
+        "construct": "returned-function",
+        "description": "Functions return a conditional expression, an `||` default or a `??` default between a parameter and a declared function; callers invoke the result.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.3333,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [
+            "main.js:19 -> custom",
+            "main.js:19 -> fallback",
+            "main.js:21 -> custom",
+            "main.js:21 -> fallback",
+            "main.js:23 -> custom",
+            "main.js:23 -> fallback"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 9,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 6,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 21,
+              "Unresolved": 1
+            },
+            "not_resolved": 1,
+            "not_resolved_share": 0.0455,
+            "references": 22
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 6,
+            "marked_unresolved": 3,
+            "marked_unresolved_share": 0.5,
+            "without_target": 3,
+            "without_target_share": 0.5
+          }
+        }
+      },
+      "returned-function/stored-in-property": {
+        "base": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:16 -> head",
+            "main.js:16 -> middle",
+            "main.js:16 -> tail"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 2,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 13
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 13
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.5,
+            "without_target": 1,
+            "without_target_share": 0.5
+          }
+        },
+        "construct": "returned-function",
+        "description": "The result of a function that returns one of several functions from different branches is stored in a property and called through it.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": true,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 0.25,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 1,
+          "calls_missed": [
+            "main.js:16 -> head",
+            "main.js:16 -> middle",
+            "main.js:16 -> tail"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 4,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 2,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 1,
+          "references": {
+            "by_status": {
+              "Resolved": 13
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 13
+          },
+          "true_positive_edges": 1,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 2,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.5,
+            "without_target": 1,
+            "without_target_share": 0.5
+          }
+        }
+      },
+      "returned-function/two-levels": {
+        "base": {
+          "call_recall": 0.5,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 3,
+          "calls_missed": [
+            "main.js:20 -> exclaim",
+            "main.js:20 -> plain",
+            "main.js:20 -> shout"
+          ],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 6,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 4,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 3,
+          "references": {
+            "by_status": {
+              "Resolved": 19
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 19
+          },
+          "true_positive_edges": 3,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 1,
+            "marked_unresolved_share": 0.25,
+            "without_target": 1,
+            "without_target_share": 0.25
+          }
+        },
+        "construct": "returned-function",
+        "description": "A parameter is reassigned to the result of a function that forwards another function's branch returns, then called.",
+        "exports": {
+          "export_fact_rows": {},
+          "facts": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          },
+          "symbols": {
+            "files": 0,
+            "files_exact": 0,
+            "matched_names": 0,
+            "observed_names": 0,
+            "precision": null,
+            "predicted_names": 0,
+            "recall": null
+          }
+        },
+        "held_out": false,
+        "labelled_exports_match_observed": true,
+        "labels_vs_observed": {
+          "failures": [],
+          "labelled_not_observed": [],
+          "observed_not_labelled": [],
+          "observed_on_unknown_lines": []
+        },
+        "refined": {
+          "call_recall": 1.0,
+          "callbacks_found": 0,
+          "callbacks_missed": [],
+          "calls_found": 6,
+          "calls_missed": [],
+          "edges_to_unlabelled_functions": 0,
+          "expected_callbacks": 0,
+          "expected_calls": 6,
+          "false_complete_call_lines": [],
+          "false_positive_edges": [],
+          "import_binding_stops": [],
+          "labelled_call_lines": 4,
+          "labelled_functions_not_extracted": [],
+          "precision": 1.0,
+          "predicted_labelled_edges": 6,
+          "references": {
+            "by_status": {
+              "Resolved": 19
+            },
+            "not_resolved": 0,
+            "not_resolved_share": 0.0,
+            "references": 19
+          },
+          "true_positive_edges": 6,
+          "unknown_lines": [],
+          "unresolved_calls": {
+            "call_sites": 4,
+            "marked_unresolved": 0,
+            "marked_unresolved_share": 0.0,
+            "without_target": 0,
+            "without_target_share": 0.0
+          }
+        }
       }
     },
     "false_complete": {
       "base": 0,
+      "call_lines": 66,
+      "call_lines_base": 0,
+      "call_lines_refined": 0,
       "hidden_lines": 4,
       "refined": 0
     },
@@ -2555,7 +3090,9 @@
           "calls_found": 3,
           "expected_callbacks": 3,
           "expected_calls": 7,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 6,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 8,
           "predicted_labelled_edges": 3,
@@ -2578,7 +3115,9 @@
           "calls_found": 5,
           "expected_callbacks": 3,
           "expected_calls": 7,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 6,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 5,
           "predicted_labelled_edges": 5,
@@ -2594,7 +3133,9 @@
           "calls_found": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 7,
           "predicted_labelled_edges": 0,
@@ -2617,7 +3158,9 @@
           "calls_found": 3,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 4,
           "predicted_labelled_edges": 3,
@@ -2633,7 +3176,9 @@
           "calls_found": 1,
           "expected_callbacks": 0,
           "expected_calls": 6,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 6,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 8,
           "predicted_labelled_edges": 1,
@@ -2657,7 +3202,9 @@
           "calls_found": 5,
           "expected_callbacks": 0,
           "expected_calls": 6,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 6,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 4,
           "predicted_labelled_edges": 5,
@@ -2673,7 +3220,9 @@
           "calls_found": 3,
           "expected_callbacks": 0,
           "expected_calls": 9,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 7,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 8,
           "predicted_labelled_edges": 3,
@@ -2697,7 +3246,9 @@
           "calls_found": 6,
           "expected_callbacks": 0,
           "expected_calls": 9,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 7,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 5,
           "predicted_labelled_edges": 6,
@@ -2713,7 +3264,9 @@
           "calls_found": 3,
           "expected_callbacks": 0,
           "expected_calls": 7,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 7,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 4,
           "predicted_labelled_edges": 3,
@@ -2736,7 +3289,9 @@
           "calls_found": 6,
           "expected_callbacks": 0,
           "expected_calls": 7,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 7,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 1,
           "predicted_labelled_edges": 6,
@@ -2752,7 +3307,9 @@
           "calls_found": 1,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 2,
           "predicted_labelled_edges": 1,
@@ -2776,7 +3333,9 @@
           "calls_found": 1,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 2,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 2,
           "predicted_labelled_edges": 1,
@@ -2793,7 +3352,9 @@
           "calls_found": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 2,
           "predicted_labelled_edges": 0,
@@ -2818,7 +3379,9 @@
           "calls_found": 0,
           "expected_callbacks": 0,
           "expected_calls": 2,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 1,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 2,
           "predicted_labelled_edges": 0,
@@ -2835,7 +3398,9 @@
           "calls_found": 0,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 3,
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 3,
           "predicted_labelled_edges": 0,
@@ -2859,7 +3424,9 @@
           "calls_found": 4,
           "expected_callbacks": 0,
           "expected_calls": 4,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 3,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 2,
           "predicted_labelled_edges": 4,
@@ -2875,7 +3442,9 @@
           "calls_found": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 3,
           "predicted_labelled_edges": 0,
@@ -2900,7 +3469,9 @@
           "calls_found": 0,
           "expected_callbacks": 0,
           "expected_calls": 0,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 0,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 3,
           "predicted_labelled_edges": 0,
@@ -2917,7 +3488,9 @@
           "calls_found": 1,
           "expected_callbacks": 0,
           "expected_calls": 5,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 5,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 4,
           "predicted_labelled_edges": 1,
@@ -2940,7 +3513,9 @@
           "calls_found": 5,
           "expected_callbacks": 0,
           "expected_calls": 5,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 5,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 0,
           "predicted_labelled_edges": 5,
@@ -2956,7 +3531,9 @@
           "calls_found": 3,
           "expected_callbacks": 1,
           "expected_calls": 4,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 4,
           "predicted_labelled_edges": 3,
@@ -2980,7 +3557,9 @@
           "calls_found": 3,
           "expected_callbacks": 1,
           "expected_calls": 4,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 4,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 4,
           "predicted_labelled_edges": 3,
@@ -2996,7 +3575,9 @@
           "calls_found": 2,
           "expected_callbacks": 0,
           "expected_calls": 7,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 7,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 5,
           "predicted_labelled_edges": 2,
@@ -3020,13 +3601,61 @@
           "calls_found": 4,
           "expected_callbacks": 0,
           "expected_calls": 7,
+          "false_complete_call_lines": 0,
           "import_binding_stops": 0,
+          "labelled_call_lines": 7,
           "labelled_functions_not_extracted": 0,
           "marked_unresolved": 3,
           "predicted_labelled_edges": 4,
           "references": 15,
           "references_not_resolved": 1,
           "true_positive_edges": 4
+        }
+      },
+      "returned-function": {
+        "base": {
+          "call_sites": 14,
+          "callbacks_found": 0,
+          "calls_found": 8,
+          "expected_callbacks": 0,
+          "expected_calls": 23,
+          "false_complete_call_lines": 0,
+          "import_binding_stops": 0,
+          "labelled_call_lines": 14,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 6,
+          "predicted_labelled_edges": 8,
+          "references": 65,
+          "references_not_resolved": 1,
+          "true_positive_edges": 8
+        },
+        "cases": [
+          "returned-function/branch-returns",
+          "returned-function/two-levels"
+        ],
+        "exports_symbols": {
+          "files": 0,
+          "files_exact": 0
+        },
+        "held_out_cases": [
+          "returned-function/conditional-default",
+          "returned-function/stored-in-property"
+        ],
+        "refined": {
+          "call_sites": 14,
+          "callbacks_found": 0,
+          "calls_found": 14,
+          "expected_callbacks": 0,
+          "expected_calls": 23,
+          "false_complete_call_lines": 0,
+          "import_binding_stops": 0,
+          "labelled_call_lines": 14,
+          "labelled_functions_not_extracted": 0,
+          "marked_unresolved": 4,
+          "predicted_labelled_edges": 14,
+          "references": 65,
+          "references_not_resolved": 1,
+          "true_positive_edges": 14
         }
       }
     }
@@ -3035,186 +3664,186 @@
     "check": {
       "async": {
         "cold": {
-          "analysis_peak_rss_bytes": 77602816,
-          "analysis_wall_ms": 427,
-          "analysis_wall_ms_per_mb": 1332,
-          "process_peak_rss_bytes": 77864960,
-          "process_wall_ms": 547,
-          "process_wall_ms_per_mb": 1706
+          "analysis_peak_rss_bytes": 77987840,
+          "analysis_wall_ms": 420,
+          "analysis_wall_ms_per_mb": 1310,
+          "process_peak_rss_bytes": 77987840,
+          "process_wall_ms": 541,
+          "process_wall_ms_per_mb": 1688
         },
         "source_bytes": 320550,
         "stored_bytes": 14169377,
         "stored_bytes_per_mb": 44203329,
-        "stored_gzip_bytes": 1108347,
-        "stored_gzip_bytes_per_mb": 3457642,
+        "stored_gzip_bytes": 1108341,
+        "stored_gzip_bytes_per_mb": 3457623,
         "warm": {
-          "analysis_peak_rss_bytes": 77496320,
-          "analysis_wall_ms": 291,
-          "analysis_wall_ms_per_mb": 908,
-          "process_peak_rss_bytes": 77496320,
-          "process_wall_ms": 405,
-          "process_wall_ms_per_mb": 1263
+          "analysis_peak_rss_bytes": 77778944,
+          "analysis_wall_ms": 305,
+          "analysis_wall_ms_per_mb": 951,
+          "process_peak_rss_bytes": 77815808,
+          "process_wall_ms": 420,
+          "process_wall_ms_per_mb": 1310
         }
       },
       "axios": {
         "cold": {
-          "analysis_peak_rss_bytes": 89329664,
-          "analysis_wall_ms": 590,
-          "analysis_wall_ms_per_mb": 2092,
-          "process_peak_rss_bytes": 89329664,
-          "process_wall_ms": 711,
-          "process_wall_ms_per_mb": 2521
+          "analysis_peak_rss_bytes": 90009600,
+          "analysis_wall_ms": 559,
+          "analysis_wall_ms_per_mb": 1982,
+          "process_peak_rss_bytes": 90009600,
+          "process_wall_ms": 675,
+          "process_wall_ms_per_mb": 2393
         },
         "source_bytes": 282016,
         "stored_bytes": 21249950,
         "stored_bytes_per_mb": 75350157,
-        "stored_gzip_bytes": 1505889,
-        "stored_gzip_bytes_per_mb": 5339729,
+        "stored_gzip_bytes": 1505894,
+        "stored_gzip_bytes_per_mb": 5339747,
         "warm": {
-          "analysis_peak_rss_bytes": 92274688,
-          "analysis_wall_ms": 364,
-          "analysis_wall_ms_per_mb": 1291,
-          "process_peak_rss_bytes": 92274688,
+          "analysis_peak_rss_bytes": 92798976,
+          "analysis_wall_ms": 362,
+          "analysis_wall_ms_per_mb": 1284,
+          "process_peak_rss_bytes": 92798976,
           "process_wall_ms": 480,
           "process_wall_ms_per_mb": 1702
         }
       },
       "chalk": {
         "cold": {
-          "analysis_peak_rss_bytes": 73310208,
-          "analysis_wall_ms": 45,
-          "analysis_wall_ms_per_mb": 4726,
-          "process_peak_rss_bytes": 73310208,
-          "process_wall_ms": 154,
-          "process_wall_ms_per_mb": 16175
+          "analysis_peak_rss_bytes": 72065024,
+          "analysis_wall_ms": 49,
+          "analysis_wall_ms_per_mb": 5147,
+          "process_peak_rss_bytes": 72065024,
+          "process_wall_ms": 161,
+          "process_wall_ms_per_mb": 16910
         },
         "source_bytes": 9521,
         "stored_bytes": 827790,
         "stored_bytes_per_mb": 86943598,
-        "stored_gzip_bytes": 65733,
-        "stored_gzip_bytes_per_mb": 6904002,
+        "stored_gzip_bytes": 65735,
+        "stored_gzip_bytes_per_mb": 6904212,
         "warm": {
-          "analysis_peak_rss_bytes": 72613888,
-          "analysis_wall_ms": 23,
-          "analysis_wall_ms_per_mb": 2416,
-          "process_peak_rss_bytes": 72613888,
-          "process_wall_ms": 137,
-          "process_wall_ms_per_mb": 14389
+          "analysis_peak_rss_bytes": 72007680,
+          "analysis_wall_ms": 22,
+          "analysis_wall_ms_per_mb": 2311,
+          "process_peak_rss_bytes": 72007680,
+          "process_wall_ms": 133,
+          "process_wall_ms_per_mb": 13969
         }
       },
       "commander": {
         "cold": {
-          "analysis_peak_rss_bytes": 72351744,
-          "analysis_wall_ms": 243,
-          "analysis_wall_ms_per_mb": 1920,
-          "process_peak_rss_bytes": 72351744,
-          "process_wall_ms": 360,
-          "process_wall_ms_per_mb": 2844
+          "analysis_peak_rss_bytes": 73617408,
+          "analysis_wall_ms": 242,
+          "analysis_wall_ms_per_mb": 1912,
+          "process_peak_rss_bytes": 73617408,
+          "process_wall_ms": 358,
+          "process_wall_ms_per_mb": 2828
         },
         "source_bytes": 126592,
         "stored_bytes": 5598158,
         "stored_bytes_per_mb": 44222052,
-        "stored_gzip_bytes": 404180,
-        "stored_gzip_bytes_per_mb": 3192777,
+        "stored_gzip_bytes": 404181,
+        "stored_gzip_bytes_per_mb": 3192785,
         "warm": {
-          "analysis_peak_rss_bytes": 73244672,
-          "analysis_wall_ms": 172,
-          "analysis_wall_ms_per_mb": 1359,
-          "process_peak_rss_bytes": 73244672,
-          "process_wall_ms": 282,
-          "process_wall_ms_per_mb": 2228
+          "analysis_peak_rss_bytes": 73027584,
+          "analysis_wall_ms": 175,
+          "analysis_wall_ms_per_mb": 1382,
+          "process_peak_rss_bytes": 73027584,
+          "process_wall_ms": 288,
+          "process_wall_ms_per_mb": 2275
         }
       },
       "constructs (all cases)": {
         "cold": {
-          "analysis_peak_rss_bytes": 73412608,
-          "analysis_wall_ms": 67,
-          "analysis_wall_ms_per_mb": 8102,
-          "process_peak_rss_bytes": 73412608,
-          "process_wall_ms": 189,
-          "process_wall_ms_per_mb": 22854
+          "analysis_peak_rss_bytes": 73252864,
+          "analysis_wall_ms": 71,
+          "analysis_wall_ms_per_mb": 6724,
+          "process_peak_rss_bytes": 73252864,
+          "process_wall_ms": 176,
+          "process_wall_ms_per_mb": 16668
         },
-        "source_bytes": 8270,
-        "stored_bytes": 895456,
-        "stored_bytes_per_mb": 108277630,
-        "stored_gzip_bytes": 91742,
-        "stored_gzip_bytes_per_mb": 11093349,
+        "source_bytes": 10559,
+        "stored_bytes": 1167912,
+        "stored_bytes_per_mb": 110608202,
+        "stored_gzip_bytes": 115740,
+        "stored_gzip_bytes_per_mb": 10961265,
         "warm": {
-          "analysis_peak_rss_bytes": 72818688,
-          "analysis_wall_ms": 31,
-          "analysis_wall_ms_per_mb": 3748,
-          "process_peak_rss_bytes": 72818688,
-          "process_wall_ms": 147,
-          "process_wall_ms_per_mb": 17775
+          "analysis_peak_rss_bytes": 73322496,
+          "analysis_wall_ms": 35,
+          "analysis_wall_ms_per_mb": 3315,
+          "process_peak_rss_bytes": 73322496,
+          "process_wall_ms": 146,
+          "process_wall_ms_per_mb": 13827
         }
       },
       "dayjs": {
         "cold": {
-          "analysis_peak_rss_bytes": 73347072,
-          "analysis_wall_ms": 39,
-          "analysis_wall_ms_per_mb": 5446,
-          "process_peak_rss_bytes": 73347072,
-          "process_wall_ms": 154,
-          "process_wall_ms_per_mb": 21505
+          "analysis_peak_rss_bytes": 72830976,
+          "analysis_wall_ms": 36,
+          "analysis_wall_ms_per_mb": 5027,
+          "process_peak_rss_bytes": 72830976,
+          "process_wall_ms": 146,
+          "process_wall_ms_per_mb": 20388
         },
         "source_bytes": 7161,
         "stored_bytes": 1587474,
         "stored_bytes_per_mb": 221683284,
-        "stored_gzip_bytes": 91750,
-        "stored_gzip_bytes_per_mb": 12812456,
+        "stored_gzip_bytes": 91752,
+        "stored_gzip_bytes_per_mb": 12812736,
         "warm": {
-          "analysis_peak_rss_bytes": 72785920,
-          "analysis_wall_ms": 18,
-          "analysis_wall_ms_per_mb": 2514,
-          "process_peak_rss_bytes": 72785920,
+          "analysis_peak_rss_bytes": 73109504,
+          "analysis_wall_ms": 17,
+          "analysis_wall_ms_per_mb": 2374,
+          "process_peak_rss_bytes": 73109504,
           "process_wall_ms": 127,
           "process_wall_ms_per_mb": 17735
         }
       },
       "underscore": {
         "cold": {
-          "analysis_peak_rss_bytes": 72257536,
-          "analysis_wall_ms": 195,
-          "analysis_wall_ms_per_mb": 2830,
-          "process_peak_rss_bytes": 72257536,
-          "process_wall_ms": 309,
-          "process_wall_ms_per_mb": 4484
+          "analysis_peak_rss_bytes": 73117696,
+          "analysis_wall_ms": 199,
+          "analysis_wall_ms_per_mb": 2888,
+          "process_peak_rss_bytes": 73117696,
+          "process_wall_ms": 311,
+          "process_wall_ms_per_mb": 4513
         },
         "source_bytes": 68916,
         "stored_bytes": 6271368,
         "stored_bytes_per_mb": 91000174,
-        "stored_gzip_bytes": 401268,
-        "stored_gzip_bytes_per_mb": 5822567,
+        "stored_gzip_bytes": 401269,
+        "stored_gzip_bytes_per_mb": 5822581,
         "warm": {
-          "analysis_peak_rss_bytes": 72073216,
-          "analysis_wall_ms": 144,
-          "analysis_wall_ms_per_mb": 2090,
-          "process_peak_rss_bytes": 72073216,
-          "process_wall_ms": 260,
-          "process_wall_ms_per_mb": 3773
+          "analysis_peak_rss_bytes": 73138176,
+          "analysis_wall_ms": 145,
+          "analysis_wall_ms_per_mb": 2104,
+          "process_peak_rss_bytes": 73138176,
+          "process_wall_ms": 256,
+          "process_wall_ms_per_mb": 3715
         }
       },
       "zod": {
         "cold": {
-          "analysis_peak_rss_bytes": 1010933760,
-          "analysis_wall_ms": 10157,
-          "analysis_wall_ms_per_mb": 3289,
-          "process_peak_rss_bytes": 1010933760,
-          "process_wall_ms": 10348,
-          "process_wall_ms_per_mb": 3351
+          "analysis_peak_rss_bytes": 1011171328,
+          "analysis_wall_ms": 9787,
+          "analysis_wall_ms_per_mb": 3170,
+          "process_peak_rss_bytes": 1011171328,
+          "process_wall_ms": 9973,
+          "process_wall_ms_per_mb": 3230
         },
         "source_bytes": 3087749,
         "stored_bytes": 296044379,
         "stored_bytes_per_mb": 95877087,
-        "stored_gzip_bytes": 20937295,
-        "stored_gzip_bytes_per_mb": 6780763,
+        "stored_gzip_bytes": 20937301,
+        "stored_gzip_bytes_per_mb": 6780765,
         "warm": {
-          "analysis_peak_rss_bytes": 993386496,
-          "analysis_wall_ms": 10157,
-          "analysis_wall_ms_per_mb": 3289,
-          "process_peak_rss_bytes": 993386496,
-          "process_wall_ms": 10349,
-          "process_wall_ms_per_mb": 3352
+          "analysis_peak_rss_bytes": 993738752,
+          "analysis_wall_ms": 9980,
+          "analysis_wall_ms_per_mb": 3232,
+          "process_peak_rss_bytes": 993738752,
+          "process_wall_ms": 10167,
+          "process_wall_ms_per_mb": 3293
         }
       }
     },
@@ -3222,92 +3851,92 @@
       "async": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 94257152,
-          "wall_ms": 745
+          "peak_rss_bytes": 92917760,
+          "wall_ms": 428
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 264429568,
-          "wall_ms": 2243
+          "peak_rss_bytes": 258617344,
+          "wall_ms": 2002
         }
       },
       "axios": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 106389504,
-          "wall_ms": 1226
+          "peak_rss_bytes": 103636992,
+          "wall_ms": 613
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 236736512,
-          "wall_ms": 3218
+          "peak_rss_bytes": 233197568,
+          "wall_ms": 2166
         }
       },
       "chalk": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 31682560,
-          "wall_ms": 54
+          "peak_rss_bytes": 31219712,
+          "wall_ms": 51
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 40443904,
+          "peak_rss_bytes": 40607744,
           "wall_ms": 94
         }
       },
       "commander": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 60932096,
-          "wall_ms": 248
+          "peak_rss_bytes": 60104704,
+          "wall_ms": 260
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 145293312,
-          "wall_ms": 1895
+          "peak_rss_bytes": 144879616,
+          "wall_ms": 1678
         }
       },
       "dayjs": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 31723520,
-          "wall_ms": 39
+          "peak_rss_bytes": 32165888,
+          "wall_ms": 38
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 35876864,
-          "wall_ms": 110
+          "peak_rss_bytes": 35168256,
+          "wall_ms": 95
         }
       },
       "underscore": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 53100544,
-          "wall_ms": 212
+          "peak_rss_bytes": 51929088,
+          "wall_ms": 224
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 119705600,
-          "wall_ms": 697
+          "peak_rss_bytes": 118611968,
+          "wall_ms": 667
         }
       },
       "zod": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 1267785728,
-          "wall_ms": 15787
+          "peak_rss_bytes": 1271189504,
+          "wall_ms": 11176
         },
         "refined": {
           "error": "timed out after 600 s",
-          "peak_rss_bytes": 2325233664,
-          "wall_ms": 600195
+          "peak_rss_bytes": 2324557824,
+          "wall_ms": 600161
         }
       }
     },
     "machine": {
       "cpus": 32,
-      "git_head": "55bf3fde8da07d71030a420a34949ca672226e3c",
-      "launcher_peak_rss_bytes": 28549120,
+      "git_head": "2795c87d4f47b6db98169972339098c7c9661f85",
+      "launcher_peak_rss_bytes": 27840512,
       "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
       "python": "3.12.3"
     },
@@ -3318,6 +3947,7 @@
     "When one line labels a callee both as a direct call and as a callback, the callback counts as found only when a second distinct call site on that line reaches it.",
     "Predicted edges to functions without an @fn label are counted apart and are neither true nor false positives.",
     "A labelled hidden path (@unknown) is 'reported-unknown' when a call site on that line carries an unresolved marker, 'false-complete' when it has resolved targets and no marker, and 'silent' when polint has no call site there or one with neither. For the refined column the refined layer's own status decides; sites it has no row for keep the base layer's marker.",
+    "A labelled call line is false-complete when polint resolves a call site on it to labelled functions that miss a labelled `@calls` callee and no call site on the line carries an unresolved marker. Lines are the unit of the labels, so on a line with several call sites the targets and markers of all of them count together.",
     "A base edge whose target is an import binding rather than a function is a miss, counted as 'stops at import binding'.",
     "Observed package edges are mapped to polint by exact call-expression span (falling back to the polint call site in the same file ending at the same byte) and by callee end byte (innermost polint function in the same file ending there).",
     "Observed edges whose site or callee has no polint counterpart stay in the denominator: recall is over every observed edge.",
@@ -10920,74 +11550,11 @@
               "site_text": "keysFunc(source)",
               "syntax": "identifier"
             }
-          ],
-          "other targets, no unresolved marker": [
-            {
-              "kind": "call",
-              "observed_callee": "underscore-umd.js:727 <anonymous>",
-              "outcome": "other targets, no unresolved marker",
-              "polint_callee": "underscore-umd.js@25455..25509#<polint:anonymous:25455:25509>",
-              "polint_site": {
-                "key": "underscore-umd.js@47637..47679",
-                "marked_unresolved": false,
-                "match": "exact span",
-                "stops_at_import_binding": false,
-                "targets": [
-                  "underscore-umd.js:710 identity"
-                ],
-                "text": "iteratee(obj[currentKey], currentKey, obj)"
-              },
-              "site": "underscore-umd.js:1371",
-              "site_key": "underscore-umd.js@47637..47679",
-              "site_text": "iteratee(obj[currentKey], currentKey, obj)",
-              "syntax": "identifier"
-            },
-            {
-              "kind": "call",
-              "observed_callee": "underscore-umd.js:1464 <anonymous>",
-              "outcome": "other targets, no unresolved marker",
-              "polint_callee": "underscore-umd.js@50883..51216#<polint:anonymous:50883:51216>",
-              "polint_site": {
-                "key": "underscore-umd.js@47637..47679",
-                "marked_unresolved": false,
-                "match": "exact span",
-                "stops_at_import_binding": false,
-                "targets": [
-                  "underscore-umd.js:710 identity"
-                ],
-                "text": "iteratee(obj[currentKey], currentKey, obj)"
-              },
-              "site": "underscore-umd.js:1371",
-              "site_key": "underscore-umd.js@47637..47679",
-              "site_text": "iteratee(obj[currentKey], currentKey, obj)",
-              "syntax": "identifier"
-            },
-            {
-              "kind": "call",
-              "observed_callee": "underscore-umd.js:1582 <anonymous>",
-              "outcome": "other targets, no unresolved marker",
-              "polint_callee": "underscore-umd.js@54836..54985#<polint:anonymous:54836:54985>",
-              "polint_site": {
-                "key": "underscore-umd.js@47637..47679",
-                "marked_unresolved": false,
-                "match": "exact span",
-                "stops_at_import_binding": false,
-                "targets": [
-                  "underscore-umd.js:710 identity"
-                ],
-                "text": "iteratee(obj[currentKey], currentKey, obj)"
-              },
-              "site": "underscore-umd.js:1371",
-              "site_key": "underscore-umd.js@47637..47679",
-              "site_text": "iteratee(obj[currentKey], currentKey, obj)",
-              "syntax": "identifier"
-            }
           ]
         },
         "outcomes": {
           "found": 157,
-          "no target, marked unresolved": 102,
-          "other targets, no unresolved marker": 3
+          "no target, marked unresolved": 105
         },
         "recall": 0.5992,
         "references": {
@@ -11001,10 +11568,10 @@
         },
         "unresolved_calls": {
           "call_sites": 455,
-          "marked_unresolved": 248,
-          "marked_unresolved_share": 0.5451,
-          "without_target": 262,
-          "without_target_share": 0.5758
+          "marked_unresolved": 249,
+          "marked_unresolved_share": 0.5473,
+          "without_target": 263,
+          "without_target_share": 0.578
         }
       },
       "sha256": "6547214df2878ae60cc552422ef14af38b8d4e3aa613be5bfe9c52b775d96f7a",

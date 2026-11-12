@@ -174,10 +174,10 @@ These are found by the benchmark and are not changed by it:
   are identifier calls to an arrow function (372) and `(0, f)(x)` calls to
   a declaration (134, async's compiled CommonJS interop).
 - A class is one function spanning the class; there is no constructor function.
-- On underscore the refined plan answers `iteratee(...)` inside `map` with
-  the single target `identity` and no unresolved marker, while the observed
-  callees are other closures that `cb` can return. This is a false-complete
-  answer; the base plan marks the same site unresolved.
+- On underscore both plans mark `iteratee(...)` inside `map` unresolved:
+  `iteratee = cb(iteratee, context)` can return closures the refined walk does
+  not follow, so it does not report `identity`, the one return it can name, as
+  the complete answer.
 - On axios the refined plan resolves no points-to edges, so refined recall
   equals base recall there.
 - `.polint/cache` holds tens to hundreds of MB per MB of source after a
