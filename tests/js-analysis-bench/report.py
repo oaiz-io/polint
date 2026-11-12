@@ -42,12 +42,20 @@ sys.path.insert(0, str(bench.REPO_ROOT / "scripts" / "bench-runner"))
 import bench_matrix  # noqa: E402  (the existing cost machinery: measure, directory_bytes)
 
 REPORT_SCHEMA = "polint-js-analysis-bench-report-1"
-DUMP_SCHEMA = "polint-js-bench-facts-1"
+DUMP_SCHEMA = "polint-js-bench-facts-2"
 DUMP_FILTER = "eval::js_bench::tests::dump_js_bench_facts"
 PLANS = {
     "base": "syntax,call_graph,symbols,references",
     "refined": "syntax,calls,control_flow,dataflow,call_graph,symbols,references",
 }
+# The syntax census rides on the cheapest plan in its own run, so it never
+# adds to the timed base and refined dumps.
+CENSUS_CAPS = "syntax"
+# Examples kept per outcome class, per package and plan. False-complete answers
+# are always kept in full.
+EXAMPLES_PER_OUTCOME = 5
+EXAMPLES_PER_GAP = 3
+FALSE_COMPLETE = "other targets, no unresolved marker"
 RULES_TARGET_DIR = bench.REPO_ROOT / "target" / "js-analysis-bench-rules"
 MB = 1_000_000
 OBSERVED_KINDS = ("call", "callback", "implicit")
@@ -64,6 +72,10 @@ def ratio(hit: int, total: int) -> float | None:
 
 def pct(value: float | None) -> str:
     return "n/a" if value is None else f"{value * 100:.0f}%"
+
+
+def pct1(value: float | None) -> str:
+    return "n/a" if value is None else f"{value * 100:.1f}%"
 
 
 def frac(hit: int, total: int) -> str:
@@ -152,12 +164,18 @@ def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
 def run_dump(test_binary: Path, tree: Path, plan: str, out: Path, timeout: int) -> dict:
     """Dump one tree's facts; return where the dump is, its wall clock and peak RSS.
 
-    The dump is not loaded here: see `load_dump` and `run` for why."""
+    `plan` is a key of `PLANS`, or `census` for the syntax census run. The dump
+    is not loaded here: see `load_dump` and `run` for why."""
     manifest = out.with_suffix(".manifest")
     manifest.write_text(f"{tree}\t{out}\n")
     env = dict(os.environ)
     env["POLINT_JS_BENCH_MANIFEST"] = str(manifest)
-    env["POLINT_JS_BENCH_CAPS"] = PLANS[plan]
+    if plan == "census":
+        env["POLINT_JS_BENCH_CAPS"] = CENSUS_CAPS
+        env["POLINT_JS_BENCH_CENSUS"] = "1"
+    else:
+        env["POLINT_JS_BENCH_CAPS"] = PLANS[plan]
+        env.pop("POLINT_JS_BENCH_CENSUS", None)
     result = bench_matrix.measure(
         [str(test_binary), DUMP_FILTER, "--exact", "--ignored", "--test-threads", "1"],
         bench.REPO_ROOT,
@@ -239,13 +257,19 @@ class Facts:
         return min(candidates, key=lambda site: site["end"] - site["start"]) if candidates else None
 
     def function_for(self, key: str, name: str) -> dict | None:
-        """The innermost polint function in the same file ending at the same byte.
+        """The polint function with the same span, else the innermost one in the
+        same file ending at the same byte.
 
+        The exact span comes first because a concise arrow returning another
+        arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.
         Polint represents a class constructor by the class, so an observed
         `constructor` maps to the innermost polint function enclosing it.
         """
         path, start, end = parse_key(key)
         candidates = [f for f in self.functions_by_end.get((path, end), []) if not f["module"]]
+        exact = [f for f in candidates if f["start"] == start]
+        if exact:
+            return exact[0]
         if not candidates and name == "constructor":
             candidates = [
                 f
@@ -590,10 +614,257 @@ def construct_summary(case_results: dict) -> dict:
 # packages: observed calls
 
 
-def score_package_calls(observed: dict, facts: Facts) -> dict:
+class Census:
+    """One package's syntax census: Oxc's function and call spans with their context.
+
+    A census function counts as extracted when polint has a function in the same
+    file ending at the same byte, like `Facts.function_for` maps callees; a class
+    constructor counts as extracted when its class is."""
+
+    def __init__(self, dump: dict, facts: Facts):
+        self.functions = defaultdict(list)
+        self.calls = {}
+        self.calls_by_end = defaultdict(list)
+        for path, rows in dump["syntax_census"].items():
+            self.functions[path] = rows["functions"]
+            for row in rows["calls"]:
+                self.calls[(path, row["start"], row["end"])] = row
+                self.calls_by_end[(path, row["end"])].append(row)
+        self.facts = facts
+
+    def extracted(self, path: str, row: dict) -> bool:
+        if row["kind"] == "constructor" and row["class"] is not None:
+            return any(not f["module"] for f in self.facts.functions_by_end.get((path, row["class"][1]), []))
+        return any(not f["module"] for f in self.facts.functions_by_end.get((path, row["end"]), []))
+
+    def missing_around(self, path: str, start: int, end: int) -> list[dict]:
+        """Census functions polint does not extract that contain the span, outermost first."""
+        rows = [
+            f
+            for f in self.functions.get(path, [])
+            if f["start"] <= start and end <= f["end"] and not self.extracted(path, f)
+        ]
+        return sorted(rows, key=lambda f: (f["start"] - f["end"], f["start"]))
+
+    def around(self, path: str, start: int, end: int) -> list[dict]:
+        """Census functions other than classes that contain the span, outermost first."""
+        rows = [
+            f
+            for f in self.functions.get(path, [])
+            if f["start"] <= start and end <= f["end"] and f["kind"] != "class"
+        ]
+        return sorted(rows, key=lambda f: (f["start"] - f["end"], f["start"]))
+
+    def function_at(self, path: str, end: int) -> dict | None:
+        rows = [f for f in self.functions.get(path, []) if f["end"] == end and f["kind"] != "class"]
+        return min(rows, key=lambda f: f["end"] - f["start"]) if rows else None
+
+    def call_at(self, path: str, start: int, end: int) -> dict | None:
+        if (path, start, end) in self.calls:
+            return self.calls[(path, start, end)]
+        rows = self.calls_by_end.get((path, end), [])
+        return min(rows, key=lambda row: row["end"] - row["start"]) if rows else None
+
+
+class Sources:
+    """Line numbers and short excerpts from a package's fetched sources."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.cache: dict[str, tuple[bytes, list[int]] | None] = {}
+
+    def load(self, path: str):
+        if path not in self.cache:
+            file = self.root / path
+            data = file.read_bytes() if file.is_file() else None
+            self.cache[path] = None if data is None else (data, line_starts(data))
+        return self.cache[path]
+
+    def line(self, path: str, offset: int) -> int | None:
+        loaded = self.load(path)
+        return None if loaded is None else line_of(loaded[1], offset)
+
+    def at(self, key: str) -> str:
+        path, start, _ = parse_key(key)
+        line = self.line(path, start)
+        return f"{path}:{line}" if line is not None else path
+
+    def excerpt(self, key: str, limit: int = 90) -> str:
+        path, start, end = parse_key(key)
+        loaded = self.load(path)
+        if loaded is None:
+            return ""
+        text = " ".join(loaded[0][start:end].decode("utf-8", "replace").split())
+        return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+# Gaps a missed observed edge is attributed to. The exclusive attribution takes
+# the first one that applies, in this order: extraction before resolution,
+# because no resolution change finds an edge whose call site or callee polint
+# does not extract.
+GAPS = {
+    "unary": "functions under a unary operator (unary IIFEs)",
+    "block": "functions declared in try / catch / if blocks",
+    "export": "calls in exported initializers",
+    "constructor": "class constructors and `new`",
+    "callback": "callbacks invoked by built-ins",
+    "computed": "computed-key member calls",
+    "class_method": "prototype and class methods, incl. inheritance",
+}
+REMAINDERS = {
+    "not_analysed": "file not analysed (discovery excludes)",
+    "other_extraction": "other call sites or functions not extracted",
+    "import_stop": "identifier call stops at import binding",
+    "other_member": "other member calls (object-literal functions, namespaces)",
+    "other": "other resolution misses",
+}
+BLOCK_TAGS = {"try", "catch", "finally", "if"}
+EXTRACTION_OUTCOMES = ("site not a polint call site", "callee not a polint function")
+
+
+def extraction_gap(row: dict) -> str | None:
+    """The extraction gap a census function or call's own context places it in.
+
+    An exported declaration (`export function f`, `export class C`) carries the
+    `export` tag too, but only an expression inside an exported initializer
+    (`export const x = make(() => ...)`) is in that gap."""
+    context = set(row["context"])
+    if "unary" in context:
+        return "unary"
+    if context & BLOCK_TAGS:
+        return "block"
+    if "export" in context and not (row["kind"] in ("declaration", "class") and row["context"] == ["export"]):
+        return "export"
+    return None
+
+
+def attribute_gap(edge: dict, outcome: str, census: Census) -> tuple[str, set[str], bool, str]:
+    """(the one gap or remainder the miss is attributed to, every gap whose
+    condition holds, whether a class-method miss goes through inheritance,
+    the call syntax and the callee's census kind)."""
+    site_path, site_start, site_end = parse_key(edge["site"])
+    callee_path, callee_start, callee_end = parse_key(edge["callee"])
+    site_call = census.call_at(site_path, site_start, site_end)
+    callee_row = census.function_at(callee_path, callee_end)
+    applies = set()
+    missing = []
+    # The functions around a call site polint does not have: when polint
+    # extracts all of them, the outermost one in a gap decides, then the call's
+    # own exported-initializer context.
+    enclosing = []
+    if outcome == "site not a polint call site":
+        missing = census.missing_around(site_path, site_start, site_end)
+        enclosing = census.around(site_path, site_start, site_end)
+    elif outcome == "callee not a polint function":
+        missing = census.missing_around(callee_path, callee_start, callee_end)
+    for row in [*missing, *enclosing]:
+        gap = extraction_gap(row)
+        if gap:
+            applies.add(gap)
+        if row in missing and row["kind"] == "constructor":
+            applies.add("constructor")
+    if outcome == "site not a polint call site" and site_call and extraction_gap(site_call) == "export":
+        applies.add("export")
+    if edge["syntax"] == "new" or (callee_row is not None and callee_row["kind"] == "constructor"):
+        applies.add("constructor")
+    if edge["kind"] == "callback":
+        applies.add("callback")
+    if edge["syntax"] == "computed-member":
+        applies.add("computed")
+    class_method = callee_row is not None and (
+        callee_row["kind"] in ("method", "accessor") or "prototype_assignment" in callee_row["context"]
+    )
+    if class_method and edge["syntax"] in ("member", "super", "computed-member"):
+        applies.add("class_method")
+    shape = f"{edge['syntax']} call to {callee_row['kind'] if callee_row else 'unknown'}"
+    inherited = class_method and (
+        edge["syntax"] == "super"
+        or bool(site_call and site_call.get("this_receiver") and site_call["class"] != callee_row["class"])
+    )
+
+    if outcome == "site or callee in a file polint does not analyse":
+        return "not_analysed", applies, inherited, shape
+    if outcome in EXTRACTION_OUTCOMES:
+        outermost = missing[0] if missing else None
+        if outermost is not None:
+            gap = extraction_gap(outermost) or ("constructor" if outermost["kind"] == "constructor" else None)
+            return gap or "other_extraction", applies, inherited, shape
+        for row in enclosing:
+            if extraction_gap(row):
+                return extraction_gap(row), applies, inherited, shape
+        if outcome == "site not a polint call site" and site_call and extraction_gap(site_call) == "export":
+            return "export", applies, inherited, shape
+        return "other_extraction", applies, inherited, shape
+    for gap in ("constructor", "callback", "computed", "class_method"):
+        if gap in applies:
+            return gap, applies, inherited, shape
+    if outcome == "stops at import binding":
+        return "import_stop", applies, inherited, shape
+    if edge["syntax"] == "member":
+        return "other_member", applies, inherited, shape
+    return "other", applies, inherited, shape
+
+
+def describe_function(facts: Facts, key: str, sources: Sources) -> str:
+    function = facts.functions.get(key)
+    name = (function or {}).get("name") or "<anonymous>"
+    return f"{sources.at(key)} {name}"
+
+
+def describe_edge(edge: dict, outcome: str, facts: Facts, sources: Sources) -> dict:
+    """One observed edge and what polint answered for it."""
+    site = facts.site_for(edge["site"])
+    callee = facts.function_for(edge["callee"], edge["callee_name"])
+    example = {
+        "site": sources.at(edge["site"]),
+        "site_key": edge["site"],
+        "site_text": sources.excerpt(edge["site"]),
+        "kind": edge["kind"],
+        "syntax": edge["syntax"],
+        "observed_callee": f"{sources.at(edge['callee'])} {edge['callee_name'] or '<anonymous>'}",
+        "polint_callee": callee["key"] if callee else None,
+        "outcome": outcome,
+        "polint_site": None,
+    }
+    if site is not None:
+        targets = sorted(facts.targets.get(site["key"], ()))
+        example["polint_site"] = {
+            "key": site["key"],
+            "match": "exact span" if site["key"] == edge["site"] else "same end byte",
+            "text": sources.excerpt(site["key"]),
+            "targets": [describe_function(facts, key, sources) for key in targets],
+            "marked_unresolved": site["key"] in facts.marked_unresolved,
+            "stops_at_import_binding": site["key"] in facts.import_stops,
+        }
+    return example
+
+
+def polint_answer(example: dict) -> str:
+    site = example["polint_site"]
+    if site is None:
+        return "no call site"
+    if site["targets"]:
+        answer = "targets " + "; ".join(site["targets"])
+    elif site["stops_at_import_binding"]:
+        answer = "import binding"
+    else:
+        answer = "no target"
+    answer += ", marked unresolved" if site["marked_unresolved"] else ", no unresolved marker"
+    if site["match"] != "exact span":
+        answer += f" (site matched by {site['match']}: `{site['text']}`)"
+    return answer
+
+
+def score_package_calls(observed: dict, facts: Facts, census: Census | None, sources: Sources) -> dict:
     by_kind = defaultdict(Counter)
     by_syntax = defaultdict(Counter)
     outcomes = Counter()
+    examples = defaultdict(list)
+    gaps_exclusive = Counter()
+    gaps_applying = Counter()
+    gap_examples = defaultdict(list)
+    inherited = 0
+    other_shapes = Counter()
     for edge in observed["edges"]:
         kind, syntax = edge["kind"], edge["syntax"]
         if kind == "implicit":
@@ -618,7 +889,7 @@ def score_package_calls(observed: dict, facts: Facts) -> dict:
             outcome = (
                 "other targets, marked unresolved"
                 if site["key"] in facts.marked_unresolved
-                else "other targets, no unresolved marker"
+                else FALSE_COMPLETE
             )
         elif site["key"] in facts.marked_unresolved:
             outcome = "no target, marked unresolved"
@@ -628,17 +899,38 @@ def score_package_calls(observed: dict, facts: Facts) -> dict:
         for bucket in (by_kind[kind], by_syntax[syntax]):
             bucket["observed"] += 1
             bucket["found"] += outcome == "found"
+        if outcome == FALSE_COMPLETE or len(examples[outcome]) < EXAMPLES_PER_OUTCOME:
+            examples[outcome].append(describe_edge(edge, outcome, facts, sources))
+        if outcome != "found" and census is not None:
+            gap, applying, through_inheritance, shape = attribute_gap(edge, outcome, census)
+            gaps_exclusive[gap] += 1
+            if gap == "other":
+                other_shapes[shape] += 1
+            gaps_applying.update(applying)
+            inherited += gap == "class_method" and through_inheritance
+            if len(gap_examples[gap]) < EXAMPLES_PER_GAP:
+                gap_examples[gap].append(describe_edge(edge, outcome, facts, sources))
     found = outcomes["found"]
     total = sum(outcomes.values())
-    return {
+    result = {
         "observed_edges": total,
         "observed_implicit_edges": by_kind.get("implicit", Counter())["observed"],
         "found": found,
         "recall": ratio(found, total),
         "outcomes": dict(sorted(outcomes.items())),
+        "outcome_examples": dict(sorted(examples.items())),
         "by_kind": {k: {**v, "recall": ratio(v["found"], v["observed"])} for k, v in sorted(by_kind.items())},
         "by_syntax": {k: {**v, "recall": ratio(v["found"], v["observed"])} for k, v in sorted(by_syntax.items())},
     }
+    if census is not None:
+        result["gaps"] = {
+            "attributed": dict(sorted(gaps_exclusive.items())),
+            "applying": dict(sorted(gaps_applying.items())),
+            "class_method_through_inheritance": inherited,
+            "other_by_syntax_and_callee": dict(sorted(other_shapes.items())),
+            "examples": dict(sorted(gap_examples.items())),
+        }
+    return result
 
 
 def score_packages(inputs: dict, dumps: dict) -> dict:
@@ -648,6 +940,7 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
         observed_calls = json.loads((bench.OBSERVED / "packages" / f"{name}.calls.json").read_text())
         observed_exports = json.loads((bench.OBSERVED / "packages" / f"{name}.exports.json").read_text())
         analysed, exported = bench.package_files(package)
+        sources = Sources(bench.require_fetched(package))
         entry = {
             "files_selected": len(analysed),
             "version": package["version"],
@@ -669,19 +962,75 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
             entry["source_bytes"] = sum(row["bytes"] for row in base_dump["files"])
             entry["functions"] = len(base_dump["functions"])
             entry["exports"] = score_exports(observed_exports, base_dump, exported)
+        census_run = dumps.get(("package", name, "census"), {"dump": None, "error": "not run"})
+        if census_run["dump"] is None:
+            entry["census_error"] = census_run["error"]
         for plan in PLANS:
             run = dumps[("package", name, plan)]
             if run["dump"] is None:
                 entry[plan] = {"error": run["error"]}
                 continue
             facts = Facts(run["dump"], plan)
+            census = Census(census_run["dump"], facts) if census_run["dump"] is not None else None
             entry[plan] = {
-                **score_package_calls(observed_calls, facts),
+                **score_package_calls(observed_calls, facts, census, sources),
                 "unresolved_calls": facts.unresolved_call_share(),
                 "references": facts.reference_share(),
             }
         results[name] = entry
     return results
+
+
+def rank_gaps(packages: dict) -> dict:
+    """Missed observed edges per gap over every package, per plan, largest first.
+
+    `attributed` counts each missed edge once, under the first gap that applies
+    (see `GAPS`); `applying` counts every gap whose condition holds, so one edge
+    can be in several. `recall_gain_upper_bound` is `attributed` over the plan's
+    observed edges: what fixing the gap could add at most, if every edge it holds
+    were then found. A plan's totals leave out packages whose dump for that plan
+    failed, and say which."""
+    ranking = {}
+    for plan in PLANS:
+        scored = {name: entry[plan] for name, entry in packages.items() if "gaps" in entry.get(plan, {})}
+        observed = sum(entry["observed_edges"] for entry in scored.values())
+        rows = []
+        for gap, label in {**GAPS, **REMAINDERS}.items():
+            per_package = {
+                name: entry["gaps"]["attributed"].get(gap, 0)
+                for name, entry in scored.items()
+                if entry["gaps"]["attributed"].get(gap, 0)
+            }
+            attributed = sum(per_package.values())
+            rows.append(
+                {
+                    "gap": gap,
+                    "label": label,
+                    "fixable_gap": gap in GAPS,
+                    "attributed": attributed,
+                    "applying": sum(entry["gaps"]["applying"].get(gap, 0) for entry in scored.values()),
+                    "recall_gain_upper_bound": ratio(attributed, observed),
+                    "by_package": dict(sorted(per_package.items(), key=lambda item: (-item[1], item[0]))),
+                }
+            )
+        rows.sort(key=lambda row: (-row["attributed"], row["gap"]))
+        ranking[plan] = {
+            "packages": sorted(scored),
+            "left_out": sorted(set(packages) - set(scored)),
+            "observed_edges": observed,
+            "missed_edges": sum(row["attributed"] for row in rows),
+            "class_method_through_inheritance": sum(
+                entry["gaps"]["class_method_through_inheritance"] for entry in scored.values()
+            ),
+            "other_by_syntax_and_callee": dict(
+                sorted(
+                    sum((Counter(entry["gaps"]["other_by_syntax_and_callee"]) for entry in scored.values()), Counter()).items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+            ),
+            "rows": rows,
+        }
+    return ranking
 
 
 # ---------------------------------------------------------------------------
@@ -800,6 +1149,94 @@ def machine(launcher_peak_rss_bytes: int) -> dict:
 
 # ---------------------------------------------------------------------------
 # rendering
+
+
+def cell(text: str) -> str:
+    return text.replace("|", "\\|").replace("`", "'")
+
+
+def render_gaps(report: dict, add) -> None:
+    add("### Missed edges ranked by gap")
+    add("")
+    add("Every observed call or callback edge polint did not find is attributed to one gap: the first in the order")
+    add("unary IIFEs, try / catch / if blocks, exported initializers, constructors, callbacks to built-ins, computed")
+    add("keys, prototype and class methods, then the remainders. Extraction gaps come first because no resolution")
+    add("change finds an edge whose call site or callee polint does not extract; a site or callee polint misses is")
+    add("charged to the outermost function around it that polint does not extract. **attributed** counts each edge")
+    add("once; **applying** counts every gap whose condition holds. The recall gain is an upper bound: it assumes")
+    add("every attributed edge is found once the gap is fixed. The syntax census behind this is described in the README.")
+    add("")
+    ranking = report["gap_ranking"]
+    base, refined = ranking["base"], ranking["refined"]
+    refined_rows = {row["gap"]: row for row in refined["rows"]}
+    add(f"Base: {base['missed_edges']} missed of {base['observed_edges']} observed edges. Refined: "
+        f"{refined['missed_edges']} missed of {refined['observed_edges']}"
+        + (f", without {', '.join(refined['left_out'])} (no refined dump)" if refined["left_out"] else "")
+        + ".")
+    add("")
+    add("| rank | gap | attributed base | applying base | recall gain base (upper bound) | attributed refined | recall gain refined (upper bound) | base by package |")
+    add("|---|---|---|---|---|---|---|---|")
+    for rank, row in enumerate(base["rows"], 1):
+        other = refined_rows.get(row["gap"], {})
+        label = row["label"] if row["fixable_gap"] else f"_{row['label']}_"
+        by_package = ", ".join(f"{name} {count}" for name, count in row["by_package"].items()) or "–"
+        add(
+            f"| {rank} | {label} | {row['attributed']} | {row['applying']} | {pct1(row['recall_gain_upper_bound'])} "
+            f"| {other.get('attributed', 'n/a')} | {pct1(other.get('recall_gain_upper_bound'))} | {by_package} |"
+        )
+    add("")
+    add("Rows in italics are remainders, not one of the named extraction or resolution gaps. Of the base")
+    add(f"prototype and class method misses, {base['class_method_through_inheritance']} go through `super` or a `this`")
+    add("call into another class; that split reads the receiver syntactically and is approximate.")
+    add("'Other resolution misses' by call syntax and callee kind (base): "
+        + ", ".join(f"{shape} {count}" for shape, count in base["other_by_syntax_and_callee"].items())
+        + ". An `expression` call is one whose callee is neither a name nor a member, such as the `(0, f)(x)`")
+    add("form compiled CommonJS uses.")
+    add("")
+
+
+def render_false_complete(report: dict, add) -> None:
+    add("### Other targets and no unresolved marker (every case)")
+    add("")
+    add("The observed callee is not among polint's targets for the site, and the site carries no unresolved marker.")
+    add("The polint site column shows which call expression the observed site was matched to.")
+    add("")
+    add("| package | plan | observed site | syntax / kind | observed callee | polint answer | observed site text | polint site text |")
+    add("|---|---|---|---|---|---|---|---|")
+    any_case = False
+    for name, entry in report["packages"].items():
+        for plan in PLANS:
+            for example in entry.get(plan, {}).get("outcome_examples", {}).get(FALSE_COMPLETE, []):
+                any_case = True
+                site = example["polint_site"]
+                add(
+                    f"| {name} | {plan} | {example['site']} | {example['syntax']} / {example['kind']} "
+                    f"| {cell(example['observed_callee'])} | {cell(polint_answer(example))} "
+                    f"| `{cell(example['site_text'])}` | `{cell(site['text'])}` |"
+                )
+    if not any_case:
+        add("| none | | | | | | | |")
+    add("")
+
+
+def render_outcome_examples(report: dict, add) -> None:
+    add("### One example per package, plan and outcome")
+    add("")
+    add(f"`report.json` keeps up to {EXAMPLES_PER_OUTCOME} per outcome (all of them for '{FALSE_COMPLETE}') and up to")
+    add(f"{EXAMPLES_PER_GAP} per gap.")
+    add("")
+    add("| package | plan | outcome | observed site | syntax / kind | observed callee | polint answer |")
+    add("|---|---|---|---|---|---|---|")
+    for name, entry in report["packages"].items():
+        for plan in PLANS:
+            for outcome, examples in entry.get(plan, {}).get("outcome_examples", {}).items():
+                example = examples[0]
+                add(
+                    f"| {name} | {plan} | {outcome} | {example['site']} `{cell(example['site_text'])}` "
+                    f"| {example['syntax']} / {example['kind']} | {cell(example['observed_callee'])} "
+                    f"| {cell(polint_answer(example))} |"
+                )
+    add("")
 
 
 def render_markdown(report: dict) -> str:
@@ -950,6 +1387,10 @@ def render_markdown(report: dict) -> str:
         add(f"| {name} | " + " | ".join(cells) + " |")
     add("")
 
+    render_gaps(report, add)
+    render_false_complete(report, add)
+    render_outcome_examples(report, add)
+
     add("## Exports (against the loaded module's export keys)")
     add("")
     add("`Symbols` is the exported-symbol answer a rule can read; export facts are the module export rows.")
@@ -1050,6 +1491,18 @@ DECISIONS = [
     "apply; observed edges touching such files count as 'site or callee in a file polint does not analyse'.",
     "Missing call sites and functions are not worked around: functions under a unary operator, functions declared "
     "inside try, catch or if blocks, and calls in exported variable initializers are reported as misses.",
+    "An observed callee maps to the polint function with the same span before the innermost one ending at the same "
+    "byte: a concise arrow returning an arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.",
+    "Every missed observed edge is attributed to one gap from a syntax census: Oxc's own function and call spans with "
+    "their syntactic context, parsed again apart from the analysis. A site or callee polint does not extract is "
+    "charged to the outermost function around it that polint does not extract, else to the outermost enclosing "
+    "function or the call in a gap; edges polint maps go to constructors, callbacks to built-ins, computed keys and "
+    "prototype or class methods, in that order. A computed-key miss is counted whether or not the key set is known, "
+    "so that row is an upper bound for computed keys over a known set.",
+    "A census function counts as extracted when polint has a function in the same file ending at the same byte, "
+    "or, for a class constructor, when polint has the class.",
+    "Every package edge with other targets and no unresolved marker is kept as an example; other outcomes and gaps "
+    "keep a bounded sample, in observed-edge order.",
     "Process peak RSS is measured with `wait4` like the matrix runner does. Linux carries the parent's resident "
     "size into the child's peak at fork, so every process is launched before the report loads any fact dump, and "
     "the launcher's own peak is recorded with the cost section. The in-process analysis peak has no such floor.",
@@ -1082,6 +1535,10 @@ def run(args) -> int:
                 if dumps[(kind, name, plan)]["error"]:
                     print(f"{kind} {name} {plan}: {dumps[(kind, name, plan)]['error']}", file=sys.stderr)
             if kind == "package":
+                out = scratch / "dumps" / f"{kind}-{name}-census.json"
+                dumps[(kind, name, "census")] = run_dump(test_binary, tree, "census", out, args.dump_timeout)
+                if dumps[(kind, name, "census")]["error"]:
+                    print(f"{kind} {name} census: {dumps[(kind, name, 'census')]['error']}", file=sys.stderr)
                 print(f"dumped {name}", file=sys.stderr)
 
         # Every measured process is started before any dump is loaded. A child's
@@ -1100,6 +1557,7 @@ def run(args) -> int:
 
         case_results = score_constructs(cases, dumps)
         hidden_lines = sum(len(e["base"].get("unknown_lines", [])) for e in case_results.values())
+        packages = score_packages(inputs, dumps)
         report = {
             "schema": REPORT_SCHEMA,
             "polint_version": version,
@@ -1120,7 +1578,8 @@ def run(args) -> int:
                 },
                 "cases": case_results,
             },
-            "packages": score_packages(inputs, dumps),
+            "packages": packages,
+            "gap_ranking": rank_gaps(packages),
             "decisions": DECISIONS,
             "cost": None,
         }

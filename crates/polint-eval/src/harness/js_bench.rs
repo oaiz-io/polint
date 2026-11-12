@@ -27,22 +27,36 @@
 //! Each non-empty manifest line is `<tree>\t<output.json>`. Trees should live
 //! outside any git checkout, so that no parent `.gitignore` hides their files,
 //! and the run writes no cache.
+//!
+//! With `POLINT_JS_BENCH_CENSUS=1` the dump also carries a syntax census: every
+//! function-like node, class, call and `new` expression Oxc finds in each
+//! analysed file, with the syntactic context it sits in. The report uses it to
+//! say which kind of missing extraction an unmatched observed edge falls into.
+//! The census parses each file again on its own; it reads no analysis store and
+//! feeds nothing back into one.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
+use oxc_allocator::Allocator;
+use oxc_ast::AstKind;
+use oxc_ast::ast::{Expression, FunctionType, MethodDefinitionKind};
+use oxc_semantic::{AstNodes, NodeId, SemanticBuilder};
+use oxc_span::GetSpan;
 use serde_json::{Value, json};
 
+use crate::analysis_api::SourceFile;
 use crate::analysis_neutral::ids::CallSiteId;
 use crate::core::{AnalysisDb, TS_JS_MODULE_FUNCTION_NAME};
-use crate::internal_core::{FileId, FunctionId, Span, SymbolId};
+use crate::internal_core::{FileId, FunctionId, Language, Span, SymbolId};
 
 const MANIFEST_ENV: &str = "POLINT_JS_BENCH_MANIFEST";
 const CAPS_ENV: &str = "POLINT_JS_BENCH_CAPS";
-const SCHEMA: &str = "polint-js-bench-facts-1";
+const CENSUS_ENV: &str = "POLINT_JS_BENCH_CENSUS";
+const SCHEMA: &str = "polint-js-bench-facts-2";
 
 /// Analyses `tree` with the named capabilities and returns its normalized dump.
-fn dump_tree(tree: &Path, capabilities: &[&str]) -> anyhow::Result<Value> {
+fn dump_tree(tree: &Path, capabilities: &[&str], with_census: bool) -> anyhow::Result<Value> {
     let loaded = crate::cli::load_config_for_check(tree, &[])?;
     let config_digest = crate::cache::keys::config_hash(&loaded);
     let rule_digest = crate::cache::keys::rule_hash(&[], None, &BTreeMap::new());
@@ -57,7 +71,206 @@ fn dump_tree(tree: &Path, capabilities: &[&str]) -> anyhow::Result<Value> {
             plan: &plan,
             parallel: true,
         })?;
-    Ok(Dump::new(&output.db).document(capabilities))
+    let mut document = Dump::new(&output.db).document(capabilities);
+    if with_census {
+        document["syntax_census"] = syntax_census(&output.db);
+    }
+    Ok(document)
+}
+
+/// Per analysed JS/TS file: the function-like nodes and call expressions Oxc
+/// parses, each with its byte span and syntactic context.
+fn syntax_census(db: &AnalysisDb) -> Value {
+    let files: BTreeMap<&str, Value> = db
+        .files()
+        .iter()
+        .filter(|file| {
+            matches!(
+                file.language,
+                Language::TypeScript | Language::Tsx | Language::JavaScript | Language::Jsx
+            )
+        })
+        .map(|file| (file.relative_path.as_str(), census_file(file)))
+        .collect();
+    json!(files)
+}
+
+fn census_file(file: &SourceFile) -> Value {
+    let allocator = Allocator::default();
+    let parsed = crate::ts::parse::parse_ts_file(&allocator, file);
+    if parsed.is_catastrophic() {
+        return json!({ "fully_parsed": false, "functions": [], "calls": [] });
+    }
+    let semantic = SemanticBuilder::new().build(parsed.program()).semantic;
+    let nodes = semantic.nodes();
+    let source = file.source.as_ref();
+    let mut functions = Vec::new();
+    let mut calls = Vec::new();
+    for node in nodes.iter() {
+        let id = node.id();
+        let kind = node.kind();
+        let function_kind = match kind {
+            // A method's body is its `MethodDefinition` row.
+            AstKind::Function(_)
+                if matches!(nodes.parent_kind(id), AstKind::MethodDefinition(_)) =>
+            {
+                None
+            }
+            AstKind::Function(function) => Some(match function.r#type {
+                FunctionType::FunctionDeclaration | FunctionType::TSDeclareFunction => {
+                    "declaration"
+                }
+                FunctionType::FunctionExpression | FunctionType::TSEmptyBodyFunctionExpression => {
+                    "expression"
+                }
+            }),
+            AstKind::ArrowFunctionExpression(_) => Some("arrow"),
+            AstKind::MethodDefinition(method) => Some(match method.kind {
+                MethodDefinitionKind::Constructor => "constructor",
+                MethodDefinitionKind::Get | MethodDefinitionKind::Set => "accessor",
+                MethodDefinitionKind::Method => "method",
+            }),
+            AstKind::StaticBlock(_) => Some("static_block"),
+            AstKind::Class(_) => Some("class"),
+            _ => None,
+        };
+        if let Some(function_kind) = function_kind {
+            functions.push(census_row(nodes, id, source, function_kind, None));
+            continue;
+        }
+        match kind {
+            AstKind::CallExpression(call) => calls.push(census_row(
+                nodes,
+                id,
+                source,
+                "call",
+                Some(has_this_receiver(&call.callee)),
+            )),
+            AstKind::NewExpression(_) => calls.push(census_row(nodes, id, source, "new", None)),
+            _ => {}
+        }
+    }
+    json!({
+        "fully_parsed": parsed.fully_parsed,
+        "functions": sorted(functions.into_iter()),
+        "calls": sorted(calls.into_iter()),
+    })
+}
+
+fn census_row(
+    nodes: &AstNodes<'_>,
+    id: NodeId,
+    source: &str,
+    kind: &str,
+    this_receiver: Option<bool>,
+) -> Value {
+    let span = nodes.kind(id).span();
+    let (context, class) = syntactic_context(nodes, id, source);
+    let mut row = json!({
+        "start": span.start,
+        "end": span.end,
+        "kind": kind,
+        "context": context,
+        "class": class.map(|class| [class.start, class.end]),
+    });
+    if let Some(this_receiver) = this_receiver {
+        row["this_receiver"] = Value::Bool(this_receiver);
+    }
+    row
+}
+
+/// The context tags between a node and its nearest enclosing function-like
+/// node or class, innermost first, plus the span of the nearest enclosing
+/// class at any depth.
+fn syntactic_context(
+    nodes: &AstNodes<'_>,
+    id: NodeId,
+    source: &str,
+) -> (Vec<&'static str>, Option<oxc_span::Span>) {
+    let mut tags = Vec::new();
+    let mut class = None;
+    let mut bounded = false;
+    let mut child = nodes.kind(id).span();
+    for ancestor in nodes.ancestor_ids(id) {
+        let kind = nodes.kind(ancestor);
+        if let AstKind::Class(found) = kind {
+            class.get_or_insert(found.span);
+        }
+        if !bounded {
+            let tag = match kind {
+                AstKind::Function(_)
+                | AstKind::ArrowFunctionExpression(_)
+                | AstKind::StaticBlock(_)
+                | AstKind::Class(_) => {
+                    bounded = true;
+                    None
+                }
+                AstKind::UnaryExpression(_) => Some("unary"),
+                AstKind::TryStatement(statement) => {
+                    if statement.block.span == child {
+                        Some("try")
+                    } else if statement
+                        .finalizer
+                        .as_ref()
+                        .is_some_and(|block| block.span == child)
+                    {
+                        Some("finally")
+                    } else {
+                        None
+                    }
+                }
+                AstKind::CatchClause(_) => Some("catch"),
+                AstKind::IfStatement(_) => Some("if"),
+                AstKind::ExportNamedDeclaration(_) | AstKind::ExportDefaultDeclaration(_) => {
+                    Some("export")
+                }
+                AstKind::CallExpression(call) => Some(if call.callee.span() == child {
+                    "callee"
+                } else {
+                    "argument"
+                }),
+                AstKind::NewExpression(call) => Some(if call.callee.span() == child {
+                    "new_callee"
+                } else {
+                    "argument"
+                }),
+                AstKind::ObjectProperty(_) => Some("property"),
+                AstKind::AssignmentExpression(assignment) => {
+                    let left = assignment.left.span();
+                    let target = source
+                        .get(left.start as usize..left.end as usize)
+                        .unwrap_or_default();
+                    Some(if target.contains("prototype") {
+                        "prototype_assignment"
+                    } else {
+                        "assignment"
+                    })
+                }
+                _ => None,
+            };
+            tags.extend(tag);
+        }
+        if bounded && class.is_some() {
+            break;
+        }
+        child = kind.span();
+    }
+    (tags, class)
+}
+
+fn has_this_receiver(callee: &Expression<'_>) -> bool {
+    match callee {
+        Expression::StaticMemberExpression(member) => {
+            matches!(member.object, Expression::ThisExpression(_))
+        }
+        Expression::ComputedMemberExpression(member) => {
+            matches!(member.object, Expression::ThisExpression(_))
+        }
+        Expression::PrivateFieldExpression(member) => {
+            matches!(member.object, Expression::ThisExpression(_))
+        }
+        _ => false,
+    }
 }
 
 /// Lookup tables that turn run-local ids into path-and-span keys.
@@ -322,9 +535,10 @@ mod tests {
             .map(str::trim)
             .filter(|name| !name.is_empty())
             .collect();
+        let with_census = std::env::var_os(CENSUS_ENV).is_some_and(|value| value == "1");
         let manifest = std::fs::read_to_string(&manifest).expect("read manifest");
         for (tree, out) in manifest_entries(&manifest) {
-            let document = dump_tree(&tree, &capabilities)
+            let document = dump_tree(&tree, &capabilities, with_census)
                 .unwrap_or_else(|error| panic!("analyse {}: {error:#}", tree.display()));
             let mut text = serde_json::to_string_pretty(&document).expect("serialize dump");
             text.push('\n');
@@ -343,6 +557,53 @@ mod tests {
                 (PathBuf::from("/b c"), PathBuf::from("/b.json")),
             ]
         );
+    }
+
+    #[test]
+    fn census_tags_the_syntactic_context_of_functions_and_calls() {
+        let source = "!function () { g(); }();\n\
+            try { function inTry() {} } catch (e) { h(); }\n\
+            export const made = make();\n\
+            A.prototype.run = function () {};\n\
+            class B extends A { constructor() { super(); this.run(); } }\n";
+        let file = SourceFile::new(
+            FileId::from_raw(0),
+            PathBuf::from("census.js"),
+            "census.js".to_string(),
+            Language::JavaScript,
+            source.into(),
+            "test-hash".to_string(),
+        );
+        let census = census_file(&file);
+        let at = |rows: &str, text: &str| {
+            let start = source.find(text).expect("text in source");
+            census[rows]
+                .as_array()
+                .expect("rows")
+                .iter()
+                .find(|row| row["start"] == start)
+                .unwrap_or_else(|| panic!("no {rows} row at `{text}`"))
+                .clone()
+        };
+        let context = |row: &Value| row["context"].clone();
+
+        assert_eq!(
+            context(&at("functions", "function () { g")),
+            json!(["callee", "unary"])
+        );
+        assert_eq!(context(&at("functions", "function inTry")), json!(["try"]));
+        assert_eq!(context(&at("calls", "h()")), json!(["catch"]));
+        assert_eq!(context(&at("calls", "make()")), json!(["export"]));
+        assert_eq!(
+            context(&at("functions", "function () {}")),
+            json!(["prototype_assignment"])
+        );
+        let constructor = at("functions", "constructor()");
+        assert_eq!(constructor["kind"], "constructor");
+        let class_start = source.find("class B").expect("class");
+        assert_eq!(constructor["class"][0], class_start);
+        assert_eq!(at("calls", "this.run()")["this_receiver"], true);
+        assert_eq!(at("calls", "g()")["this_receiver"], false);
     }
 
     #[test]

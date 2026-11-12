@@ -89,7 +89,17 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
 - **Why missed** (packages): each observed edge polint does not find is put in
   one bucket, such as no matching call site, no matching function, a target
   that stops at an import binding, or other targets with or without an
-  unresolved marker.
+  unresolved marker. Each bucket keeps a bounded sample of examples (site,
+  observed callee, what polint answered); every edge with other targets and no
+  unresolved marker is kept and listed in `report.md`.
+- **Missed edges by gap** (packages): each missed edge is also attributed to
+  one extraction or resolution gap (unary IIFEs, functions in try / catch / if
+  blocks, exported initializers, constructors, callbacks to built-ins,
+  computed keys, prototype and class methods) or a named remainder, using a
+  syntax census of the same files. The ranking gives each gap's count and an
+  upper bound on the recall it could add. Gap conditions are read from syntax
+  alone, so the attribution says where a miss sits, not that fixing that gap
+  alone would find it.
 - **Cost**: `polint check` with the census rule pack in `rule-pack/` (asks for
   `Functions`, `CallGraph`, `Symbols`, `References`), cold and warm, wall time
   and peak RSS from the in-process cost record (`POLINT_GOLDEN_COST_PATH`) and
@@ -114,8 +124,16 @@ Two columns are reported throughout:
 library as `crate::eval::js_bench`, test-only) holds one ignored test,
 `dump_js_bench_facts`. It analyses each tree listed in
 `POLINT_JS_BENCH_MANIFEST` with the capabilities in `POLINT_JS_BENCH_CAPS` and
-writes the facts as JSON (`polint-js-bench-facts-1`). It only reads facts and is
+writes the facts as JSON (`polint-js-bench-facts-2`). It only reads facts and is
 not part of any public surface. `report.py` runs it through the test binary.
+
+With `POLINT_JS_BENCH_CENSUS=1` the dump also carries a syntax census: every
+function and call expression Oxc parses in each file, with its syntactic
+context (under a unary operator, in a try / catch / finally / if block, in an
+export, a callee or argument, a prototype assignment) and enclosing class. The
+census parses each file again on its own, reads no analysis store and feeds
+nothing back. The report runs it as a separate dump so the timed dumps are
+unchanged.
 
 ## Limits
 
@@ -147,8 +165,17 @@ These are found by the benchmark and are not changed by it:
   extracted, nor are the calls in their bodies. Calls written directly in try,
   finally and if blocks, and functions in bare blocks and loop bodies, are.
 - Calls in exported variable initializers (`export const X = make()`,
-  `export default make()`) produce no call site.
+  `export default make()`) produce no call site, and neither do calls inside
+  the functions such an initializer contains. This is the largest single gap
+  on the real packages: 909 of 2710 missed base edges, 789 of them on zod.
+- Of the base misses that are not extraction or named resolution gaps, most
+  are identifier calls to an arrow function (372) and `(0, f)(x)` calls to
+  a declaration (134, async's compiled CommonJS interop).
 - A class is one function spanning the class; there is no constructor function.
+- On underscore the refined plan answers `iteratee(...)` inside `map` with
+  the single target `identity` and no unresolved marker, while the observed
+  callees are other closures that `cb` can return. This is a false-complete
+  answer; the base plan marks the same site unresolved.
 - On axios the refined plan resolves no points-to edges, so refined recall
   equals base recall there.
 - `.polint/cache` holds tens to hundreds of MB per MB of source after a
