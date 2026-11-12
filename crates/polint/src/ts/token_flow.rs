@@ -1,6 +1,6 @@
 //! TypeScript token-source flow extraction used by semantic-graph projection.
 
-use std::collections::{BTreeMap, btree_map::Entry};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 use crate::analysis_api::{FactFamily, SourceFile};
 use crate::analysis_neutral::stable_key::semantic_stable_key;
@@ -8,8 +8,9 @@ use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{Argument, BindingPattern, Expression, Function, Statement, VariableDeclarator};
 use oxc_semantic::{AstNodes, NodeId, SemanticBuilder};
-use oxc_span::GetSpan;
+use oxc_span::{GetSpan, Span};
 
+use crate::ts::callable_flow::cannot_be_callable;
 use crate::ts::inventory::extract::extract_ts_inventory;
 use crate::ts::inventory::store::TsInventoryOutput;
 use crate::ts::parse::parse_ts_file;
@@ -53,6 +54,9 @@ struct TsTokenSourceFlowIndex {
     local_alias_target_by_function_var: BTreeMap<(NodeId, String), Option<String>>,
     returned_function_key_by_function: BTreeMap<NodeId, Option<String>>,
     local_return_token_by_function_var: BTreeMap<(NodeId, String), Option<String>>,
+    /// Names written somewhere inside a function body, nested closures included.
+    /// A written name may hold any value, so no flow is keyed on it there.
+    written_names_by_function: BTreeSet<(NodeId, String)>,
 }
 
 pub fn collect_ts_token_source_flows(
@@ -93,6 +97,7 @@ pub fn collect_ts_token_source_flows_from_nodes(
 ) -> Vec<TsTokenSourceFlow> {
     let source = file.source.as_ref();
     let mut index = TsTokenSourceFlowIndex::from_inventory(interner, inventory, nodes);
+    index.collect_written_names(nodes);
     index.collect_parameter_calls(source, nodes);
     index.collect_local_alias_assignments(nodes);
     index.collect_returned_functions(nodes);
@@ -148,6 +153,33 @@ impl TsTokenSourceFlowIndex {
         index
     }
 
+    fn collect_written_names(&mut self, nodes: &AstNodes<'_>) {
+        for (node_id, node) in nodes.iter_enumerated() {
+            let AstKind::IdentifierReference(identifier) = node.kind() else {
+                continue;
+            };
+            if !is_written_reference(nodes, node_id, identifier.span) {
+                continue;
+            }
+            for (ancestor_id, ancestor) in nodes.ancestors_enumerated(node_id) {
+                if matches!(
+                    ancestor.kind(),
+                    AstKind::Function(_)
+                        | AstKind::ArrowFunctionExpression(_)
+                        | AstKind::MethodDefinition(_)
+                ) {
+                    self.written_names_by_function
+                        .insert((ancestor_id, identifier.name.to_string()));
+                }
+            }
+        }
+    }
+
+    fn is_written_in(&self, function: NodeId, name: &str) -> bool {
+        self.written_names_by_function
+            .contains(&(function, name.to_string()))
+    }
+
     fn collect_parameter_calls(&mut self, source: &str, nodes: &AstNodes<'_>) {
         for (node_id, node) in nodes.iter_enumerated() {
             let AstKind::CallExpression(call) = node.kind() else {
@@ -167,6 +199,9 @@ impl TsTokenSourceFlowIndex {
             else {
                 continue;
             };
+            if self.is_written_in(enclosing_function, &callee_name) {
+                continue;
+            }
             let Some(callsite_key) = self.callsite_key_for_kind(source, node.kind()) else {
                 continue;
             };
@@ -224,6 +259,12 @@ impl TsTokenSourceFlowIndex {
             let Some(returned_function_key) =
                 self.function_key_from_return_argument(enclosing_function, argument)
             else {
+                // A return this index cannot name may still yield a function, so
+                // the function no longer has a single known returned value.
+                if !cannot_be_callable(argument) {
+                    self.returned_function_key_by_function
+                        .insert(enclosing_function, None);
+                }
                 continue;
             };
 
@@ -337,6 +378,9 @@ impl TsTokenSourceFlowIndex {
         let Some(enclosing_function) = enclosing_function_node(nodes, node_id) else {
             return;
         };
+        if self.is_written_in(enclosing_function, callee_name) {
+            return;
+        }
         let Some(returned_function_key) = unique_lookup(
             &self.local_return_token_by_function_var,
             &(enclosing_function, callee_name.to_string()),
@@ -440,6 +484,9 @@ impl TsTokenSourceFlowIndex {
         enclosing_function: NodeId,
         name: &str,
     ) -> Option<String> {
+        if self.is_written_in(enclosing_function, name) {
+            return None;
+        }
         unique_lookup(
             &self.local_alias_target_by_function_var,
             &(enclosing_function, name.to_string()),
@@ -522,6 +569,41 @@ fn enclosing_function_node(nodes: &AstNodes<'_>, node_id: NodeId) -> Option<Node
                 None
             }
         })
+}
+
+/// Whether the identifier reference at `node_id` is written: the target of an
+/// assignment, an element of a destructuring assignment pattern, or the head of
+/// a `for…in` / `for…of` loop. Member targets such as `name.field = value` do not
+/// write `name`.
+fn is_written_reference(nodes: &AstNodes<'_>, node_id: NodeId, span: Span) -> bool {
+    let contains = |outer: Span| outer.start <= span.start && span.end <= outer.end;
+    for (_, ancestor) in nodes.ancestors_enumerated(node_id) {
+        match ancestor.kind() {
+            AstKind::ArrayAssignmentTarget(_)
+            | AstKind::ObjectAssignmentTarget(_)
+            | AstKind::AssignmentTargetRest(_) => {}
+            AstKind::AssignmentTargetWithDefault(target) => {
+                if !contains(target.binding.span()) {
+                    return false;
+                }
+            }
+            AstKind::AssignmentTargetPropertyIdentifier(property) => {
+                if property.binding.span != span {
+                    return false;
+                }
+            }
+            AstKind::AssignmentTargetPropertyProperty(property) => {
+                if !contains(property.binding.span()) {
+                    return false;
+                }
+            }
+            AstKind::AssignmentExpression(assignment) => return contains(assignment.left.span()),
+            AstKind::ForInStatement(statement) => return contains(statement.left.span()),
+            AstKind::ForOfStatement(statement) => return contains(statement.left.span()),
+            _ => return false,
+        }
+    }
+    false
 }
 
 fn variable_declarator_name_for_call(nodes: &AstNodes<'_>, node_id: NodeId) -> Option<String> {

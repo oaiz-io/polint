@@ -6,6 +6,8 @@ use crate::internal_core::FunctionId;
 #[cfg(feature = "lang-typescript")]
 mod extract;
 #[cfg(feature = "lang-typescript")]
+pub(super) use extract::cannot_be_callable;
+#[cfg(feature = "lang-typescript")]
 pub(super) use extract::collect_callable_flows;
 
 /// A bounded, heuristic callable flow extracted from the frontend AST. The graph
@@ -1092,6 +1094,89 @@ mod tests {
         for (source, call, expected, why) in cases {
             assert_eq!(
                 resolved_targets_at(&[("main.js", source)], call),
+                expected
+                    .iter()
+                    .map(|text| (*text).to_string())
+                    .collect::<BTreeSet<_>>(),
+                "{call:?}: {why}"
+            );
+        }
+    }
+
+    /// A returned or reassigned callable is answered with every source that can
+    /// produce it, or with nothing when one of those sources is not followed: an
+    /// empty answer leaves the call unresolved, while a partial one would report
+    /// a call as complete that reaches further targets at run time.
+    #[test]
+    fn returned_callables_are_complete_or_left_unresolved() {
+        const HEADER: &str = "function a() {}\nfunction b() {}\nfunction c() {}\n";
+        // (source after the shared declarations, call snippet, exact targets, why)
+        let cases: &[(&str, &str, &[&str], &str)] = &[
+            (
+                "function pick(k, fn) {\n  if (k === 1) return a;\n  if (k === 2) return b;\n  return fn;\n}\nconst f = pick(3, c);\nf();\n",
+                "f();",
+                &["function a() {}", "function b() {}", "function c() {}"],
+                "every branch return is part of the answer, not the first that resolves",
+            ),
+            (
+                "function resolve(k, fn) {\n  if (k) return a;\n  return fn;\n}\nfunction apply(k, fn) {\n  fn = resolve(k, fn);\n  return fn();\n}\napply(1, b);\n",
+                "fn();",
+                &["function a() {}", "function b() {}"],
+                "a reassigned parameter joins the value it is replaced with",
+            ),
+            (
+                "function apply(fn) {\n  fn = wrap(fn);\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a reassignment from an unknown call drops the stale parameter binding",
+            ),
+            (
+                "function apply(fn) {\n  fn = fn || b;\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &["function a() {}"],
+                "a bound function is truthy, so an `||` default does not replace it",
+            ),
+            (
+                "function pick(k, fn) {\n  if (k) return a;\n  return lookup(fn);\n}\nconst f = pick(1, b);\nf();\n",
+                "f();",
+                &[],
+                "a return this walk cannot follow leaves the call unresolved",
+            ),
+            (
+                "function pick(k, fn) {\n  switch (k) {\n    case 1:\n      return fn;\n  }\n  return a;\n}\nconst f = pick(1, b);\nf();\n",
+                "f();",
+                &[],
+                "a return inside a switch is not followed, so the later return is not the whole answer",
+            ),
+            (
+                "function pick(k, fn) {\n  if (k) return a;\n  return lookup(fn);\n}\nfunction main() {\n  const f = pick(1, b);\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "an unknown return also blocks the returned value bound inside a function",
+            ),
+            (
+                "function pick(k, fn) {\n  switch (k) {\n    case 1:\n      return fn;\n  }\n  return a;\n}\nfunction main() {\n  const f = pick(1, b);\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a returned parameter blocks the single returned value bound inside a function",
+            ),
+            (
+                "function make() {\n  let g = a;\n  g = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a reassigned local alias no longer names its first value",
+            ),
+            (
+                "function pick(k) {\n  if (k) return a;\n  return null;\n}\nconst f = pick(1);\nf();\n",
+                "f();",
+                &["function a() {}"],
+                "a returned primitive cannot be called, so it does not block the answer",
+            ),
+        ];
+        for (body, call, expected, why) in cases {
+            let source = format!("{HEADER}{body}");
+            assert_eq!(
+                resolved_targets_at(&[("main.js", &source)], call),
                 expected
                     .iter()
                     .map(|text| (*text).to_string())
