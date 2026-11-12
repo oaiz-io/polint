@@ -1,0 +1,54 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 6,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@314..334",
+      "syntax": "identifier",
+      "callee": "main.js@75..256",
+      "callee_name": "choose"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@469..486",
+      "syntax": "identifier",
+      "callee": "main.js@257..354",
+      "callee_name": "resolve"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@515..524",
+      "syntax": "identifier",
+      "callee": "main.js@12..74",
+      "callee_name": "exclaim"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@515..524",
+      "syntax": "identifier",
+      "callee": "main.js@197..253",
+      "callee_name": "plain"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@515..524",
+      "syntax": "identifier",
+      "callee": "main.js@355..414",
+      "callee_name": "shout"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@592..615",
+      "syntax": "identifier",
+      "callee": "main.js@415..557",
+      "callee_name": "apply"
+    }
+  ]
+}

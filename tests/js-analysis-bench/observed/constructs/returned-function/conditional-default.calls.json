@@ -1,0 +1,75 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 5,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@391..412",
+      "syntax": "identifier",
+      "callee": "main.js@118..194",
+      "callee_name": "ternary"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@434..438",
+      "syntax": "identifier",
+      "callee": "main.js@12..64",
+      "callee_name": "fallback"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@434..438",
+      "syntax": "identifier",
+      "callee": "main.js@65..117",
+      "callee_name": "custom"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@478..509",
+      "syntax": "identifier",
+      "callee": "main.js@195..263",
+      "callee_name": "orDefault"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@533..537",
+      "syntax": "identifier",
+      "callee": "main.js@12..64",
+      "callee_name": "fallback"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@533..537",
+      "syntax": "identifier",
+      "callee": "main.js@65..117",
+      "callee_name": "custom"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@577..618",
+      "syntax": "identifier",
+      "callee": "main.js@264..342",
+      "callee_name": "nullishDefault"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@647..651",
+      "syntax": "identifier",
+      "callee": "main.js@12..64",
+      "callee_name": "fallback"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@647..651",
+      "syntax": "identifier",
+      "callee": "main.js@65..117",
+      "callee_name": "custom"
+    }
+  ]
+}

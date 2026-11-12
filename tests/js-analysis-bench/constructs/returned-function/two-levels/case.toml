@@ -1,0 +1,3 @@
+construct = "returned-function"
+held_out = false
+description = "A parameter is reassigned to the result of a function that forwards another function's branch returns, then called."

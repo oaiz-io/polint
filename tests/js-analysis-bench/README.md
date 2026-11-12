@@ -81,7 +81,9 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   did; they give recall, never precision, so no package precision is reported.
 - **False-complete count** (required): `@unknown` lines where polint gives
   resolved targets and no unresolved marker. `reported-unknown` and `silent`
-  lines are counted next to it.
+  lines are counted next to it. Labelled `@calls` lines count apart as
+  false-complete call lines when polint resolves them to targets that miss a
+  labelled callee and marks no call site on the line unresolved.
 - **Export-set accuracy**: per file, exported names from `Symbols` and from
   the module export facts against the keys of the module as Node loads it.
 - **Unresolved share**: share of call sites with an unresolved marker, and of

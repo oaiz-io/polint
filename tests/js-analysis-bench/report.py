@@ -481,6 +481,31 @@ def score_case(case: dict, labels: dict, facts: Facts) -> dict:
                 why = "call site with neither a target nor an unresolved marker"
             unknown.append({"file": rel, "line": line, "verdict": verdict, "detail": why})
 
+    # A labelled call line answered with resolved targets that miss a labelled
+    # callee, and with no unresolved marker on any call site of the line, claims
+    # a complete answer that is not: the same false-complete answer as on an
+    # @unknown line, for a callee polint could have named.
+    incomplete = []
+    for rel, file_labels in labels.items():
+        wanted_by_line = defaultdict(set)
+        for line, name in file_labels["calls"]:
+            wanted_by_line[line].add(name)
+        for line, wanted in sorted(wanted_by_line.items()):
+            sites = [s["key"] for s in facts.dump["call_sites"] if s["file"] == rel and s["line"] == line]
+            if any(key in facts.marked_unresolved for key in sites):
+                continue
+            resolved = {names.get(target) for key in sites for target in facts.targets.get(key, ())}
+            missed = sorted(wanted - resolved)
+            if missed and resolved - {None}:
+                incomplete.append(
+                    {
+                        "file": rel,
+                        "line": line,
+                        "missed": missed,
+                        "resolved": sorted(name for name in resolved if name is not None),
+                    }
+                )
+
     import_stops = sorted(
         f"{facts.sites[key]['file']}:{facts.sites[key]['line']}" for key in facts.import_stops if key in facts.sites
     )
@@ -501,6 +526,8 @@ def score_case(case: dict, labels: dict, facts: Facts) -> dict:
         "edges_to_unlabelled_functions": unlabelled_targets,
         "labelled_functions_not_extracted": missing_functions,
         "unknown_lines": unknown,
+        "labelled_call_lines": sum(len({line for line, _ in fl["calls"]}) for fl in labels.values()),
+        "false_complete_call_lines": incomplete,
         "import_binding_stops": import_stops if facts.plan == "base" else [],
         "unresolved_calls": facts.unresolved_call_share(),
         "references": facts.reference_share(),
@@ -591,6 +618,8 @@ def construct_summary(case_results: dict) -> dict:
             counts["labelled_functions_not_extracted"] += len(scored["labelled_functions_not_extracted"])
             for unknown in scored["unknown_lines"]:
                 counts[f"unknown_{unknown['verdict']}"] += 1
+            counts["labelled_call_lines"] += scored["labelled_call_lines"]
+            counts["false_complete_call_lines"] += len(scored["false_complete_call_lines"])
             counts["call_sites"] += scored["unresolved_calls"]["call_sites"]
             counts["marked_unresolved"] += scored["unresolved_calls"]["marked_unresolved"]
             counts["references"] += scored["references"]["references"]
@@ -1260,8 +1289,8 @@ def render_markdown(report: dict) -> str:
     add("Counts are summed over each construct's cases. `held out` cases must not be used to tune analysis;")
     add("compare their rows with the other cases to see whether a change generalises.")
     add("")
-    add("| construct | cases (held out) | call recall base | call recall refined | callback recall base | callback recall refined | precision base | precision refined | hidden paths base: reported / false-complete / silent | hidden paths refined | stops at import binding (base) |")
-    add("|---|---|---|---|---|---|---|---|---|---|---|")
+    add("| construct | cases (held out) | call recall base | call recall refined | callback recall base | callback recall refined | precision base | precision refined | hidden paths base: reported / false-complete / silent | hidden paths refined | false-complete call lines base / refined | stops at import binding (base) |")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for construct, row in sorted(report["constructs"]["summary"].items()):
         base, refined = row["base"], row["refined"]
 
@@ -1280,7 +1309,9 @@ def render_markdown(report: dict) -> str:
             f"| {frac(refined.get('callbacks_found', 0), refined.get('expected_callbacks', 0))} "
             f"| {frac(base.get('true_positive_edges', 0), base.get('predicted_labelled_edges', 0))} "
             f"| {frac(refined.get('true_positive_edges', 0), refined.get('predicted_labelled_edges', 0))} "
-            f"| {hidden(base)} | {hidden(refined)} | {base.get('import_binding_stops', 0)} |"
+            f"| {hidden(base)} | {hidden(refined)} "
+            f"| {base.get('false_complete_call_lines', 0)} / {refined.get('false_complete_call_lines', 0)} "
+            f"| {base.get('import_binding_stops', 0)} |"
         )
     add("")
     fc = report["constructs"]["false_complete"]
@@ -1288,6 +1319,26 @@ def render_markdown(report: dict) -> str:
         f"**False-complete count** (a labelled hidden path where polint gives a resolved answer with no "
         f"unresolved marker): base {fc['base']}, refined {fc['refined']}, over {fc['hidden_lines']} labelled hidden paths."
     )
+    add("")
+    add(
+        f"**False-complete call lines** (a labelled call line where polint gives resolved targets that miss a "
+        f"labelled callee, with no unresolved marker on the line): base {fc['call_lines_base']}, refined "
+        f"{fc['call_lines_refined']}, over {fc['call_lines']} labelled call lines."
+    )
+    add("")
+    add("| case | plan | line | resolved to | missed |")
+    add("|---|---|---|---|---|")
+    any_line = False
+    for case_id, entry in sorted(report["constructs"]["cases"].items()):
+        for plan in PLANS:
+            for row in entry[plan].get("false_complete_call_lines", []):
+                any_line = True
+                add(
+                    f"| {case_id} | {plan} | {row['file']}:{row['line']} | {', '.join(row['resolved'])} "
+                    f"| {', '.join(row['missed'])} |"
+                )
+    if not any_line:
+        add("| none | | | | |")
     add("")
 
     add("### Per case")
@@ -1473,6 +1524,9 @@ DECISIONS = [
     "marker, 'false-complete' when it has resolved targets and no marker, and 'silent' when polint has no call site "
     "there or one with neither. For the refined column the refined layer's own status decides; sites it has no row "
     "for keep the base layer's marker.",
+    "A labelled call line is false-complete when polint resolves a call site on it to labelled functions that "
+    "miss a labelled `@calls` callee and no call site on the line carries an unresolved marker. Lines are the unit "
+    "of the labels, so on a line with several call sites the targets and markers of all of them count together.",
     "A base edge whose target is an import binding rather than a function is a miss, counted as 'stops at import "
     "binding'.",
     "Observed package edges are mapped to polint by exact call-expression span (falling back to the polint call "
@@ -1566,6 +1620,13 @@ def run(args) -> int:
                 "summary": construct_summary(case_results),
                 "false_complete": {
                     "hidden_lines": hidden_lines,
+                    "call_lines": sum(e["base"].get("labelled_call_lines", 0) for e in case_results.values()),
+                    **{
+                        f"call_lines_{plan}": sum(
+                            len(e[plan].get("false_complete_call_lines", [])) for e in case_results.values()
+                        )
+                        for plan in PLANS
+                    },
                     **{
                         plan: sum(
                             1
