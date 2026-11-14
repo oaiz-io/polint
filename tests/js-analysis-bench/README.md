@@ -166,12 +166,11 @@ These are found by the benchmark and are not changed by it:
 - Functions declared inside `try`, `catch` or `if` blocks are not
   extracted, nor are the calls in their bodies. Calls written directly in try,
   finally and if blocks, and functions in bare blocks and loop bodies, are.
-- Calls in exported variable initializers (`export const X = make()`,
-  `export default make()`) produce no call site, and neither do calls inside
-  the functions such an initializer contains. This is the largest single gap
-  on the real packages: 909 of 2710 missed base edges, 789 of them on zod.
+- Member calls on object-literal functions and namespace imports are not
+  resolved. This is the largest single gap on the real packages: 1053 of 2582
+  missed base edges, 724 of them on zod.
 - Of the base misses that are not extraction or named resolution gaps, most
-  are identifier calls to an arrow function (372) and `(0, f)(x)` calls to
+  are identifier calls to an arrow function (435) and `(0, f)(x)` calls to
   a declaration (134, async's compiled CommonJS interop).
 - A class is one function spanning the class; there is no constructor function.
 - On underscore both plans mark `iteratee(...)` inside `map` unresolved:
