@@ -1497,13 +1497,13 @@ def render_markdown(report: dict) -> str:
         add("Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is")
         add("the only way to time the refined plan, because no public view asks for it.")
         add("")
-        add("| tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB |")
-        add("|---|---|---|---|---|")
+        add("| tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |")
+        add("|---|---|---|---|---|---|")
         for name, row in cost["dump"].items():
             add(
                 f"| {name} | {row['base']['wall_ms']} | {row['base']['peak_rss_bytes'] / MB:.0f} "
                 f"| {row['refined']['wall_ms']}{' (' + row['refined']['error'] + ')' if row['refined'].get('error') else ''} "
-                f"| {row['refined']['peak_rss_bytes'] / MB:.0f} |"
+                f"| {row['refined']['peak_rss_bytes'] / MB:.0f} | {report['dump_budgets_s'].get(name, 'none')} |"
             )
     add("")
     add("## Decisions recorded by this run")
@@ -1562,6 +1562,8 @@ DECISIONS = [
     "the launcher's own peak is recorded with the cost section. The in-process analysis peak has no such floor.",
     "Each fact dump has a wall-clock limit (`--dump-timeout`, 600 s by default); a tree whose dump exceeds it is "
     "reported as timed out for that plan and has no scores in that column.",
+    "A package with `dump_budget_s` in `inputs.toml` has a time budget for each of its fact dumps; the report is "
+    "written either way, and the run exits with status 1 naming every dump that ran over its budget or timed out.",
 ]
 
 
@@ -1574,6 +1576,8 @@ def run(args) -> int:
     cases = bench.construct_cases()
     polint, test_binary = build(args)
     version = subprocess.run([str(polint), "--version"], capture_output=True, text=True, check=True).stdout.split()[-1]
+
+    budgets = {package["name"]: package["dump_budget_s"] for package in inputs["package"] if "dump_budget_s" in package}
 
     with tempfile.TemporaryDirectory(prefix="polint-js-bench-report-") as scratch_name:
         scratch = Path(scratch_name)
@@ -1594,6 +1598,14 @@ def run(args) -> int:
                 if dumps[(kind, name, "census")]["error"]:
                     print(f"{kind} {name} census: {dumps[(kind, name, 'census')]['error']}", file=sys.stderr)
                 print(f"dumped {name}", file=sys.stderr)
+
+        over_budget = [
+            f"{name} {plan}: {run_entry['cost']['wall_ms'] / 1000:.1f} s, budget {budgets[name]} s"
+            for (kind, name, plan), run_entry in dumps.items()
+            if kind == "package"
+            and name in budgets
+            and (run_entry["cost"]["wall_ms"] > budgets[name] * 1000 or (run_entry["error"] or "").startswith("timed out"))
+        ]
 
         # Every measured process is started before any dump is loaded. A child's
         # peak RSS from wait4 starts at this process's own resident size when it
@@ -1640,6 +1652,7 @@ def run(args) -> int:
                 "cases": case_results,
             },
             "packages": packages,
+            "dump_budgets_s": budgets,
             "gap_ranking": rank_gaps(packages),
             "decisions": DECISIONS,
             "cost": None,
@@ -1670,4 +1683,7 @@ def run(args) -> int:
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     (out_dir / "report.md").write_text(render_markdown(report))
     print(f"wrote {out_dir / 'report.json'} and {out_dir / 'report.md'}", file=sys.stderr)
+    if over_budget:
+        print("fact dumps over their time budget:\n" + "\n".join(over_budget), file=sys.stderr)
+        return 1
     return 0

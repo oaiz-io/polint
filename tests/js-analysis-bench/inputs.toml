@@ -39,6 +39,10 @@ sha256 = "84efd155bed93270286e793fc951be270b536cbd5b0eeb111f0fa3967201d698"
 analysed = ["src/**/*.ts"]
 exports_skip = ["src/**/tests/**", "src/v3/benchmarks/**"]
 driver = "drivers/zod.mjs"
+# The largest package, with schema helpers that call themselves at several
+# sites, so it is the scaling check of the refined layer: each of its fact
+# dumps must finish in this many seconds, or `bench.py report` fails.
+dump_budget_s = 180
 
 [[package]]
 name = "commander"
