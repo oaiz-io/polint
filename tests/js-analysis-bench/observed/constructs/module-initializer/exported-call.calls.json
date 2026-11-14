@@ -1,0 +1,26 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@172..197",
+      "syntax": "identifier",
+      "callee": "main.js@82..148",
+      "callee_name": "makeConfig"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@183..196",
+      "syntax": "identifier",
+      "callee": "main.js@19..80",
+      "callee_name": "defaultName"
+    }
+  ]
+}

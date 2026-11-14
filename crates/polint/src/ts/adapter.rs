@@ -1648,13 +1648,15 @@ fn extract_anonymous_callables_from_statement(
             ExportDefaultDeclarationKind::ClassDeclaration(class) => {
                 extract_anonymous_callables_from_class(db, ctx, class);
             }
-            ExportDefaultDeclarationKind::CallExpression(call) => {
-                extract_anonymous_callables_from_expression(db, ctx, &call.callee, true);
-                for argument in &call.arguments {
-                    extract_anonymous_callables_from_argument(db, ctx, argument);
+            // `export default <expression>` evaluates its expression while the
+            // module body runs, like any module-level initializer, so the
+            // functions inside it (and an anonymous default function itself)
+            // get facts the same way.
+            declaration => {
+                if let Some(expression) = declaration.as_expression() {
+                    extract_anonymous_callables_from_expression(db, ctx, expression, true);
                 }
             }
-            _ => {}
         },
         _ => {}
     }

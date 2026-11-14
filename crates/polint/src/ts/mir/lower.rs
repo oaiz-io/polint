@@ -1150,6 +1150,42 @@ fn collect_anonymous_functions_from_statement<'ast>(
         Statement::ClassDeclaration(class) => {
             collect_anonymous_functions_from_class(class, functions)
         }
+        // Functions nested in an exported declaration or initializer are lowered
+        // exactly as in the unexported form; `collect_functions` dedups the
+        // candidates the declaration path already emitted.
+        Statement::ExportNamedDeclaration(export) => match &export.declaration {
+            Some(Declaration::VariableDeclaration(variable)) => {
+                for declarator in &variable.declarations {
+                    if let Some(init) = &declarator.init {
+                        collect_anonymous_functions_from_expression(init, true, functions);
+                    }
+                }
+            }
+            Some(Declaration::FunctionDeclaration(function)) => {
+                if let Some(body) = function.body.as_deref() {
+                    collect_anonymous_functions_from_body(body, functions);
+                }
+            }
+            Some(Declaration::ClassDeclaration(class)) => {
+                collect_anonymous_functions_from_class(class, functions);
+            }
+            _ => {}
+        },
+        Statement::ExportDefaultDeclaration(export) => match &export.declaration {
+            ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
+                if let Some(body) = function.body.as_deref() {
+                    collect_anonymous_functions_from_body(body, functions);
+                }
+            }
+            ExportDefaultDeclarationKind::ClassDeclaration(class) => {
+                collect_anonymous_functions_from_class(class, functions);
+            }
+            declaration => {
+                if let Some(expression) = declaration.as_expression() {
+                    collect_anonymous_functions_from_expression(expression, true, functions);
+                }
+            }
+        },
         _ => {}
     }
 }
@@ -1655,6 +1691,45 @@ impl<'source> FunctionLowering<'source> {
                         places,
                         operations,
                         unsupported,
+                    );
+                }
+            }
+            // `export` only changes a module-level binding's visibility, not when
+            // its initializer runs: `export const x = make()` calls `make` while
+            // the module body executes, exactly like `const x = make()`. Function
+            // and class declarations stay out of the body, as unexported ones do.
+            Statement::ExportNamedDeclaration(export) => {
+                if let Some(Declaration::VariableDeclaration(variable)) = &export.declaration {
+                    for declarator in &variable.declarations {
+                        self.lower_variable_declarator(
+                            interner,
+                            declarator,
+                            places,
+                            operations,
+                            unsupported,
+                        );
+                    }
+                }
+            }
+            Statement::ExportDefaultDeclaration(export) => {
+                if let Some(expression) = export.declaration.as_expression()
+                    && let Some(shape) = self.lower_expression(
+                        interner,
+                        expression,
+                        places,
+                        operations,
+                        unsupported,
+                        false,
+                    )
+                {
+                    self.push_operation(
+                        interner,
+                        operations,
+                        export.span,
+                        OperationKindDraft::Read {
+                            place_key: shape.key,
+                        },
+                        MirStatus::Partial,
                     );
                 }
             }
@@ -5308,6 +5383,93 @@ boot();
             .count();
 
         assert_eq!(module_boot_calls, 1);
+    }
+
+    /// `(owner function name, callee evidence)` for every unknown-callee call.
+    fn direct_calls_by_owner(
+        output: &MirOutput,
+        interner: &crate::internal_core::StableKeyInterner,
+    ) -> BTreeSet<(String, String)> {
+        output
+            .operations
+            .iter()
+            .filter_map(|operation| {
+                let MirOperationKind::Call {
+                    callee: MirValue::Unknown { evidence },
+                    ..
+                } = &operation.kind
+                else {
+                    return None;
+                };
+                let body = output
+                    .bodies
+                    .iter()
+                    .find(|body| body.id == operation.body)?;
+                let owner = interner.resolve(body.owner_stable_key);
+                let owner = if owner.contains(TS_JS_MODULE_FUNCTION_NAME) {
+                    TS_JS_MODULE_FUNCTION_NAME.to_string()
+                } else {
+                    owner.to_string()
+                };
+                Some((owner, evidence.clone()))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn ts_exported_initializers_lower_like_unexported_ones() {
+        let source = r#"
+function defaultName() { return "app"; }
+function makeConfig(name) { return { name }; }
+function load(id) { return id; }
+function normalize(input) { return input; }
+function define(build) { return build; }
+function boot() { return 1; }
+
+export const config = makeConfig(defaultName());
+export const api = {
+  get(id) { return load(id); },
+};
+export const parse = define((input) => normalize(input));
+export default config && (() => boot());
+"#;
+        let (exported, exported_interner) = lower("src/exported.ts", source);
+        let (local, local_interner) = lower(
+            "src/exported.ts",
+            &source
+                .replace("export const", "const       ")
+                .replace("export default", "const d =     "),
+        );
+        let exported_calls = direct_calls_by_owner(&exported, &exported_interner);
+        let module_calls: BTreeSet<_> = exported_calls
+            .iter()
+            .filter(|(owner, _)| owner == TS_JS_MODULE_FUNCTION_NAME)
+            .map(|(_, callee)| callee.as_str())
+            .collect();
+        assert_eq!(
+            module_calls,
+            BTreeSet::from(["defaultName", "define", "makeConfig"])
+        );
+        for callee in ["load", "normalize", "boot"] {
+            let owners: Vec<_> = exported_calls
+                .iter()
+                .filter(|(_, evidence)| evidence == callee)
+                .map(|(owner, _)| owner.as_str())
+                .collect();
+            assert_eq!(
+                owners.len(),
+                1,
+                "{callee} should be called once, by: {}",
+                owners.join(", ")
+            );
+            assert_ne!(owners[0], TS_JS_MODULE_FUNCTION_NAME);
+        }
+        // The same source without `export`, padded so every span stays put,
+        // lowers to the same owners and callees.
+        assert_eq!(
+            exported_calls,
+            direct_calls_by_owner(&local, &local_interner)
+        );
     }
 
     #[test]

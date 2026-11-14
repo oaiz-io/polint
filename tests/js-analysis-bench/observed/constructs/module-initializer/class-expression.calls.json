@@ -1,0 +1,47 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@249..258",
+      "syntax": "identifier",
+      "callee": "main.js@18..77",
+      "callee_name": "read"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@331..344",
+      "syntax": "member",
+      "callee": "main.js@196..278",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@347..360",
+      "syntax": "member",
+      "callee": "main.js@196..278",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@404..419",
+      "syntax": "new",
+      "callee": "main.js@116..192",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@449..468",
+      "syntax": "member",
+      "callee": "main.js@282..385",
+      "callee_name": "getTwice"
+    }
+  ]
+}
