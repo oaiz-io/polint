@@ -23,7 +23,10 @@ make js-bench JS_BENCH_ARGS="--no-cost --out /tmp/js-bench"   # scores only
 `make js-bench` is offline after the fetch. It builds the release `polint`
 binary and the polint library test binary, so expect a release build the first
 time. `--dump-timeout` (default 600 s) bounds each fact dump; `--cost-runs`
-(default 3) sets the number of measured cold and warm runs.
+(default 3) sets the number of measured cold and warm runs. A package's
+`dump_budget_s` in `inputs.toml` is a time budget for each of its fact dumps:
+the report shows it, and `bench.py report` exits with status 1 when a dump runs
+over it or times out.
 
 Recording observed calls executes third-party code and is a separate command:
 
@@ -181,5 +184,9 @@ These are found by the benchmark and are not changed by it:
   equals base recall there.
 - `.polint/cache` holds tens to hundreds of MB per MB of source after a
   cold run, mostly layer blobs.
-- The refined plan's dump on zod runs for more than ten minutes
-  single-threaded; it is reported as timed out.
+- The refined plan's dump on zod takes about 80 s and 3.6 GB, against 11 s
+  and 1.3 GB for the base plan, within its 180 s budget. Most of it is the
+  refined-call solver, not the callable-flow walk. Refined recall on zod
+  equals base recall (217 of 1308 observed edges).
+- Sites the base plan stops at an import binding (57 on axios, 25 on zod)
+  have no target and no unresolved marker on the refined plan.

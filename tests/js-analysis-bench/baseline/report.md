@@ -87,7 +87,7 @@ coercions, iterator and thenable protocol) have no call expression and are liste
 | package | format | files analysed / selected | source KB | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | axios 1.21.1 | ESM source, Node and browser adapters | 72 / 72 | 282 | 675 | 99/675 (15%) | 99/675 (15%) | 57 | 20 | 76% | 89% / 89% | 9% |
-| zod 4.6.7 | TypeScript ESM source | 332 / 332 | 3088 | 1308 | 217/1308 (17%) | timed out after 600 s | 25 | 9 | 70% | 95% / n/a | 7% |
+| zod 4.6.7 | TypeScript ESM source | 332 / 332 | 3088 | 1308 | 217/1308 (17%) | 217/1308 (17%) | 25 | 9 | 70% | 95% / 95% | 7% |
 | commander 14.0.3 | CommonJS only | 7 / 7 | 127 | 318 | 14/318 (4%) | 117/318 (37%) | 0 | 1 | 94% | 98% / 78% | 10% |
 | async 3.2.6 | CommonJS transpiled from ESM | 129 / 129 | 321 | 637 | 319/637 (50%) | 323/637 (51%) | 0 | 1 | 63% | 73% / 73% | 27% |
 | chalk 6.0.1 | ESM only, with subpath imports | 2 / 5 | 10 | 72 | 2/72 (3%) | 5/72 (7%) | 2 | 47 | 75% | 97% / 92% | 9% |
@@ -107,14 +107,14 @@ coercions, iterator and thenable protocol) have no call expression and are liste
 | axios | syntax: member | 326 | 1/326 (0%) | 1/326 (0%) |
 | axios | syntax: new | 21 | 5/21 (24%) | 5/21 (24%) |
 | axios | syntax: super | 1 | 0/1 (0%) | 0/1 (0%) |
-| zod | kind: call | 1265 | 217/1265 (17%) | n/a |
-| zod | kind: callback | 43 | 0/43 (0%) | n/a |
-| zod | kind: implicit | 18 | 0/18 (0%) | n/a |
-| zod | syntax: computed-member | 5 | 0/5 (0%) | n/a |
-| zod | syntax: expression | 1 | 1/1 (100%) | n/a |
-| zod | syntax: identifier | 408 | 165/408 (40%) | n/a |
-| zod | syntax: member | 829 | 50/829 (6%) | n/a |
-| zod | syntax: new | 65 | 1/65 (2%) | n/a |
+| zod | kind: call | 1265 | 217/1265 (17%) | 217/1265 (17%) |
+| zod | kind: callback | 43 | 0/43 (0%) | 0/43 (0%) |
+| zod | kind: implicit | 18 | 0/18 (0%) | 0/18 (0%) |
+| zod | syntax: computed-member | 5 | 0/5 (0%) | 0/5 (0%) |
+| zod | syntax: expression | 1 | 1/1 (100%) | 1/1 (100%) |
+| zod | syntax: identifier | 408 | 165/408 (40%) | 165/408 (40%) |
+| zod | syntax: member | 829 | 50/829 (6%) | 50/829 (6%) |
+| zod | syntax: new | 65 | 1/65 (2%) | 1/65 (2%) |
 | commander | kind: call | 264 | 14/264 (5%) | 117/264 (44%) |
 | commander | kind: callback | 54 | 0/54 (0%) | 0/54 (0%) |
 | commander | syntax: identifier | 35 | 13/35 (37%) | 20/35 (57%) |
@@ -154,7 +154,7 @@ coercions, iterator and thenable protocol) have no call expression and are liste
 | package | callee not a polint function | found | no target, marked unresolved | no target, no unresolved marker | site not a polint call site | site or callee in a file polint does not analyse | stops at import binding |
 |---|---|---|---|---|---|---|---|
 | axios | 9 / 9 | 99 / 99 | 491 / 491 | 8 / 65 | 11 / 11 | 0 / 0 | 57 / 0 |
-| zod | 6 / n/a | 217 / n/a | 1056 / n/a | 1 / n/a | 3 / n/a | 0 / n/a | 25 / n/a |
+| zod | 6 / 6 | 217 / 217 | 1056 / 1056 | 1 / 26 | 3 / 3 | 0 / 0 | 25 / 0 |
 | commander | 1 / 1 | 14 / 117 | 303 / 200 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
 | async | 1 / 1 | 319 / 323 | 317 / 313 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
 | chalk | 0 / 0 | 2 / 5 | 21 / 20 | 0 / 0 | 0 / 0 | 47 / 47 | 2 / 0 |
@@ -171,21 +171,21 @@ charged to the outermost function around it that polint does not extract. **attr
 once; **applying** counts every gap whose condition holds. The recall gain is an upper bound: it assumes
 every attributed edge is found once the gap is fixed. The syntax census behind this is described in the README.
 
-Base: 2582 missed of 3389 observed edges. Refined: 1380 missed of 2081, without zod (no refined dump).
+Base: 2582 missed of 3389 observed edges. Refined: 2471 missed of 3389.
 
 | rank | gap | attributed base | applying base | recall gain base (upper bound) | attributed refined | recall gain refined (upper bound) | base by package |
 |---|---|---|---|---|---|---|---|
-| 1 | _other member calls (object-literal functions, namespaces)_ | 1053 | 0 | 31.1% | 328 | 15.8% | zod 724, axios 247, async 52, underscore 20, commander 10 |
-| 2 | _other resolution misses_ | 729 | 0 | 21.5% | 565 | 27.2% | async 240, zod 202, axios 172, underscore 80, commander 22, chalk 13 |
-| 3 | prototype and class methods, incl. inheritance | 273 | 277 | 8.1% | 160 | 7.7% | commander 210, axios 34, zod 20, async 8, underscore 1 |
-| 4 | callbacks invoked by built-ins | 152 | 163 | 4.5% | 109 | 5.2% | commander 53, zod 43, axios 38, async 13, underscore 5 |
-| 5 | functions under a unary operator (unary IIFEs) | 118 | 118 | 3.5% | 118 | 5.7% | dayjs 117, axios 1 |
-| 6 | class constructors and `new` | 92 | 94 | 2.7% | 22 | 1.1% | zod 64, axios 16, commander 8, async 4 |
+| 1 | _other member calls (object-literal functions, namespaces)_ | 1053 | 0 | 31.1% | 1054 | 31.1% | zod 724, axios 247, async 52, underscore 20, commander 10 |
+| 2 | _other resolution misses_ | 729 | 0 | 21.5% | 789 | 23.3% | async 240, zod 202, axios 172, underscore 80, commander 22, chalk 13 |
+| 3 | prototype and class methods, incl. inheritance | 273 | 277 | 8.1% | 180 | 5.3% | commander 210, axios 34, zod 20, async 8, underscore 1 |
+| 4 | callbacks invoked by built-ins | 152 | 163 | 4.5% | 152 | 4.5% | commander 53, zod 43, axios 38, async 13, underscore 5 |
+| 5 | functions under a unary operator (unary IIFEs) | 118 | 118 | 3.5% | 118 | 3.5% | dayjs 117, axios 1 |
+| 6 | class constructors and `new` | 92 | 94 | 2.7% | 86 | 2.5% | zod 64, axios 16, commander 8, async 4 |
 | 7 | _identifier call stops at import binding_ | 73 | 0 | 2.1% | 0 | 0.0% | axios 47, zod 24, chalk 2 |
-| 8 | _file not analysed (discovery excludes)_ | 47 | 0 | 1.4% | 47 | 2.3% | chalk 47 |
-| 9 | functions declared in try / catch / if blocks | 17 | 17 | 0.5% | 17 | 0.8% | axios 16, commander 1 |
-| 10 | computed-key member calls | 15 | 18 | 0.4% | 10 | 0.5% | chalk 8, zod 5, axios 2 |
-| 11 | _other call sites or functions not extracted_ | 13 | 0 | 0.4% | 4 | 0.2% | zod 9, axios 3, async 1 |
+| 8 | _file not analysed (discovery excludes)_ | 47 | 0 | 1.4% | 47 | 1.4% | chalk 47 |
+| 9 | functions declared in try / catch / if blocks | 17 | 17 | 0.5% | 17 | 0.5% | axios 16, commander 1 |
+| 10 | computed-key member calls | 15 | 18 | 0.4% | 15 | 0.4% | chalk 8, zod 5, axios 2 |
+| 11 | _other call sites or functions not extracted_ | 13 | 0 | 0.4% | 13 | 0.4% | zod 9, axios 3, async 1 |
 | 12 | calls in exported initializers | 0 | 0 | 0.0% | 0 | 0.0% | – |
 
 Rows in italics are remainders, not one of the named extraction or resolution gaps. Of the base
@@ -227,6 +227,11 @@ The polint site column shows which call expression the observed site was matched
 | zod | base | no target, no unresolved marker | src/v4/core/json-schema-processors.ts:750 `JSON.stringify(value, (_, val) => { if (typeof val !== "bigint") return val; unrepresenta…` | member / callback | src/v4/core/json-schema-processors.ts:750 <anonymous> | no target, no unresolved marker |
 | zod | base | site not a polint call site | src/v4/classic/schemas.ts:2406 `util.shallowClone(defaultValue)` | member / call | src/v4/core/util.ts:558 shallowClone | no call site |
 | zod | base | stops at import binding | src/v3/helpers/parseUtil.ts:73 `getErrorMap()` | identifier / call | src/v3/errors.ts:11 getErrorMap | import binding, no unresolved marker |
+| zod | refined | callee not a polint function | src/v3/ZodError.ts:315 `mapper(sub)` | identifier / call | src/v3/ZodError.ts:308 <anonymous> | no target, marked unresolved |
+| zod | refined | found | src/v4/classic/errors.ts:58 `_lazyMethod(proto, "format", (self) => (mapper: any) => core.formatError(self, mapper))` | identifier / call | src/v4/classic/errors.ts:35 _lazyMethod | targets src/v4/classic/errors.ts:35 _lazyMethod, no unresolved marker |
+| zod | refined | no target, marked unresolved | src/v3/ZodError.ts:264 `mapper(issue)` | identifier / call | src/v3/ZodError.ts:220 <anonymous> | no target, marked unresolved |
+| zod | refined | no target, no unresolved marker | src/v3/helpers/parseUtil.ts:73 `getErrorMap()` | identifier / call | src/v3/errors.ts:11 getErrorMap | import binding, no unresolved marker |
+| zod | refined | site not a polint call site | src/v4/classic/schemas.ts:2406 `util.shallowClone(defaultValue)` | member / call | src/v4/core/util.ts:558 shallowClone | no call site |
 | commander | base | callee not a polint function | lib/help.js:331 `option.argChoices.map((choice) => JSON.stringify(choice))` | member / callback | lib/help.js:331 <anonymous> | no target, marked unresolved |
 | commander | base | found | lib/command.js:70 `useColor()` | identifier / call | lib/command.js:2752 useColor | targets lib/command.js:2752 useColor, no unresolved marker |
 | commander | base | no target, marked unresolved | index.js:7 `new Command()` | new / call | lib/command.js:20 constructor | no target, marked unresolved |
@@ -286,33 +291,33 @@ Both are compared with the export keys the loaded module actually has.
 
 ## Cost
 
-The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit d3f77c0cb57f.
+The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit b019a14e7b3f.
 
-`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 32 MB; the analysis column has no such floor.
+`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 27 MB; the analysis column has no such floor.
 
 | tree | source KB | cold analysis ms (per MB) | cold process ms | warm analysis ms (per MB) | warm process ms | cold peak RSS MB (analysis / process) | warm peak RSS MB | stored bytes per MB (gzip) |
 |---|---|---|---|---|---|---|---|---|
-| constructs (all cases) | 13 | 123 (9617) | 302 | 72 (5629) | 247 | 74 / 74 | 74 / 74 | 110875762 (10781235) |
-| axios | 282 | 825 (2925) | 1009 | 672 (2383) | 858 | 102 / 102 | 103 / 103 | 75549990 (5370046) |
-| zod | 3088 | 11395 (3690) | 11587 | 11303 (3661) | 11489 | 1058 / 1059 | 1041 / 1041 | 95877087 (6780764) |
-| commander | 127 | 262 (2070) | 391 | 201 (1588) | 331 | 73 / 73 | 73 / 73 | 44222052 (3192769) |
-| async | 321 | 516 (1610) | 645 | 342 (1067) | 471 | 78 / 78 | 78 / 78 | 44203329 (3457623) |
-| chalk | 10 | 45 (4726) | 162 | 21 (2206) | 136 | 73 / 73 | 73 / 73 | 86943598 (6904107) |
-| dayjs | 7 | 40 (5586) | 156 | 17 (2374) | 132 | 73 / 73 | 73 / 73 | 221683284 (12812875) |
-| underscore | 69 | 207 (3004) | 327 | 152 (2206) | 264 | 73 / 73 | 73 / 73 | 91000174 (5822610) |
+| constructs (all cases) | 13 | 87 (6802) | 199 | 47 (3675) | 160 | 73 / 73 | 73 / 73 | 110875762 (10781079) |
+| axios | 282 | 631 (2237) | 744 | 401 (1422) | 520 | 100 / 100 | 102 / 102 | 75549990 (5370043) |
+| zod | 3088 | 10499 (3400) | 10708 | 10816 (3503) | 10999 | 1060 / 1061 | 1041 / 1041 | 95877087 (6780767) |
+| commander | 127 | 233 (1841) | 344 | 179 (1414) | 294 | 73 / 73 | 73 / 73 | 44222052 (3192816) |
+| async | 321 | 427 (1332) | 546 | 286 (892) | 402 | 78 / 78 | 78 / 78 | 44203329 (3457617) |
+| chalk | 10 | 45 (4726) | 159 | 22 (2311) | 131 | 73 / 73 | 73 / 73 | 86943598 (6904422) |
+| dayjs | 7 | 37 (5167) | 146 | 17 (2374) | 132 | 73 / 73 | 73 / 73 | 221683284 (12812456) |
+| underscore | 69 | 192 (2786) | 306 | 150 (2177) | 259 | 73 / 73 | 73 / 73 | 91000174 (5822581) |
 
 Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is
 the only way to time the refined plan, because no public view asks for it.
 
-| tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB |
-|---|---|---|---|---|
-| axios | 599 | 116 | 2143 | 281 |
-| zod | 11045 | 1322 | 600185 (timed out after 600 s) | 2450 |
-| commander | 276 | 60 | 1732 | 144 |
-| async | 446 | 92 | 1947 | 264 |
-| chalk | 53 | 32 | 88 | 41 |
-| dayjs | 39 | 31 | 104 | 35 |
-| underscore | 191 | 53 | 641 | 119 |
+| tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |
+|---|---|---|---|---|---|
+| axios | 618 | 117 | 2158 | 279 | none |
+| zod | 10898 | 1333 | 81463 | 3811 | 180 |
+| commander | 235 | 59 | 1691 | 146 | none |
+| async | 410 | 93 | 1924 | 262 | none |
+| chalk | 42 | 32 | 93 | 40 | none |
+| dayjs | 41 | 32 | 93 | 37 | none |
+| underscore | 191 | 53 | 674 | 122 | none |
 
 ## Decisions recorded by this run
 
@@ -336,3 +341,4 @@ the only way to time the refined plan, because no public view asks for it.
 - Every package edge with other targets and no unresolved marker is kept as an example; other outcomes and gaps keep a bounded sample, in observed-edge order.
 - Process peak RSS is measured with `wait4` like the matrix runner does. Linux carries the parent's resident size into the child's peak at fork, so every process is launched before the report loads any fact dump, and the launcher's own peak is recorded with the cost section. The in-process analysis peak has no such floor.
 - Each fact dump has a wall-clock limit (`--dump-timeout`, 600 s by default); a tree whose dump exceeds it is reported as timed out for that plan and has no scores in that column.
+- A package with `dump_budget_s` in `inputs.toml` has a time budget for each of its fact dumps; the report is written either way, and the run exits with status 1 naming every dump that ran over its budget or timed out.

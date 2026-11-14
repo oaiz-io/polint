@@ -4353,186 +4353,186 @@
     "check": {
       "async": {
         "cold": {
-          "analysis_peak_rss_bytes": 77795328,
-          "analysis_wall_ms": 516,
-          "analysis_wall_ms_per_mb": 1610,
-          "process_peak_rss_bytes": 77795328,
-          "process_wall_ms": 645,
-          "process_wall_ms_per_mb": 2012
+          "analysis_peak_rss_bytes": 78381056,
+          "analysis_wall_ms": 427,
+          "analysis_wall_ms_per_mb": 1332,
+          "process_peak_rss_bytes": 78381056,
+          "process_wall_ms": 546,
+          "process_wall_ms_per_mb": 1703
         },
         "source_bytes": 320550,
         "stored_bytes": 14169377,
         "stored_bytes_per_mb": 44203329,
-        "stored_gzip_bytes": 1108341,
-        "stored_gzip_bytes_per_mb": 3457623,
+        "stored_gzip_bytes": 1108339,
+        "stored_gzip_bytes_per_mb": 3457617,
         "warm": {
-          "analysis_peak_rss_bytes": 77881344,
-          "analysis_wall_ms": 342,
-          "analysis_wall_ms_per_mb": 1067,
-          "process_peak_rss_bytes": 77881344,
-          "process_wall_ms": 471,
-          "process_wall_ms_per_mb": 1469
+          "analysis_peak_rss_bytes": 78098432,
+          "analysis_wall_ms": 286,
+          "analysis_wall_ms_per_mb": 892,
+          "process_peak_rss_bytes": 78098432,
+          "process_wall_ms": 402,
+          "process_wall_ms_per_mb": 1254
         }
       },
       "axios": {
         "cold": {
-          "analysis_peak_rss_bytes": 102215680,
-          "analysis_wall_ms": 825,
-          "analysis_wall_ms_per_mb": 2925,
-          "process_peak_rss_bytes": 102215680,
-          "process_wall_ms": 1009,
-          "process_wall_ms_per_mb": 3578
+          "analysis_peak_rss_bytes": 99966976,
+          "analysis_wall_ms": 631,
+          "analysis_wall_ms_per_mb": 2237,
+          "process_peak_rss_bytes": 99966976,
+          "process_wall_ms": 744,
+          "process_wall_ms_per_mb": 2638
         },
         "source_bytes": 282016,
         "stored_bytes": 21306306,
         "stored_bytes_per_mb": 75549990,
-        "stored_gzip_bytes": 1514439,
-        "stored_gzip_bytes_per_mb": 5370046,
+        "stored_gzip_bytes": 1514438,
+        "stored_gzip_bytes_per_mb": 5370043,
         "warm": {
-          "analysis_peak_rss_bytes": 103157760,
-          "analysis_wall_ms": 672,
-          "analysis_wall_ms_per_mb": 2383,
-          "process_peak_rss_bytes": 103419904,
-          "process_wall_ms": 858,
-          "process_wall_ms_per_mb": 3042
+          "analysis_peak_rss_bytes": 102182912,
+          "analysis_wall_ms": 401,
+          "analysis_wall_ms_per_mb": 1422,
+          "process_peak_rss_bytes": 102182912,
+          "process_wall_ms": 520,
+          "process_wall_ms_per_mb": 1844
         }
       },
       "chalk": {
         "cold": {
-          "analysis_peak_rss_bytes": 72810496,
+          "analysis_peak_rss_bytes": 72671232,
           "analysis_wall_ms": 45,
           "analysis_wall_ms_per_mb": 4726,
-          "process_peak_rss_bytes": 72810496,
-          "process_wall_ms": 162,
-          "process_wall_ms_per_mb": 17015
+          "process_peak_rss_bytes": 72671232,
+          "process_wall_ms": 159,
+          "process_wall_ms_per_mb": 16700
         },
         "source_bytes": 9521,
         "stored_bytes": 827790,
         "stored_bytes_per_mb": 86943598,
-        "stored_gzip_bytes": 65734,
-        "stored_gzip_bytes_per_mb": 6904107,
+        "stored_gzip_bytes": 65737,
+        "stored_gzip_bytes_per_mb": 6904422,
         "warm": {
-          "analysis_peak_rss_bytes": 72597504,
-          "analysis_wall_ms": 21,
-          "analysis_wall_ms_per_mb": 2206,
-          "process_peak_rss_bytes": 72597504,
-          "process_wall_ms": 136,
-          "process_wall_ms_per_mb": 14284
+          "analysis_peak_rss_bytes": 72933376,
+          "analysis_wall_ms": 22,
+          "analysis_wall_ms_per_mb": 2311,
+          "process_peak_rss_bytes": 72933376,
+          "process_wall_ms": 131,
+          "process_wall_ms_per_mb": 13759
         }
       },
       "commander": {
         "cold": {
-          "analysis_peak_rss_bytes": 72646656,
-          "analysis_wall_ms": 262,
-          "analysis_wall_ms_per_mb": 2070,
-          "process_peak_rss_bytes": 72646656,
-          "process_wall_ms": 391,
-          "process_wall_ms_per_mb": 3089
+          "analysis_peak_rss_bytes": 73392128,
+          "analysis_wall_ms": 233,
+          "analysis_wall_ms_per_mb": 1841,
+          "process_peak_rss_bytes": 73392128,
+          "process_wall_ms": 344,
+          "process_wall_ms_per_mb": 2717
         },
         "source_bytes": 126592,
         "stored_bytes": 5598158,
         "stored_bytes_per_mb": 44222052,
-        "stored_gzip_bytes": 404179,
-        "stored_gzip_bytes_per_mb": 3192769,
+        "stored_gzip_bytes": 404185,
+        "stored_gzip_bytes_per_mb": 3192816,
         "warm": {
-          "analysis_peak_rss_bytes": 72536064,
-          "analysis_wall_ms": 201,
-          "analysis_wall_ms_per_mb": 1588,
-          "process_peak_rss_bytes": 72536064,
-          "process_wall_ms": 331,
-          "process_wall_ms_per_mb": 2615
+          "analysis_peak_rss_bytes": 72835072,
+          "analysis_wall_ms": 179,
+          "analysis_wall_ms_per_mb": 1414,
+          "process_peak_rss_bytes": 72835072,
+          "process_wall_ms": 294,
+          "process_wall_ms_per_mb": 2322
         }
       },
       "constructs (all cases)": {
         "cold": {
-          "analysis_peak_rss_bytes": 73613312,
-          "analysis_wall_ms": 123,
-          "analysis_wall_ms_per_mb": 9617,
-          "process_peak_rss_bytes": 73613312,
-          "process_wall_ms": 302,
-          "process_wall_ms_per_mb": 23612
+          "analysis_peak_rss_bytes": 72601600,
+          "analysis_wall_ms": 87,
+          "analysis_wall_ms_per_mb": 6802,
+          "process_peak_rss_bytes": 72601600,
+          "process_wall_ms": 199,
+          "process_wall_ms_per_mb": 15559
         },
         "source_bytes": 12790,
         "stored_bytes": 1418101,
         "stored_bytes_per_mb": 110875762,
-        "stored_gzip_bytes": 137892,
-        "stored_gzip_bytes_per_mb": 10781235,
+        "stored_gzip_bytes": 137890,
+        "stored_gzip_bytes_per_mb": 10781079,
         "warm": {
-          "analysis_peak_rss_bytes": 73601024,
-          "analysis_wall_ms": 72,
-          "analysis_wall_ms_per_mb": 5629,
-          "process_peak_rss_bytes": 73601024,
-          "process_wall_ms": 247,
-          "process_wall_ms_per_mb": 19312
+          "analysis_peak_rss_bytes": 72937472,
+          "analysis_wall_ms": 47,
+          "analysis_wall_ms_per_mb": 3675,
+          "process_peak_rss_bytes": 72937472,
+          "process_wall_ms": 160,
+          "process_wall_ms_per_mb": 12510
         }
       },
       "dayjs": {
         "cold": {
-          "analysis_peak_rss_bytes": 72826880,
-          "analysis_wall_ms": 40,
-          "analysis_wall_ms_per_mb": 5586,
-          "process_peak_rss_bytes": 72826880,
-          "process_wall_ms": 156,
-          "process_wall_ms_per_mb": 21785
+          "analysis_peak_rss_bytes": 73465856,
+          "analysis_wall_ms": 37,
+          "analysis_wall_ms_per_mb": 5167,
+          "process_peak_rss_bytes": 73465856,
+          "process_wall_ms": 146,
+          "process_wall_ms_per_mb": 20388
         },
         "source_bytes": 7161,
         "stored_bytes": 1587474,
         "stored_bytes_per_mb": 221683284,
-        "stored_gzip_bytes": 91753,
-        "stored_gzip_bytes_per_mb": 12812875,
+        "stored_gzip_bytes": 91750,
+        "stored_gzip_bytes_per_mb": 12812456,
         "warm": {
-          "analysis_peak_rss_bytes": 72818688,
+          "analysis_peak_rss_bytes": 72830976,
           "analysis_wall_ms": 17,
           "analysis_wall_ms_per_mb": 2374,
-          "process_peak_rss_bytes": 72818688,
+          "process_peak_rss_bytes": 72830976,
           "process_wall_ms": 132,
           "process_wall_ms_per_mb": 18433
         }
       },
       "underscore": {
         "cold": {
-          "analysis_peak_rss_bytes": 73076736,
-          "analysis_wall_ms": 207,
-          "analysis_wall_ms_per_mb": 3004,
-          "process_peak_rss_bytes": 73076736,
-          "process_wall_ms": 327,
-          "process_wall_ms_per_mb": 4745
+          "analysis_peak_rss_bytes": 73277440,
+          "analysis_wall_ms": 192,
+          "analysis_wall_ms_per_mb": 2786,
+          "process_peak_rss_bytes": 73277440,
+          "process_wall_ms": 306,
+          "process_wall_ms_per_mb": 4440
         },
         "source_bytes": 68916,
         "stored_bytes": 6271368,
         "stored_bytes_per_mb": 91000174,
-        "stored_gzip_bytes": 401271,
-        "stored_gzip_bytes_per_mb": 5822610,
+        "stored_gzip_bytes": 401269,
+        "stored_gzip_bytes_per_mb": 5822581,
         "warm": {
-          "analysis_peak_rss_bytes": 72814592,
-          "analysis_wall_ms": 152,
-          "analysis_wall_ms_per_mb": 2206,
-          "process_peak_rss_bytes": 72814592,
-          "process_wall_ms": 264,
-          "process_wall_ms_per_mb": 3831
+          "analysis_peak_rss_bytes": 73355264,
+          "analysis_wall_ms": 150,
+          "analysis_wall_ms_per_mb": 2177,
+          "process_peak_rss_bytes": 73355264,
+          "process_wall_ms": 259,
+          "process_wall_ms_per_mb": 3758
         }
       },
       "zod": {
         "cold": {
-          "analysis_peak_rss_bytes": 1058414592,
-          "analysis_wall_ms": 11395,
-          "analysis_wall_ms_per_mb": 3690,
-          "process_peak_rss_bytes": 1058676736,
-          "process_wall_ms": 11587,
-          "process_wall_ms_per_mb": 3753
+          "analysis_peak_rss_bytes": 1060319232,
+          "analysis_wall_ms": 10499,
+          "analysis_wall_ms_per_mb": 3400,
+          "process_peak_rss_bytes": 1060528128,
+          "process_wall_ms": 10708,
+          "process_wall_ms_per_mb": 3468
         },
         "source_bytes": 3087749,
         "stored_bytes": 296044379,
         "stored_bytes_per_mb": 95877087,
-        "stored_gzip_bytes": 20937298,
-        "stored_gzip_bytes_per_mb": 6780764,
+        "stored_gzip_bytes": 20937307,
+        "stored_gzip_bytes_per_mb": 6780767,
         "warm": {
-          "analysis_peak_rss_bytes": 1040785408,
-          "analysis_wall_ms": 11303,
-          "analysis_wall_ms_per_mb": 3661,
-          "process_peak_rss_bytes": 1040785408,
-          "process_wall_ms": 11489,
-          "process_wall_ms_per_mb": 3721
+          "analysis_peak_rss_bytes": 1041121280,
+          "analysis_wall_ms": 10816,
+          "analysis_wall_ms_per_mb": 3503,
+          "process_peak_rss_bytes": 1041121280,
+          "process_wall_ms": 10999,
+          "process_wall_ms_per_mb": 3562
         }
       }
     },
@@ -4540,92 +4540,92 @@
       "async": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 92483584,
-          "wall_ms": 446
+          "peak_rss_bytes": 93089792,
+          "wall_ms": 410
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 263639040,
-          "wall_ms": 1947
+          "peak_rss_bytes": 262434816,
+          "wall_ms": 1924
         }
       },
       "axios": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 116137984,
-          "wall_ms": 599
+          "peak_rss_bytes": 117448704,
+          "wall_ms": 618
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 281366528,
-          "wall_ms": 2143
+          "peak_rss_bytes": 279429120,
+          "wall_ms": 2158
         }
       },
       "chalk": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 31531008,
-          "wall_ms": 53
+          "peak_rss_bytes": 32268288,
+          "wall_ms": 42
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 41242624,
-          "wall_ms": 88
+          "peak_rss_bytes": 40394752,
+          "wall_ms": 93
         }
       },
       "commander": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 59793408,
-          "wall_ms": 276
+          "peak_rss_bytes": 59494400,
+          "wall_ms": 235
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 144125952,
-          "wall_ms": 1732
+          "peak_rss_bytes": 145534976,
+          "wall_ms": 1691
         }
       },
       "dayjs": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 31064064,
-          "wall_ms": 39
+          "peak_rss_bytes": 32337920,
+          "wall_ms": 41
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 35418112,
-          "wall_ms": 104
+          "peak_rss_bytes": 37122048,
+          "wall_ms": 93
         }
       },
       "underscore": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 52953088,
+          "peak_rss_bytes": 52527104,
           "wall_ms": 191
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 118890496,
-          "wall_ms": 641
+          "peak_rss_bytes": 122380288,
+          "wall_ms": 674
         }
       },
       "zod": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 1321979904,
-          "wall_ms": 11045
+          "peak_rss_bytes": 1332719616,
+          "wall_ms": 10898
         },
         "refined": {
-          "error": "timed out after 600 s",
-          "peak_rss_bytes": 2450268160,
-          "wall_ms": 600185
+          "error": null,
+          "peak_rss_bytes": 3810615296,
+          "wall_ms": 81463
         }
       }
     },
     "machine": {
       "cpus": 32,
-      "git_head": "d3f77c0cb57f51416fc7e93483d19ca54a9b8020",
-      "launcher_peak_rss_bytes": 31686656,
+      "git_head": "b019a14e7b3f4fe00c9bef9ba96354f2b9aa2eac",
+      "launcher_peak_rss_bytes": 27361280,
       "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
       "python": "3.12.3"
     },
@@ -4651,8 +4651,12 @@
     "A census function counts as extracted when polint has a function in the same file ending at the same byte, or, for a class constructor, when polint has the class.",
     "Every package edge with other targets and no unresolved marker is kept as an example; other outcomes and gaps keep a bounded sample, in observed-edge order.",
     "Process peak RSS is measured with `wait4` like the matrix runner does. Linux carries the parent's resident size into the child's peak at fork, so every process is launched before the report loads any fact dump, and the launcher's own peak is recorded with the cost section. The in-process analysis peak has no such floor.",
-    "Each fact dump has a wall-clock limit (`--dump-timeout`, 600 s by default); a tree whose dump exceeds it is reported as timed out for that plan and has no scores in that column."
+    "Each fact dump has a wall-clock limit (`--dump-timeout`, 600 s by default); a tree whose dump exceeds it is reported as timed out for that plan and has no scores in that column.",
+    "A package with `dump_budget_s` in `inputs.toml` has a time budget for each of its fact dumps; the report is written either way, and the run exits with status 1 naming every dump that ran over its budget or timed out."
   ],
+  "dump_budgets_s": {
+    "zod": 180
+  },
   "gap_ranking": {
     "base": {
       "class_method_through_inheritance": 2,
@@ -4840,18 +4844,16 @@
     },
     "refined": {
       "class_method_through_inheritance": 2,
-      "left_out": [
-        "zod"
-      ],
-      "missed_edges": 1380,
-      "observed_edges": 2081,
+      "left_out": [],
+      "missed_edges": 2471,
+      "observed_edges": 3389,
       "other_by_syntax_and_callee": {
         "expression call to arrow": 14,
         "expression call to declaration": 134,
         "expression call to expression": 9,
-        "identifier call to arrow": 247,
-        "identifier call to declaration": 65,
-        "identifier call to expression": 95,
+        "identifier call to arrow": 448,
+        "identifier call to declaration": 87,
+        "identifier call to expression": 96,
         "identifier call to method": 1
       },
       "packages": [
@@ -4860,51 +4862,70 @@
         "chalk",
         "commander",
         "dayjs",
-        "underscore"
+        "underscore",
+        "zod"
       ],
       "rows": [
         {
           "applying": 0,
-          "attributed": 565,
+          "attributed": 1054,
+          "by_package": {
+            "async": 52,
+            "axios": 247,
+            "commander": 9,
+            "underscore": 20,
+            "zod": 726
+          },
+          "fixable_gap": false,
+          "gap": "other_member",
+          "label": "other member calls (object-literal functions, namespaces)",
+          "recall_gain_upper_bound": 0.311
+        },
+        {
+          "applying": 0,
+          "attributed": 789,
           "by_package": {
             "async": 240,
             "axios": 219,
             "chalk": 12,
             "commander": 15,
-            "underscore": 79
+            "underscore": 79,
+            "zod": 224
           },
           "fixable_gap": false,
           "gap": "other",
           "label": "other resolution misses",
-          "recall_gain_upper_bound": 0.2715
+          "recall_gain_upper_bound": 0.2328
         },
         {
-          "applying": 0,
-          "attributed": 328,
-          "by_package": {
-            "async": 52,
-            "axios": 247,
-            "commander": 9,
-            "underscore": 20
-          },
-          "fixable_gap": false,
-          "gap": "other_member",
-          "label": "other member calls (object-literal functions, namespaces)",
-          "recall_gain_upper_bound": 0.1576
-        },
-        {
-          "applying": 164,
-          "attributed": 160,
+          "applying": 184,
+          "attributed": 180,
           "by_package": {
             "async": 4,
             "axios": 34,
             "commander": 121,
-            "underscore": 1
+            "underscore": 1,
+            "zod": 20
           },
           "fixable_gap": true,
           "gap": "class_method",
           "label": "prototype and class methods, incl. inheritance",
-          "recall_gain_upper_bound": 0.0769
+          "recall_gain_upper_bound": 0.0531
+        },
+        {
+          "applying": 163,
+          "attributed": 152,
+          "by_package": {
+            "async": 13,
+            "axios": 38,
+            "commander": 53,
+            "underscore": 5,
+            "zod": 43
+          },
+          "fixable_gap": true,
+          "gap": "callback",
+          "label": "callbacks invoked by built-ins",
+          "recall_gain_upper_bound": 0.0449
         },
         {
           "applying": 118,
@@ -4916,21 +4937,21 @@
           "fixable_gap": true,
           "gap": "unary",
           "label": "functions under a unary operator (unary IIFEs)",
-          "recall_gain_upper_bound": 0.0567
+          "recall_gain_upper_bound": 0.0348
         },
         {
-          "applying": 120,
-          "attributed": 109,
+          "applying": 88,
+          "attributed": 86,
           "by_package": {
-            "async": 13,
-            "axios": 38,
-            "commander": 53,
-            "underscore": 5
+            "async": 4,
+            "axios": 16,
+            "commander": 2,
+            "zod": 64
           },
           "fixable_gap": true,
-          "gap": "callback",
-          "label": "callbacks invoked by built-ins",
-          "recall_gain_upper_bound": 0.0524
+          "gap": "constructor",
+          "label": "class constructors and `new`",
+          "recall_gain_upper_bound": 0.0254
         },
         {
           "applying": 0,
@@ -4941,20 +4962,7 @@
           "fixable_gap": false,
           "gap": "not_analysed",
           "label": "file not analysed (discovery excludes)",
-          "recall_gain_upper_bound": 0.0226
-        },
-        {
-          "applying": 24,
-          "attributed": 22,
-          "by_package": {
-            "async": 4,
-            "axios": 16,
-            "commander": 2
-          },
-          "fixable_gap": true,
-          "gap": "constructor",
-          "label": "class constructors and `new`",
-          "recall_gain_upper_bound": 0.0106
+          "recall_gain_upper_bound": 0.0139
         },
         {
           "applying": 17,
@@ -4966,31 +4974,33 @@
           "fixable_gap": true,
           "gap": "block",
           "label": "functions declared in try / catch / if blocks",
-          "recall_gain_upper_bound": 0.0082
+          "recall_gain_upper_bound": 0.005
         },
         {
-          "applying": 13,
-          "attributed": 10,
+          "applying": 18,
+          "attributed": 15,
           "by_package": {
             "axios": 2,
-            "chalk": 8
+            "chalk": 8,
+            "zod": 5
           },
           "fixable_gap": true,
           "gap": "computed",
           "label": "computed-key member calls",
-          "recall_gain_upper_bound": 0.0048
+          "recall_gain_upper_bound": 0.0044
         },
         {
           "applying": 0,
-          "attributed": 4,
+          "attributed": 13,
           "by_package": {
             "async": 1,
-            "axios": 3
+            "axios": 3,
+            "zod": 9
           },
           "fixable_gap": false,
           "gap": "other_extraction",
           "label": "other call sites or functions not extracted",
-          "recall_gain_upper_bound": 0.0019
+          "recall_gain_upper_bound": 0.0038
         },
         {
           "applying": 0,
@@ -13203,7 +13213,903 @@
       },
       "origin": "https://registry.npmjs.org/zod/-/zod-4.6.7.tgz",
       "refined": {
-        "error": "timed out after 600 s"
+        "by_kind": {
+          "call": {
+            "found": 217,
+            "observed": 1265,
+            "recall": 0.1715
+          },
+          "callback": {
+            "found": 0,
+            "observed": 43,
+            "recall": 0.0
+          },
+          "implicit": {
+            "found": 0,
+            "observed": 18,
+            "recall": 0.0
+          }
+        },
+        "by_syntax": {
+          "computed-member": {
+            "found": 0,
+            "observed": 5,
+            "recall": 0.0
+          },
+          "expression": {
+            "found": 1,
+            "observed": 1,
+            "recall": 1.0
+          },
+          "identifier": {
+            "found": 165,
+            "observed": 408,
+            "recall": 0.4044
+          },
+          "member": {
+            "found": 50,
+            "observed": 829,
+            "recall": 0.0603
+          },
+          "new": {
+            "found": 1,
+            "observed": 65,
+            "recall": 0.0154
+          }
+        },
+        "found": 217,
+        "gaps": {
+          "applying": {
+            "callback": 43,
+            "class_method": 20,
+            "computed": 5,
+            "constructor": 64
+          },
+          "attributed": {
+            "callback": 43,
+            "class_method": 20,
+            "computed": 5,
+            "constructor": 64,
+            "other": 224,
+            "other_extraction": 9,
+            "other_member": 726
+          },
+          "class_method_through_inheritance": 0,
+          "examples": {
+            "callback": [
+              {
+                "kind": "callback",
+                "observed_callee": "src/v3/helpers/parseUtil.ts:83 <anonymous>",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v3/helpers/parseUtil.ts@2215..2225#<polint:anonymous:2215:2225>",
+                "polint_site": {
+                  "key": "src/v3/helpers/parseUtil.ts@1914..2226",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "[ ctx.common.contextualErrorMap, // contextual error map is first priority ctx.schemaErro\u2026"
+                },
+                "site": "src/v3/helpers/parseUtil.ts:78",
+                "site_key": "src/v3/helpers/parseUtil.ts@1914..2226",
+                "site_text": "[ ctx.common.contextualErrorMap, // contextual error map is first priority ctx.schemaErro\u2026",
+                "syntax": "member"
+              },
+              {
+                "kind": "callback",
+                "observed_callee": "src/v3/helpers/parseUtil.ts:29 <anonymous>",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v3/helpers/parseUtil.ts@743..753#<polint:anonymous:743:753>",
+                "polint_site": {
+                  "key": "src/v3/helpers/parseUtil.ts@721..754",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "errorMaps .filter((m) => !!m)"
+                },
+                "site": "src/v3/helpers/parseUtil.ts:28",
+                "site_key": "src/v3/helpers/parseUtil.ts@721..754",
+                "site_text": "errorMaps .filter((m) => !!m)",
+                "syntax": "member"
+              },
+              {
+                "kind": "callback",
+                "observed_callee": "src/v4/classic/schemas.ts:2157 <anonymous>",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/classic/schemas.ts@76481..76494#<polint:anonymous:76481:76494>",
+                "polint_site": {
+                  "key": "src/v4/classic/schemas.ts@76470..76495",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "values.map((v) => [v, v])"
+                },
+                "site": "src/v4/classic/schemas.ts:2157",
+                "site_key": "src/v4/classic/schemas.ts@76470..76495",
+                "site_text": "values.map((v) => [v, v])",
+                "syntax": "member"
+              }
+            ],
+            "class_method": [
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/registries.ts:33 add",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/registries.ts@1109..1441#$ZodRegistry.add",
+                "polint_site": {
+                  "key": "src/v4/classic/schemas.ts@10112..10156",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "core.globalRegistry.add(cl, { description })"
+                },
+                "site": "src/v4/classic/schemas.ts:265",
+                "site_key": "src/v4/classic/schemas.ts@10112..10156",
+                "site_text": "core.globalRegistry.add(cl, { description })",
+                "syntax": "member"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/registries.ts:33 add",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/registries.ts@1109..1441#$ZodRegistry.add",
+                "polint_site": {
+                  "key": "src/v4/classic/schemas.ts@10552..10588",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "core.globalRegistry.add(cl, args[0])"
+                },
+                "site": "src/v4/classic/schemas.ts:272",
+                "site_key": "src/v4/classic/schemas.ts@10552..10588",
+                "site_text": "core.globalRegistry.add(cl, args[0])",
+                "syntax": "member"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/registries.ts:60 get",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/registries.ts@1777..2222#$ZodRegistry.get",
+                "polint_site": {
+                  "key": "src/v4/core/registries.ts@1997..2008",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "this.get(p)"
+                },
+                "site": "src/v4/core/registries.ts:66",
+                "site_key": "src/v4/core/registries.ts@1997..2008",
+                "site_text": "this.get(p)",
+                "syntax": "member"
+              }
+            ],
+            "computed": [
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/json-schema-processors.ts:72 minContributor",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/json-schema-processors.ts@3004..3056#minContributor",
+                "polint_site": {
+                  "key": "src/v4/core/json-schema-processors.ts@4861..4912",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "contributors[ch._zod.def.check]?.(agg, ch._zod.def)"
+                },
+                "site": "src/v4/core/json-schema-processors.ts:111",
+                "site_key": "src/v4/core/json-schema-processors.ts@4861..4912",
+                "site_text": "contributors[ch._zod.def.check]?.(agg, ch._zod.def)",
+                "syntax": "computed-member"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/json-schema-processors.ts:73 maxContributor",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/json-schema-processors.ts@3094..3146#maxContributor",
+                "polint_site": {
+                  "key": "src/v4/core/json-schema-processors.ts@4861..4912",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "contributors[ch._zod.def.check]?.(agg, ch._zod.def)"
+                },
+                "site": "src/v4/core/json-schema-processors.ts:111",
+                "site_key": "src/v4/core/json-schema-processors.ts@4861..4912",
+                "site_text": "contributors[ch._zod.def.check]?.(agg, ch._zod.def)",
+                "syntax": "computed-member"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/json-schema-processors.ts:76 <anonymous>",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/json-schema-processors.ts@3235..3418#<polint:anonymous:3235:3418>",
+                "polint_site": {
+                  "key": "src/v4/core/json-schema-processors.ts@4861..4912",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "contributors[ch._zod.def.check]?.(agg, ch._zod.def)"
+                },
+                "site": "src/v4/core/json-schema-processors.ts:111",
+                "site_key": "src/v4/core/json-schema-processors.ts@4861..4912",
+                "site_text": "contributors[ch._zod.def.check]?.(agg, ch._zod.def)",
+                "syntax": "computed-member"
+              }
+            ],
+            "constructor": [
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/core.ts:118 _",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/core.ts@5058..5885#_",
+                "polint_site": {
+                  "key": "src/v4/classic/schemas.ts@102587..102729",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "new ZodPreprocess({ type: \"pipe\", in: transform(fn as any) as any as core.$ZodTransform, \u2026"
+                },
+                "site": "src/v4/classic/schemas.ts:2932",
+                "site_key": "src/v4/classic/schemas.ts@102587..102729",
+                "site_text": "new ZodPreprocess({ type: \"pipe\", in: transform(fn as any) as any as core.$ZodTransform, \u2026",
+                "syntax": "new"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/core.ts:118 _",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/core.ts@5058..5885#_",
+                "polint_site": {
+                  "key": "src/v4/classic/schemas.ts@62202..62220",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "new ZodObject(def)"
+                },
+                "site": "src/v4/classic/schemas.ts:1740",
+                "site_key": "src/v4/classic/schemas.ts@62202..62220",
+                "site_text": "new ZodObject(def)",
+                "syntax": "new"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/core.ts:118 _",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/core.ts@5058..5885#_",
+                "polint_site": {
+                  "key": "src/v4/classic/schemas.ts@63555..63678",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "new ZodUnion({ type: \"union\", options: options as any as core.$ZodType[], ...util.normali\u2026"
+                },
+                "site": "src/v4/classic/schemas.ts:1789",
+                "site_key": "src/v4/classic/schemas.ts@63555..63678",
+                "site_text": "new ZodUnion({ type: \"union\", options: options as any as core.$ZodType[], ...util.normali\u2026",
+                "syntax": "new"
+              }
+            ],
+            "other": [
+              {
+                "kind": "call",
+                "observed_callee": "src/v3/ZodError.ts:220 <anonymous>",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v3/ZodError.ts@5731..5797#<polint:anonymous:5731:5797>",
+                "polint_site": {
+                  "key": "src/v3/ZodError.ts@7654..7667",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "mapper(issue)"
+                },
+                "site": "src/v3/ZodError.ts:264",
+                "site_key": "src/v3/ZodError.ts@7654..7667",
+                "site_text": "mapper(issue)",
+                "syntax": "identifier"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v3/ZodError.ts:224 processError",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v3/ZodError.ts@5894..7736#<polint:anonymous:5894:7736>",
+                "polint_site": {
+                  "key": "src/v3/ZodError.ts@7743..7761",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "processError(this)"
+                },
+                "site": "src/v3/ZodError.ts:272",
+                "site_key": "src/v3/ZodError.ts@7743..7761",
+                "site_text": "processError(this)",
+                "syntax": "identifier"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v3/errors.ts:11 getErrorMap",
+                "outcome": "no target, no unresolved marker",
+                "polint_callee": "src/v3/errors.ts@251..304#getErrorMap",
+                "polint_site": {
+                  "key": "src/v3/helpers/parseUtil.ts@1790..1803",
+                  "marked_unresolved": false,
+                  "match": "exact span",
+                  "stops_at_import_binding": true,
+                  "targets": [],
+                  "text": "getErrorMap()"
+                },
+                "site": "src/v3/helpers/parseUtil.ts:73",
+                "site_key": "src/v3/helpers/parseUtil.ts@1790..1803",
+                "site_text": "getErrorMap()",
+                "syntax": "identifier"
+              }
+            ],
+            "other_extraction": [
+              {
+                "kind": "call",
+                "observed_callee": "src/v3/ZodError.ts:308 <anonymous>",
+                "outcome": "callee not a polint function",
+                "polint_callee": null,
+                "polint_site": {
+                  "key": "src/v3/ZodError.ts@8964..8975",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "mapper(sub)"
+                },
+                "site": "src/v3/ZodError.ts:315",
+                "site_key": "src/v3/ZodError.ts@8964..8975",
+                "site_text": "mapper(sub)",
+                "syntax": "identifier"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/locales/en.ts:132 <anonymous>",
+                "outcome": "callee not a polint function",
+                "polint_callee": null,
+                "polint_site": {
+                  "key": "src/v4/classic/schemas.ts@1048..1052",
+                  "marked_unresolved": false,
+                  "match": "exact span",
+                  "stops_at_import_binding": true,
+                  "targets": [],
+                  "text": "en()"
+                },
+                "site": "src/v4/classic/schemas.ts:15",
+                "site_key": "src/v4/classic/schemas.ts@1048..1052",
+                "site_text": "en()",
+                "syntax": "identifier"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/util.ts:558 shallowClone",
+                "outcome": "site not a polint call site",
+                "polint_callee": "src/v4/core/util.ts@20034..20250#shallowClone",
+                "polint_site": null,
+                "site": "src/v4/classic/schemas.ts:2406",
+                "site_key": "src/v4/classic/schemas.ts@84917..84948",
+                "site_text": "util.shallowClone(defaultValue)",
+                "syntax": "member"
+              }
+            ],
+            "other_member": [
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/api.ts:861 _coercedDate",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/api.ts@26518..26742#_coercedDate",
+                "polint_site": {
+                  "key": "src/v4/classic/coerce.ts@1436..1478",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "core._coercedDate(schemas.ZodDate, params)"
+                },
+                "site": "src/v4/classic/coerce.ts:26",
+                "site_key": "src/v4/classic/coerce.ts@1436..1478",
+                "site_text": "core._coercedDate(schemas.ZodDate, params)",
+                "syntax": "member"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/api.ts:625 _coercedNumber",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/api.ts@20277..20539#_coercedNumber",
+                "polint_site": {
+                  "key": "src/v4/classic/coerce.ts@572..618",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "core._coercedNumber(schemas.ZodNumber, params)"
+                },
+                "site": "src/v4/classic/coerce.ts:11",
+                "site_key": "src/v4/classic/coerce.ts@572..618",
+                "site_text": "core._coercedNumber(schemas.ZodNumber, params)",
+                "syntax": "member"
+              },
+              {
+                "kind": "call",
+                "observed_callee": "src/v4/core/core.ts:73 init",
+                "outcome": "no target, marked unresolved",
+                "polint_callee": "src/v4/core/core.ts@3200..4850#init",
+                "polint_site": {
+                  "key": "src/v4/classic/errors.ts@2321..2349",
+                  "marked_unresolved": true,
+                  "match": "exact span",
+                  "stops_at_import_binding": false,
+                  "targets": [],
+                  "text": "$ZodError.init(inst, issues)"
+                },
+                "site": "src/v4/classic/errors.ts:51",
+                "site_key": "src/v4/classic/errors.ts@2321..2349",
+                "site_text": "$ZodError.init(inst, issues)",
+                "syntax": "member"
+              }
+            ]
+          },
+          "other_by_syntax_and_callee": {
+            "identifier call to arrow": 201,
+            "identifier call to declaration": 22,
+            "identifier call to expression": 1
+          }
+        },
+        "observed_edges": 1308,
+        "observed_implicit_edges": 18,
+        "outcome_examples": {
+          "callee not a polint function": [
+            {
+              "kind": "call",
+              "observed_callee": "src/v3/ZodError.ts:308 <anonymous>",
+              "outcome": "callee not a polint function",
+              "polint_callee": null,
+              "polint_site": {
+                "key": "src/v3/ZodError.ts@8964..8975",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "mapper(sub)"
+              },
+              "site": "src/v3/ZodError.ts:315",
+              "site_key": "src/v3/ZodError.ts@8964..8975",
+              "site_text": "mapper(sub)",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/locales/en.ts:132 <anonymous>",
+              "outcome": "callee not a polint function",
+              "polint_callee": null,
+              "polint_site": {
+                "key": "src/v4/classic/schemas.ts@1048..1052",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": true,
+                "targets": [],
+                "text": "en()"
+              },
+              "site": "src/v4/classic/schemas.ts:15",
+              "site_key": "src/v4/classic/schemas.ts@1048..1052",
+              "site_text": "en()",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/errors.ts:324 <anonymous>",
+              "outcome": "callee not a polint function",
+              "polint_callee": null,
+              "polint_site": {
+                "key": "src/v4/core/errors.ts@11150..11161",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "mapper(sub)"
+              },
+              "site": "src/v4/core/errors.ts:329",
+              "site_key": "src/v4/core/errors.ts@11150..11161",
+              "site_text": "mapper(sub)",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/errors.ts:351 <anonymous>",
+              "outcome": "callee not a polint function",
+              "polint_callee": null,
+              "polint_site": {
+                "key": "src/v4/core/errors.ts@14134..14147",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "mapper(issue)"
+              },
+              "site": "src/v4/core/errors.ts:395",
+              "site_key": "src/v4/core/errors.ts@14134..14147",
+              "site_text": "mapper(issue)",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/errors.ts:423 <anonymous>",
+              "outcome": "callee not a polint function",
+              "polint_callee": null,
+              "polint_site": {
+                "key": "src/v4/core/errors.ts@17039..17052",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "mapper(issue)"
+              },
+              "site": "src/v4/core/errors.ts:470",
+              "site_key": "src/v4/core/errors.ts@17039..17052",
+              "site_text": "mapper(issue)",
+              "syntax": "identifier"
+            }
+          ],
+          "found": [
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/classic/errors.ts:35 _lazyMethod",
+              "outcome": "found",
+              "polint_callee": "src/v4/classic/errors.ts@1757..2249#_lazyMethod",
+              "polint_site": {
+                "key": "src/v4/classic/errors.ts@2510..2597",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "src/v4/classic/errors.ts:35 _lazyMethod"
+                ],
+                "text": "_lazyMethod(proto, \"format\", (self) => (mapper: any) => core.formatError(self, mapper))"
+              },
+              "site": "src/v4/classic/errors.ts:58",
+              "site_key": "src/v4/classic/errors.ts@2510..2597",
+              "site_text": "_lazyMethod(proto, \"format\", (self) => (mapper: any) => core.formatError(self, mapper))",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/classic/errors.ts:35 _lazyMethod",
+              "outcome": "found",
+              "polint_callee": "src/v4/classic/errors.ts@1757..2249#_lazyMethod",
+              "polint_site": {
+                "key": "src/v4/classic/errors.ts@2601..2690",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "src/v4/classic/errors.ts:35 _lazyMethod"
+                ],
+                "text": "_lazyMethod(proto, \"flatten\", (self) => (mapper: any) => core.flattenError(self, mapper))"
+              },
+              "site": "src/v4/classic/errors.ts:59",
+              "site_key": "src/v4/classic/errors.ts@2601..2690",
+              "site_text": "_lazyMethod(proto, \"flatten\", (self) => (mapper: any) => core.flattenError(self, mapper))",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/classic/errors.ts:35 _lazyMethod",
+              "outcome": "found",
+              "polint_callee": "src/v4/classic/errors.ts@1757..2249#_lazyMethod",
+              "polint_site": {
+                "key": "src/v4/classic/errors.ts@2694..2865",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "src/v4/classic/errors.ts:35 _lazyMethod"
+                ],
+                "text": "_lazyMethod(proto, \"addIssue\", (self) => (issue: any) => { self.issues.push(issue); self.\u2026"
+              },
+              "site": "src/v4/classic/errors.ts:60",
+              "site_key": "src/v4/classic/errors.ts@2694..2865",
+              "site_text": "_lazyMethod(proto, \"addIssue\", (self) => (issue: any) => { self.issues.push(issue); self.\u2026",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/classic/errors.ts:35 _lazyMethod",
+              "outcome": "found",
+              "polint_callee": "src/v4/classic/errors.ts@1757..2249#_lazyMethod",
+              "polint_site": {
+                "key": "src/v4/classic/errors.ts@2869..3046",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "src/v4/classic/errors.ts:35 _lazyMethod"
+                ],
+                "text": "_lazyMethod(proto, \"addIssues\", (self) => (issues: any) => { self.issues.push(...issues);\u2026"
+              },
+              "site": "src/v4/classic/errors.ts:64",
+              "site_key": "src/v4/classic/errors.ts@2869..3046",
+              "site_text": "_lazyMethod(proto, \"addIssues\", (self) => (issues: any) => { self.issues.push(...issues);\u2026",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/classic/from-json-schema.ts:808 convertSchema",
+              "outcome": "found",
+              "polint_callee": "src/v4/classic/from-json-schema.ts@29826..34482#convertSchema",
+              "polint_site": {
+                "key": "src/v4/classic/from-json-schema.ts@21519..21574",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "src/v4/classic/from-json-schema.ts:808 convertSchema"
+                ],
+                "text": "convertSchema(propSchema as JSONSchema.JSONSchema, ctx)"
+              },
+              "site": "src/v4/classic/from-json-schema.ts:637",
+              "site_key": "src/v4/classic/from-json-schema.ts@21519..21574",
+              "site_text": "convertSchema(propSchema as JSONSchema.JSONSchema, ctx)",
+              "syntax": "identifier"
+            }
+          ],
+          "no target, marked unresolved": [
+            {
+              "kind": "call",
+              "observed_callee": "src/v3/ZodError.ts:220 <anonymous>",
+              "outcome": "no target, marked unresolved",
+              "polint_callee": "src/v3/ZodError.ts@5731..5797#<polint:anonymous:5731:5797>",
+              "polint_site": {
+                "key": "src/v3/ZodError.ts@7654..7667",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "mapper(issue)"
+              },
+              "site": "src/v3/ZodError.ts:264",
+              "site_key": "src/v3/ZodError.ts@7654..7667",
+              "site_text": "mapper(issue)",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v3/ZodError.ts:224 processError",
+              "outcome": "no target, marked unresolved",
+              "polint_callee": "src/v3/ZodError.ts@5894..7736#<polint:anonymous:5894:7736>",
+              "polint_site": {
+                "key": "src/v3/ZodError.ts@7743..7761",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "processError(this)"
+              },
+              "site": "src/v3/ZodError.ts:272",
+              "site_key": "src/v3/ZodError.ts@7743..7761",
+              "site_text": "processError(this)",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v3/helpers/parseUtil.ts:6 makeIssue",
+              "outcome": "no target, marked unresolved",
+              "polint_callee": "src/v3/helpers/parseUtil.ts@238..980#makeIssue",
+              "polint_site": {
+                "key": "src/v3/helpers/parseUtil.ts@1821..2232",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "makeIssue({ issueData: issueData, data: ctx.data, path: ctx.path, errorMaps: [ ctx.common\u2026"
+              },
+              "site": "src/v3/helpers/parseUtil.ts:74",
+              "site_key": "src/v3/helpers/parseUtil.ts@1821..2232",
+              "site_text": "makeIssue({ issueData: issueData, data: ctx.data, path: ctx.path, errorMaps: [ ctx.common\u2026",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v3/locales/en.ts:4 errorMap",
+              "outcome": "no target, marked unresolved",
+              "polint_callee": "src/v3/locales/en.ts@154..5106#errorMap",
+              "polint_site": {
+                "key": "src/v3/helpers/parseUtil.ts@831..883",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "map(fullIssue, { data, defaultError: errorMessage })"
+              },
+              "site": "src/v3/helpers/parseUtil.ts:33",
+              "site_key": "src/v3/helpers/parseUtil.ts@831..883",
+              "site_text": "map(fullIssue, { data, defaultError: errorMessage })",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/api.ts:861 _coercedDate",
+              "outcome": "no target, marked unresolved",
+              "polint_callee": "src/v4/core/api.ts@26518..26742#_coercedDate",
+              "polint_site": {
+                "key": "src/v4/classic/coerce.ts@1436..1478",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "core._coercedDate(schemas.ZodDate, params)"
+              },
+              "site": "src/v4/classic/coerce.ts:26",
+              "site_key": "src/v4/classic/coerce.ts@1436..1478",
+              "site_text": "core._coercedDate(schemas.ZodDate, params)",
+              "syntax": "member"
+            }
+          ],
+          "no target, no unresolved marker": [
+            {
+              "kind": "call",
+              "observed_callee": "src/v3/errors.ts:11 getErrorMap",
+              "outcome": "no target, no unresolved marker",
+              "polint_callee": "src/v3/errors.ts@251..304#getErrorMap",
+              "polint_site": {
+                "key": "src/v3/helpers/parseUtil.ts@1790..1803",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": true,
+                "targets": [],
+                "text": "getErrorMap()"
+              },
+              "site": "src/v3/helpers/parseUtil.ts:73",
+              "site_key": "src/v3/helpers/parseUtil.ts@1790..1803",
+              "site_text": "getErrorMap()",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/util.ts:367 assignProp",
+              "outcome": "no target, no unresolved marker",
+              "polint_callee": "src/v4/core/util.ts@13406..13666#assignProp",
+              "polint_site": {
+                "key": "src/v4/classic/from-json-schema.ts@21733..21820",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": true,
+                "targets": [],
+                "text": "assignProp(shape, key, requiredSet.has(key) ? propZodSchema : propZodSchema.optional())"
+              },
+              "site": "src/v4/classic/from-json-schema.ts:639",
+              "site_key": "src/v4/classic/from-json-schema.ts@21733..21820",
+              "site_text": "assignProp(shape, key, requiredSet.has(key) ? propZodSchema : propZodSchema.optional())",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/to-json-schema.ts:850 createStandardJSONSchemaMethod",
+              "outcome": "no target, no unresolved marker",
+              "polint_callee": "src/v4/core/to-json-schema.ts@34705..35017#<polint:anonymous:34705:35017>",
+              "polint_site": {
+                "key": "src/v4/classic/schemas.ts@11169..11214",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": true,
+                "targets": [],
+                "text": "createStandardJSONSchemaMethod(this, \"input\")"
+              },
+              "site": "src/v4/classic/schemas.ts:289",
+              "site_key": "src/v4/classic/schemas.ts@11169..11214",
+              "site_text": "createStandardJSONSchemaMethod(this, \"input\")",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/to-json-schema.ts:850 createStandardJSONSchemaMethod",
+              "outcome": "no target, no unresolved marker",
+              "polint_callee": "src/v4/core/to-json-schema.ts@34705..35017#<polint:anonymous:34705:35017>",
+              "polint_site": {
+                "key": "src/v4/classic/schemas.ts@11234..11280",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": true,
+                "targets": [],
+                "text": "createStandardJSONSchemaMethod(this, \"output\")"
+              },
+              "site": "src/v4/classic/schemas.ts:290",
+              "site_key": "src/v4/classic/schemas.ts@11234..11280",
+              "site_text": "createStandardJSONSchemaMethod(this, \"output\")",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/parse.ts:23 fn",
+              "outcome": "no target, no unresolved marker",
+              "polint_callee": "src/v4/core/parse.ts@898..1463#<polint:anonymous:898:1463>",
+              "polint_site": {
+                "key": "src/v4/classic/schemas.ts@11490..11541",
+                "marked_unresolved": false,
+                "match": "exact span",
+                "stops_at_import_binding": true,
+                "targets": [],
+                "text": "parse.parse(this, data, params, { callee: _parse })"
+              },
+              "site": "src/v4/classic/schemas.ts:298",
+              "site_key": "src/v4/classic/schemas.ts@11490..11541",
+              "site_text": "parse.parse(this, data, params, { callee: _parse })",
+              "syntax": "member"
+            }
+          ],
+          "site not a polint call site": [
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/core/util.ts:558 shallowClone",
+              "outcome": "site not a polint call site",
+              "polint_callee": "src/v4/core/util.ts@20034..20250#shallowClone",
+              "polint_site": null,
+              "site": "src/v4/classic/schemas.ts:2406",
+              "site_key": "src/v4/classic/schemas.ts@84917..84948",
+              "site_text": "util.shallowClone(defaultValue)",
+              "syntax": "member"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/locales/de.ts:5 error",
+              "outcome": "site not a polint call site",
+              "polint_callee": "src/v4/locales/de.ts@193..4455#error",
+              "polint_site": null,
+              "site": "src/v4/locales/de.ts:119",
+              "site_key": "src/v4/locales/de.ts@4553..4560",
+              "site_text": "error()",
+              "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "src/v4/locales/en.ts:5 error",
+              "outcome": "site not a polint call site",
+              "polint_callee": "src/v4/locales/en.ts@193..4977#error",
+              "polint_site": null,
+              "site": "src/v4/locales/en.ts:134",
+              "site_key": "src/v4/locales/en.ts@5075..5082",
+              "site_text": "error()",
+              "syntax": "identifier"
+            }
+          ]
+        },
+        "outcomes": {
+          "callee not a polint function": 6,
+          "found": 217,
+          "no target, marked unresolved": 1056,
+          "no target, no unresolved marker": 26,
+          "site not a polint call site": 3
+        },
+        "recall": 0.1659,
+        "references": {
+          "by_status": {
+            "Ambiguous": 184,
+            "Resolved": 73731,
+            "Unresolved": 5118
+          },
+          "not_resolved": 5302,
+          "not_resolved_share": 0.0671,
+          "references": 79033
+        },
+        "unresolved_calls": {
+          "call_sites": 48838,
+          "marked_unresolved": 33959,
+          "marked_unresolved_share": 0.6953,
+          "without_target": 46299,
+          "without_target_share": 0.948
+        }
       },
       "sha256": "84efd155bed93270286e793fc951be270b536cbd5b0eeb111f0fa3967201d698",
       "source_bytes": 3087749,
