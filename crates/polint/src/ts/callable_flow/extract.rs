@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
 use oxc_ast::ast::{
@@ -61,7 +61,7 @@ const CALLABLE_WALK_BUDGET: usize = 4096;
 /// What a guarded walk frame is keyed on. Two different recursions share the
 /// guard, and their keys must not collide: a call's start offset and a
 /// function's identity are separate namespaces.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum WalkKey {
     /// A call whose returned object shape is being resolved, keyed by the
     /// call's start offset (unique within the file the collector is built for).
@@ -128,6 +128,72 @@ impl CallableWalkGuard {
             key,
         })
     }
+
+    /// The guard state a walk started now can observe. With no frame in flight
+    /// the next `enter` refreshes the budget, so only the depth is visible and
+    /// every such state is the same; with frames in flight the walk sees the
+    /// remaining budget and which frames it may not re-enter.
+    fn observable_state(&self) -> WalkGuardState {
+        let depth = self.depth.get();
+        if depth == 0 {
+            return WalkGuardState::default();
+        }
+        WalkGuardState {
+            depth,
+            budget: self.budget.get(),
+            active: self.active.borrow().iter().copied().collect(),
+        }
+    }
+}
+
+/// [`CallableWalkGuard::observable_state`]: everything about the guard that
+/// can change what a walk does.
+#[derive(Default, PartialEq, Eq, Hash)]
+struct WalkGuardState {
+    depth: usize,
+    budget: usize,
+    active: Vec<WalkKey>,
+}
+
+/// The complete input of one callee-body walk in
+/// `TsCallableFlowCollector::collect_function_flow_invocation`, apart from the
+/// collector's tables, which `InvocationOutcome::generation` covers. The body
+/// is identified by its address in the AST arena, which outlives the collector.
+#[derive(PartialEq, Eq, Hash)]
+struct InvocationKey {
+    function: FunctionId,
+    body: usize,
+    env: FlowEnv,
+    invocation_depth: usize,
+    this_method_walk: bool,
+    current_super: Option<ObjectTargets>,
+    guard: WalkGuardState,
+}
+
+/// What one callee-body walk produced besides the rows it emitted: its return
+/// value, the env it left behind, and the guard budget it left. The rows are
+/// already in the collector, which keeps every row it emits and deduplicates
+/// them at the end, so replaying an outcome loses none.
+struct InvocationOutcome {
+    /// The collector's `table_generation` the walk ran under. The outcome is
+    /// valid only while no table a walk reads has changed since.
+    generation: u64,
+    returned: CollectionTargets,
+    env: FlowEnv,
+    budget: usize,
+}
+
+#[cfg(all(test, feature = "lang-go"))]
+thread_local! {
+    /// Callee bodies walked on this thread, counting walks whose outcome was
+    /// replayed from an earlier one as none.
+    static BODY_WALKS: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Callee bodies walked on the calling thread so far.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn body_walks() -> usize {
+    BODY_WALKS.with(Cell::get)
 }
 
 /// Releases one walk frame. A guard object rather than paired calls because the
@@ -197,6 +263,9 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
             current_super: None,
             invocation_depth: 0,
             walk_guard: Rc::default(),
+            table_generation: 0,
+            invocations: HashMap::new(),
+            invocation_walks: 0,
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -258,6 +327,20 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     invocation_depth: usize,
     /// Bounds the recursive callable walks that `invocation_depth` cannot reach.
     walk_guard: Rc<CallableWalkGuard>,
+    /// Advanced by every write a walk makes to a table walks read (`classes`,
+    /// `export_aliases`, `exports`), so a recorded invocation outcome is reused
+    /// only while the tables it was computed from are unchanged.
+    table_generation: u64,
+    /// Outcomes of earlier callee-body walks in the call tree of the outermost
+    /// walk in flight, by their complete input. Without it a function whose
+    /// body follows `k` calls back into itself is walked once per path through
+    /// the call tree, `k^d` walks for `d` levels of nesting, although every
+    /// walk at one level computes the same answer. Emptied when the outermost
+    /// walk returns, so it holds one call tree at a time. Only looked up, never
+    /// iterated, so it cannot affect row order.
+    invocations: HashMap<InvocationKey, InvocationOutcome>,
+    /// Callee-body walks in flight; zero outside the outermost one.
+    invocation_walks: usize,
     /// Program-global positional index of every `receiver.next()` call: maps the
     /// `.next()` call's `span.start` to its 0-based ordinal among `.next()` calls
     /// on the same receiver name (in source order). Used to sequence generator
@@ -392,6 +475,9 @@ fn compute_module_export_summaries<'ast>(
                 current_super: None,
                 invocation_depth: 0,
                 walk_guard: Rc::default(),
+                table_generation: 0,
+                invocations: HashMap::new(),
+                invocation_walks: 0,
                 iterator_next_ordinals: BTreeMap::new(),
                 iterator_next_starts: BTreeMap::new(),
                 rows: Vec::new(),
@@ -455,6 +541,9 @@ fn compute_function_return_summaries<'ast>(
             current_super: None,
             invocation_depth: 0,
             walk_guard: Rc::default(),
+            table_generation: 0,
+            invocations: HashMap::new(),
+            invocation_walks: 0,
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -1897,7 +1986,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 && let Some(init) = &declarator.init
                 && expression_aliases_exports(init)
             {
-                self.export_aliases.insert(name.clone());
+                if self.export_aliases.insert(name.clone()) {
+                    self.table_generation += 1;
+                }
                 env.objects.entry(name).or_default();
             }
             // `var mixin = require('merge-descriptors')`: a property-copy helper.
@@ -1920,6 +2011,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 && let Some(Expression::ClassExpression(class)) = &declarator.init
             {
                 self.classes.insert(name.clone(), self.class_targets(class));
+                self.table_generation += 1;
                 if let Some(statics) = self.class_static_targets(&name) {
                     env.objects.insert(name, statics);
                 }
@@ -2370,6 +2462,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 // A function-constructor (`function IPv4(){}`) is not yet in the
                 // class table; the first `IPv4.prototype.m = fn` creates it, so
                 // classic prototype OOP registers its instance methods.
+                self.table_generation += 1;
                 let class = self.classes.entry(class_name.to_string()).or_default();
                 for target in targets {
                     class
@@ -2432,6 +2525,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             }
 
             if self.classes.contains_key(object_name) {
+                self.table_generation += 1;
                 if handled_by_setter {
                     if let Some(object) = env.objects.get(object_name).cloned()
                         && let Some(class) = self.classes.get_mut(object_name)
@@ -2465,6 +2559,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let Some(target) = export_assignment_target(&assignment.left) else {
             return;
         };
+        self.table_generation += 1;
         let mut callables = self.callable_targets_from_expression(&assignment.right, env);
         // An identifier RHS may name a top-level function declaration (e.g.
         // `function foo() {}` ... `module.exports = foo`), which lives in
@@ -3786,6 +3881,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                             .is_some_and(|name| self.export_aliases.contains(name)))
                 {
                     self.exports.esmodule = true;
+                    self.table_generation += 1;
                     return;
                 }
                 let Some(target_name) = expression_identifier(receiver) else {
@@ -4339,7 +4435,32 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         if self.invocation_depth > 16 {
             return CollectionTargets::unfollowed();
         }
+        // A walk with the same input under unchanged tables already ran in this
+        // call tree: replay its effect instead of walking the body again. Nested
+        // invocations run one level deeper, so a walk never meets its own key
+        // while in flight. The outermost walk has nothing to reuse and nothing
+        // to share, so it is not keyed.
+        let key = (self.invocation_walks > 0).then(|| InvocationKey {
+            function: flow.function.id,
+            body: std::ptr::from_ref(flow.body).addr(),
+            env: env.clone(),
+            invocation_depth: self.invocation_depth,
+            this_method_walk: self.this_method_walk,
+            current_super: self.current_super.clone(),
+            guard: self.walk_guard.observable_state(),
+        });
+        if let Some(outcome) = key.as_ref().and_then(|key| self.invocations.get(key))
+            && outcome.generation == self.table_generation
+        {
+            env.clone_from(&outcome.env);
+            self.walk_guard.budget.set(outcome.budget);
+            return outcome.returned.clone();
+        }
+        #[cfg(all(test, feature = "lang-go"))]
+        BODY_WALKS.with(|walks| walks.set(walks.get() + 1));
+        let generation = self.table_generation;
         self.invocation_depth += 1;
+        self.invocation_walks += 1;
         // Calls in the invoked body belong to `flow.function`, which is the
         // owner every model row emitted from it names.
         let result = if let Some(expression) = flow.expression_body {
@@ -4348,7 +4469,25 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         } else {
             self.collect_invocation_statements(&flow.body.statements, flow.function, env)
         };
+        self.invocation_walks -= 1;
         self.invocation_depth -= 1;
+        match key {
+            // A walk that changed a table may not reproduce itself, because a
+            // later walk with the same input reads the changed table.
+            Some(key) if self.table_generation == generation => {
+                self.invocations.insert(
+                    key,
+                    InvocationOutcome {
+                        generation,
+                        returned: result.clone(),
+                        env: env.clone(),
+                        budget: self.walk_guard.budget.get(),
+                    },
+                );
+            }
+            Some(_) => {}
+            None => self.invocations.clear(),
+        }
         result
     }
 
@@ -7393,7 +7532,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct FlowEnv {
     bindings: BTreeMap<String, CollectionTargets>,
     bound_functions: BTreeMap<String, Vec<BoundFunctionTarget>>,
@@ -7486,7 +7625,7 @@ impl FlowEnv {
 /// Jelly models generators sequence-sensitively — the first `.next()` yields the
 /// first value, the next `.next()` the second, etc. — so resolving every
 /// `.next()` to every yield (the flow-insensitive lump) over-approximates.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct GeneratorSequence {
     steps: Vec<CollectionTargets>,
     ret: CollectionTargets,
@@ -7527,7 +7666,7 @@ impl GeneratorSequence {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct BoundFunctionTarget {
     function: FunctionId,
     this_object: ObjectTargets,
@@ -7535,7 +7674,7 @@ struct BoundFunctionTarget {
     bound_arguments: Vec<CollectionTargets>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct CollectionTargets {
     keys: Vec<FunctionId>,
     /// Index-ordered array element cells (numeric indices). `value_at(i)` reads
@@ -7723,7 +7862,7 @@ impl CollectionTargets {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct ObjectTargets {
     properties: BTreeMap<String, Vec<FunctionId>>,
     getter_properties: BTreeMap<String, Vec<FunctionId>>,
@@ -8034,7 +8173,7 @@ enum ConstructorAssignment {
     Param { property: String, index: usize },
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct PromiseTargets {
     fulfilled: CollectionTargets,
     rejected: CollectionTargets,

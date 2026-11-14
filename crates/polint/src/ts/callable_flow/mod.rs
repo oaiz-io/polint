@@ -1185,4 +1185,37 @@ mod tests {
             );
         }
     }
+
+    /// A function whose body calls itself at several sites walks one callee body
+    /// per level of nesting: the sibling self-calls at one level have the same
+    /// input, so the walk of the first answers the others. Two self-calls
+    /// therefore walk exactly as many bodies as one, where walking every sibling
+    /// again walks `2^d` bodies for `d` levels of nesting.
+    #[test]
+    fn sibling_self_calls_with_the_same_input_walk_the_callee_once() {
+        let walks_with = |self_calls: usize| {
+            let calls = (0..self_calls)
+                .map(|index| format!("  walk(node.child{index});\n"))
+                .collect::<String>();
+            let source =
+                format!("function walk(node) {{\n{calls}  return node;\n}}\nwalk({{}});\n");
+            let repo = tempfile::tempdir().unwrap();
+            std::fs::write(repo.path().join("main.js"), source).unwrap();
+            let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+            let file = &output.db.files()[0];
+            let arena = oxc_allocator::Allocator::default();
+            let parsed = crate::ts::parse::parse_ts_file(&arena, file);
+            let programs = BTreeMap::from([(file.id, parsed.program())]);
+            let before = super::extract::body_walks();
+            super::collect_callable_flows(&output.db, &programs);
+            super::extract::body_walks() - before
+        };
+        let single = walks_with(1);
+        assert!(single > 0, "the self-call is followed into the callee body");
+        let double = walks_with(2);
+        assert!(
+            double <= 2 * single,
+            "two self-calls walked {double} callee bodies, one walked {single}"
+        );
+    }
 }
