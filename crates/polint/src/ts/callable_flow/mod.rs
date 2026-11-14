@@ -1186,14 +1186,21 @@ mod tests {
         }
     }
 
-    /// A function whose body calls itself at several sites walks one callee body
-    /// per level of nesting: the sibling self-calls at one level have the same
-    /// input, so the walk of the first answers the others. Two self-calls
-    /// therefore walk exactly as many bodies as one, where walking every sibling
-    /// again walks `2^d` bodies for `d` levels of nesting.
+    /// A function whose body calls itself at several sites does not walk its
+    /// body once per path through the call tree. Walking every call again
+    /// walks about `k^d` bodies per call tree for `k` self-calls and `d` levels
+    /// of nesting, `2^17` for two self-calls. Once a call tree has walked
+    /// `INVOCATION_KEYING_AFTER_WALKS` bodies, a callee input is recorded the
+    /// second time it comes and answered from the record every time after, so
+    /// a call tree walks little more than the threshold, and a further
+    /// self-call adds one call tree, entered from its own call site. A walk
+    /// limit far above the keyed count makes the unkeyed walks fail in bounded
+    /// time.
     #[test]
-    fn sibling_self_calls_with_the_same_input_walk_the_callee_once() {
+    fn self_call_walks_grow_linearly_past_the_keying_threshold() {
+        let threshold = super::extract::INVOCATION_KEYING_AFTER_WALKS;
         let walks_with = |self_calls: usize| {
+            super::extract::limit_body_walks(super::extract::body_walks() + 16 * threshold);
             let calls = (0..self_calls)
                 .map(|index| format!("  walk(node.child{index});\n"))
                 .collect::<String>();
@@ -1210,12 +1217,20 @@ mod tests {
             super::collect_callable_flows(&output.db, &programs);
             super::extract::body_walks() - before
         };
-        let single = walks_with(1);
-        assert!(single > 0, "the self-call is followed into the callee body");
+        assert!(
+            walks_with(1) > 0,
+            "the self-call is followed into the callee body"
+        );
         let double = walks_with(2);
         assert!(
-            double <= 2 * single,
-            "two self-calls walked {double} callee bodies, one walked {single}"
+            double <= 8 * threshold,
+            "two self-calls walked {double} callee bodies"
+        );
+        let triple = walks_with(3);
+        assert!(
+            triple - double <= 2 * threshold,
+            "a third self-call added {} callee-body walks to {double}",
+            triple - double
         );
     }
 }

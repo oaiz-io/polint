@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
+use std::hash::BuildHasher as _;
 use std::rc::Rc;
 
 use oxc_ast::ast::{
@@ -155,45 +156,70 @@ struct WalkGuardState {
     active: Vec<WalkKey>,
 }
 
-/// The complete input of one callee-body walk in
+/// The input of one callee-body walk in
 /// `TsCallableFlowCollector::collect_function_flow_invocation`, apart from the
-/// collector's tables, which `InvocationOutcome::generation` covers. The body
-/// is identified by its address in the AST arena, which outlives the collector.
+/// env the walk starts from and the collector's tables, which
+/// `InvocationRecord::generation` covers. The body is identified by its address
+/// in the AST arena, which outlives the collector.
 #[derive(PartialEq, Eq, Hash)]
-struct InvocationKey {
+struct InvocationInput {
     function: FunctionId,
     body: usize,
-    env: FlowEnv,
     invocation_depth: usize,
     this_method_walk: bool,
     current_super: Option<ObjectTargets>,
     guard: WalkGuardState,
 }
 
-/// What one callee-body walk produced besides the rows it emitted: its return
-/// value, the env it left behind, and the guard budget it left. The rows are
-/// already in the collector, which keeps every row it emits and deduplicates
-/// them at the end, so replaying an outcome loses none.
-struct InvocationOutcome {
-    /// The collector's `table_generation` the walk ran under. The outcome is
+/// One callee-body walk: its complete input, and what it produced besides the
+/// rows it emitted, which are its return value, the env it left behind and the
+/// guard budget it left. The rows are already in the collector, which keeps
+/// every row it emits and deduplicates them at the end, so replaying a record
+/// loses none.
+struct InvocationRecord {
+    input: InvocationInput,
+    env_before: FlowEnv,
+    /// The collector's `table_generation` the walk ran under. The record is
     /// valid only while no table a walk reads has changed since.
     generation: u64,
     returned: CollectionTargets,
-    env: FlowEnv,
+    env_after: FlowEnv,
     budget: usize,
 }
+
+/// Hashes an invocation's input and starting env into its key in
+/// `TsCallableFlowCollector::invocations`.
+type InvocationHasher = std::hash::BuildHasherDefault<std::hash::DefaultHasher>;
+
+/// The callee-body walks a call tree makes before its walks are keyed in
+/// `TsCallableFlowCollector::invocations`. Keying hashes the callee env, which
+/// inherits the caller's, and recording an input that comes again copies that
+/// env twice, which costs more than the repeats a call tree of a few thousand
+/// walks has to save. A tree that grows past this many walks makes this many
+/// unkeyed and is linear after, so the extra walks are bounded per call tree.
+pub(super) const INVOCATION_KEYING_AFTER_WALKS: usize = 4096;
 
 #[cfg(all(test, feature = "lang-go"))]
 thread_local! {
     /// Callee bodies walked on this thread, counting walks whose outcome was
     /// replayed from an earlier one as none.
     static BODY_WALKS: Cell<usize> = const { Cell::new(0) };
+    /// The `BODY_WALKS` count past which a walk on this thread panics.
+    static BODY_WALK_LIMIT: Cell<usize> = const { Cell::new(usize::MAX) };
 }
 
 /// Callee bodies walked on the calling thread so far.
 #[cfg(all(test, feature = "lang-go"))]
 pub(super) fn body_walks() -> usize {
     BODY_WALKS.with(Cell::get)
+}
+
+/// Makes a walk on the calling thread panic once `body_walks` would pass
+/// `limit`, so a test of the walk count fails quickly where the walks would
+/// not finish.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn limit_body_walks(limit: usize) {
+    BODY_WALK_LIMIT.with(|cap| cap.set(limit));
 }
 
 /// Releases one walk frame. A guard object rather than paired calls because the
@@ -266,6 +292,7 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
             table_generation: 0,
             invocations: HashMap::new(),
             invocation_walks: 0,
+            tree_walks: 0,
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -331,16 +358,22 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     /// `export_aliases`, `exports`), so a recorded invocation outcome is reused
     /// only while the tables it was computed from are unchanged.
     table_generation: u64,
-    /// Outcomes of earlier callee-body walks in the call tree of the outermost
-    /// walk in flight, by their complete input. Without it a function whose
-    /// body follows `k` calls back into itself is walked once per path through
-    /// the call tree, `k^d` walks for `d` levels of nesting, although every
-    /// walk at one level computes the same answer. Emptied when the outermost
-    /// walk returns, so it holds one call tree at a time. Only looked up, never
-    /// iterated, so it cannot affect row order.
-    invocations: HashMap<InvocationKey, InvocationOutcome>,
+    /// The callee-body walks of the call tree of the outermost walk in flight,
+    /// by the hash of their whole input: `None` for an input walked once, the
+    /// record of a later walk for an input walked again. Without it a function
+    /// whose body follows `k` calls back into itself is walked once per path
+    /// through the call tree, `k^d` walks for `d` levels of nesting, although
+    /// every walk at one level computes the same answer. With it an input is
+    /// walked at most twice while the tables do not change, and an input that
+    /// comes only once costs no copy of its env. A call tree keys its walks
+    /// only after `INVOCATION_KEYING_AFTER_WALKS` of them. Emptied when the
+    /// outermost walk returns, so it holds one call tree at a time. Only looked
+    /// up, never iterated, so it cannot affect row order.
+    invocations: HashMap<u64, Option<Box<InvocationRecord>>>,
     /// Callee-body walks in flight; zero outside the outermost one.
     invocation_walks: usize,
+    /// Callee-body walks made in the call tree of the outermost walk in flight.
+    tree_walks: usize,
     /// Program-global positional index of every `receiver.next()` call: maps the
     /// `.next()` call's `span.start` to its 0-based ordinal among `.next()` calls
     /// on the same receiver name (in source order). Used to sequence generator
@@ -478,6 +511,7 @@ fn compute_module_export_summaries<'ast>(
                 table_generation: 0,
                 invocations: HashMap::new(),
                 invocation_walks: 0,
+                tree_walks: 0,
                 iterator_next_ordinals: BTreeMap::new(),
                 iterator_next_starts: BTreeMap::new(),
                 rows: Vec::new(),
@@ -544,6 +578,7 @@ fn compute_function_return_summaries<'ast>(
             table_generation: 0,
             invocations: HashMap::new(),
             invocation_walks: 0,
+            tree_walks: 0,
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -4437,30 +4472,57 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         }
         // A walk with the same input under unchanged tables already ran in this
         // call tree: replay its effect instead of walking the body again. Nested
-        // invocations run one level deeper, so a walk never meets its own key
+        // invocations run one level deeper, so a walk never meets its own input
         // while in flight. The outermost walk has nothing to reuse and nothing
-        // to share, so it is not keyed.
-        let key = (self.invocation_walks > 0).then(|| InvocationKey {
-            function: flow.function.id,
-            body: std::ptr::from_ref(flow.body).addr(),
-            env: env.clone(),
-            invocation_depth: self.invocation_depth,
-            this_method_walk: self.this_method_walk,
-            current_super: self.current_super.clone(),
-            guard: self.walk_guard.observable_state(),
+        // to share, so it is not keyed, and neither are the first walks of its
+        // call tree.
+        let outermost = self.invocation_walks == 0;
+        let keyed = !outermost && self.tree_walks >= INVOCATION_KEYING_AFTER_WALKS;
+        let key = keyed.then(|| {
+            let input = InvocationInput {
+                function: flow.function.id,
+                body: std::ptr::from_ref(flow.body).addr(),
+                invocation_depth: self.invocation_depth,
+                this_method_walk: self.this_method_walk,
+                current_super: self.current_super.clone(),
+                guard: self.walk_guard.observable_state(),
+            };
+            let hash = InvocationHasher::default().hash_one((&input, &*env));
+            (input, hash)
         });
-        if let Some(outcome) = key.as_ref().and_then(|key| self.invocations.get(key))
-            && outcome.generation == self.table_generation
-        {
-            env.clone_from(&outcome.env);
-            self.walk_guard.budget.set(outcome.budget);
-            return outcome.returned.clone();
+        let mut walked_before = false;
+        if let Some((input, hash)) = &key {
+            match self.invocations.get(hash) {
+                // Equal hashes alone do not make equal inputs.
+                Some(Some(record))
+                    if record.generation == self.table_generation
+                        && record.input == *input
+                        && record.env_before == *env =>
+                {
+                    env.clone_from(&record.env_after);
+                    self.walk_guard.budget.set(record.budget);
+                    return record.returned.clone();
+                }
+                Some(_) => walked_before = true,
+                None => {}
+            }
         }
+        // Only an input that comes again is recorded, so an input walked once
+        // costs no copy of its env. A repeated input is walked a second time to
+        // record it, and its record answers it after that.
+        let env_before = walked_before.then(|| env.clone());
         #[cfg(all(test, feature = "lang-go"))]
-        BODY_WALKS.with(|walks| walks.set(walks.get() + 1));
+        BODY_WALKS.with(|walks| {
+            walks.set(walks.get() + 1);
+            assert!(
+                walks.get() <= BODY_WALK_LIMIT.with(Cell::get),
+                "walked more callee bodies than the limit"
+            );
+        });
         let generation = self.table_generation;
         self.invocation_depth += 1;
         self.invocation_walks += 1;
+        self.tree_walks += 1;
         // Calls in the invoked body belong to `flow.function`, which is the
         // owner every model row emitted from it names.
         let result = if let Some(expression) = flow.expression_body {
@@ -4471,22 +4533,30 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         };
         self.invocation_walks -= 1;
         self.invocation_depth -= 1;
-        match key {
+        match (key, env_before) {
             // A walk that changed a table may not reproduce itself, because a
             // later walk with the same input reads the changed table.
-            Some(key) if self.table_generation == generation => {
+            (Some((input, hash)), Some(env_before)) if self.table_generation == generation => {
                 self.invocations.insert(
-                    key,
-                    InvocationOutcome {
+                    hash,
+                    Some(Box::new(InvocationRecord {
+                        input,
+                        env_before,
                         generation,
                         returned: result.clone(),
-                        env: env.clone(),
+                        env_after: env.clone(),
                         budget: self.walk_guard.budget.get(),
-                    },
+                    })),
                 );
             }
-            Some(_) => {}
-            None => self.invocations.clear(),
+            (Some((_, hash)), None) => {
+                self.invocations.entry(hash).or_insert(None);
+            }
+            (Some(_), Some(_)) | (None, _) => {}
+        }
+        if outermost {
+            self.invocations.clear();
+            self.tree_walks = 0;
         }
         result
     }
