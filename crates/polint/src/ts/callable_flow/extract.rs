@@ -2391,10 +2391,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         assignment: &'ast oxc_ast::ast::AssignmentExpression<'ast>,
         env: &mut FlowEnv,
     ) {
-        let AssignmentTarget::AssignmentTargetIdentifier(target) = &assignment.left else {
+        let Some(name) = assigned_identifier(&assignment.left) else {
             return;
         };
-        let name = target.name.as_str();
         let bound = env
             .bindings
             .get(name)
@@ -9065,6 +9064,18 @@ fn array_element_expression<'a>(
         ArrayExpressionElement::SpreadElement(spread) => Some(&spread.argument),
         ArrayExpressionElement::Elision(_) => None,
         _ => Some(element.to_expression()),
+    }
+}
+
+/// The name an assignment writes, also through a parenthesized or TypeScript
+/// wrapper target such as `(fn as any) = value` or `fn! = value`.
+fn assigned_identifier<'a>(target: &'a AssignmentTarget<'a>) -> Option<&'a str> {
+    if let AssignmentTarget::AssignmentTargetIdentifier(identifier) = target {
+        return Some(identifier.name.as_str());
+    }
+    match target.get_expression()?.get_inner_expression() {
+        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
+        _ => None,
     }
 }
 

@@ -460,7 +460,7 @@ mod tests {
     }
 
     /// Resolved-target texts for the unique call site starting at `call` in
-    /// `main.js`. Returning the whole set (not a membership check) makes every
+    /// `main.ts`, or `main.js` when there is no `main.ts`. Returning the whole set (not a membership check) makes every
     /// fixture below a precision control too: an extra target fails the same way
     /// a missing one does.
     fn resolved_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
@@ -469,7 +469,12 @@ mod tests {
             std::fs::write(repo.path().join(name), body).unwrap();
         }
         let sources = files.iter().copied().collect::<BTreeMap<_, _>>();
-        let source = sources["main.js"];
+        let main_path = if sources.contains_key("main.ts") {
+            "main.ts"
+        } else {
+            "main.js"
+        };
+        let source = sources[main_path];
         assert_eq!(
             source.matches(call).count(),
             1,
@@ -492,7 +497,7 @@ mod tests {
             .db
             .files()
             .iter()
-            .find(|file| file.relative_path == "main.js")
+            .find(|file| file.relative_path == main_path)
             .unwrap();
         let start = source.find(call).unwrap() as u32;
         // `arr.reduce(fn)` and `arr.reduce(fn)()` share a start byte; the snippet
@@ -1173,10 +1178,35 @@ mod tests {
                 "a returned primitive cannot be called, so it does not block the answer",
             ),
         ];
-        for (body, call, expected, why) in cases {
+        // TypeScript assignment targets may wrap the written name.
+        let ts_cases: &[(&str, &str, &[&str], &str)] = &[
+            (
+                "function make() {\n  let g = a;\n  (g as any) = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a write through a type assertion still replaces the local alias",
+            ),
+            (
+                "function make() {\n  let g = a;\n  g! = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a write through a non-null assertion still replaces the local alias",
+            ),
+            (
+                "function make() {\n  let g = a;\n  (g) = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a parenthesized write still replaces the local alias",
+            ),
+        ];
+        let all_cases = cases
+            .iter()
+            .map(|case| ("main.js", case))
+            .chain(ts_cases.iter().map(|case| ("main.ts", case)));
+        for (path, (body, call, expected, why)) in all_cases {
             let source = format!("{HEADER}{body}");
             assert_eq!(
-                resolved_targets_at(&[("main.js", &source)], call),
+                resolved_targets_at(&[(path, &source)], call),
                 expected
                     .iter()
                     .map(|text| (*text).to_string())

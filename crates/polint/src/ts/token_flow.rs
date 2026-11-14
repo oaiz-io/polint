@@ -581,7 +581,12 @@ fn is_written_reference(nodes: &AstNodes<'_>, node_id: NodeId, span: Span) -> bo
         match ancestor.kind() {
             AstKind::ArrayAssignmentTarget(_)
             | AstKind::ObjectAssignmentTarget(_)
-            | AstKind::AssignmentTargetRest(_) => {}
+            | AstKind::AssignmentTargetRest(_)
+            | AstKind::ParenthesizedExpression(_)
+            | AstKind::TSAsExpression(_)
+            | AstKind::TSSatisfiesExpression(_)
+            | AstKind::TSTypeAssertion(_)
+            | AstKind::TSNonNullExpression(_) => {}
             AstKind::AssignmentTargetWithDefault(target) => {
                 if !contains(target.binding.span()) {
                     return false;
