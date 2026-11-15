@@ -33,6 +33,7 @@ The product-specific refinement is that polint should support repo-local call gr
 - [REPO-INDEX.md](REPO-INDEX.md): OSS repositories cloned and inspected.
 - [PAPER-INDEX.md](PAPER-INDEX.md): papers and docs downloaded locally.
 - [VALIDATION.md](VALIDATION.md): validation pass for references, source paths, and core claims.
+- [JS-RECALL-BUCKETS.md](JS-RECALL-BUCKETS.md): JS/TS bench recall by package and plan, missed edges by cause, and the plan for the remaining buckets.
 - [STANDARD.md](STANDARD.md): standardized vocabulary and comparison template.
 - [algorithms/core-algorithms.md](algorithms/core-algorithms.md): Python-ish pseudocode for the main algorithms.
 - [languages/go.md](languages/go.md): Go-specific findings.
