@@ -425,3 +425,116 @@ export const used = localThing;
         assert!(semantic.resolutions.is_empty());
     }
 }
+
+#[cfg(test)]
+mod value_functions {
+    use super::derive_ts_semantic_index;
+    use crate::analysis_api::SourceFile;
+    use crate::internal_core::{FileId, Language};
+    use crate::ts::parse::parse_ts_file;
+    use oxc_allocator::Allocator;
+    use oxc_semantic::SemanticBuilder;
+    use std::path::PathBuf;
+
+    /// Returns `(binding text, function text)` for every value-function row.
+    fn links(path: &str, source: &str) -> Vec<(String, String)> {
+        let file = SourceFile::new(
+            FileId::from_raw(0),
+            PathBuf::from(path),
+            path.to_string(),
+            Language::TypeScript,
+            source.to_string().into(),
+            "test-hash".to_string(),
+        );
+        let allocator = Allocator::default();
+        let parsed = parse_ts_file(&allocator, &file);
+        let semantic = SemanticBuilder::new().build(parsed.program()).semantic;
+        let output = derive_ts_semantic_index(
+            &crate::internal_core::test_stable_key_interner(),
+            &file,
+            source,
+            parsed.program(),
+            semantic.scoping(),
+            semantic.nodes(),
+            false,
+        );
+        let text = |span: &crate::internal_core::Span| {
+            source[span.start_byte as usize..span.end_byte as usize].to_string()
+        };
+        output
+            .value_functions
+            .iter()
+            .map(|row| (text(&row.binding), text(&row.function)))
+            .collect()
+    }
+
+    #[test]
+    fn links_const_bindings_to_their_function_literals_at_any_depth() {
+        let found = links(
+            "src/value.ts",
+            "const top = () => 1;\nfunction outer() {\n  const inner = function () { return 2; };\n  return inner();\n}\n",
+        );
+
+        assert_eq!(
+            found,
+            vec![
+                ("top".to_string(), "() => 1".to_string()),
+                (
+                    "inner".to_string(),
+                    "function () { return 2; }".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn links_unwritten_function_local_let_and_var() {
+        let found = links(
+            "src/value.js",
+            "function outer() {\n  let a = () => 1;\n  var b = () => 2;\n  return a() + b();\n}\n",
+        );
+
+        assert_eq!(
+            found
+                .iter()
+                .map(|(binding, _)| binding.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
+    }
+
+    #[test]
+    fn skips_wrapped_invoked_and_conditional_initializers() {
+        let found = links(
+            "src/value.ts",
+            "const wrapped = wrap(() => 1);\nconst invoked = (function () { return () => 2; })();\nconst picked = flag ? () => 3 : () => 4;\nconst asserted = (() => 5) as Fn;\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn skips_mutable_bindings_that_another_value_can_reach() {
+        let found = links(
+            "src/value.js",
+            "var scriptGlobal = () => 1;\nfunction outer() {\n  let reassigned = () => 1;\n  reassigned = () => 2;\n  var redeclared = () => 3;\n  var redeclared = () => 4;\n  return reassigned() + redeclared();\n}\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn module_scope_let_links_only_in_files_with_module_syntax() {
+        let module = links(
+            "src/value.js",
+            "export let handler = () => 1;\nhandler();\n",
+        );
+        let with_eval = links(
+            "src/value.js",
+            "function outer() {\n  let local = () => 1;\n  eval(code);\n  return local();\n}\n",
+        );
+
+        assert_eq!(module.len(), 1, "{module:?}");
+        assert!(with_eval.is_empty(), "{with_eval:?}");
+    }
+}

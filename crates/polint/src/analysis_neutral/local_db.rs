@@ -42,6 +42,7 @@ use crate::analysis_neutral::semantic_graph::store::SemanticGraphStore;
 use crate::analysis_neutral::solver::store::SolverStore;
 use crate::analysis_neutral::store::SemanticStore;
 use crate::analysis_neutral::summaries::store::SummaryStore;
+use crate::analysis_neutral::symbol_graph::semantic::ValueFunctionFact;
 use crate::analysis_neutral::types::store::TypeStore;
 use crate::analysis_neutral::values::store::ValueStore;
 
@@ -68,6 +69,7 @@ pub struct LocalAnalysisDb {
     definitions: Vec<DefinitionFact>,
     references: Vec<ReferenceFact>,
     semantic_imports: Vec<SemanticImportFact>,
+    value_functions: Vec<ValueFunctionFact>,
     file_metrics: Vec<FileMetricFact>,
     function_metrics: Vec<FunctionMetricFact>,
     complexity_metrics: Vec<ComplexityMetricFact>,
@@ -141,6 +143,7 @@ impl LocalAnalysisDb {
             definitions: Vec::new(),
             references: Vec::new(),
             semantic_imports: Vec::new(),
+            value_functions: Vec::new(),
             file_metrics: Vec::new(),
             function_metrics: Vec::new(),
             complexity_metrics: Vec::new(),
@@ -360,6 +363,14 @@ impl LocalAnalysisDb {
 
     pub fn replace_semantic_imports(&mut self, imports: Vec<SemanticImportFact>) {
         FactDatabase::replace_semantic_imports(self, imports);
+    }
+
+    pub fn replace_value_functions(&mut self, value_functions: Vec<ValueFunctionFact>) {
+        self.value_functions = value_functions;
+    }
+
+    pub fn value_functions(&self) -> &[ValueFunctionFact] {
+        &self.value_functions
     }
 
     pub fn symbols(&self) -> &[SymbolFact] {

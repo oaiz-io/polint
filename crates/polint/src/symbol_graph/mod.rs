@@ -380,6 +380,7 @@ fn derive_requested_symbols_uncached_with_payload(
         semantic_output.generated_symbols,
         semantic_output.stable_exports,
     );
+    db.replace_value_function_facts(semantic_output.value_functions);
     db.replace_symbol_graph_facts(output.symbols, output.definitions, output.references);
     derivation.diagnostics.extend(output.diagnostics);
     derivation
@@ -692,6 +693,7 @@ fn restore_symbol_graph_layer_payload(db: &mut AnalysisDb, payload: &SymbolGraph
         semantic.generated_symbols,
         semantic.stable_exports,
     );
+    db.replace_value_function_facts(semantic.value_functions);
 }
 
 fn validate_symbol_graph_layer_payload(
@@ -730,6 +732,7 @@ fn semantic_index_payload(db: &AnalysisDb) -> SemanticIndexOutput {
         stable_exports: sorted_semantic_rows(db.stable_exports().to_vec(), |row| {
             stable_export_payload_sort_key(&interner, row)
         }),
+        value_functions: db.value_functions().to_vec(),
     }
 }
 

@@ -10,7 +10,7 @@ use crate::analysis_neutral::symbol_graph::{
         AliasFact, AliasId, AliasKind, ExportFact, ExportId, ExportKind, ResolutionFact,
         ResolutionId, ResolutionStepKind, ScopeFact, ScopeId, ScopeKind, SemanticImportFact,
         SemanticImportId, SemanticImportKind, SemanticIndexBuilder, SemanticIndexOutput,
-        SemanticStatus, StableExportId, StableExportIdentity,
+        SemanticStatus, StableExportId, StableExportIdentity, ValueFunctionFact,
     },
     stable_id::{StableReferenceKey, StableSymbolKey},
 };
@@ -24,7 +24,7 @@ use oxc_ast::AstKind;
 use oxc_ast::ast::{
     Argument, AssignmentTarget, BindingIdentifier, BindingPattern, Declaration,
     ExportDefaultDeclarationKind, Expression, ImportDeclarationSpecifier, ImportOrExportKind,
-    ModuleExportName, Program, Statement,
+    ModuleExportName, Program, Statement, VariableDeclarationKind,
 };
 use oxc_semantic::{
     AstNodes, Reference, ReferenceFlags, ReferenceId as OxcReferenceId, Scoping, SemanticBuilder,
@@ -399,8 +399,64 @@ fn derive_ts_semantic_index(
     if requests_references {
         add_ts_semantic_resolution_rows(interner, &mut builder, file, source, scoping, nodes);
     }
+    add_ts_value_function_rows(&mut builder, file, program, scoping, nodes);
 
     builder.finish(interner)
+}
+
+/// Records bindings that can only ever hold the function literal they are
+/// declared with, so a call through the binding has exactly one callee.
+///
+/// The initializer must be the function or arrow expression itself; calls,
+/// conditionals, wrappers and type assertions around it are not followed.
+/// `const` bindings always qualify. `let`/`var` bindings qualify only when they
+/// are declared once, never written, and the file has no direct `eval` that
+/// could write them. A top-level `let`/`var` also needs import or export syntax
+/// in the file: without it the file may run as a classic script, whose global
+/// bindings other scripts can reassign.
+fn add_ts_value_function_rows(
+    builder: &mut SemanticIndexBuilder,
+    file: &SourceFile,
+    program: &Program<'_>,
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) {
+    let mutable_bindings_are_sealed = !scoping.root_unresolved_references().contains_key("eval");
+    let root_is_module_scope = program.body.iter().any(Statement::is_module_declaration);
+    for node in nodes.iter() {
+        let AstKind::VariableDeclarator(declarator) = node.kind() else {
+            continue;
+        };
+        let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+            continue;
+        };
+        let Some(symbol) = binding.symbol_id.get() else {
+            continue;
+        };
+        let function_span = match &declarator.init {
+            Some(Expression::ArrowFunctionExpression(function)) => function.span,
+            Some(Expression::FunctionExpression(function)) => function.span,
+            _ => continue,
+        };
+        let single_value = match declarator.kind {
+            VariableDeclarationKind::Const => true,
+            VariableDeclarationKind::Let | VariableDeclarationKind::Var => {
+                mutable_bindings_are_sealed
+                    && scoping.symbol_redeclarations(symbol).is_empty()
+                    && !scoping.symbol_is_mutated(symbol)
+                    && (root_is_module_scope
+                        || scoping.symbol_scope_id(symbol) != scoping.root_scope_id())
+            }
+            VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing => false,
+        };
+        if !single_value {
+            continue;
+        }
+        builder.add_value_function(ValueFunctionFact {
+            binding: span_from_oxc(file, scoping.symbol_span(symbol)),
+            function: span_from_oxc(file, function_span),
+        });
+    }
 }
 
 fn export_symbol_stable_keys(

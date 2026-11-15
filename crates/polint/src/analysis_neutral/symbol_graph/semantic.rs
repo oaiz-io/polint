@@ -118,6 +118,19 @@ pub struct StableExportIdentity {
     pub status: SemanticStatus,
 }
 
+/// A binding whose only value is one function literal.
+///
+/// `binding` is the declared identifier span, equal to the binding symbol's
+/// `primary_span`; `function` is the span of the function or arrow expression
+/// it is initialised with, equal to that function's syntax fact span. A row
+/// exists only when no other value can reach the binding: a `const`, or a
+/// function-local `let`/`var` that is declared once and never written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValueFunctionFact {
+    pub binding: Span,
+    pub function: Span,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SemanticIndexOutput {
     pub scopes: Vec<ScopeFact>,
@@ -127,6 +140,7 @@ pub struct SemanticIndexOutput {
     pub resolutions: Vec<ResolutionFact>,
     pub generated_symbols: Vec<GeneratedSymbolFact>,
     pub stable_exports: Vec<StableExportIdentity>,
+    pub value_functions: Vec<ValueFunctionFact>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -138,6 +152,8 @@ pub struct CachedSemanticIndexOutput {
     pub resolutions: Vec<CachedResolutionFact>,
     pub generated_symbols: Vec<CachedGeneratedSymbolFact>,
     pub stable_exports: Vec<CachedStableExportIdentity>,
+    #[serde(default)]
+    pub value_functions: Vec<ValueFunctionFact>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -386,6 +402,7 @@ impl CachedSemanticIndexOutput {
                     status: row.status,
                 })
                 .collect(),
+            value_functions: output.value_functions.clone(),
         }
     }
 
@@ -507,6 +524,7 @@ impl CachedSemanticIndexOutput {
                     status: row.status,
                 })
                 .collect(),
+            value_functions: self.value_functions,
             stable_exports: self
                 .stable_exports
                 .into_iter()
@@ -550,6 +568,7 @@ pub struct SemanticIndexBuilder {
     resolutions: Vec<ResolutionFact>,
     generated_symbols: Vec<GeneratedSymbolFact>,
     stable_exports: Vec<StableExportIdentity>,
+    value_functions: Vec<ValueFunctionFact>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -729,6 +748,10 @@ impl SemanticIndexBuilder {
         id
     }
 
+    pub fn add_value_function(&mut self, fact: ValueFunctionFact) {
+        self.value_functions.push(fact);
+    }
+
     pub fn finish(self, interner: &crate::internal_core::StableKeyInterner) -> SemanticIndexOutput {
         SemanticIndexOutput {
             scopes: sort_rows(self.scopes, |row| scope_sort_key(interner, row)),
@@ -744,6 +767,15 @@ impl SemanticIndexBuilder {
             stable_exports: sort_rows(self.stable_exports, |row| {
                 stable_export_sort_key(interner, row)
             }),
+            value_functions: sort_rows(self.value_functions, |row| {
+                (
+                    row.binding.file,
+                    row.binding.start_byte,
+                    row.binding.end_byte,
+                    row.function.start_byte,
+                    row.function.end_byte,
+                )
+            }),
         }
     }
 }
@@ -757,6 +789,7 @@ impl SemanticIndexOutput {
         self.resolutions.extend(other.resolutions);
         self.generated_symbols.extend(other.generated_symbols);
         self.stable_exports.extend(other.stable_exports);
+        self.value_functions.extend(other.value_functions);
     }
 }
 

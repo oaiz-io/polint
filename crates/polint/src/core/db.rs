@@ -92,7 +92,7 @@ use crate::module_graph::topology::{
 use crate::symbol_graph::semantic::{
     AliasFact, AliasId, ExportFact, ExportId, GeneratedSymbolFact, GeneratedSymbolId,
     ResolutionFact, ResolutionId, ScopeFact, ScopeId, SemanticImportFact, SemanticImportId,
-    SemanticStatus, StableExportId, StableExportIdentity,
+    SemanticStatus, StableExportId, StableExportIdentity, ValueFunctionFact,
 };
 use crate::ts::object_model::facts::{
     TsObjectAllocationFact, TsPropertyReadFact, TsPropertyWriteFact, TsPrototypeLinkFact,
@@ -1154,6 +1154,26 @@ impl AnalysisDb {
             stable_exports,
         );
         self.refresh_semantic_index_metadata();
+    }
+
+    /// Stores the value-function rows of the current semantic index. Call after
+    /// [`Self::replace_semantic_index_facts`], which clears them.
+    pub(crate) fn replace_value_function_facts(
+        &mut self,
+        mut value_functions: Vec<ValueFunctionFact>,
+    ) {
+        value_functions.sort_by_key(|row| {
+            (
+                row.binding.file,
+                row.binding.start_byte,
+                row.binding.end_byte,
+                row.function.start_byte,
+                row.function.end_byte,
+            )
+        });
+        value_functions.dedup();
+        self.semantic_index_store_mut()
+            .replace_value_functions(value_functions);
     }
 
     pub(crate) fn replace_semantic_mir(&mut self, output: MirOutput) -> Result<(), AnalysisError> {
@@ -3776,6 +3796,10 @@ impl AnalysisDb {
 
     pub(crate) fn semantic_imports(&self) -> &[SemanticImportFact] {
         self.semantic_index_store().semantic_imports()
+    }
+
+    pub(crate) fn value_functions(&self) -> &[ValueFunctionFact] {
+        self.semantic_index_store().value_functions()
     }
 
     pub(crate) fn exports(&self) -> &[ExportFact] {
@@ -6458,6 +6482,10 @@ impl AnalysisDb {
 impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
     fn semantic_scopes(&self) -> &[ScopeFact] {
         self.scopes()
+    }
+
+    fn value_functions(&self) -> &[ValueFunctionFact] {
+        self.value_functions()
     }
 
     /// Route the trait's symbol and reference lookups to the indexed inherent

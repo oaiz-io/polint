@@ -14,7 +14,7 @@ use crate::analysis_api::{
 use crate::internal_core::{Language, StableKeyId, StableKeyInterner};
 
 use crate::analysis_neutral::summaries::facts::SummaryDomainKind;
-use crate::analysis_neutral::symbol_graph::semantic::ScopeFact;
+use crate::analysis_neutral::symbol_graph::semantic::{ScopeFact, ValueFunctionFact};
 use crate::analysis_neutral::{
     CALLS_PROVIDER_ID, POLINT_ABSTRACT_DOMAINS_PROVIDER_ID, POLINT_DIRECT_SUMMARIES_PROVIDER_ID,
 };
@@ -292,6 +292,11 @@ pub trait AnalysisHost: FactDatabase {
 
     /// Language-neutral semantic scopes installed by the composition root.
     fn semantic_scopes(&self) -> &[ScopeFact] {
+        &[]
+    }
+
+    /// Bindings whose only value is one function literal.
+    fn value_functions(&self) -> &[ValueFunctionFact] {
         &[]
     }
 
@@ -682,7 +687,11 @@ pub trait AnalysisHost: FactDatabase {
     }
 }
 
-impl AnalysisHost for LocalAnalysisDb {}
+impl AnalysisHost for LocalAnalysisDb {
+    fn value_functions(&self) -> &[ValueFunctionFact] {
+        LocalAnalysisDb::value_functions(self)
+    }
+}
 
 fn host_fact_meta(
     producer_id: &'static str,
