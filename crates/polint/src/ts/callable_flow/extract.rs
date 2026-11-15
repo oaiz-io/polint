@@ -185,6 +185,9 @@ struct InvocationRecord {
     returned: CollectionTargets,
     env_after: FlowEnv,
     budget: usize,
+    /// The walks the recorded walk made, itself included, which a replay
+    /// counts as made.
+    walks: usize,
 }
 
 /// Hashes an invocation's input and starting env into its key in
@@ -206,6 +209,33 @@ thread_local! {
     static BODY_WALKS: Cell<usize> = const { Cell::new(0) };
     /// The `BODY_WALKS` count past which a walk on this thread panics.
     static BODY_WALK_LIMIT: Cell<usize> = const { Cell::new(usize::MAX) };
+    /// The walks a call tree on this thread makes before its walks are keyed.
+    static KEYING_AFTER_WALKS: Cell<usize> = const { Cell::new(INVOCATION_KEYING_AFTER_WALKS) };
+    /// Walks on this thread answered from a record instead of walked.
+    static REPLAYED_WALKS: Cell<usize> = const { Cell::new(0) };
+}
+
+/// The walks a call tree makes before its walks are keyed: the threshold, or
+/// on a test thread the value `key_walks_after` set there.
+fn keying_after_walks() -> usize {
+    #[cfg(all(test, feature = "lang-go"))]
+    return KEYING_AFTER_WALKS.with(Cell::get);
+    #[cfg(not(all(test, feature = "lang-go")))]
+    INVOCATION_KEYING_AFTER_WALKS
+}
+
+/// Keys the walks of every call tree on the calling thread after `walks` of
+/// them, so a small fixture can exercise the walk cache. Returns the previous
+/// setting.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn key_walks_after(walks: usize) -> usize {
+    KEYING_AFTER_WALKS.with(|threshold| threshold.replace(walks))
+}
+
+/// Walks on the calling thread answered from a record so far.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn replayed_walks() -> usize {
+    REPLAYED_WALKS.with(Cell::get)
 }
 
 /// Callee bodies walked on the calling thread so far.
@@ -4476,7 +4506,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // to share, so it is not keyed, and neither are the first walks of its
         // call tree.
         let outermost = self.invocation_walks == 0;
-        let keyed = !outermost && self.tree_walks >= INVOCATION_KEYING_AFTER_WALKS;
+        // A finished call tree leaves nothing for the next one to replay.
+        debug_assert!(!outermost || (self.invocations.is_empty() && self.tree_walks == 0));
+        let keyed = !outermost && self.tree_walks >= keying_after_walks();
         let key = keyed.then(|| {
             let input = InvocationInput {
                 function: flow.function.id,
@@ -4500,6 +4532,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 {
                     env.clone_from(&record.env_after);
                     self.walk_guard.budget.set(record.budget);
+                    self.tree_walks += record.walks;
+                    #[cfg(all(test, feature = "lang-go"))]
+                    REPLAYED_WALKS.with(|walks| walks.set(walks.get() + 1));
                     return record.returned.clone();
                 }
                 Some(_) => walked_before = true,
@@ -4519,6 +4554,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             );
         });
         let generation = self.table_generation;
+        let walks_before = self.tree_walks;
         self.invocation_depth += 1;
         self.invocation_walks += 1;
         self.tree_walks += 1;
@@ -4545,6 +4581,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                         returned: result.clone(),
                         env_after: env.clone(),
                         budget: self.walk_guard.budget.get(),
+                        walks: self.tree_walks - walks_before,
                     })),
                 );
             }

@@ -1263,4 +1263,128 @@ mod tests {
             triple - double
         );
     }
+
+    /// Keying every walk changes no flow. Past the first case, each case
+    /// repeats a callee walk whose outcome differs between repeats through one
+    /// input the walk cache keys on or one table it guards, so a replay that
+    /// ignored it would lose a flow the unkeyed walk finds.
+    #[test]
+    fn keyed_walks_find_the_flows_unkeyed_walks_find() {
+        const PRELUDE: &str = "function a() {}\nfunction b() {}\n";
+        let cases: &[(&str, &str, bool)] = &[
+            (
+                "a callee called three times with nothing changed between the calls",
+                "function leaf(f) { f(); }\n\
+                 function use(f) { leaf(f); }\n\
+                 function main(f) { use(f); use(f); use(f); }\n\
+                 main(a);\n",
+                true,
+            ),
+            (
+                "a prototype method assigned between the second and third call",
+                "function Foo() {}\n\
+                 function use() { const o = new Foo(); o.m(); }\n\
+                 function main() { use(); use(); Foo.prototype.m = a; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "prototype methods assigned during the recorded walk",
+                "function Foo() {}\n\
+                 function use() {\n\
+                 \x20 const o = new Foo();\n\
+                 \x20 o.n4();\n\
+                 \x20 Foo.prototype.n4 = o.n3;\n\
+                 \x20 Foo.prototype.n3 = o.n2;\n\
+                 \x20 Foo.prototype.n2 = o.n1;\n\
+                 \x20 Foo.prototype.n1 = o.m;\n\
+                 \x20 Foo.prototype.m = a;\n\
+                 }\n\
+                 function main() { use(); use(); use(); use(); use(); use(); use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "a class declared between the second and third call",
+                "function use() { const o = new Foo(); o.m(); }\n\
+                 function main() { use(); use(); const Foo = class { m() {} }; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "a class with static members declared between the second and third call",
+                "function use() { Foo.z = b; Foo.m(); }\n\
+                 function main() { use(); use(); const Foo = class { static m() {} }; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "a static member assigned between the second and third call",
+                "class Foo {}\n\
+                 function use() { Foo.z = b; Foo.m(); }\n\
+                 function main() { use(); use(); Foo.m = a; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "the same callee at another invocation depth",
+                &format!(
+                    "function leaf(f) {{ f(); }}\n\
+                     function use() {{ leaf(a); }}\n\
+                     {}function d15() {{ use(); }}\n\
+                     function main() {{ d1(); d1(); use(); }}\n\
+                     main();\n",
+                    (1..15)
+                        .map(|depth| format!("function d{depth}() {{ d{}(); }}\n", depth + 1))
+                        .collect::<String>()
+                ),
+                false,
+            ),
+            (
+                "the same callee under another walk guard",
+                "function use(x, k) { x.f(k); }\n\
+                 function main(bb) {\n\
+                 \x20 const o = { f(cb) { cb(); use(this, bb); use(this, bb); } };\n\
+                 \x20 o.f(a);\n\
+                 \x20 use(o, bb);\n\
+                 }\n\
+                 main(b);\n",
+                false,
+            ),
+            (
+                "the same callee under another super",
+                "function main(pp) {\n\
+                 \x20 const t = { h() { super.m1(); } };\n\
+                 \x20 const r = { m3() { q.g(); (t || t).h(); } };\n\
+                 \x20 const r2 = { m3: r.m3 };\n\
+                 \x20 const q = { g() { r.m3(); (t || t).h(); (t || t).h(); } };\n\
+                 \x20 Object.setPrototypeOf(r, pp);\n\
+                 \x20 r2.m3();\n\
+                 \x20 q.g();\n\
+                 }\n\
+                 const p = { m1() {} };\n\
+                 main(p);\n",
+                false,
+            ),
+        ];
+        for (case, body, replays) in cases {
+            let repo = tempfile::tempdir().unwrap();
+            std::fs::write(repo.path().join("main.js"), format!("{PRELUDE}{body}")).unwrap();
+            let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+            let file = &output.db.files()[0];
+            let arena = oxc_allocator::Allocator::default();
+            let parsed = crate::ts::parse::parse_ts_file(&arena, file);
+            let programs = BTreeMap::from([(file.id, parsed.program())]);
+            let previous = super::extract::key_walks_after(usize::MAX);
+            let unkeyed = super::collect_callable_flows(&output.db, &programs);
+            super::extract::key_walks_after(0);
+            let before = super::extract::replayed_walks();
+            let keyed = super::collect_callable_flows(&output.db, &programs);
+            let replayed = super::extract::replayed_walks() - before;
+            super::extract::key_walks_after(previous);
+            assert!(!unkeyed.is_empty(), "{case}: no flows");
+            assert_eq!(keyed, unkeyed, "{case}");
+            assert!(!replays || replayed > 0, "{case}: no walk replayed");
+        }
+    }
 }
