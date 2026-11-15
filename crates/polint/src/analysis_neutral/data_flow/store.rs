@@ -24,32 +24,26 @@ impl DataFlowOutput {
     }
 
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.nodes.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.kind, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.kind,
-                right.id,
-            ))
-        });
+        interner.sort_by_key_text(
+            &mut self.nodes,
+            |row| row.stable_key,
+            |row| (row.kind, row.id),
+        );
         self.models = self
             .models
             .into_iter()
             .map(DataFlowModelFact::normalized)
             .collect();
-        self.models.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.kind, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.kind,
-                right.id,
-            ))
-        });
-        self.budgets.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.reason, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.reason,
-                right.id,
-            ))
-        });
+        interner.sort_by_key_text(
+            &mut self.models,
+            |row| row.stable_key,
+            |row| (row.kind, row.id),
+        );
+        interner.sort_by_key_text(
+            &mut self.budgets,
+            |row| row.stable_key,
+            |row| (row.reason, row.id),
+        );
 
         let node_remap = self
             .nodes
@@ -103,24 +97,11 @@ impl DataFlowOutput {
                 edge
             })
             .collect();
-        self.edges.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.from,
-                left.to,
-                left.kind,
-                left.algorithm,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.from,
-                    right.to,
-                    right.kind,
-                    right.algorithm,
-                    right.id,
-                ))
-        });
+        interner.sort_by_key_text(
+            &mut self.edges,
+            |row| row.stable_key,
+            |row| (row.from, row.to, row.kind, row.algorithm, row.id),
+        );
         for (index, edge) in self.edges.iter_mut().enumerate() {
             edge.id = DataFlowEdgeId(index as u64);
         }

@@ -96,24 +96,11 @@ impl EvidenceOutput {
                 edge
             })
             .collect();
-        self.edges.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.from,
-                left.to,
-                left.kind,
-                left.query_mode,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.from,
-                    right.to,
-                    right.kind,
-                    right.query_mode,
-                    right.id,
-                ))
-        });
+        interner.sort_by_key_text(
+            &mut self.edges,
+            |row| row.stable_key,
+            |row| (row.from, row.to, row.kind, row.query_mode, row.id),
+        );
         let edge_remap = self
             .edges
             .iter()
@@ -135,13 +122,11 @@ impl EvidenceOutput {
                 path
             })
             .collect();
-        self.paths.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.rank, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.rank,
-                right.id,
-            ))
-        });
+        interner.sort_by_key_text(
+            &mut self.paths,
+            |row| row.stable_key,
+            |row| (row.rank, row.id),
+        );
         let path_remap = self
             .paths
             .iter()
@@ -164,13 +149,11 @@ impl EvidenceOutput {
                 slice
             })
             .collect();
-        self.slices.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.query_mode, left.id).cmp(&(
-                interner.resolve(right.stable_key),
-                right.query_mode,
-                right.id,
-            ))
-        });
+        interner.sort_by_key_text(
+            &mut self.slices,
+            |row| row.stable_key,
+            |row| (row.query_mode, row.id),
+        );
         let slice_remap = self
             .slices
             .iter()
@@ -199,14 +182,12 @@ impl EvidenceOutput {
             remap_required(&mut replay.bundle, &bundle_remap);
         }
 
-        self.unknowns.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.reason)
-                .cmp(&(interner.resolve(right.stable_key), right.reason))
-        });
-        self.replay_keys.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.query_mode)
-                .cmp(&(interner.resolve(right.stable_key), right.query_mode))
-        });
+        interner.sort_by_key_text(&mut self.unknowns, |row| row.stable_key, |row| row.reason);
+        interner.sort_by_key_text(
+            &mut self.replay_keys,
+            |row| row.stable_key,
+            |row| row.query_mode,
+        );
 
         self
     }
@@ -426,13 +407,7 @@ fn normalize_nodes(
         .into_iter()
         .map(EvidenceNodeFact::normalized)
         .collect();
-    nodes.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.kind, left.id).cmp(&(
-            interner.resolve(right.stable_key),
-            right.kind,
-            right.id,
-        ))
-    });
+    interner.sort_by_key_text(&mut nodes, |row| row.stable_key, |row| (row.kind, row.id));
     nodes
 }
 
@@ -440,13 +415,11 @@ fn normalize_omitted_regions(
     mut omitted_regions: Vec<EvidenceOmittedRegionFact>,
     interner: &StableKeyInterner,
 ) -> Vec<EvidenceOmittedRegionFact> {
-    omitted_regions.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.reason, left.id).cmp(&(
-            interner.resolve(right.stable_key),
-            right.reason,
-            right.id,
-        ))
-    });
+    interner.sort_by_key_text(
+        &mut omitted_regions,
+        |row| row.stable_key,
+        |row| (row.reason, row.id),
+    );
     omitted_regions
 }
 
@@ -458,13 +431,11 @@ fn normalize_bundles(
         .into_iter()
         .map(EvidenceBundleFact::normalized)
         .collect::<Vec<_>>();
-    bundles.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.query_mode, left.id).cmp(&(
-            interner.resolve(right.stable_key),
-            right.query_mode,
-            right.id,
-        ))
-    });
+    interner.sort_by_key_text(
+        &mut bundles,
+        |row| row.stable_key,
+        |row| (row.query_mode, row.id),
+    );
     bundles
 }
 
@@ -472,6 +443,7 @@ fn validate_references(
     output: &EvidenceOutput,
     interner: &StableKeyInterner,
 ) -> Result<(), AnalysisError> {
+    let keys = interner.read_view();
     reject_duplicate_ids(output.nodes.iter().map(|node| node.id), "evidence node id")?;
     reject_duplicate_ids(output.edges.iter().map(|edge| edge.id), "evidence edge id")?;
     reject_duplicate_ids(
@@ -523,7 +495,7 @@ fn validate_references(
         if !nodes.contains(&edge.from) || !nodes.contains(&edge.to) {
             return invalid(format!(
                 "evidence edge `{}` references missing endpoint",
-                interner.resolve(edge.stable_key)
+                keys.text(edge.stable_key)
             ));
         }
     }
@@ -531,21 +503,21 @@ fn validate_references(
         if bundle.entry_node.is_some_and(|node| !nodes.contains(&node)) {
             return invalid(format!(
                 "evidence bundle `{}` references missing entry node",
-                interner.resolve(bundle.stable_key)
+                keys.text(bundle.stable_key)
             ));
         }
         require_all(
             &bundle.selected_paths,
             &paths,
             "path",
-            interner.resolve(bundle.stable_key).as_ref(),
+            keys.text(bundle.stable_key),
             "bundle",
         )?;
         require_all(
             &bundle.selected_slices,
             &slices,
             "slice",
-            interner.resolve(bundle.stable_key).as_ref(),
+            keys.text(bundle.stable_key),
             "bundle",
         )?;
     }
@@ -554,28 +526,28 @@ fn validate_references(
             path.bundle,
             &bundles,
             "bundle",
-            interner.resolve(path.stable_key).as_ref(),
+            keys.text(path.stable_key),
             "path",
         )?;
         require_all(
             &path.nodes,
             &nodes,
             "node",
-            interner.resolve(path.stable_key).as_ref(),
+            keys.text(path.stable_key),
             "path",
         )?;
         require_all(
             &path.edges,
             &edges,
             "edge",
-            interner.resolve(path.stable_key).as_ref(),
+            keys.text(path.stable_key),
             "path",
         )?;
         require_all(
             &path.omitted_regions,
             &omitted,
             "omitted region",
-            interner.resolve(path.stable_key).as_ref(),
+            keys.text(path.stable_key),
             "path",
         )?;
     }
@@ -584,35 +556,35 @@ fn validate_references(
             slice.bundle,
             &bundles,
             "bundle",
-            interner.resolve(slice.stable_key).as_ref(),
+            keys.text(slice.stable_key),
             "slice",
         )?;
         require_all(
             &slice.root_nodes,
             &nodes,
             "root node",
-            interner.resolve(slice.stable_key).as_ref(),
+            keys.text(slice.stable_key),
             "slice",
         )?;
         require_all(
             &slice.nodes,
             &nodes,
             "node",
-            interner.resolve(slice.stable_key).as_ref(),
+            keys.text(slice.stable_key),
             "slice",
         )?;
         require_all(
             &slice.edges,
             &edges,
             "edge",
-            interner.resolve(slice.stable_key).as_ref(),
+            keys.text(slice.stable_key),
             "slice",
         )?;
         require_all(
             &slice.omitted_regions,
             &omitted,
             "omitted region",
-            interner.resolve(slice.stable_key).as_ref(),
+            keys.text(slice.stable_key),
             "slice",
         )?;
     }
@@ -621,28 +593,28 @@ fn validate_references(
             unknown.bundle,
             &bundles,
             "bundle",
-            interner.resolve(unknown.stable_key).as_ref(),
+            keys.text(unknown.stable_key),
             "unknown",
         )?;
         require_option(
             unknown.path,
             &paths,
             "path",
-            interner.resolve(unknown.stable_key).as_ref(),
+            keys.text(unknown.stable_key),
             "unknown",
         )?;
         require_option(
             unknown.slice,
             &slices,
             "slice",
-            interner.resolve(unknown.stable_key).as_ref(),
+            keys.text(unknown.stable_key),
             "unknown",
         )?;
         require_option(
             unknown.edge,
             &edges,
             "edge",
-            interner.resolve(unknown.stable_key).as_ref(),
+            keys.text(unknown.stable_key),
             "unknown",
         )?;
     }
@@ -651,21 +623,21 @@ fn validate_references(
             region.bundle,
             &bundles,
             "bundle",
-            interner.resolve(region.stable_key).as_ref(),
+            keys.text(region.stable_key),
             "omitted",
         )?;
         require_option(
             region.path,
             &paths,
             "path",
-            interner.resolve(region.stable_key).as_ref(),
+            keys.text(region.stable_key),
             "omitted",
         )?;
         require_option(
             region.slice,
             &slices,
             "slice",
-            interner.resolve(region.stable_key).as_ref(),
+            keys.text(region.stable_key),
             "omitted",
         )?;
     }
@@ -674,7 +646,7 @@ fn validate_references(
             replay.bundle,
             &bundles,
             "bundle",
-            interner.resolve(replay.stable_key).as_ref(),
+            keys.text(replay.stable_key),
             "replay",
         )?;
     }
