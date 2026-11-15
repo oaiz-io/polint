@@ -2939,4 +2939,191 @@ export const used = missing;
                 && reference.precision == SymbolPrecision::Unresolved
         }));
     }
+
+    fn resolved(import: ImportId, file: FileId, target: ModuleNodeId) -> ResolvedImportFact {
+        ResolvedImportFact::new(
+            crate::core::ResolvedImportId::from_raw(0),
+            import,
+            file,
+            Some(target),
+            ResolutionStatus::Resolved,
+            ResolutionPrecision::ExactFile,
+            None,
+        )
+    }
+
+    fn exported_symbol_in<'a>(
+        symbols: &'a [SymbolFact],
+        file: FileId,
+        name: &str,
+    ) -> &'a SymbolFact {
+        symbols
+            .iter()
+            .find(|symbol| symbol.name == name && symbol.is_exported && symbol.file == Some(file))
+            .unwrap_or_else(|| panic!("missing exported symbol `{name}` in {file:?}"))
+    }
+
+    #[test]
+    fn links_imports_through_barrel_re_exports_to_declaring_symbols() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let handlers = r#"
+import { requireAdmin, renamed, onlyStar, dup, missing } from "./index";
+
+export const used = [requireAdmin, renamed, onlyStar, dup, missing];
+"#;
+        let index = r#"
+export { requireAdmin } from "./gate";
+export { other as renamed } from "./gate";
+export * from "./c";
+export * from "./a";
+export * from "./b";
+"#;
+        let gate = "export function requireAdmin() {}\nexport function other() {}\n";
+        let only_star = "export function onlyStar() {}\n";
+        let a = "export function dup() {}\n";
+        let b = "export function dup() {}\n";
+        let handlers_file = add_file(&mut db, temp.path(), "src/handlers.ts", handlers);
+        let index_file = add_file(&mut db, temp.path(), "src/index.ts", index);
+        let gate_file = add_file(&mut db, temp.path(), "src/gate.ts", gate);
+        let c_file = add_file(&mut db, temp.path(), "src/c.ts", only_star);
+        let a_file = add_file(&mut db, temp.path(), "src/a.ts", a);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let nodes = [
+            (ModuleNodeId::from_raw(0), "src/handlers.ts", handlers_file),
+            (ModuleNodeId::from_raw(1), "src/index.ts", index_file),
+            (ModuleNodeId::from_raw(2), "src/gate.ts", gate_file),
+            (ModuleNodeId::from_raw(3), "src/c.ts", c_file),
+            (ModuleNodeId::from_raw(4), "src/a.ts", a_file),
+            (ModuleNodeId::from_raw(5), "src/b.ts", b_file),
+        ];
+        let imports = vec![
+            (
+                push_import(&mut db, handlers_file, handlers, "./index", 0),
+                handlers_file,
+                nodes[1].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./gate", 0),
+                index_file,
+                nodes[2].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./gate", 1),
+                index_file,
+                nodes[2].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./c", 0),
+                index_file,
+                nodes[3].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./a", 0),
+                index_file,
+                nodes[4].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./b", 0),
+                index_file,
+                nodes[5].0,
+            ),
+        ];
+        db.replace_module_graph_facts(
+            imports
+                .into_iter()
+                .map(|(import, file, target)| resolved(import, file, target))
+                .collect(),
+            nodes
+                .iter()
+                .map(|(id, label, file)| file_node(*id, label, *file))
+                .collect(),
+            vec![],
+        );
+
+        let (symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+        let import_reference = |name: &str| {
+            references
+                .iter()
+                .find(|reference| {
+                    reference.name == name
+                        && reference.kind == ReferenceKind::Import
+                        && reference.file == Some(handlers_file)
+                })
+                .unwrap_or_else(|| panic!("missing import reference `{name}`"))
+        };
+        let linked = |name: &str, target: &SymbolFact| {
+            let reference = import_reference(name);
+            assert_eq!(reference.target, Some(target.id), "{name}: {reference:#?}");
+            assert_eq!(reference.status, SymbolResolutionStatus::Resolved);
+            assert_eq!(reference.precision, SymbolPrecision::ModuleLinked);
+        };
+
+        linked(
+            "requireAdmin",
+            exported_symbol_in(&symbols, gate_file, "requireAdmin"),
+        );
+        linked("renamed", exported_symbol_in(&symbols, gate_file, "other"));
+        linked("onlyStar", exported_symbol_in(&symbols, c_file, "onlyStar"));
+
+        let dup = import_reference("dup");
+        assert_eq!(dup.target, None);
+        assert_eq!(dup.status, SymbolResolutionStatus::Ambiguous);
+        assert!(
+            dup.candidates
+                .contains(&exported_symbol_in(&symbols, a_file, "dup").id)
+        );
+        assert!(
+            dup.candidates
+                .contains(&exported_symbol_in(&symbols, b_file, "dup").id)
+        );
+
+        let missing = import_reference("missing");
+        assert_eq!(missing.target, None);
+        assert_eq!(missing.status, SymbolResolutionStatus::Unresolved);
+    }
+
+    #[test]
+    fn re_export_cycles_stay_unresolved() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let user = "import { loop } from \"./a\";\nexport const used = loop;\n";
+        let a = "export { loop } from \"./b\";\n";
+        let b = "export { loop } from \"./a\";\n";
+        let user_file = add_file(&mut db, temp.path(), "src/user.ts", user);
+        let a_file = add_file(&mut db, temp.path(), "src/a.ts", a);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let (user_node, a_node, b_node) = (
+            ModuleNodeId::from_raw(0),
+            ModuleNodeId::from_raw(1),
+            ModuleNodeId::from_raw(2),
+        );
+        let user_import = push_import(&mut db, user_file, user, "./a", 0);
+        let a_import = push_import(&mut db, a_file, a, "./b", 0);
+        let b_import = push_import(&mut db, b_file, b, "./a", 0);
+        db.replace_module_graph_facts(
+            vec![
+                resolved(user_import, user_file, a_node),
+                resolved(a_import, a_file, b_node),
+                resolved(b_import, b_file, a_node),
+            ],
+            vec![
+                file_node(user_node, "src/user.ts", user_file),
+                file_node(a_node, "src/a.ts", a_file),
+                file_node(b_node, "src/b.ts", b_file),
+            ],
+            vec![],
+        );
+
+        let (_symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+
+        assert!(references.iter().any(|reference| {
+            reference.name == "loop"
+                && reference.kind == ReferenceKind::Import
+                && reference.file == Some(user_file)
+                && reference.target.is_none()
+                && reference.status == SymbolResolutionStatus::Unresolved
+        }));
+    }
+
 }

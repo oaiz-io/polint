@@ -47,6 +47,7 @@ struct TsFileSymbolSummary {
     file: FileId,
     import_aliases: Vec<ImportAlias>,
     exports: BTreeMap<String, Vec<PolintSymbolId>>,
+    re_exports: Vec<ReExport>,
 }
 
 impl TsFileSymbolSummary {
@@ -55,9 +56,35 @@ impl TsFileSymbolSummary {
             file,
             import_aliases: Vec::new(),
             exports: BTreeMap::new(),
+            re_exports: Vec::new(),
         }
     }
 }
+
+/// An `export ... from "m"` statement: the names it forwards are bindings of
+/// another module, so they never appear in the declaring file's local exports.
+#[derive(Debug, Clone)]
+struct ReExport {
+    import_path: String,
+    import_source_span: Span,
+    kind: ReExportKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReExportKind {
+    /// `export { imported as exported } from "m"`.
+    Named { exported: String, imported: String },
+    /// `export * from "m"`: every non-default name of `m`.
+    Star,
+    /// `export * as exported from "m"`: a namespace object, not a declaration.
+    StarAs { exported: String },
+}
+
+/// Bound on re-export hops followed while linking an import alias.
+const MAX_RE_EXPORT_HOPS: usize = 8;
+/// Bound on (module, name) lookups spent linking one import alias. Exceeding
+/// it leaves the alias unresolved rather than linked on a partial search.
+const MAX_RE_EXPORT_LOOKUPS: usize = 512;
 
 #[derive(Debug, Clone)]
 struct ImportAlias {
@@ -183,6 +210,7 @@ fn derive_ts_file_symbols(
     };
 
     let import_aliases = collect_import_aliases(file, source, parsed.program());
+    let re_exports = collect_re_exports(file, parsed.program());
     let semantic_return = SemanticBuilder::new()
         .with_check_syntax_error(true)
         .build(parsed.program());
@@ -210,6 +238,7 @@ fn derive_ts_file_symbols(
         file: file.id,
         import_aliases,
         exports: BTreeMap::new(),
+        re_exports,
     };
     let mut symbol_ids = BTreeMap::<OxcSymbolId, PolintSymbolId>::new();
     let mut oxc_symbols = scoping.symbol_ids().collect::<Vec<_>>();
@@ -1619,10 +1648,6 @@ fn add_import_alias_references(
     module_nodes: &[ModuleNode],
     summaries: &[TsFileSymbolSummary],
 ) {
-    let exports_by_file = summaries
-        .iter()
-        .map(|summary| (summary.file, summary.exports.clone()))
-        .collect::<BTreeMap<_, _>>();
     let imports_by_key = db
         .imports()
         .iter()
@@ -1641,6 +1666,15 @@ fn add_import_alias_references(
         .iter()
         .filter_map(|node| node.file.map(|file| (node.id, file)))
         .collect::<BTreeMap<ModuleNodeId, FileId>>();
+    let modules = ModuleExports {
+        summaries: summaries
+            .iter()
+            .map(|summary| (summary.file, summary))
+            .collect(),
+        imports_by_key: &imports_by_key,
+        resolved_by_import: &resolved_by_import,
+        file_by_node: &file_by_node,
+    };
 
     for alias in summaries
         .iter()
@@ -1662,28 +1696,147 @@ fn add_import_alias_references(
             continue;
         };
 
-        add_import_alias_reference(builder, alias, resolved, &file_by_node, &exports_by_file);
+        add_import_alias_reference(builder, alias, resolved, &modules);
     }
+}
+
+/// Export lookup across the module graph: local exports, then `export ... from`
+/// forwarding, resolved only through imports the module graph resolved to a
+/// file.
+struct ModuleExports<'a> {
+    summaries: BTreeMap<FileId, &'a TsFileSymbolSummary>,
+    imports_by_key: &'a BTreeMap<(FileId, String, u32), &'a crate::analysis_api::ImportFact>,
+    resolved_by_import: &'a BTreeMap<crate::internal_core::ImportId, &'a ResolvedImportFact>,
+    file_by_node: &'a BTreeMap<ModuleNodeId, FileId>,
+}
+
+impl ModuleExports<'_> {
+    fn re_export_target(&self, file: FileId, re_export: &ReExport) -> Option<FileId> {
+        let key = (
+            file,
+            re_export.import_path.clone(),
+            re_export.import_source_span.start_byte,
+        );
+        let import = self.imports_by_key.get(&key)?;
+        let resolved = self.resolved_by_import.get(&import.id)?;
+        if resolved.status != ResolutionStatus::Resolved {
+            return None;
+        }
+        self.file_by_node.get(&resolved.target_node?).copied()
+    }
+
+    /// Declaring symbols that `name` exported from `file` binds to. An empty
+    /// result means the binding could not be proven; several results mean the
+    /// name is ambiguous.
+    fn exported(&self, file: FileId, name: &str) -> Vec<PolintSymbolId> {
+        let mut search = ReExportSearch {
+            path: Vec::new(),
+            lookups: 0,
+        };
+        let mut candidates = self
+            .exported_within(file, name, &mut search)
+            .unwrap_or_default();
+        candidates.sort_unstable();
+        candidates.dedup();
+        candidates
+    }
+
+    /// `None` when the search could not finish, so no candidate set from it
+    /// may be trusted.
+    fn exported_within(
+        &self,
+        file: FileId,
+        name: &str,
+        search: &mut ReExportSearch,
+    ) -> Option<Vec<PolintSymbolId>> {
+        search.lookups += 1;
+        if search.path.len() > MAX_RE_EXPORT_HOPS || search.lookups > MAX_RE_EXPORT_LOOKUPS {
+            return None;
+        }
+        if search
+            .path
+            .iter()
+            .any(|(seen_file, seen_name)| *seen_file == file && seen_name == name)
+        {
+            // A star cycle contributes no binding; a named cycle never
+            // resolves, and the caller treats an empty named result as unknown.
+            return Some(Vec::new());
+        }
+        let summary = self.summaries.get(&file)?;
+        if let Some(local) = summary.exports.get(name).filter(|local| !local.is_empty()) {
+            return Some(local.clone());
+        }
+
+        search.path.push((file, name.to_string()));
+        let result = self.forwarded_export(summary, name, search);
+        search.path.pop();
+        result
+    }
+
+    fn forwarded_export(
+        &self,
+        summary: &TsFileSymbolSummary,
+        name: &str,
+        search: &mut ReExportSearch,
+    ) -> Option<Vec<PolintSymbolId>> {
+        let mut forwarded = false;
+        let mut candidates = Vec::new();
+        for re_export in &summary.re_exports {
+            match &re_export.kind {
+                ReExportKind::Named { exported, imported } if exported == name => {
+                    forwarded = true;
+                    let target = self.re_export_target(summary.file, re_export)?;
+                    let found = self.exported_within(target, imported, search)?;
+                    if found.is_empty() {
+                        return None;
+                    }
+                    candidates.extend(found);
+                }
+                ReExportKind::StarAs { exported } if exported == name => return None,
+                _ => {}
+            }
+        }
+        if forwarded || name == "default" {
+            return Some(candidates);
+        }
+
+        for re_export in &summary.re_exports {
+            if re_export.kind != ReExportKind::Star {
+                continue;
+            }
+            // An unresolved star source cannot supply a second binding to a
+            // name that resolves elsewhere: duplicate star bindings make the
+            // name ambiguous, and importing an ambiguous name is an error.
+            if let Some(target) = self.re_export_target(summary.file, re_export) {
+                candidates.extend(self.exported_within(target, name, search)?);
+            }
+        }
+        Some(candidates)
+    }
+}
+
+struct ReExportSearch {
+    path: Vec<(FileId, String)>,
+    lookups: usize,
 }
 
 fn add_import_alias_reference(
     builder: &mut SymbolGraphBuilder,
     alias: &ImportAlias,
     resolved: &ResolvedImportFact,
-    file_by_node: &BTreeMap<ModuleNodeId, FileId>,
-    exports_by_file: &BTreeMap<FileId, BTreeMap<String, Vec<PolintSymbolId>>>,
+    modules: &ModuleExports<'_>,
 ) {
     match resolved.status {
         ResolutionStatus::Resolved => {
             let Some(target_file) = resolved
                 .target_node
-                .and_then(|target_node| file_by_node.get(&target_node).copied())
+                .and_then(|target_node| modules.file_by_node.get(&target_node).copied())
             else {
                 let draft = import_alias_reference_draft(alias, SymbolPrecision::Unresolved);
                 builder.add_unresolved_reference(draft);
                 return;
             };
-            let candidates = import_alias_candidates(alias, target_file, exports_by_file);
+            let candidates = import_alias_candidates(alias, target_file, modules);
             match candidates.as_slice() {
                 [target] => {
                     let draft = import_alias_reference_draft(alias, SymbolPrecision::ModuleLinked);
@@ -1721,22 +1874,25 @@ fn add_import_alias_reference(
 fn import_alias_candidates(
     alias: &ImportAlias,
     target_file: FileId,
-    exports_by_file: &BTreeMap<FileId, BTreeMap<String, Vec<PolintSymbolId>>>,
+    modules: &ModuleExports<'_>,
 ) -> Vec<PolintSymbolId> {
-    let Some(exports) = exports_by_file.get(&target_file) else {
-        return Vec::new();
-    };
-    let mut candidates = match &alias.target {
-        ImportAliasTarget::Named(name) => exports.get(name).cloned().unwrap_or_default(),
-        ImportAliasTarget::Default => exports.get("default").cloned().unwrap_or_default(),
-        ImportAliasTarget::Namespace => exports
-            .values()
-            .flat_map(|symbols| symbols.iter().copied())
-            .collect::<Vec<_>>(),
-    };
-    candidates.sort_unstable();
-    candidates.dedup();
-    candidates
+    match &alias.target {
+        ImportAliasTarget::Named(name) => modules.exported(target_file, name),
+        ImportAliasTarget::Default => modules.exported(target_file, "default"),
+        ImportAliasTarget::Namespace => {
+            let Some(summary) = modules.summaries.get(&target_file) else {
+                return Vec::new();
+            };
+            let mut candidates = summary
+                .exports
+                .values()
+                .flat_map(|symbols| symbols.iter().copied())
+                .collect::<Vec<_>>();
+            candidates.sort_unstable();
+            candidates.dedup();
+            candidates
+        }
+    }
 }
 
 fn import_alias_reference_draft(alias: &ImportAlias, precision: SymbolPrecision) -> ReferenceDraft {
@@ -2123,6 +2279,43 @@ fn collect_import_aliases(
     }
 
     aliases
+}
+
+fn collect_re_exports(file: &SourceFile, program: &Program<'_>) -> Vec<ReExport> {
+    let mut re_exports = Vec::new();
+    for statement in &program.body {
+        match statement {
+            Statement::ExportNamedDeclaration(export) => {
+                let Some(module_source) = &export.source else {
+                    continue;
+                };
+                for specifier in &export.specifiers {
+                    re_exports.push(ReExport {
+                        import_path: module_source.value.to_string(),
+                        import_source_span: span_from_oxc(file, module_source.span),
+                        kind: ReExportKind::Named {
+                            exported: module_export_name_text(&specifier.exported),
+                            imported: module_export_name_text(&specifier.local),
+                        },
+                    });
+                }
+            }
+            Statement::ExportAllDeclaration(export) => {
+                re_exports.push(ReExport {
+                    import_path: export.source.value.to_string(),
+                    import_source_span: span_from_oxc(file, export.source.span),
+                    kind: match &export.exported {
+                        Some(exported) => ReExportKind::StarAs {
+                            exported: module_export_name_text(exported),
+                        },
+                        None => ReExportKind::Star,
+                    },
+                });
+            }
+            _ => {}
+        }
+    }
+    re_exports
 }
 
 fn collect_export_names(
