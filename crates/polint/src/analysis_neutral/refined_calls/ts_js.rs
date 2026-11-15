@@ -1,5 +1,6 @@
 use crate::analysis_neutral::AnalysisHost;
-use std::collections::BTreeSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use super::facts::{
     RefinedCallConfidence, RefinedCallEdgeFact, RefinedCallTier, RefinedCallValidation,
@@ -7,36 +8,110 @@ use super::facts::{
 use super::store::RefinedCallOutput;
 use crate::analysis_api::{FactFamily, stable_key_from_parts};
 use crate::analysis_neutral::calls::facts::{
-    CallAlgorithm, CallCallee, CallEdgeKind, CallProvenance, CallTargetStatus, UnresolvedCallFact,
-    UnresolvedCallReason,
+    CallAlgorithm, CallCallee, CallEdgeKind, CallProvenance, CallSiteFact, CallTargetStatus,
+    UnresolvedCallFact, UnresolvedCallReason,
 };
-use crate::analysis_neutral::ids::RefinedCallEdgeId;
+use crate::analysis_neutral::ids::{CallSiteId, PlaceId, RefinedCallEdgeId, SemanticNodeId};
 use crate::analysis_neutral::points_to::facts::PointsToStatus;
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
+use crate::internal_core::StableKeyId;
 
 pub fn derive_ts_js_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    let index = SiteIndex::new(db);
     let edges = db
         .unresolved_calls()
         .iter()
-        .filter_map(|unresolved| unresolved_edge(db, unresolved))
+        .filter_map(|unresolved| unresolved_edge(db, &index, unresolved))
         .collect();
     RefinedCallOutput { edges }.normalized(interner)
 }
 
+/// The facts each unresolved call is matched against, indexed once per run so
+/// matching stays linear in the number of facts.
+struct SiteIndex<'db> {
+    /// The first TS-family call site with each id.
+    sites: HashMap<CallSiteId, &'db CallSiteFact>,
+    /// Call sites whose first callsite node carries a call constraint that a
+    /// present solver edge was derived from.
+    solver_resolved: HashSet<CallSiteId>,
+    /// The stable key of the first place with each id.
+    places: HashMap<PlaceId, StableKeyId>,
+}
+
+impl<'db> SiteIndex<'db> {
+    fn new(db: &'db impl AnalysisHost) -> Self {
+        let mut sites = HashMap::new();
+        for site in db.call_sites() {
+            if site.language.is_ts_family() {
+                sites.entry(site.id).or_insert(site);
+            }
+        }
+        let mut places = HashMap::new();
+        for place in db.mir_places() {
+            places.entry(place.id).or_insert(place.stable_key);
+        }
+        Self {
+            sites,
+            solver_resolved: solver_resolved_sites(db),
+            places,
+        }
+    }
+}
+
+/// Call sites the points-to solver resolved: a present solver edge derived
+/// from a call constraint lists, among its contributing facts, a call
+/// constraint on the site's callsite node. Keys are compared as text.
+fn solver_resolved_sites(db: &impl AnalysisHost) -> HashSet<CallSiteId> {
+    let contributing: HashSet<Arc<str>> = db
+        .solver_derived_edges()
+        .iter()
+        .filter(|edge| {
+            edge.status == PointsToStatus::Present
+                && edge.provenance.constraint_kind == "call_constraint"
+        })
+        .flat_map(|edge| edge.provenance.contributing_facts.iter())
+        .map(|fact| db.resolve_stable_key(fact.stable_key))
+        .collect();
+    if contributing.is_empty() {
+        return HashSet::new();
+    }
+    let resolved_nodes: HashSet<SemanticNodeId> = db
+        .semantic_constraints()
+        .iter()
+        .filter_map(|constraint| match constraint.kind {
+            ConstraintKind::CallConstraint { callsite }
+                if contributing.contains(db.resolve_stable_key(constraint.stable_key).as_ref()) =>
+            {
+                Some(callsite)
+            }
+            _ => None,
+        })
+        .collect();
+    let mut callsite_nodes: HashMap<CallSiteId, SemanticNodeId> = HashMap::new();
+    for node in db.semantic_nodes() {
+        if let NodeKind::Callsite(site) = node.kind {
+            callsite_nodes.entry(site).or_insert(node.id);
+        }
+    }
+    callsite_nodes
+        .into_iter()
+        .filter(|(_, node)| resolved_nodes.contains(node))
+        .map(|(site, _)| site)
+        .collect()
+}
+
 fn unresolved_edge(
     db: &impl AnalysisHost,
+    index: &SiteIndex<'_>,
     unresolved: &UnresolvedCallFact,
 ) -> Option<RefinedCallEdgeFact> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let site = db
-        .call_sites()
-        .iter()
-        .find(|site| site.id == unresolved.site && site.language.is_ts_family())?;
-    if solver_resolved_site(db, site.id) {
+    let site = *index.sites.get(&unresolved.site)?;
+    if index.solver_resolved.contains(&site.id) {
         return None;
     }
     let status = match unresolved.reason {
@@ -46,7 +121,7 @@ fn unresolved_edge(
         _ => CallTargetStatus::Unresolved,
     };
     let unresolved_key = db.resolve_stable_key(unresolved.stable_key).to_string();
-    let callable_place_key = callable_place_stable_key(db, site);
+    let callable_place_key = callable_place_stable_key(db, index, site);
 
     Some(RefinedCallEdgeFact {
         id: RefinedCallEdgeId(0),
@@ -81,48 +156,19 @@ fn unresolved_edge(
     })
 }
 
-fn solver_resolved_site(
-    db: &impl AnalysisHost,
-    site: crate::analysis_neutral::ids::CallSiteId,
-) -> bool {
-    let Some(callsite_node) = db.semantic_nodes().iter().find_map(|node| match node.kind {
-        NodeKind::Callsite(candidate) if candidate == site => Some(node.id),
-        _ => None,
-    }) else {
-        return false;
-    };
-    let constraint_keys = db
-        .semantic_constraints()
-        .iter()
-        .filter_map(|constraint| match constraint.kind {
-            ConstraintKind::CallConstraint { callsite } if callsite == callsite_node => {
-                Some(db.resolve_stable_key(constraint.stable_key).to_string())
-            }
-            _ => None,
-        })
-        .collect::<BTreeSet<_>>();
-
-    db.solver_derived_edges().iter().any(|edge| {
-        edge.status == PointsToStatus::Present
-            && edge.provenance.constraint_kind == "call_constraint"
-            && edge.provenance.contributing_facts.iter().any(|fact| {
-                constraint_keys.contains(db.resolve_stable_key(fact.stable_key).as_ref())
-            })
-    })
-}
-
 fn callable_place_stable_key(
     db: &impl AnalysisHost,
-    site: &crate::analysis_neutral::calls::facts::CallSiteFact,
+    index: &SiteIndex<'_>,
+    site: &CallSiteFact,
 ) -> Option<String> {
     let place = match site.callee {
         CallCallee::FunctionValue { place } => Some(place),
         _ => site.receiver,
     }?;
-    db.mir_places()
-        .iter()
-        .find(|candidate| candidate.id == place)
-        .map(|candidate| db.resolve_stable_key(candidate.stable_key).to_string())
+    index
+        .places
+        .get(&place)
+        .map(|stable_key| db.resolve_stable_key(*stable_key).to_string())
 }
 
 #[cfg(test)]
