@@ -1,10 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis_api::FactFamily;
-use crate::analysis_api::SemanticStatus;
 use crate::analysis_api::{
-    FunctionFact, ReferenceFact, SymbolFact, SymbolKind, SymbolPrecision, SymbolResolutionStatus,
+    FunctionFact, ReferenceFact, ReferenceKind, SymbolFact, SymbolKind, SymbolPrecision,
+    SymbolResolutionStatus,
 };
+use crate::analysis_api::{SemanticImportKind, SemanticStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallCallee, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact,
@@ -77,9 +78,13 @@ pub fn resolve_direct_call_targets(
         let Some(symbol) = index.symbols_by_id.get(&target_symbol).copied() else {
             continue;
         };
-        if !is_direct_callable_symbol(symbol) {
+        let target_function = if is_direct_callable_symbol(symbol) {
+            index.function_for_symbol(symbol)
+        } else if let Some(function) = index.value_function_for_symbol(symbol) {
+            Some(function)
+        } else {
             continue;
-        }
+        };
         if symbol.kind == SymbolKind::Class
             && !matches!(site.kind, CallSyntaxKind::Constructor | CallSyntaxKind::New)
         {
@@ -101,7 +106,7 @@ pub fn resolve_direct_call_targets(
             id: CallTargetId(0),
             site: site.id,
             caller: site.caller,
-            target_function: index.function_for_symbol(symbol),
+            target_function,
             target_symbol: Some(target_symbol),
             synthetic_target: None,
             edge_kind: edge_kind_for_site(site.kind),
@@ -131,10 +136,45 @@ struct DirectIndex<'db, H: AnalysisHost + ?Sized> {
     symbols_by_id: BTreeMap<SymbolId, &'db SymbolFact>,
     functions_by_file_name: BTreeMap<(Option<FileId>, String), &'db FunctionFact>,
     functions_by_name: BTreeMap<String, Vec<&'db FunctionFact>>,
+    functions_by_file: BTreeMap<FileId, Vec<&'db FunctionFact>>,
+    functions_by_span: BTreeMap<SpanKey, &'db FunctionFact>,
+    /// Binding identifier span -> span of the only function literal it holds.
+    value_functions: BTreeMap<SpanKey, SpanKey>,
+    /// Import binding span -> the exported symbol it is linked to.
+    import_links: BTreeMap<SpanKey, SymbolId>,
+    /// `(file, local name)` of namespace imports, whose binding is the module
+    /// object rather than any one export.
+    namespace_imports: BTreeSet<(FileId, String)>,
+    sources_by_file: BTreeMap<FileId, &'db str>,
 }
+
+type SpanKey = (FileId, u32, u32);
+
+fn span_key(span: &Span) -> SpanKey {
+    (span.file, span.start_byte, span.end_byte)
+}
+
+/// Re-export chains longer than this are left unresolved.
+const MAX_IMPORT_HOPS: usize = 8;
 
 impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
     fn new(db: &'db H) -> Self {
+        let namespace_imports = db
+            .semantic_imports()
+            .iter()
+            .filter(|import| {
+                matches!(
+                    import.kind,
+                    SemanticImportKind::StaticNamespace | SemanticImportKind::EsNamespace
+                )
+            })
+            .filter_map(|import| Some((import.file?, import.local_name.clone()?)))
+            .collect::<BTreeSet<_>>();
+        let sources_by_file = db
+            .files()
+            .iter()
+            .map(|file| (file.id, file.source.as_ref()))
+            .collect::<BTreeMap<_, _>>();
         Self {
             db,
             references_by_id: db
@@ -153,6 +193,20 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
                 .map(|function| ((Some(function.file), function.name.clone()), function))
                 .collect(),
             functions_by_name: functions_by_name(db.functions()),
+            functions_by_file: functions_by_file(db.functions()),
+            functions_by_span: db
+                .functions()
+                .iter()
+                .map(|function| (span_key(&function.span), function))
+                .collect(),
+            value_functions: db
+                .value_functions()
+                .iter()
+                .map(|row| (span_key(&row.binding), span_key(&row.function)))
+                .collect(),
+            import_links: import_links(db.references()),
+            namespace_imports,
+            sources_by_file,
         }
     }
 
@@ -219,7 +273,101 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
         })
     }
 
+    /// The function a call through `symbol` reaches. Import bindings follow
+    /// their module link (through re-exports) to the exported declaration;
+    /// an import that cannot be followed to one function has no target.
     fn function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
+        let mut current = symbol;
+        let mut seen = BTreeSet::new();
+        for _ in 0..MAX_IMPORT_HOPS {
+            if current.kind != SymbolKind::Import {
+                return self
+                    .declared_function_for_symbol(current)
+                    .or_else(|| self.value_function_for_symbol(current));
+            }
+            let file = current.file?;
+            if self
+                .namespace_imports
+                .contains(&(file, current.name.clone()))
+            {
+                return None;
+            }
+            let target = self
+                .import_links
+                .get(&span_key(current.primary_span.as_ref()?))?;
+            if !seen.insert(*target) {
+                return None;
+            }
+            current = self.symbols_by_id.get(target).copied()?;
+        }
+        None
+    }
+
+    /// The function literal a single-value binding holds.
+    fn value_function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
+        if !matches!(symbol.kind, SymbolKind::Constant | SymbolKind::Variable) {
+            return None;
+        }
+        let function = self
+            .value_functions
+            .get(&span_key(symbol.primary_span.as_ref()?))?;
+        self.functions_by_span
+            .get(function)
+            .map(|function| function.id)
+    }
+
+    fn declared_function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
+        if !matches!(
+            symbol.kind,
+            SymbolKind::Function | SymbolKind::Method | SymbolKind::Class
+        ) {
+            return None;
+        }
+        self.function_declaring_symbol(symbol)
+            .or_else(|| self.function_named_like_symbol(symbol))
+    }
+
+    /// The innermost same-named function whose span holds the declared name,
+    /// so a nested function never stands in for a same-named outer one. A
+    /// body-less overload signature defers to the implementation that follows
+    /// its sibling signatures.
+    fn function_declaring_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
+        let name_span = symbol.primary_span.as_ref()?;
+        let file = symbol.file?;
+        let functions = self.functions_by_file.get(&file)?;
+        let (index, declaring) = functions
+            .iter()
+            .enumerate()
+            .filter(|(_, function)| function_matches_callee(&function.name, &symbol.name))
+            .filter(|(_, function)| {
+                function.span.start_byte <= name_span.start_byte
+                    && name_span.end_byte <= function.span.end_byte
+            })
+            .min_by_key(|(_, function)| function.span.end_byte - function.span.start_byte)?;
+        if self.has_body(declaring) {
+            return Some(declaring.id);
+        }
+        Some(
+            overload_implementation(functions, index, |function| self.has_body(function))
+                .unwrap_or(declaring)
+                .id,
+        )
+    }
+
+    /// Whether the function's source ends in a block. Overload signatures and
+    /// ambient declarations end in a type or `;` instead. A signature whose
+    /// return type is an object type literal also ends in `}`, which only keeps
+    /// the signature as the target.
+    fn has_body(&self, function: &FunctionFact) -> bool {
+        self.sources_by_file
+            .get(&function.file)
+            .and_then(|source| {
+                source.get(function.span.start_byte as usize..function.span.end_byte as usize)
+            })
+            .is_some_and(|text| text.trim_end().trim_end_matches(';').ends_with('}'))
+    }
+
+    fn function_named_like_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
         self.functions_by_file_name
             .get(&(symbol.file, symbol.qualified_name.clone()))
             .or_else(|| {
@@ -312,6 +460,71 @@ fn receiver_is_builtin_global(db: &impl AnalysisHost, site: &CallSiteFact) -> bo
         .take_while(|ch| ch.is_alphanumeric() || *ch == '_' || *ch == '$')
         .collect();
     BUILTIN_GLOBAL_RECEIVERS.contains(&receiver.as_str())
+}
+
+fn functions_by_file(functions: &[FunctionFact]) -> BTreeMap<FileId, Vec<&FunctionFact>> {
+    let mut by_file: BTreeMap<FileId, Vec<&FunctionFact>> = BTreeMap::new();
+    for function in functions {
+        by_file.entry(function.file).or_default().push(function);
+    }
+    for functions in by_file.values_mut() {
+        functions.sort_by_key(|function| (function.span.start_byte, function.span.end_byte));
+    }
+    by_file
+}
+
+/// The implementation after the overload signature at `index`: the first
+/// function with a body among the same-named functions that directly follow
+/// it, each starting after the previous one ends. `functions` is sorted by
+/// start offset.
+fn overload_implementation<'db>(
+    functions: &[&'db FunctionFact],
+    index: usize,
+    has_body: impl Fn(&FunctionFact) -> bool,
+) -> Option<&'db FunctionFact> {
+    let mut previous = *functions.get(index)?;
+    for next in functions.get(index + 1..)? {
+        if next.span.start_byte < previous.span.end_byte {
+            continue;
+        }
+        if next.name != previous.name {
+            return None;
+        }
+        if has_body(next) {
+            return Some(next);
+        }
+        previous = next;
+    }
+    None
+}
+
+/// Import bindings whose module link names exactly one exported symbol. A
+/// binding with links to different symbols is dropped.
+fn import_links(references: &[ReferenceFact]) -> BTreeMap<SpanKey, SymbolId> {
+    let mut links = BTreeMap::<SpanKey, Option<SymbolId>>::new();
+    for reference in references {
+        if reference.kind != ReferenceKind::Import
+            || reference.precision != SymbolPrecision::ModuleLinked
+            || !is_precise_resolved_reference(reference)
+        {
+            continue;
+        }
+        let (Some(span), Some(target)) = (reference.primary_span.as_ref(), reference.target) else {
+            continue;
+        };
+        links
+            .entry(span_key(span))
+            .and_modify(|linked| {
+                if *linked != Some(target) {
+                    *linked = None;
+                }
+            })
+            .or_insert(Some(target));
+    }
+    links
+        .into_iter()
+        .filter_map(|(binding, target)| Some((binding, target?)))
+        .collect()
 }
 
 fn functions_by_name(functions: &[FunctionFact]) -> BTreeMap<String, Vec<&FunctionFact>> {
@@ -1062,5 +1275,435 @@ mod non_direct_cases {
 
     fn span(file: FileId, line: u32) -> Span {
         Span::new(file, line * 10, line * 10 + 5, line, 1, line, 6)
+    }
+}
+
+#[cfg(test)]
+mod linked_bindings {
+    use std::path::PathBuf;
+
+    use super::resolve_direct_call_targets;
+    use crate::analysis_api::{
+        DefinitionFact, FunctionFact, ReferenceFact, ReferenceKind, SemanticImportFact,
+        SemanticImportId, SemanticImportKind, SemanticStatus, SymbolFact, SymbolKind,
+        SymbolNamespace, SymbolPrecision, SymbolResolutionStatus,
+    };
+    use crate::analysis_neutral::LocalAnalysisDb;
+    use crate::analysis_neutral::calls::facts::{
+        CallAlgorithm, CallCallee, CallPrecision, CallSiteFact, CallSyntaxKind, CallTargetFact,
+        CallTargetStatus,
+    };
+    use crate::analysis_neutral::ids::{CallSiteId, MirBodyId, MirOpId};
+    use crate::analysis_neutral::symbol_graph::semantic::ValueFunctionFact;
+    use crate::internal_core::{FileId, FunctionId, Language, ReferenceId, Span, SymbolId};
+
+    #[test]
+    fn call_through_const_bound_function_literal_targets_the_literal() {
+        let mut graph = Graph::new(&["src/caller.ts"]);
+        let file = graph.files[0];
+        let literal = graph.function(file, "handler", 40, 60);
+        let binding = graph.symbol(file, "handler", SymbolKind::Constant, 30, 37);
+        graph.value_function(span(file, 30, 37), span(file, 40, 60));
+        let call = graph.reference(file, "handler", ReferenceKind::Call, 80, 87, binding);
+
+        let targets = graph.resolve(file, call, "handler", 80, 89);
+
+        assert_eq!(targets.len(), 1, "{targets:#?}");
+        assert_eq!(targets[0].target_symbol, Some(binding));
+        assert_eq!(targets[0].target_function, Some(literal));
+    }
+
+    #[test]
+    fn const_binding_without_a_function_literal_row_has_no_target() {
+        let mut graph = Graph::new(&["src/caller.ts"]);
+        let file = graph.files[0];
+        graph.function(file, "handler", 40, 60);
+        let binding = graph.symbol(file, "handler", SymbolKind::Constant, 30, 37);
+        let call = graph.reference(file, "handler", ReferenceKind::Call, 80, 87, binding);
+
+        assert!(graph.resolve(file, call, "handler", 80, 89).is_empty());
+    }
+
+    #[test]
+    fn imported_call_follows_the_module_link_to_the_exported_function() {
+        let mut graph = Graph::new(&["src/caller.ts", "src/factory.ts"]);
+        let (caller_file, factory_file) = (graph.files[0], graph.files[1]);
+        let exported = graph.function(factory_file, "makeThing", 0, 50);
+        let export_symbol = graph.symbol(factory_file, "makeThing", SymbolKind::Function, 9, 18);
+        let import = graph.symbol(caller_file, "makeThing", SymbolKind::Import, 9, 18);
+        graph.reference(
+            caller_file,
+            "makeThing",
+            ReferenceKind::Import,
+            9,
+            18,
+            export_symbol,
+        );
+        let call = graph.reference(
+            caller_file,
+            "makeThing",
+            ReferenceKind::Call,
+            60,
+            69,
+            import,
+        );
+
+        let targets = graph.resolve(caller_file, call, "makeThing", 60, 71);
+
+        assert_eq!(targets.len(), 1, "{targets:#?}");
+        assert_eq!(targets[0].target_symbol, Some(import));
+        assert_eq!(targets[0].target_function, Some(exported));
+    }
+
+    #[test]
+    fn imported_call_follows_a_re_export_to_a_const_function_literal() {
+        let mut graph = Graph::new(&["src/caller.ts", "src/index.ts", "src/impl.ts"]);
+        let (caller_file, index_file, impl_file) = (graph.files[0], graph.files[1], graph.files[2]);
+        let literal = graph.function(impl_file, "run", 20, 40);
+        let binding = graph.symbol(impl_file, "run", SymbolKind::Constant, 13, 16);
+        graph.value_function(span(impl_file, 13, 16), span(impl_file, 20, 40));
+        let re_export = graph.symbol(index_file, "run", SymbolKind::Import, 9, 12);
+        graph.reference(index_file, "run", ReferenceKind::Import, 9, 12, binding);
+        let import = graph.symbol(caller_file, "run", SymbolKind::Import, 9, 12);
+        graph.reference(caller_file, "run", ReferenceKind::Import, 9, 12, re_export);
+        let call = graph.reference(caller_file, "run", ReferenceKind::Call, 50, 53, import);
+
+        let targets = graph.resolve(caller_file, call, "run", 50, 55);
+
+        assert_eq!(targets.len(), 1, "{targets:#?}");
+        assert_eq!(targets[0].target_function, Some(literal));
+    }
+
+    #[test]
+    fn namespace_import_binding_is_never_followed_to_one_export() {
+        let mut graph = Graph::new(&["src/caller.ts", "src/util.ts"]);
+        let (caller_file, util_file) = (graph.files[0], graph.files[1]);
+        graph.function(util_file, "util", 0, 50);
+        let export_symbol = graph.symbol(util_file, "util", SymbolKind::Function, 9, 13);
+        let import = graph.symbol(caller_file, "util", SymbolKind::Import, 12, 16);
+        graph.reference(
+            caller_file,
+            "util",
+            ReferenceKind::Import,
+            12,
+            16,
+            export_symbol,
+        );
+        graph.namespace_import(caller_file, "util");
+        let call = graph.reference(caller_file, "util", ReferenceKind::Call, 60, 64, import);
+
+        let targets = graph.resolve(caller_file, call, "util", 60, 66);
+
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.target_function.is_none()),
+            "{targets:#?}"
+        );
+    }
+
+    #[test]
+    fn import_link_cycle_has_no_target_function() {
+        let mut graph = Graph::new(&["src/a.ts", "src/b.ts"]);
+        let (a, b) = (graph.files[0], graph.files[1]);
+        graph.function(b, "loop", 100, 120);
+        let in_a = graph.symbol(a, "loop", SymbolKind::Import, 9, 13);
+        let in_b = graph.symbol(b, "loop", SymbolKind::Import, 9, 13);
+        graph.reference(a, "loop", ReferenceKind::Import, 9, 13, in_b);
+        graph.reference(b, "loop", ReferenceKind::Import, 9, 13, in_a);
+        let call = graph.reference(a, "loop", ReferenceKind::Call, 60, 64, in_a);
+
+        let targets = graph.resolve(a, call, "loop", 60, 66);
+
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.target_function.is_none()),
+            "{targets:#?}"
+        );
+    }
+
+    #[test]
+    fn declared_function_wins_over_a_nested_same_named_function() {
+        let mut graph = Graph::new(&["src/caller.ts"]);
+        let file = graph.files[0];
+        let outer = graph.function(file, "run", 100, 300);
+        graph.function(file, "run", 150, 200);
+        let declared = graph.symbol(file, "run", SymbolKind::Function, 109, 112);
+        let call = graph.reference(file, "run", ReferenceKind::Call, 400, 403, declared);
+
+        let targets = graph.resolve(file, call, "run", 400, 405);
+
+        assert_eq!(targets.len(), 1, "{targets:#?}");
+        assert_eq!(targets[0].target_function, Some(outer));
+    }
+
+    #[test]
+    fn overloaded_function_targets_the_implementation_not_a_signature() {
+        let source = "function pick(a: string): string;\n\
+                      function pick(a: number): number;\n\
+                      function pick(a: any) { return a; }\n";
+        let mut graph = Graph::with_sources(&[("src/pick.ts", source)]);
+        let file = graph.files[0];
+        let first = range_of(source, "function pick(a: string): string;");
+        let second = range_of(source, "function pick(a: number): number;");
+        let body = range_of(source, "function pick(a: any) { return a; }");
+        graph.function(file, "pick", first.0, first.1);
+        graph.function(file, "pick", second.0, second.1);
+        let implementation = graph.function(file, "pick", body.0, body.1);
+        let declared = graph.symbol(file, "pick", SymbolKind::Function, 9, 13);
+        let call = graph.reference(file, "pick", ReferenceKind::Call, 1100, 1104, declared);
+
+        let targets = graph.resolve(file, call, "pick", 1100, 1106);
+
+        assert_eq!(targets.len(), 1, "{targets:#?}");
+        assert_eq!(targets[0].target_function, Some(implementation));
+    }
+
+    #[test]
+    fn bodyless_declaration_without_an_implementation_keeps_its_target() {
+        let source = "declare function ambient(a: string): string;\n\
+                      function other() {}\n";
+        let mut graph = Graph::with_sources(&[("src/ambient.ts", source)]);
+        let file = graph.files[0];
+        let signature = range_of(source, "declare function ambient(a: string): string;");
+        let other = range_of(source, "function other() {}");
+        let ambient = graph.function(file, "ambient", signature.0, signature.1);
+        graph.function(file, "other", other.0, other.1);
+        let declared = graph.symbol(file, "ambient", SymbolKind::Function, 17, 24);
+        let call = graph.reference(file, "ambient", ReferenceKind::Call, 1100, 1107, declared);
+
+        let targets = graph.resolve(file, call, "ambient", 1100, 1109);
+
+        assert_eq!(targets.len(), 1, "{targets:#?}");
+        assert_eq!(targets[0].target_function, Some(ambient));
+    }
+
+    fn range_of(source: &str, needle: &str) -> (u32, u32) {
+        let start = source.find(needle).expect("needle in source");
+        (start as u32, (start + needle.len()) as u32)
+    }
+
+    struct Graph {
+        db: LocalAnalysisDb,
+        files: Vec<FileId>,
+        caller: FunctionId,
+        symbols: Vec<SymbolFact>,
+        references: Vec<ReferenceFact>,
+        value_functions: Vec<ValueFunctionFact>,
+        semantic_imports: Vec<SemanticImportFact>,
+    }
+
+    impl Graph {
+        fn new(paths: &[&str]) -> Self {
+            let sources: Vec<(&str, &str)> = paths.iter().map(|path| (*path, "")).collect();
+            Self::with_sources(&sources)
+        }
+
+        fn with_sources(files: &[(&str, &str)]) -> Self {
+            let mut db = LocalAnalysisDb::new();
+            let files: Vec<FileId> = files
+                .iter()
+                .map(|(path, source)| {
+                    db.add_source_file(
+                        PathBuf::from(path),
+                        (*path).to_string(),
+                        Language::TypeScript,
+                        (*source).into(),
+                        "content".to_string(),
+                    )
+                })
+                .collect();
+            let caller = db.push_function(FunctionFact::new(
+                FunctionId::from_raw(999),
+                files[0],
+                "caller".to_string(),
+                span(files[0], 1000, 2000),
+                Language::TypeScript,
+                false,
+                true,
+                1,
+                Vec::new(),
+            ));
+            Self {
+                db,
+                files,
+                caller,
+                symbols: Vec::new(),
+                references: Vec::new(),
+                value_functions: Vec::new(),
+                semantic_imports: Vec::new(),
+            }
+        }
+
+        fn function(&mut self, file: FileId, name: &str, start: u32, end: u32) -> FunctionId {
+            self.db.push_function(FunctionFact::new(
+                FunctionId::from_raw(999),
+                file,
+                name.to_string(),
+                span(file, start, end),
+                Language::TypeScript,
+                false,
+                true,
+                1,
+                Vec::new(),
+            ))
+        }
+
+        fn symbol(
+            &mut self,
+            file: FileId,
+            name: &str,
+            kind: SymbolKind,
+            start: u32,
+            end: u32,
+        ) -> SymbolId {
+            let id = SymbolId::from_raw(self.symbols.len() as u64);
+            self.symbols.push(SymbolFact::new(
+                id,
+                Language::TypeScript,
+                name.to_string(),
+                name.to_string(),
+                kind,
+                SymbolNamespace::Value,
+                Some(file),
+                None,
+                None,
+                None,
+                Some(span(file, start, end)),
+                true,
+                self.db
+                    .stable_key_interner()
+                    .intern(format!("symbol:{}:{name}", id.0)),
+                SymbolPrecision::ExactSemantic,
+            ));
+            id
+        }
+
+        fn reference(
+            &mut self,
+            file: FileId,
+            name: &str,
+            kind: ReferenceKind,
+            start: u32,
+            end: u32,
+            target: SymbolId,
+        ) -> ReferenceId {
+            let id = ReferenceId::from_raw(self.references.len() as u64);
+            let precision = if kind == ReferenceKind::Import {
+                SymbolPrecision::ModuleLinked
+            } else {
+                SymbolPrecision::ExactLocal
+            };
+            self.references.push(ReferenceFact::new(
+                id,
+                Language::TypeScript,
+                name.to_string(),
+                name.to_string(),
+                kind,
+                SymbolNamespace::Value,
+                Some(file),
+                None,
+                None,
+                None,
+                Some(span(file, start, end)),
+                Some(target),
+                vec![target],
+                self.db
+                    .stable_key_interner()
+                    .intern(format!("reference:{name}:{}", id.0)),
+                SymbolResolutionStatus::Resolved,
+                precision,
+            ));
+            id
+        }
+
+        fn value_function(&mut self, binding: Span, function: Span) {
+            self.value_functions
+                .push(ValueFunctionFact { binding, function });
+        }
+
+        fn namespace_import(&mut self, file: FileId, local_name: &str) {
+            self.semantic_imports.push(SemanticImportFact {
+                id: SemanticImportId(self.semantic_imports.len() as u64),
+                language: Language::TypeScript,
+                file: Some(file),
+                package: None,
+                module: None,
+                scope: None,
+                import_path: "./util".to_string(),
+                local_name: Some(local_name.to_string()),
+                imported_name: None,
+                namespace: SymbolNamespace::Value,
+                kind: SemanticImportKind::EsNamespace,
+                stable_key: self
+                    .db
+                    .stable_key_interner()
+                    .intern(format!("semantic-import:{local_name}")),
+                status: SemanticStatus::Resolved,
+            });
+        }
+
+        fn resolve(
+            &mut self,
+            file: FileId,
+            reference: ReferenceId,
+            name: &str,
+            start: u32,
+            end: u32,
+        ) -> Vec<CallTargetFact> {
+            self.resolve_site(
+                file,
+                (start, end),
+                CallSyntaxKind::Function,
+                CallCallee::Identifier {
+                    reference: Some(reference),
+                    name: name.to_string(),
+                },
+            )
+        }
+
+        fn resolve_site(
+            &mut self,
+            file: FileId,
+            (start, end): (u32, u32),
+            kind: CallSyntaxKind,
+            callee: CallCallee,
+        ) -> Vec<CallTargetFact> {
+            let definitions: Vec<DefinitionFact> = Vec::new();
+            self.db.replace_symbol_graph_facts(
+                self.symbols.clone(),
+                definitions,
+                self.references.clone(),
+            );
+            self.db
+                .replace_semantic_imports(self.semantic_imports.clone());
+            self.db
+                .replace_value_functions(self.value_functions.clone());
+            let site = CallSiteFact {
+                in_throw: false,
+                id: CallSiteId(1),
+                language: Language::TypeScript,
+                file,
+                caller: self.caller,
+                owner_symbol: None,
+                body: MirBodyId(0),
+                operation: MirOpId(1),
+                span: span(file, start, end),
+                kind,
+                callee,
+                receiver: None,
+                arguments: Vec::new(),
+                result: None,
+                status: CallTargetStatus::Unresolved,
+                precision: CallPrecision::Conservative,
+                stable_key: self.db.stable_key_interner().intern("call-site:1"),
+            };
+            resolve_direct_call_targets(&self.db, &[site])
+        }
+    }
+
+    fn span(file: FileId, start: u32, end: u32) -> Span {
+        Span::new(file, start, end, 1, start + 1, 1, end + 1)
     }
 }
