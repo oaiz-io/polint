@@ -233,6 +233,11 @@ def sandbox_run(
             "node", "--expose-internals", "--import", "/bench/observed/recorder.mjs", "-e", "0",
         ]
         completed = subprocess.run(argv, capture_output=True, text=True, timeout=900)
+        if completed.returncode != 0:
+            # The recorder catches driver errors and records them as failures,
+            # so a non-zero exit is the container or node itself failing; a
+            # result written before that is not trusted.
+            raise SystemExit(f"recorder exited {completed.returncode} for {tree} ({mode}):\n{completed.stderr}")
         result = Path(scratch) / "result.json"
         if not result.exists():
             raise SystemExit(f"recorder wrote nothing for {tree} ({mode}):\n{completed.stderr}")

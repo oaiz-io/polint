@@ -114,17 +114,31 @@ def parse_key(key: str) -> tuple[str, int, int]:
 
 
 def build(args) -> tuple[Path, Path]:
-    """Build the release CLI and the release lib-test binary that holds the dump."""
-    base = ["cargo", "build", "--release", "--locked", "-p", "polint", "--bin", "polint"]
-    subprocess.run(base, cwd=bench.REPO_ROOT, check=True)
+    """Build the release CLI and the release lib-test binary that holds the dump.
+
+    Both paths come from cargo's own artifact messages, so a `CARGO_TARGET_DIR`
+    or a configured target directory is honoured and a stale binary from
+    another directory is never measured."""
+    cli = cargo_executable(
+        ["cargo", "build", "--release", "--locked", "-p", "polint", "--bin", "polint"],
+        lambda message: "bin" in message["target"]["kind"] and not message["profile"]["test"],
+        "the polint CLI binary",
+    )
+    test_binary = cargo_executable(
+        ["cargo", "test", "-p", "polint", "--lib", "--all-features", "--locked", "--release", "--no-run"],
+        lambda message: message["profile"]["test"],
+        "the polint lib-test binary",
+    )
+    return cli, test_binary
+
+
+def cargo_executable(argv: list[str], wanted, what: str) -> Path:
+    """Run a cargo build and return the `executable` of the matching polint artifact."""
     completed = subprocess.run(
-        [
-            "cargo", "test", "-p", "polint", "--lib", "--all-features", "--locked",
-            "--release", "--no-run", "--message-format=json",
-        ],
+        [*argv, "--message-format=json"],
         cwd=bench.REPO_ROOT,
         check=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
         text=True,
     )
     executable = None
@@ -133,17 +147,25 @@ def build(args) -> tuple[Path, Path]:
         if (
             message.get("reason") == "compiler-artifact"
             and message["target"]["name"] == "polint"
-            and message["profile"]["test"]
             and message.get("executable")
+            and wanted(message)
         ):
             executable = Path(message["executable"])
     if executable is None:
-        raise SystemExit("could not find the polint lib-test binary")
-    return bench.REPO_ROOT / "target" / "release" / "polint", executable
+        raise SystemExit(f"could not find {what} in cargo's output")
+    return executable
 
 
 def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
-    """Copy every analysed tree outside git; return {case id: tree}, {package: tree}."""
+    """Copy every analysed tree outside git; return {case id: tree}, {package: tree}.
+
+    polint's file walk reads ignore files in every ancestor of a tree even
+    outside a git checkout, so an ignore file above the scratch directory (a
+    stray `.gitignore` in the system temp directory, say) could hide staged
+    files. The `.ignore` written at the scratch root re-includes every path
+    beneath it and takes precedence over any ancestor's rules; `load_dump`
+    still rejects a dump that discovered no files."""
+    (scratch / ".ignore").write_text("!*\n")
     case_trees = {}
     for case in cases:
         dest = scratch / "constructs" / case["id"]
@@ -196,6 +218,12 @@ def load_dump(run: dict) -> None:
     dump = json.loads(run["dump"].read_text())
     if dump.get("schema") != DUMP_SCHEMA:
         raise SystemExit(f"unexpected dump schema in {run['dump']}")
+    if not dump["files"]:
+        # Every staged tree holds source files, so an empty dump means the
+        # walk was hidden from them and its scores would be meaningless.
+        run["dump"] = None
+        run["error"] = "dump discovered no files"
+        return
     run["dump"] = dump
 
 
@@ -1664,6 +1692,7 @@ def run(args) -> int:
                 sum(
                     sum(row["bytes"] for row in dumps[("case", case_id, "base")]["dump"]["files"])
                     for case_id in case_trees
+                    if dumps[("case", case_id, "base")]["dump"] is not None
                 ),
             )
             for name in package_trees:
@@ -1683,7 +1712,13 @@ def run(args) -> int:
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     (out_dir / "report.md").write_text(render_markdown(report))
     print(f"wrote {out_dir / 'report.json'} and {out_dir / 'report.md'}", file=sys.stderr)
+    failed = [
+        f"{kind} {name} {plan}: {run_entry['error']}"
+        for (kind, name, plan), run_entry in sorted(dumps.items())
+        if run_entry["error"]
+    ]
+    if failed:
+        print("fact dumps that failed:\n" + "\n".join(failed), file=sys.stderr)
     if over_budget:
         print("fact dumps over their time budget:\n" + "\n".join(over_budget), file=sys.stderr)
-        return 1
-    return 0
+    return 1 if failed or over_budget else 0

@@ -25,8 +25,9 @@ binary and the polint library test binary, so expect a release build the first
 time. `--dump-timeout` (default 600 s) bounds each fact dump; `--cost-runs`
 (default 3) sets the number of measured cold and warm runs. A package's
 `dump_budget_s` in `inputs.toml` is a time budget for each of its fact dumps:
-the report shows it, and `bench.py report` exits with status 1 when a dump runs
-over it or times out.
+the report shows it. `bench.py report` still writes the report but exits with
+status 1 when any fact dump fails, times out, discovers no files, or runs over
+its package's budget.
 
 Recording observed calls executes third-party code and is a separate command:
 
