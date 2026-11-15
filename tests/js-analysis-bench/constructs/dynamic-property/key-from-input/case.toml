@@ -1,0 +1,3 @@
+construct = "dynamic-property"
+held_out = true
+description = "A method is called through a key read from the environment, so the target is not visible in the source."

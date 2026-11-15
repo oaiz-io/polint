@@ -1,0 +1,40 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@188..203",
+      "syntax": "identifier",
+      "callee": "main.js@238..296",
+      "callee_name": "onEvent"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@314..329",
+      "syntax": "identifier",
+      "callee": "main.js@12..236",
+      "callee_name": "createEmitter"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@355..374",
+      "syntax": "member",
+      "callee": "main.js@98..143",
+      "callee_name": "on"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@389..404",
+      "syntax": "member",
+      "callee": "main.js@149..228",
+      "callee_name": "emit"
+    }
+  ]
+}

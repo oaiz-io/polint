@@ -1,0 +1,4843 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "lib/adapters/adapters.js",
+    "lib/adapters/fetch.js",
+    "lib/adapters/http.js",
+    "lib/adapters/xhr.js",
+    "lib/axios.js",
+    "lib/cancel/CancelToken.js",
+    "lib/cancel/CanceledError.js",
+    "lib/cancel/isCancel.js",
+    "lib/core/Axios.js",
+    "lib/core/AxiosError.js",
+    "lib/core/AxiosHeaders.js",
+    "lib/core/InterceptorManager.js",
+    "lib/core/assertParamsAcyclic.js",
+    "lib/core/buildFullPath.js",
+    "lib/core/createMultipartBody.js",
+    "lib/core/dispatchRequest.js",
+    "lib/core/mergeConfig.js",
+    "lib/core/methodList.js",
+    "lib/core/setFormDataHeaders.js",
+    "lib/core/settle.js",
+    "lib/core/transformData.js",
+    "lib/defaults/index.js",
+    "lib/defaults/transitional.js",
+    "lib/env/data.js",
+    "lib/helpers/AxiosTransformStream.js",
+    "lib/helpers/AxiosURLSearchParams.js",
+    "lib/helpers/Http2Sessions.js",
+    "lib/helpers/HttpStatusCode.js",
+    "lib/helpers/ZlibHeaderTransformStream.js",
+    "lib/helpers/bind.js",
+    "lib/helpers/buildURL.js",
+    "lib/helpers/callbackify.js",
+    "lib/helpers/combineURLs.js",
+    "lib/helpers/composeSignals.js",
+    "lib/helpers/cookies.js",
+    "lib/helpers/estimateDataURLDecodedBytes.js",
+    "lib/helpers/formDataToBlob.js",
+    "lib/helpers/formDataToJSON.js",
+    "lib/helpers/formDataToStream.js",
+    "lib/helpers/fromDataURI.js",
+    "lib/helpers/isAbsoluteURL.js",
+    "lib/helpers/isAxiosError.js",
+    "lib/helpers/isURLSameOrigin.js",
+    "lib/helpers/normalizeURLForProtocolCheck.js",
+    "lib/helpers/parseHeaders.js",
+    "lib/helpers/parseProtocol.js",
+    "lib/helpers/progressEventReducer.js",
+    "lib/helpers/readBlob.js",
+    "lib/helpers/resolveConfig.js",
+    "lib/helpers/sanitizeHeaderValue.js",
+    "lib/helpers/shouldBypassProxy.js",
+    "lib/helpers/speedometer.js",
+    "lib/helpers/spread.js",
+    "lib/helpers/throttle.js",
+    "lib/helpers/toFormData.js",
+    "lib/helpers/toURLEncodedForm.js",
+    "lib/helpers/trackStream.js",
+    "lib/helpers/validator.js",
+    "lib/platform/common/utils.js",
+    "lib/platform/index.js",
+    "lib/platform/node/classes/Buffer.js",
+    "lib/platform/node/classes/FormData.js",
+    "lib/platform/node/classes/URLSearchParams.js",
+    "lib/platform/node/index.js",
+    "lib/utils.js"
+  ],
+  "instrumented_functions": 533,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "lib/adapters/adapters.js@1396..1421",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/adapters.js@2235..2266",
+      "syntax": "identifier",
+      "callee": "lib/adapters/adapters.js@1381..1462",
+      "callee_name": "isResolvedHandle"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/adapters.js@2473..2498",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/adapters.js@2513..2532",
+      "syntax": "member",
+      "callee": "lib/adapters/fetch.js@23341..24023",
+      "callee_name": "getFetch"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/adapters.js@602..1038",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@10015..10046",
+      "syntax": "member",
+      "callee": "lib/utils.js@27776..27939",
+      "callee_name": "isSpecCompliantForm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@11804..12127",
+      "syntax": "identifier",
+      "callee": "lib/helpers/trackStream.js@834..1762",
+      "callee_name": "trackStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@12064..12087",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1209..1307",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@12383..12415",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@5904..6062",
+      "callee_name": "resolveBodyLength"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@12877..12899",
+      "syntax": "member",
+      "callee": "lib/utils.js@12541..13118",
+      "callee_name": "isFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@13178..13332",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1127..1333",
+      "callee_name": "progressEventDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@13260..13314",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@152..1086",
+      "callee_name": "progressEventReducer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@13281..13313",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1368..1447",
+      "callee_name": "asyncDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@13375..13427",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@11765..12127",
+      "callee_name": "trackRequestStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@14078..14109",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@14572..14594",
+      "syntax": "member",
+      "callee": "lib/utils.js@12541..13118",
+      "callee_name": "isFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@14955..15007",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@14955..15007",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5105..6705",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@15715..15760",
+      "syntax": "identifier",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@1332..1588",
+      "callee_name": "toByteStringHeaderObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@15740..15759",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@15740..15759",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@8462..9035",
+      "callee_name": "normalize"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@15932..16097",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@16726..16761",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@17809..17865",
+      "syntax": "member",
+      "callee": "lib/utils.js@27502..27614",
+      "callee_name": "toFiniteNumber"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@17830..17864",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@17830..17864",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@17949..18100",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1127..1333",
+      "callee_name": "progressEventDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@18024..18086",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@152..1086",
+      "callee_name": "progressEventReducer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@18045..18079",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1368..1447",
+      "callee_name": "asyncDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@18619..18642",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1209..1307",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@18699..18855",
+      "syntax": "identifier",
+      "callee": "lib/helpers/trackStream.js@834..1762",
+      "callee_name": "trackStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@18792..18799",
+      "syntax": "identifier",
+      "callee": "lib/helpers/throttle.js@767..801",
+      "callee_name": "flush"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@18972..19073",
+      "syntax": "computed-member",
+      "callee": "lib/adapters/fetch.js@5105..5429",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@18982..19020",
+      "syntax": "member",
+      "callee": "lib/utils.js@15480..15772",
+      "callee_name": "findKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@2030..2041",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@3556..4009",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@2030..2041",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@4115..4166",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@2030..2041",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@4449..4500",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@20383..20620",
+      "syntax": "identifier",
+      "callee": "lib/core/settle.js@353..845",
+      "callee_name": "settle"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@20458..20493",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@23424..23455",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@23558..23594",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@23965..23977",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@2368..23284",
+      "callee_name": "factory"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@24042..24052",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@23341..24023",
+      "callee_name": "getFetch"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@2552..2741",
+      "syntax": "member",
+      "callee": "lib/utils.js@16550..18970",
+      "callee_name": "merge"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@2763..2793",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@2900..2920",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@2981..3000",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@3032..3052",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@3161..3187",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@3282..3376",
+      "syntax": "expression",
+      "callee": "lib/adapters/fetch.js@3294..3347",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@3551..4010",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@1990..2082",
+      "callee_name": "test"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@4110..4167",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@1990..2082",
+      "callee_name": "test"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@4121..4166",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@4444..4501",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@1990..2082",
+      "callee_name": "test"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@4959..5450",
+      "syntax": "expression",
+      "callee": "lib/adapters/fetch.js@4960..5447",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5550..5568",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5611..5640",
+      "syntax": "member",
+      "callee": "lib/utils.js@7046..7292",
+      "callee_name": "isArrayBufferView"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5644..5669",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5718..5747",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5790..5810",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5834..5850",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@3307..3347",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5950..5998",
+      "syntax": "member",
+      "callee": "lib/utils.js@27502..27614",
+      "callee_name": "toFiniteNumber"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5971..5997",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@5971..5997",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@6029..6048",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@5477..5873",
+      "callee_name": "getBodyLength"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@6406..6427",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@942..4024",
+      "callee_name": "resolveConfig"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@6462..6494",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@6550..6579",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@6629..6658",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@6829..6924",
+      "syntax": "identifier",
+      "callee": "lib/helpers/composeSignals.js@161..1610",
+      "callee_name": "composeSignals"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@7810..7821",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@6619..6685",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@8104..8133",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@2118..2349",
+      "callee_name": "maybeWithAuthCredentials"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@9576..9607",
+      "syntax": "member",
+      "callee": "lib/utils.js@27776..27939",
+      "callee_name": "isSpecCompliantForm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/fetch.js@9706..9737",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@10292..10311",
+      "syntax": "new",
+      "callee": "lib/helpers/Http2Sessions.js@409..469",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@12491..12551",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@5222..5422",
+      "callee_name": "getProxyEnvAgent"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@20337..20358",
+      "syntax": "member",
+      "callee": "lib/utils.js@5550..5670",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@20617..20642",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@27553..28048",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@20692..20703",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@20529..20649",
+      "callee_name": "done"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@20775..20793",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@20529..20649",
+      "callee_name": "done"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@20829..20906",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@23564..55799",
+      "callee_name": "dispatchHttpRequest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@2130..2175",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@2201..2244",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@23554..55800",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@20414..20930",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24029..24059",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24088..24107",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24150..24161",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24182..24195",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24216..24229",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24255..24273",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24396..24415",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24443..24455",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24481..24497",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24524..24541",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24570..24589",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24622..24645",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24672..24689",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24712..24725",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24768..24787",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24817..24837",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24870..24893",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@24920..24937",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@27009..27033",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@26149..26314",
+      "callee_name": "clearConnectPhaseTimer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@27546..28049",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@20862..20905",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@27612..27636",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@26149..26314",
+      "callee_name": "clearConnectPhaseTimer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@27702..27714",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@26993..27281",
+      "callee_name": "onFinished"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@27962..27974",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@26993..27281",
+      "callee_name": "onFinished"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@28017..28029",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@26993..27281",
+      "callee_name": "onFinished"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@28094..28169",
+      "syntax": "identifier",
+      "callee": "lib/core/buildFullPath.js@2528..2898",
+      "callee_name": "buildFullPath"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@28108..28122",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@28124..28134",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@28136..28160",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31191..31224",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31191..31236",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31191..31236",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@8462..9035",
+      "callee_name": "normalize"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31483..31535",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31483..31535",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5105..6705",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31779..31810",
+      "syntax": "member",
+      "callee": "lib/utils.js@27776..27939",
+      "callee_name": "isSpecCompliantForm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31843..31896",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31843..31896",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31914..32177",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToStream.js@1736..3064",
+      "callee_name": "formDataToStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31989..32013",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@31989..32013",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5105..6705",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@32272..32294",
+      "syntax": "member",
+      "callee": "lib/utils.js@12541..13118",
+      "callee_name": "isFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@32852..32870",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@32874..32892",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@33111..33131",
+      "syntax": "member",
+      "callee": "lib/utils.js@11959..12005",
+      "callee_name": "isStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@33221..33246",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@33321..33341",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@33720..33764",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@33720..33764",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34084..34132",
+      "syntax": "member",
+      "callee": "lib/utils.js@27502..27614",
+      "callee_name": "toFiniteNumber"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34105..34131",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34105..34131",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34390..34410",
+      "syntax": "member",
+      "callee": "lib/utils.js@11959..12005",
+      "callee_name": "isStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34567..34668",
+      "syntax": "new",
+      "callee": "lib/helpers/AxiosTransformStream.js@175..1107",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34617..34652",
+      "syntax": "member",
+      "callee": "lib/utils.js@27502..27614",
+      "callee_name": "toFiniteNumber"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34799..35031",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@10165..10267",
+      "callee_name": "flushOnFinish"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34848..35017",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1127..1333",
+      "callee_name": "progressEventDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34919..35001",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@152..1086",
+      "callee_name": "progressEventReducer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@34940..34990",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1368..1447",
+      "callee_name": "asyncDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35142..35153",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35204..35245",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35278..35319",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35646..35677",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35646..35677",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@7607..8138",
+      "callee_name": "delete"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35724..35845",
+      "syntax": "identifier",
+      "callee": "lib/helpers/buildURL.js@783..1818",
+      "callee_name": "buildURL"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35787..35800",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@35812..35835",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@36086..36347",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@36086..36347",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5105..6705",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@36134..36195",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@36745..36778",
+      "syntax": "identifier",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@1332..1588",
+      "callee_name": "toByteStringHeaderObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@37100..37125",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@38386..38866",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@12303..20268",
+      "callee_name": "setProxy"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@39153..39199",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@7673..8001",
+      "callee_name": "setDirectAgent"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@39808..39824",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@40214..40235",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@41254..41277",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@43279..43304",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@43414..43438",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@26149..26314",
+      "callee_name": "clearConnectPhaseTimer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@43540..43591",
+      "syntax": "member",
+      "callee": "lib/utils.js@27502..27614",
+      "callee_name": "toFiniteNumber"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@43681..43780",
+      "syntax": "new",
+      "callee": "lib/helpers/AxiosTransformStream.js@175..1107",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@43729..43766",
+      "syntax": "member",
+      "callee": "lib/utils.js@27502..27614",
+      "callee_name": "toFiniteNumber"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@43887..44224",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@10165..10267",
+      "callee_name": "flushOnFinish"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@43951..44208",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1127..1333",
+      "callee_name": "progressEventDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@44027..44190",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@152..1086",
+      "callee_name": "progressEventReducer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@44069..44121",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1368..1447",
+      "callee_name": "asyncDecorator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@46495..46524",
+      "syntax": "new",
+      "callee": "lib/core/AxiosHeaders.js@5041..5101",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@47645..47678",
+      "syntax": "identifier",
+      "callee": "lib/core/settle.js@353..845",
+      "callee_name": "settle"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@49638..49666",
+      "syntax": "member",
+      "callee": "lib/utils.js@20256..20368",
+      "callee_name": "stripBOM"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@49893..49926",
+      "syntax": "identifier",
+      "callee": "lib/core/settle.js@353..845",
+      "callee_name": "settle"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@52060..52084",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@26149..26314",
+      "callee_name": "clearConnectPhaseTimer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@52332..52346",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@24020..24059",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@54161..54181",
+      "syntax": "member",
+      "callee": "lib/utils.js@11959..12005",
+      "callee_name": "isStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@5860..5897",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/adapters/http.js@7808..7890",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@5424..7671",
+      "callee_name": "getDirectAgent"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@1032..1056",
+      "syntax": "new",
+      "callee": "lib/core/Axios.js@1682..1873",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@1077..1115",
+      "syntax": "identifier",
+      "callee": "lib/helpers/bind.js@340..443",
+      "callee_name": "bind"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@1158..1228",
+      "syntax": "member",
+      "callee": "lib/utils.js@19357..20072",
+      "callee_name": "extend"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@1263..1322",
+      "syntax": "member",
+      "callee": "lib/utils.js@19357..20072",
+      "callee_name": "extend"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@1430..1488",
+      "syntax": "identifier",
+      "callee": "lib/axios.js@973..1516",
+      "callee_name": "createInstance"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@1445..1487",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@6213..7870",
+      "callee_name": "mergeConfig"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@1578..1602",
+      "syntax": "identifier",
+      "callee": "lib/axios.js@973..1516",
+      "callee_name": "createInstance"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@2310..2379",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@2873..4128",
+      "callee_name": "formDataToJSON"
+    },
+    {
+      "kind": "call",
+      "site": "lib/axios.js@2325..2348",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/cancel/CancelToken.js@1240..1503",
+      "syntax": "identifier",
+      "callee": "lib/cancel/CancelToken.js@2665..2711",
+      "callee_name": "executor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/cancel/CancelToken.js@1416..1459",
+      "syntax": "new",
+      "callee": "lib/cancel/CanceledError.js@387..584",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/cancel/CancelToken.js@2649..2712",
+      "syntax": "new",
+      "callee": "lib/cancel/CancelToken.js@269..1508",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/cancel/CanceledError.js@431..518",
+      "syntax": "super",
+      "callee": "lib/core/AxiosError.js@6593..7443",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10113..10484",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10300..10475",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@2109..4186",
+      "callee_name": "request"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10320..10469",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@6213..7870",
+      "callee_name": "mergeConfig"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10401..10433",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10487..11237",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10688..10936",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@2109..4186",
+      "callee_name": "request"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10710..10928",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@6213..7870",
+      "callee_name": "mergeConfig"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@10978..10998",
+      "syntax": "identifier",
+      "callee": "lib/core/Axios.js@10579..10948",
+      "callee_name": "generateHTTPMethod"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@11205..11229",
+      "syntax": "identifier",
+      "callee": "lib/core/Axios.js@10579..10948",
+      "callee_name": "generateHTTPMethod"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@1795..1819",
+      "syntax": "new",
+      "callee": "lib/core/InterceptorManager.js@1479..1707",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@1837..1861",
+      "syntax": "new",
+      "callee": "lib/core/InterceptorManager.js@1479..1707",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@2175..2209",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@4190..9818",
+      "callee_name": "_request"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@3649..3686",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosError.js@2761..2979",
+      "callee_name": "getCauseStackIndex"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@4491..4525",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@6213..7870",
+      "callee_name": "mergeConfig"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@4637..5290",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@2042..3030",
+      "callee_name": "assertOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@4723..4766",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@750..1652",
+      "callee_name": "transitional"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@4797..4840",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@750..1652",
+      "callee_name": "transitional"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@4873..4916",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@750..1652",
+      "callee_name": "transitional"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@4961..5004",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@750..1652",
+      "callee_name": "transitional"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@5045..5088",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@750..1652",
+      "callee_name": "transitional"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@5133..5176",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@750..1652",
+      "callee_name": "transitional"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@5213..5256",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@750..1652",
+      "callee_name": "transitional"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@5345..5379",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@5492..5679",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@2042..3030",
+      "callee_name": "assertOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@5824..5876",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6069..6251",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@2042..3030",
+      "callee_name": "assertOptions"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6133..6163",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@1677..1881",
+      "callee_name": "spelling"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6188..6224",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@1677..1881",
+      "callee_name": "spelling"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6307..6342",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6352..6394",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6537..6573",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6601..6642",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6694..6849",
+      "syntax": "member",
+      "callee": "lib/utils.js@16550..18970",
+      "callee_name": "merge"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6715..6745",
+      "syntax": "identifier",
+      "callee": "lib/core/Axios.js@858..1502",
+      "callee_name": "isHeadersBucket"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6783..6813",
+      "syntax": "identifier",
+      "callee": "lib/core/Axios.js@858..1502",
+      "callee_name": "isHeadersBucket"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6873..7049",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6942..6993",
+      "syntax": "identifier",
+      "callee": "lib/core/Axios.js@858..1502",
+      "callee_name": "isHeadersBucket"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@6958..6992",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@7073..7117",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9999..10153",
+      "callee_name": "concat"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@7250..7987",
+      "syntax": "member",
+      "callee": "lib/core/InterceptorManager.js@4019..4507",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@8035..8207",
+      "syntax": "member",
+      "callee": "lib/core/InterceptorManager.js@4019..4507",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@894..920",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@9500..9537",
+      "syntax": "member",
+      "callee": "lib/core/dispatchRequest.js@2009..4217",
+      "callee_name": "dispatchRequest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@9852..9886",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@6213..7870",
+      "callee_name": "mergeConfig"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@9909..9984",
+      "syntax": "identifier",
+      "callee": "lib/core/buildFullPath.js@2528..2898",
+      "callee_name": "buildFullPath"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/Axios.js@9997..10055",
+      "syntax": "identifier",
+      "callee": "lib/helpers/buildURL.js@783..1818",
+      "callee_name": "buildURL"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosError.js@2826..2862",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosError.js@5000..5070",
+      "syntax": "new",
+      "callee": "lib/core/AxiosError.js@6593..7443",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosError.js@5870..5905",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosError.js@3741..4478",
+      "callee_name": "appendCauseStack"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@10055..10070",
+      "syntax": "new",
+      "callee": "lib/core/AxiosHeaders.js@5041..5101",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@10105..10125",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@10105..10125",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5105..6705",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@10447..10471",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@218..310",
+      "callee_name": "normalizeHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@10515..10549",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@4473..5016",
+      "callee_name": "buildAccessors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@10711..10843",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@10157..10707",
+      "callee_name": "accessor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@10871..11119",
+      "syntax": "member",
+      "callee": "lib/utils.js@25784..26137",
+      "callee_name": "reduceDescriptors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@11122..11155",
+      "syntax": "member",
+      "callee": "lib/utils.js@26225..26782",
+      "callee_name": "freezeMethods"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@4535..4566",
+      "syntax": "member",
+      "callee": "lib/utils.js@25355..25498",
+      "callee_name": "toCamelCase"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@470..504",
+      "syntax": "identifier",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@1132..1201",
+      "callee_name": "sanitizeHeaderValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@4911..4964",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@4911..4964",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5105..6705",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@4911..4964",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@6709..7297",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5079..5096",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5079..5096",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5105..6705",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5242..5266",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@218..310",
+      "callee_name": "normalizeHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5334..5362",
+      "syntax": "member",
+      "callee": "lib/utils.js@15480..15772",
+      "callee_name": "findKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5535..5561",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@3823..3882",
+      "callee_name": "headerSlot"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5565..5587",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@312..507",
+      "callee_name": "normalizeValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5656..5737",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5700..5736",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@5172..5602",
+      "callee_name": "setHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5748..5775",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5823..5857",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@5627..5737",
+      "callee_name": "setHeaders"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5874..5896",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5929..5954",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@3019..3077",
+      "callee_name": "isValidHeaderName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5964..6012",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@5627..5737",
+      "callee_name": "setHeaders"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@5975..5995",
+      "syntax": "identifier",
+      "callee": "lib/helpers/parseHeaders.js@814..1590",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6029..6051",
+      "syntax": "member",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6055..6083",
+      "syntax": "member",
+      "callee": "lib/utils.js@31975..32065",
+      "callee_name": "isSafeIterable"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6351..6377",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6564..6595",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@5627..5737",
+      "callee_name": "setHeaders"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6634..6676",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@5172..5602",
+      "callee_name": "setHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6744..6767",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@218..310",
+      "callee_name": "normalizeHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6806..6833",
+      "syntax": "member",
+      "callee": "lib/utils.js@15480..15772",
+      "callee_name": "findKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@6993..7011",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@509..741",
+      "callee_name": "parseTokens"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@7036..7060",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@7135..7157",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@7337..7360",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@218..310",
+      "callee_name": "normalizeHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@7399..7426",
+      "syntax": "member",
+      "callee": "lib/utils.js@15480..15772",
+      "callee_name": "findKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@7735..7759",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@218..310",
+      "callee_name": "normalizeHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@7803..7831",
+      "syntax": "member",
+      "callee": "lib/utils.js@15480..15772",
+      "callee_name": "findKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@8086..8106",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@7686..7996",
+      "callee_name": "deleteHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@8551..9012",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@8610..8640",
+      "syntax": "member",
+      "callee": "lib/utils.js@15480..15772",
+      "callee_name": "findKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@8782..8847",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@3823..3882",
+      "callee_name": "headerSlot"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@8802..8822",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@4292..4471",
+      "callee_name": "formatHeader"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@8948..8969",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@312..507",
+      "callee_name": "normalizeValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@9183..9366",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@9440..9453",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@9440..9453",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9121..9388",
+      "callee_name": "toJSON"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@9521..9534",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@9521..9534",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9121..9388",
+      "callee_name": "toJSON"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/AxiosHeaders.js@9901..9916",
+      "syntax": "new",
+      "callee": "lib/core/AxiosHeaders.js@5041..5101",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@2395..2430",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@825..1448",
+      "callee_name": "syncHandlerEntries"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@2879..2914",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@825..1448",
+      "callee_name": "syncHandlerEntries"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@2939..2961",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@673..823",
+      "callee_name": "normalizeHandlerId"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@3416..3443",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@348..513",
+      "callee_name": "trimHandlers"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@3671..3713",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@825..1448",
+      "callee_name": "syncHandlerEntries"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@4078..4113",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@825..1448",
+      "callee_name": "syncHandlerEntries"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@4165..4284",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@4259..4264",
+      "syntax": "identifier",
+      "callee": "lib/core/Axios.js@7284..7986",
+      "callee_name": "unshiftRequestInterceptors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@4259..4264",
+      "syntax": "identifier",
+      "callee": "lib/core/Axios.js@8070..8206",
+      "callee_name": "pushResponseInterceptors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@4351..4386",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@825..1448",
+      "callee_name": "syncHandlerEntries"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@4396..4423",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@348..513",
+      "callee_name": "trimHandlers"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@4460..4488",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@269..346",
+      "callee_name": "countHandlers"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/InterceptorManager.js@929..952",
+      "syntax": "identifier",
+      "callee": "lib/core/InterceptorManager.js@269..346",
+      "callee_name": "countHandlers"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/assertParamsAcyclic.js@329..355",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/buildFullPath.js@1833..1866",
+      "syntax": "identifier",
+      "callee": "lib/helpers/normalizeURLForProtocolCheck.js@205..472",
+      "callee_name": "normalizeURLForProtocolCheck"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/buildFullPath.js@2605..2653",
+      "syntax": "identifier",
+      "callee": "lib/core/buildFullPath.js@1723..2130",
+      "callee_name": "assertValidHttpProtocolURL"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/buildFullPath.js@2678..2705",
+      "syntax": "identifier",
+      "callee": "lib/helpers/isAbsoluteURL.js@212..616",
+      "callee_name": "isAbsoluteURL"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/buildFullPath.js@2778..2821",
+      "syntax": "identifier",
+      "callee": "lib/core/buildFullPath.js@1723..2130",
+      "callee_name": "assertValidHttpProtocolURL"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/buildFullPath.js@2834..2868",
+      "syntax": "identifier",
+      "callee": "lib/helpers/combineURLs.js@223..491",
+      "callee_name": "combineURLs"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@1224..1257",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@1772..1777",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@1264..1287",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2294..2325",
+      "syntax": "member",
+      "callee": "lib/utils.js@4422..5520",
+      "callee_name": "toSafeFlatObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2330..2366",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@513..733",
+      "callee_name": "throwIfCancellationRequested"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2388..2443",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2406..2442",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2490..2541",
+      "syntax": "member",
+      "callee": "lib/core/transformData.js@392..775",
+      "callee_name": "transformData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2612..2685",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2612..2685",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2710..2773",
+      "syntax": "member",
+      "callee": "lib/adapters/adapters.js@1911..3183",
+      "callee_name": "getAdapter"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2790..2804",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@1151..1305",
+      "callee_name": "resolveClock"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2822..2827",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@1264..1287",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2839..2854",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@6074..23281",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2839..2854",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@23512..55805",
+      "callee_name": "httpAdapter"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2912..2948",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@513..733",
+      "callee_name": "throwIfCancellationRequested"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@2977..3001",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@1704..1790",
+      "callee_name": "elapsedSince"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@3301..3363",
+      "syntax": "member",
+      "callee": "lib/core/transformData.js@392..775",
+      "callee_name": "transformData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@3449..3484",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@3570..3586",
+      "syntax": "identifier",
+      "callee": "lib/cancel/isCancel.js@30..98",
+      "callee_name": "isCancel"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@3598..3634",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@513..733",
+      "callee_name": "throwIfCancellationRequested"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@3750..3774",
+      "syntax": "identifier",
+      "callee": "lib/core/dispatchRequest.js@1704..1790",
+      "callee_name": "elapsedSince"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@3872..3997",
+      "syntax": "member",
+      "callee": "lib/core/transformData.js@392..775",
+      "callee_name": "transformData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@4105..4147",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@593..630",
+      "syntax": "member",
+      "callee": "lib/cancel/CancelToken.js@1590..1668",
+      "callee_name": "throwIfRequested"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/dispatchRequest.js@695..726",
+      "syntax": "new",
+      "callee": "lib/cancel/CanceledError.js@387..584",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@1058..1085",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@1413..1433",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@1436..1454",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@900..1394",
+      "callee_name": "copy"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@1457..1467",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@900..1394",
+      "callee_name": "copy"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@1585..1608",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@273..637",
+      "callee_name": "ownEnumerableKeys"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@1642..1667",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@273..637",
+      "callee_name": "ownEnumerableKeys"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@1990..2016",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2096..2117",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@900..1394",
+      "callee_name": "copy"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2162..2189",
+      "syntax": "identifier",
+      "callee": "lib/core/assertParamsAcyclic.js@106..1621",
+      "callee_name": "assertParamsAcyclic"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2275..2302",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2306..2333",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2348..2394",
+      "syntax": "member",
+      "callee": "lib/utils.js@16550..18970",
+      "callee_name": "merge"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2409..2436",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2451..2474",
+      "syntax": "member",
+      "callee": "lib/utils.js@16550..18970",
+      "callee_name": "merge"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2625..2645",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2660..2696",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2211..2563",
+      "callee_name": "getMergedValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2712..2732",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2747..2791",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2211..2563",
+      "callee_name": "getMergedValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2887..2907",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@2922..2950",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2211..2563",
+      "callee_name": "getMergedValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@3046..3066",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@3081..3109",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2211..2563",
+      "callee_name": "getMergedValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@3125..3145",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@3160..3188",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2211..2563",
+      "callee_name": "getMergedValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@3968..3999",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@4014..4034",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2211..2563",
+      "callee_name": "getMergedValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@4049..4080",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@4095..4123",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2211..2563",
+      "callee_name": "getMergedValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@4177..4248",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2565..2798",
+      "callee_name": "mergeDeepProperties"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@4197..4215",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@179..244",
+      "callee_name": "headersToObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@4217..4235",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@179..244",
+      "callee_name": "headersToObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@6771..6816",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@273..637",
+      "callee_name": "ownEnumerableKeys"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7006..7038",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7093..7124",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7168..7199",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7287..7322",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@3905..4130",
+      "callee_name": "mergeDirectKeys"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7325..7342",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2565..2798",
+      "callee_name": "mergeDeepProperties"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7325..7342",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@2846..2957",
+      "callee_name": "valueFromConfig2"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7325..7342",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@3005..3195",
+      "callee_name": "defaultToConfig2"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7325..7342",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@4132..4251",
+      "callee_name": "mergeHeaders"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7325..7342",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@794..2209",
+      "callee_name": "mergeParams"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7349..7379",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7459..7502",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@7510..7551",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/mergeConfig.js@941..968",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/settle.js@500..531",
+      "syntax": "identifier",
+      "callee": "lib/defaults/index.js@4665..4744",
+      "callee_name": "validateStatus"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/settle.js@539..556",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@20673..20732",
+      "callee_name": "_resolve"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/settle.js@573..838",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@20755..20822",
+      "callee_name": "_reject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/settle.js@580..837",
+      "syntax": "new",
+      "callee": "lib/core/AxiosError.js@6593..7443",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@523..557",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@589..732",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@644..726",
+      "syntax": "member",
+      "callee": "lib/defaults/index.js@1360..3213",
+      "callee_name": "transformRequest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@644..726",
+      "syntax": "member",
+      "callee": "lib/defaults/index.js@3248..4306",
+      "callee_name": "transformResponse"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@666..685",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@666..685",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@8462..9035",
+      "callee_name": "normalize"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@737..756",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/core/transformData.js@737..756",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@8462..9035",
+      "callee_name": "normalize"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1429..1453",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1429..1453",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1570..1590",
+      "syntax": "member",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1622..1644",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1717..1739",
+      "syntax": "member",
+      "callee": "lib/utils.js@12541..13118",
+      "callee_name": "isFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1875..1900",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1912..1932",
+      "syntax": "member",
+      "callee": "lib/utils.js@6414..6648",
+      "callee_name": "isBuffer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1944..1964",
+      "syntax": "member",
+      "callee": "lib/utils.js@11959..12005",
+      "callee_name": "isStream"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@1976..1994",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2006..2024",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2036..2064",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2114..2143",
+      "syntax": "member",
+      "callee": "lib/utils.js@7046..7292",
+      "callee_name": "isArrayBufferView"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2193..2222",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2234..2314",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2234..2314",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2440..2467",
+      "syntax": "identifier",
+      "callee": "lib/defaults/index.js@429..509",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2662..2684",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2781..2797",
+      "syntax": "identifier",
+      "callee": "lib/defaults/index.js@429..509",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@2866..3011",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2635..7703",
+      "callee_name": "toFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3091..3140",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3091..3140",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4866..4973",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3157..3178",
+      "syntax": "identifier",
+      "callee": "lib/defaults/index.js@922..1236",
+      "callee_name": "stringifySafely"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3310..3335",
+      "syntax": "identifier",
+      "callee": "lib/defaults/index.js@429..509",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3469..3494",
+      "syntax": "identifier",
+      "callee": "lib/defaults/index.js@429..509",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3560..3582",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3586..3614",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3683..3703",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@3983..4008",
+      "syntax": "identifier",
+      "callee": "lib/defaults/index.js@429..509",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@459..485",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@4874..4949",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/defaults/index.js@982..1006",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosTransformStream.js@212..514",
+      "syntax": "member",
+      "callee": "lib/utils.js@21369..22064",
+      "callee_name": "toFlatObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosTransformStream.js@3645..3823",
+      "syntax": "identifier",
+      "callee": "lib/helpers/AxiosTransformStream.js@1845..2293",
+      "callee_name": "pushChunk"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosTransformStream.js@3837..4083",
+      "syntax": "identifier",
+      "callee": "lib/helpers/AxiosTransformStream.js@2323..3830",
+      "callee_name": "transformChunk"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosTransformStream.js@468..499",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosURLSearchParams.js@1191..1224",
+      "syntax": "member",
+      "callee": "lib/helpers/buildURL.js@337..501",
+      "callee_name": "encode"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosURLSearchParams.js@1305..1321",
+      "syntax": "identifier",
+      "callee": "lib/helpers/AxiosURLSearchParams.js@1180..1224",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosURLSearchParams.js@1330..1346",
+      "syntax": "identifier",
+      "callee": "lib/helpers/AxiosURLSearchParams.js@1180..1224",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/AxiosURLSearchParams.js@920..953",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2635..7703",
+      "callee_name": "toFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/bind.js@407..435",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@10258..10480",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/bind.js@407..435",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@10628..10943",
+      "callee_name": "httpMethod"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/bind.js@407..435",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@2109..4186",
+      "callee_name": "request"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/bind.js@407..435",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@9822..10060",
+      "callee_name": "getUri"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/buildURL.js@1198..1235",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/buildURL.js@1269..1309",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/buildURL.js@1446..1477",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/buildURL.js@1512..1554",
+      "syntax": "new",
+      "callee": "lib/helpers/AxiosURLSearchParams.js@838..956",
+      "callee_name": "AxiosURLSearchParams"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/buildURL.js@1512..1572",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosURLSearchParams.js@1119..1376",
+      "callee_name": "toString"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/buildURL.js@901..926",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@1544..1577",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@208..451",
+      "callee_name": "throwIfDepthExceeded"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@2506..2533",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@2065..2308",
+      "callee_name": "normalizeArray"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@2570..2596",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@2964..2991",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@208..451",
+      "callee_name": "throwIfDepthExceeded"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3254..3284",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3564..3594",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3599..3627",
+      "syntax": "member",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3682..3725",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@2911..3863",
+      "callee_name": "buildPath"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3798..3825",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@1842..2063",
+      "callee_name": "arrayToObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3871..3897",
+      "syntax": "member",
+      "callee": "lib/utils.js@12541..13118",
+      "callee_name": "isFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3901..3935",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@3964..4071",
+      "syntax": "member",
+      "callee": "lib/utils.js@24539..24782",
+      "callee_name": "forEachEntry"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@4018..4063",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@2911..3863",
+      "callee_name": "buildPath"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@4028..4047",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@650..1662",
+      "callee_name": "parsePropPath"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToJSON.js@4085..4105",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToJSON.js@2310..2664",
+      "callee_name": "normalizeArrays"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@1379..1404",
+      "syntax": "member",
+      "callee": "lib/utils.js@24142..24212",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@1857..1905",
+      "syntax": "member",
+      "callee": "lib/platform/node/index.js@326..610",
+      "callee_name": "generateString"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@1936..1958",
+      "syntax": "member",
+      "callee": "lib/utils.js@12541..13118",
+      "callee_name": "isFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@2415..2444",
+      "syntax": "new",
+      "callee": "lib/helpers/formDataToStream.js@461..1295",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@2581..2616",
+      "syntax": "member",
+      "callee": "lib/utils.js@27502..27614",
+      "callee_name": "toFiniteNumber"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@2838..2869",
+      "syntax": "identifier",
+      "callee": "lib/adapters/http.js@31958..32026",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@559..580",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/formDataToStream.js@642..658",
+      "syntax": "identifier",
+      "callee": "lib/helpers/formDataToStream.js@1506..1707",
+      "callee_name": "escapeName"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/isAxiosError.js@309..332",
+      "syntax": "member",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/parseHeaders.js@1199..1228",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/parseHeaders.js@193..494",
+      "syntax": "member",
+      "callee": "lib/utils.js@27190..27452",
+      "callee_name": "toObjectSet"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/progressEventReducer.js@1057..1071",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@1402..1447",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/progressEventReducer.js@1227..1307",
+      "syntax": "computed-member",
+      "callee": "lib/helpers/throttle.js@421..748",
+      "callee_name": "throttled"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/progressEventReducer.js@244..264",
+      "syntax": "identifier",
+      "callee": "lib/helpers/speedometer.js@141..1064",
+      "callee_name": "speedometer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/progressEventReducer.js@276..1083",
+      "syntax": "identifier",
+      "callee": "lib/helpers/throttle.js@107..892",
+      "callee_name": "throttle"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/progressEventReducer.js@309..333",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/progressEventReducer.js@617..644",
+      "syntax": "identifier",
+      "callee": "lib/helpers/speedometer.js@411..1061",
+      "callee_name": "push"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1024..1047",
+      "syntax": "identifier",
+      "callee": "lib/core/mergeConfig.js@6213..7870",
+      "callee_name": "mergeConfig"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1202..1234",
+      "syntax": "member",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1282..1293",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1317..1337",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1364..1385",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1412..1433",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1451..1465",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1482..1493",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1513..1527",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1557..1581",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1597..1607",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1642..1668",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9837..9921",
+      "callee_name": "from"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1689..1812",
+      "syntax": "identifier",
+      "callee": "lib/helpers/buildURL.js@783..1818",
+      "callee_name": "buildURL"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1703..1760",
+      "syntax": "identifier",
+      "callee": "lib/core/buildFullPath.js@2528..2898",
+      "callee_name": "buildFullPath"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1766..1779",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@1785..1808",
+      "syntax": "identifier",
+      "callee": "lib/helpers/resolveConfig.js@1192..1264",
+      "callee_name": "own"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/resolveConfig.js@2638..2660",
+      "syntax": "member",
+      "callee": "lib/utils.js@12541..13118",
+      "callee_name": "isFormData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/sanitizeHeaderValue.js@1039..1092",
+      "syntax": "identifier",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@49..491",
+      "callee_name": "trimSPorHTAB"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/sanitizeHeaderValue.js@1145..1201",
+      "syntax": "identifier",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@882..1095",
+      "callee_name": "sanitizeValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/sanitizeHeaderValue.js@1262..1322",
+      "syntax": "identifier",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@882..1095",
+      "callee_name": "sanitizeValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/sanitizeHeaderValue.js@1429..1556",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/sanitizeHeaderValue.js@1443..1459",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/sanitizeHeaderValue.js@1443..1459",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9121..9388",
+      "callee_name": "toJSON"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/sanitizeHeaderValue.js@1514..1550",
+      "syntax": "identifier",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@1249..1322",
+      "callee_name": "sanitizeByteStringHeaderValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/throttle.js@382..393",
+      "syntax": "identifier",
+      "callee": "lib/helpers/progressEventReducer.js@285..1076",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/throttle.js@537..554",
+      "syntax": "identifier",
+      "callee": "lib/helpers/throttle.js@236..398",
+      "callee_name": "invoke"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@1559..1580",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@920..1013",
+      "callee_name": "removeBrackets"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@1954..2048",
+      "syntax": "member",
+      "callee": "lib/utils.js@21369..22064",
+      "callee_name": "toFlatObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@2688..2707",
+      "syntax": "member",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@2938..2970",
+      "syntax": "member",
+      "callee": "lib/utils.js@3870..3959",
+      "callee_name": "getSafeProp"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@2983..3007",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3055..3081",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2898..3031",
+      "callee_name": "option"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3152..3169",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2898..3031",
+      "callee_name": "option"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3204..3225",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2898..3031",
+      "callee_name": "option"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3245..3269",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2898..3031",
+      "callee_name": "option"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3287..3301",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2898..3031",
+      "callee_name": "option"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3363..3410",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@2898..3031",
+      "callee_name": "option"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3439..3474",
+      "syntax": "member",
+      "callee": "lib/utils.js@27776..27939",
+      "callee_name": "isSpecCompliantForm"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3504..3529",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3670..3689",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3742..3764",
+      "syntax": "member",
+      "callee": "lib/utils.js@8271..8315",
+      "callee_name": "isBoolean"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3826..3845",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3940..3966",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@3970..3995",
+      "syntax": "member",
+      "callee": "lib/utils.js@24142..24212",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@5502..5531",
+      "syntax": "member",
+      "callee": "lib/utils.js@11307..11373",
+      "callee_name": "isReactNative"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@5733..5758",
+      "syntax": "member",
+      "callee": "lib/utils.js@22286..22576",
+      "callee_name": "endsWith"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6023..6041",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@1849..1933",
+      "callee_name": "isFlatArray"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6056..6079",
+      "syntax": "member",
+      "callee": "lib/utils.js@5764..5797",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6083..6108",
+      "syntax": "member",
+      "callee": "lib/utils.js@22286..22576",
+      "callee_name": "endsWith"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6221..6240",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@920..1013",
+      "callee_name": "removeBrackets"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6302..6323",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6616..6632",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@3595..4367",
+      "callee_name": "convertValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6705..6723",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@658..750",
+      "callee_name": "isVisitable"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6757..6821",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosURLSearchParams.js@1028..1095",
+      "callee_name": "append"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6773..6799",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@1364..1671",
+      "callee_name": "renderKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@6801..6820",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@3595..4367",
+      "callee_name": "convertValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@697..723",
+      "syntax": "member",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7013..7037",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7052..7082",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@4371..4621",
+      "callee_name": "throwIfMaxDepthExceeded"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7234..7557",
+      "syntax": "member",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7311..7332",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7360..7448",
+      "syntax": "member",
+      "callee": "lib/helpers/toFormData.js@5428..6845",
+      "callee_name": "defaultVisitor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7387..7406",
+      "syntax": "member",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7488..7541",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@6964..7580",
+      "callee_name": "build"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7589..7608",
+      "syntax": "member",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@7670..7680",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@6964..7580",
+      "callee_name": "build"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/toFormData.js@960..985",
+      "syntax": "member",
+      "callee": "lib/utils.js@22286..22576",
+      "callee_name": "endsWith"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/trackStream.js@1041..1052",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@18763..18854",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/trackStream.js@1041..1052",
+      "syntax": "identifier",
+      "callee": "lib/helpers/throttle.js@767..801",
+      "callee_name": "flush"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/trackStream.js@1238..1249",
+      "syntax": "identifier",
+      "callee": "lib/helpers/trackStream.js@978..1063",
+      "callee_name": "_onFinish"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/trackStream.js@1440..1463",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@11875..12100",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/trackStream.js@1440..1463",
+      "syntax": "identifier",
+      "callee": "lib/adapters/fetch.js@18179..18653",
+      "callee_name": "onChunkProgress"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/validator.js@1610..1637",
+      "syntax": "identifier",
+      "callee": "lib/helpers/validator.js@277..379",
+      "callee_name": "validator"
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/validator.js@2682..2712",
+      "syntax": "identifier",
+      "callee": "lib/helpers/validator.js@1060..1649",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/helpers/validator.js@2757..2874",
+      "syntax": "new",
+      "callee": "lib/core/AxiosError.js@6593..7443",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "lib/platform/common/utils.js@1192..1396",
+      "syntax": "expression",
+      "callee": "lib/platform/common/utils.js@1193..1393",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@10272..10290",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@10455..10473",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@11538..11556",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@11733..11755",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@11771..11788",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@11968..11981",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@11985..12005",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@12427..12438",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@12166..12415",
+      "callee_name": "getGlobal"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@12873..12897",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@12928..12941",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5550..5670",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@13330..13359",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@14770..14799",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@10165..10483",
+      "callee_name": "forEachMethodNoData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@14770..14799",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@10536..11236",
+      "callee_name": "forEachMethodWithData"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@14770..14799",
+      "syntax": "member",
+      "callee": "lib/core/Axios.js@6916..7048",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@14770..14799",
+      "syntax": "member",
+      "callee": "lib/core/InterceptorManager.js@4194..4283",
+      "callee_name": "forEachHandler"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@14770..14799",
+      "syntax": "member",
+      "callee": "lib/core/transformData.js@608..731",
+      "callee_name": "transform"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@14770..14799",
+      "syntax": "member",
+      "callee": "lib/defaults/index.js@4900..4948",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@14846..14859",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@6414..6648",
+      "callee_name": "isBuffer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/adapters/adapters.js@631..1037",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/adapters/fetch.js@15963..16096",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@5679..5736",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@8571..9011",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9203..9365",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/helpers/sanitizeHeaderValue.js@1461..1555",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/helpers/toFormData.js@7255..7556",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/utils.js@17110..18406",
+      "callee_name": "assignValue"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/utils.js@19421..20033",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15100..15133",
+      "syntax": "member",
+      "callee": "lib/utils.js@25922..26080",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15515..15528",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@6414..6648",
+      "callee_name": "isBuffer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@15790..15982",
+      "syntax": "expression",
+      "callee": "lib/utils.js@15791..15979",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@16024..16044",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@16615..16637",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@16010..16067",
+      "callee_name": "isContextDefined"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@17991..18024",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@18066..18089",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@18178..18196",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@8503..9525",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@18226..18240",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@16550..18970",
+      "callee_name": "merge"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@18346..18362",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@18505..18521",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@6414..6648",
+      "callee_name": "isBuffer"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@18552..18580",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@19401..20057",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@19458..19473",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@19704..19722",
+      "syntax": "identifier",
+      "callee": "lib/helpers/bind.js@340..443",
+      "callee_name": "bind"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@2131..2154",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@466..580",
+      "callee_name": "isUnsafeObjectKey"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@21739..21775",
+      "syntax": "identifier",
+      "callee": "lib/helpers/AxiosTransformStream.js@432..508",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@21739..21775",
+      "syntax": "identifier",
+      "callee": "lib/helpers/toFormData.js@1990..2047",
+      "callee_name": "filter"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@24073..24281",
+      "syntax": "expression",
+      "callee": "lib/utils.js@24074..24215",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@24745..24775",
+      "syntax": "member",
+      "callee": "lib/helpers/formDataToJSON.js@3993..4070",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@25303..25332",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@25735..25755",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@25901..26081",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@14335..15146",
+      "callee_name": "forEach"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@25974..26004",
+      "syntax": "identifier",
+      "callee": "lib/core/AxiosHeaders.js@10919..11118",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@25974..26004",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@26261..26778",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@26238..26779",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@25784..26137",
+      "callee_name": "reduceDescriptors"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@26337..26352",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@26474..26491",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@27364..27385",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@27258..27334",
+      "callee_name": "define"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@27844..27868",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@29418..29445",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@30322..31000",
+      "syntax": "expression",
+      "callee": "lib/utils.js@30323..30930",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@30968..30999",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@31440..31467",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@3183..3233",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@1317..1406",
+      "callee_name": "isPrototypeBoundary"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@32005..32044",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@2966..3368",
+      "callee_name": "hasOwnInPrototypeChain"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@32048..32065",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@31412..31467",
+      "callee_name": "isIterable"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@3272..3297",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@338..437",
+      "syntax": "expression",
+      "callee": "lib/utils.js@342..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@3902..3935",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@2966..3368",
+      "callee_name": "hasOwnInPrototypeChain"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@4627..4655",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@1874..2344",
+      "callee_name": "isSafeAndFullyMutable"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@5538..5692",
+      "syntax": "expression",
+      "callee": "lib/utils.js@5539..5670",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@5775..5788",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5550..5670",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@6237..6260",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5822..5864",
+      "callee_name": "typeOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@6475..6491",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@6532..6560",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@6568..6604",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5832..5864",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@6835..6860",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@7462..7482",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5822..5864",
+      "callee_name": "typeOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@7656..7678",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5822..5864",
+      "callee_name": "typeOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@7849..7869",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@5822..5864",
+      "callee_name": "typeOfTest"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@8521..8534",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@8044..8098",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@9397..9438",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@1317..1406",
+      "callee_name": "isPrototypeBoundary"
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@9450..9482",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lib/utils.js@9487..9516",
+      "syntax": "identifier",
+      "callee": "lib/utils.js@368..417",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/fetch.js@17660..17768",
+      "syntax": "member",
+      "callee": "lib/adapters/fetch.js@17704..17767",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/fetch.js@20340..20630",
+      "syntax": "new",
+      "callee": "lib/adapters/fetch.js@20352..20629",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/fetch.js@23473..23645",
+      "syntax": "member",
+      "callee": "lib/adapters/fetch.js@23522..23644",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/fetch.js@3621..3812",
+      "syntax": "new",
+      "callee": "lib/adapters/fetch.js@3720..3802",
+      "callee_name": "duplex"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/fetch.js@4974..5440",
+      "syntax": "member",
+      "callee": "lib/adapters/fetch.js@5036..5439",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@10201..10224",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@10201..10243",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@20444..20927",
+      "syntax": "new",
+      "callee": "lib/adapters/http.js@20456..20926",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@34754..35043",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@43827..44238",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@47783..48565",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@48578..48995",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@49008..49194",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@49207..49940",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@54250..54307",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@54423..54592",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/adapters/http.js@9590..9656",
+      "syntax": "member",
+      "callee": "lib/adapters/http.js@9613..9655",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/cancel/CancelToken.js@445..531",
+      "syntax": "new",
+      "callee": "lib/cancel/CancelToken.js@457..530",
+      "callee_name": "promiseExecutor"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/core/AxiosHeaders.js@10077..10126",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@10093..10125",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/core/AxiosHeaders.js@10629..10659",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@10390..10599",
+      "callee_name": "defineAccessor"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/core/AxiosHeaders.js@4333..4468",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4403..4467",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/core/AxiosHeaders.js@4571..5013",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@4601..5012",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/core/AxiosHeaders.js@9506..9590",
+      "syntax": "member",
+      "callee": "lib/core/AxiosHeaders.js@9547..9589",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/core/assertParamsAcyclic.js@1233..1614",
+      "syntax": "member",
+      "callee": "lib/core/assertParamsAcyclic.js@1246..1613",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/core/mergeConfig.js@1731..2153",
+      "syntax": "member",
+      "callee": "lib/core/mergeConfig.js@1744..2152",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/AxiosTransformStream.js@2016..2058",
+      "syntax": "member",
+      "callee": "lib/helpers/progressEventReducer.js@1209..1307",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/AxiosTransformStream.js@2071..2088",
+      "syntax": "member",
+      "callee": "lib/adapters/http.js@47809..48564",
+      "callee_name": "handleStreamData"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/AxiosURLSearchParams.js@1249..1358",
+      "syntax": "member",
+      "callee": "lib/helpers/AxiosURLSearchParams.js@1270..1353",
+      "callee_name": "each"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/HttpStatusCode.js@1851..1994",
+      "syntax": "member",
+      "callee": "lib/helpers/HttpStatusCode.js@1890..1993",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/formDataToJSON.js@2432..2643",
+      "syntax": "member",
+      "callee": "lib/helpers/formDataToJSON.js@2460..2642",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/formDataToStream.js@2346..2499",
+      "syntax": "member",
+      "callee": "lib/helpers/formDataToStream.js@2377..2498",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/formDataToStream.js@3000..3013",
+      "syntax": "member",
+      "callee": "lib/helpers/formDataToStream.js@1299..1502",
+      "callee_name": "encode"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/parseHeaders.js@996..1569",
+      "syntax": "member",
+      "callee": "lib/helpers/parseHeaders.js@1027..1568",
+      "callee_name": "parser"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/toFormData.js@1436..1641",
+      "syntax": "member",
+      "callee": "lib/helpers/toFormData.js@1467..1640",
+      "callee_name": "each"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/toFormData.js@1909..1930",
+      "syntax": "member",
+      "callee": "lib/helpers/toFormData.js@658..750",
+      "callee_name": "isVisitable"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/toFormData.js@6251..6658",
+      "syntax": "member",
+      "callee": "lib/helpers/toFormData.js@6263..6657",
+      "callee_name": "each"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/trackStream.js@1186..1201",
+      "syntax": "member",
+      "callee": "lib/helpers/trackStream.js@319..458",
+      "callee_name": "readBytes"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/trackStream.js@422..451",
+      "syntax": "identifier",
+      "callee": "lib/helpers/trackStream.js@27..291",
+      "callee_name": "streamChunk"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/helpers/validator.js@169..383",
+      "syntax": "member",
+      "callee": "lib/helpers/validator.js@241..382",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/utils.js@13423..13502",
+      "syntax": "member",
+      "callee": "lib/utils.js@5714..5800",
+      "callee_name": "kindOfTest"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/utils.js@2099..2341",
+      "syntax": "member",
+      "callee": "lib/utils.js@2111..2340",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lib/utils.js@25375..25495",
+      "syntax": "member",
+      "callee": "lib/utils.js@25426..25494",
+      "callee_name": "replacer"
+    },
+    {
+      "kind": "callback",
+      "site": "lib/utils.js@27273..27329",
+      "syntax": "member",
+      "callee": "lib/utils.js@27285..27328",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/core/Axios.js@2169",
+      "syntax": "implicit",
+      "callee": "lib/core/dispatchRequest.js@2009..4217",
+      "callee_name": "dispatchRequest"
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/core/Axios.js@2169",
+      "syntax": "implicit",
+      "callee": "lib/core/dispatchRequest.js@2865..3515",
+      "callee_name": "onAdapterResolution"
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/core/AxiosHeaders.js@5802",
+      "syntax": "implicit",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/utils.js@6503",
+      "syntax": "implicit",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/utils.js@6548",
+      "syntax": "implicit",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/utils.js@6583",
+      "syntax": "implicit",
+      "callee": "lib/core/AxiosHeaders.js@11035..11046",
+      "callee_name": "get"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+construct = "eval"
+held_out = true
+description = "new Function builds a function from a string; the built function calls a callback passed to it."

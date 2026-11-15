@@ -48,3 +48,6 @@ node_modules/
 # not — one reached 61 MB. Results and hashes live in .swarm/*.md.
 .swarm/gate-logs/*-tests.log
 .swarm/gate-logs/T-VERIFY-*.log
+
+# Python bytecode caches left by the benchmark scripts; generated, not source.
+__pycache__/

@@ -1,0 +1,33 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@176..189",
+      "syntax": "member",
+      "callee": "main.js@239..295",
+      "callee_name": "report"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@314..328",
+      "syntax": "new",
+      "callee": "main.js@12..76",
+      "callee_name": "Counter"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@348..367",
+      "syntax": "member",
+      "callee": "main.js@108..209",
+      "callee_name": "increment"
+    }
+  ]
+}

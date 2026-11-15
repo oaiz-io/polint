@@ -1,0 +1,61 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 5,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@207..214",
+      "syntax": "identifier",
+      "callee": "main.js@97..149",
+      "callee_name": "double"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@209..213",
+      "syntax": "identifier",
+      "callee": "main.js@259..317",
+      "callee_name": "increment"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@319..335",
+      "syntax": "identifier",
+      "callee": "main.js@12..95",
+      "callee_name": "twice"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@366..392",
+      "syntax": "identifier",
+      "callee": "main.js@151..257",
+      "callee_name": "compose"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@412..419",
+      "syntax": "identifier",
+      "callee": "main.js@200..214",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "main.js@62..75",
+      "syntax": "identifier",
+      "callee": "main.js@97..149",
+      "callee_name": "double"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@65..74",
+      "syntax": "identifier",
+      "callee": "main.js@97..149",
+      "callee_name": "double"
+    }
+  ]
+}

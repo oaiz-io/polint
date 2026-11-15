@@ -13,6 +13,7 @@ pub(crate) mod fixtures;
 pub(crate) mod gates;
 #[cfg(test)]
 pub(crate) mod go_rta;
+pub(crate) mod js_bench;
 pub(crate) mod markdown;
 pub(crate) mod matcher;
 pub(crate) mod metrics;

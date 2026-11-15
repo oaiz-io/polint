@@ -1,0 +1,3 @@
+construct = "promise"
+held_out = false
+description = "Named functions are passed to then and catch on a promise chain and run as reactions."

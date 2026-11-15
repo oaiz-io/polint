@@ -1,0 +1,19 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@188..209",
+      "syntax": "computed-member",
+      "callee": "main.js@33..79",
+      "callee_name": "build"
+    }
+  ]
+}

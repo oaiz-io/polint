@@ -1,0 +1,526 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "source/index.js",
+    "source/utilities.js",
+    "source/vendor/ansi-styles/index.js",
+    "source/vendor/supports-color/index.js"
+  ],
+  "instrumented_functions": 51,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "source/index.js@1010..1041",
+      "syntax": "identifier",
+      "callee": "source/index.js@441..586",
+      "callee_name": "assertValidLevel"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@1461..1482",
+      "syntax": "identifier",
+      "callee": "source/index.js@1511..1677",
+      "callee_name": "chalkFactory"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@1575..1603",
+      "syntax": "identifier",
+      "callee": "source/index.js@944..1352",
+      "callee_name": "applyOptions"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@1720..1741",
+      "syntax": "identifier",
+      "callee": "source/index.js@1511..1677",
+      "callee_name": "chalkFactory"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2044..2132",
+      "syntax": "identifier",
+      "callee": "source/index.js@4928..6011",
+      "callee_name": "createBuilder"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2064..2115",
+      "syntax": "identifier",
+      "callee": "source/index.js@4628..4903",
+      "callee_name": "createStyler"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2272..2311",
+      "syntax": "identifier",
+      "callee": "source/index.js@4928..6011",
+      "callee_name": "createBuilder"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2724..2774",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@105..139",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2735..2773",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@6689..6770",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2816..2872",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@178..220",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2830..2871",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@4625..5123",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2971..3008",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@105..139",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@2982..3007",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@6824..6877",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@3035..3078",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@178..220",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@3049..3077",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5772..5823",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@3118..3160",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@259..331",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@3135..3159",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5169..5715",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@3276..3318",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@105..139",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@3287..3317",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5874..6635",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@3737..3771",
+      "syntax": "identifier",
+      "callee": "source/index.js@2610..3373",
+      "callee_name": "createModelConverters"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@2702..2774",
+      "callee_name": "ansi"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@2794..2872",
+      "callee_name": "ansi256"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@2964..3008",
+      "callee_name": "ansi"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@3028..3078",
+      "callee_name": "ansi256"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@3111..3160",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@3268..3318",
+      "callee_name": "ansi"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@4489..4535",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/index.js@817..849",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/vendor/ansi-styles/index.js@178..220",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4133..4177",
+      "syntax": "computed-member",
+      "callee": "source/vendor/ansi-styles/index.js@259..331",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4191..4267",
+      "syntax": "identifier",
+      "callee": "source/index.js@4928..6011",
+      "callee_name": "createBuilder"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@4211..4250",
+      "syntax": "identifier",
+      "callee": "source/index.js@4628..4903",
+      "callee_name": "createStyler"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@5167..5206",
+      "syntax": "identifier",
+      "callee": "source/index.js@6033..7314",
+      "callee_name": "applyStyle"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@5479..5520",
+      "syntax": "identifier",
+      "callee": "source/index.js@6033..7314",
+      "callee_name": "applyStyle"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@6767..6818",
+      "syntax": "identifier",
+      "callee": "source/utilities.js@264..736",
+      "callee_name": "stringReplaceAll"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@7204..7270",
+      "syntax": "identifier",
+      "callee": "source/utilities.js@745..1186",
+      "callee_name": "stringEncaseCRLFWithFirstIndex"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@7786..7799",
+      "syntax": "identifier",
+      "callee": "source/index.js@1680..1744",
+      "callee_name": "createChalk"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@7828..7885",
+      "syntax": "identifier",
+      "callee": "source/index.js@1680..1744",
+      "callee_name": "createChalk"
+    },
+    {
+      "kind": "call",
+      "site": "source/index.js@867..890",
+      "syntax": "identifier",
+      "callee": "source/index.js@441..586",
+      "callee_name": "assertValidLevel"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@3996..4008",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@89..139",
+      "callee_name": "wrapAnsi16"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@4034..4047",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@162..220",
+      "callee_name": "wrapAnsi256"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@4073..4086",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@243..331",
+      "callee_name": "wrapAnsi16m"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@4111..4145",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@89..139",
+      "callee_name": "wrapAnsi16"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@4173..4208",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@162..220",
+      "callee_name": "wrapAnsi256"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@4236..4271",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@243..331",
+      "callee_name": "wrapAnsi16m"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@4355..4389",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@162..220",
+      "callee_name": "wrapAnsi256"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@4424..4458",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@243..331",
+      "callee_name": "wrapAnsi16m"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@5779..5823",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@4625..5123",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@5802..5822",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5169..5715",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@6711..6770",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5874..6635",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@6732..6769",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@4625..5123",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@6831..6877",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5874..6635",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@6852..6876",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5772..5823",
+      "callee_name": "value"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/ansi-styles/index.js@6950..6966",
+      "syntax": "identifier",
+      "callee": "source/vendor/ansi-styles/index.js@3194..6929",
+      "callee_name": "assembleStyles"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@1690..1705",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@1110..1424",
+      "callee_name": "envForceColor"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@1922..1942",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@1949..1970",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@1977..2003",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@2031..2051",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@4181..4262",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@1587..4104",
+      "callee_name": "_supportsColor"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@4273..4294",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@1426..1585",
+      "callee_name": "translateLevel"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@4332..4375",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@4113..4297",
+      "callee_name": "createSupportsColor"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@4386..4429",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@4113..4297",
+      "callee_name": "createSupportsColor"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@637..656",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@661..681",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@686..708",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@713..735",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@774..790",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@795..812",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@817..838",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "call",
+      "site": "source/vendor/supports-color/index.js@843..866",
+      "syntax": "identifier",
+      "callee": "source/vendor/supports-color/index.js@235..585",
+      "callee_name": "hasFlag"
+    },
+    {
+      "kind": "callback",
+      "site": "source/vendor/ansi-styles/index.js@5390..5446",
+      "syntax": "member",
+      "callee": "source/vendor/ansi-styles/index.js@5411..5445",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "source/index.js@4524",
+      "syntax": "implicit",
+      "callee": "source/index.js@817..849",
+      "callee_name": "get"
+    }
+  ]
+}

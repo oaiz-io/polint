@@ -16,7 +16,7 @@ ACCURACY ?= 1
 NPM_JELLY ?= 0
 BUILD_COST ?= 0
 
-.PHONY: install test lint doc install-smoke deny check readme-assets fetch-scale-repos scale-corpus-run eval-gate bench-run build-cost build-cost-baseline
+.PHONY: install test lint doc install-smoke deny check readme-assets fetch-scale-repos scale-corpus-run eval-gate bench-run build-cost build-cost-baseline js-bench-fetch js-bench-record-observed js-bench
 
 install:
 	$(CARGO) install --locked --path crates/polint --force
@@ -122,6 +122,23 @@ build-cost-baseline:
 		--label $(BUILD_COST_LABEL) \
 		--runs $(BUILD_COST_RUNS) \
 		--out research/evaluation-harness/baselines/build-cost.json
+
+# JS/TS analysis benchmark (tests/js-analysis-bench/README.md). Opt-in; not CI.
+# js-bench-fetch downloads the pinned package tarballs once and checks their
+# hashes. js-bench-record-observed runs third-party code under the call recorder
+# inside a throwaway container with no network and no credentials, and rewrites
+# the committed observed calls; it is never part of `cargo test`. js-bench reads
+# polint's facts, scores them and rewrites tests/js-analysis-bench/baseline/, so
+# read `git diff` on it before keeping the change. JS_BENCH_ARGS passes options
+# through, for example JS_BENCH_ARGS="--no-cost".
+js-bench-fetch:
+	$(PYTHON) tests/js-analysis-bench/bench.py fetch
+
+js-bench-record-observed: js-bench-fetch
+	$(PYTHON) tests/js-analysis-bench/bench.py record-observed
+
+js-bench: js-bench-fetch
+	$(PYTHON) tests/js-analysis-bench/bench.py report $(JS_BENCH_ARGS)
 
 # Regenerate the colored-output SVGs embedded in README.md from the tracked
 # ANSI fixtures under docs/img/. Run after changing diagnostic colors/format.

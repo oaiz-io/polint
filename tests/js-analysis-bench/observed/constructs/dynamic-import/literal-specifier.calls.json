@@ -1,0 +1,27 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js",
+    "plugin.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@116..139",
+      "syntax": "member",
+      "callee": "plugin.js@28..98",
+      "callee_name": "activate"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@169..175",
+      "syntax": "identifier",
+      "callee": "main.js@12..161",
+      "callee_name": "boot"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@410..435",
+      "syntax": "identifier",
+      "callee": "main.js@56..272",
+      "callee_name": "makePicker"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@460..479",
+      "syntax": "member",
+      "callee": "main.js@198..269",
+      "callee_name": "tail"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@460..479",
+      "syntax": "member",
+      "callee": "main.js@25..42",
+      "callee_name": "head"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@460..479",
+      "syntax": "member",
+      "callee": "main.js@273..330",
+      "callee_name": "middle"
+    }
+  ]
+}

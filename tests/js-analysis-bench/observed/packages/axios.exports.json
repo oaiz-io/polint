@@ -1,0 +1,529 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "lib/adapters/adapters.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/adapters/fetch.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default",
+        "getFetch"
+      ]
+    },
+    "lib/adapters/http.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "__getDirectAgent",
+        "__isNodeEnvProxyEnabled",
+        "__isNodeNativeEnvProxySupported",
+        "__isSameOriginRedirect",
+        "__setProxy",
+        "default"
+      ]
+    },
+    "lib/adapters/xhr.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/axios.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/cancel/CancelToken.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/cancel/CanceledError.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/cancel/isCancel.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/Axios.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/AxiosError.js": {
+      "system": "esm",
+      "names": [
+        "CAUSED_BY_SEPARATOR",
+        "REDACTED",
+        "__esModule",
+        "default",
+        "getCauseStackIndex"
+      ]
+    },
+    "lib/core/AxiosHeaders.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/InterceptorManager.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/assertParamsAcyclic.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/buildFullPath.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/createMultipartBody.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/dispatchRequest.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/mergeConfig.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/methodList.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/setFormDataHeaders.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/settle.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/core/transformData.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/defaults/index.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/defaults/transitional.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/env/classes/FormData.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/env/data.js": {
+      "system": "esm",
+      "names": [
+        "VERSION"
+      ]
+    },
+    "lib/helpers/AxiosTransformStream.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/AxiosURLSearchParams.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/Http2Sessions.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/HttpStatusCode.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/ZlibHeaderTransformStream.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/bind.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/buildURL.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default",
+        "encode"
+      ]
+    },
+    "lib/helpers/callbackify.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/combineURLs.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/composeSignals.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/cookies.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/deprecatedMethod.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/estimateDataURLDecodedBytes.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default",
+        "estimateDataURLBufferAllocation"
+      ]
+    },
+    "lib/helpers/formDataToBlob.js": {
+      "system": "esm",
+      "names": [
+        "FormDataError",
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/formDataToJSON.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/formDataToStream.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/fromDataURI.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/isAbsoluteURL.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/isAxiosError.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/isURLSameOrigin.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/normalizeURLForProtocolCheck.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/null.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/parseHeaders.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/parseProtocol.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/progressEventReducer.js": {
+      "system": "esm",
+      "names": [
+        "asyncDecorator",
+        "progressEventDecorator",
+        "progressEventReducer"
+      ]
+    },
+    "lib/helpers/readBlob.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/resolveConfig.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/sanitizeHeaderValue.js": {
+      "system": "esm",
+      "names": [
+        "sanitizeByteStringHeaderValue",
+        "sanitizeHeaderValue",
+        "toByteStringHeaderObject"
+      ]
+    },
+    "lib/helpers/shouldBypassProxy.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/speedometer.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/spread.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/throttle.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/toFormData.js": {
+      "system": "esm",
+      "names": [
+        "DEFAULT_FORM_DATA_MAX_DEPTH",
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/toURLEncodedForm.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/helpers/trackStream.js": {
+      "system": "esm",
+      "names": [
+        "readBytes",
+        "streamChunk",
+        "trackStream"
+      ]
+    },
+    "lib/helpers/validator.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/browser/classes/Blob.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/browser/classes/FormData.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/browser/classes/URLSearchParams.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/browser/index.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/common/utils.js": {
+      "system": "esm",
+      "names": [
+        "hasBrowserEnv",
+        "hasStandardBrowserEnv",
+        "hasStandardBrowserWebWorkerEnv",
+        "navigator",
+        "origin"
+      ]
+    },
+    "lib/platform/index.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/node/classes/Buffer.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/node/classes/FormData.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/node/classes/URLSearchParams.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/platform/node/index.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "lib/utils.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    }
+  }
+}

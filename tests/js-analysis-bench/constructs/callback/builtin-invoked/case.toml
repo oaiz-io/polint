@@ -1,0 +1,3 @@
+construct = "callback"
+held_out = false
+description = "Functions passed to Array methods and to an inline arrow are invoked by the runtime, not by user code."

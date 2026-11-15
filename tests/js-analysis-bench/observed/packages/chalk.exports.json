@@ -1,0 +1,61 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "source/index.js": {
+      "system": "esm",
+      "names": [
+        "Chalk",
+        "__esModule",
+        "backgroundColorNames",
+        "backgroundColors",
+        "chalkStderr",
+        "colorNames",
+        "colors",
+        "default",
+        "foregroundColorNames",
+        "foregroundColors",
+        "modifierNames",
+        "modifiers",
+        "supportsColor",
+        "supportsColorStderr",
+        "underlineColorNames"
+      ]
+    },
+    "source/utilities.js": {
+      "system": "esm",
+      "names": [
+        "stringEncaseCRLFWithFirstIndex",
+        "stringReplaceAll"
+      ]
+    },
+    "source/vendor/ansi-styles/index.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "backgroundColorNames",
+        "colorNames",
+        "default",
+        "foregroundColorNames",
+        "modifierNames",
+        "underlineColorNames"
+      ]
+    },
+    "source/vendor/supports-color/browser.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "default"
+      ]
+    },
+    "source/vendor/supports-color/index.js": {
+      "system": "esm",
+      "names": [
+        "__esModule",
+        "createSupportsColor",
+        "default"
+      ]
+    }
+  }
+}

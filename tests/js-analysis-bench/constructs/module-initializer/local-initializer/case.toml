@@ -1,0 +1,3 @@
+construct = "module-initializer"
+held_out = false
+description = "Non-exported module-level constants are initialized by nested calls and by an object whose arrow property calls a function."

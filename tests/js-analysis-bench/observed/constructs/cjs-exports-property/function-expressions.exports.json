@@ -1,0 +1,20 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "main.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "object"
+    },
+    "strings.js": {
+      "system": "cjs",
+      "names": [
+        "shout",
+        "upper"
+      ],
+      "whole_value": "object"
+    }
+  }
+}

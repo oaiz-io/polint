@@ -1,0 +1,27 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "ids.js",
+    "main.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@75..81",
+      "syntax": "identifier",
+      "callee": "ids.js@41..106",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@98..105",
+      "syntax": "identifier",
+      "callee": "ids.js@108..156",
+      "callee_name": "reset"
+    }
+  ]
+}

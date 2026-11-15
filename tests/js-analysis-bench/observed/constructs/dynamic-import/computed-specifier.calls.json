@@ -1,0 +1,20 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "locale-en.js",
+    "main.js"
+  ],
+  "instrumented_functions": 1,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@130..146",
+      "syntax": "member",
+      "callee": "locale-en.js@25..76",
+      "callee_name": "greet"
+    }
+  ]
+}

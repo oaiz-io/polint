@@ -1,0 +1,33 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@233..246",
+      "syntax": "identifier",
+      "callee": "main.js@12..78",
+      "callee_name": "fetchUser"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@289..304",
+      "syntax": "identifier",
+      "callee": "main.js@98..148",
+      "callee_name": "fetchRole"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@360..370",
+      "syntax": "identifier",
+      "callee": "main.js@168..352",
+      "callee_name": "profile"
+    }
+  ]
+}

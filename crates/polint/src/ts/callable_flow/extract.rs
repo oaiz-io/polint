@@ -1,13 +1,15 @@
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::hash::BuildHasher as _;
 use std::rc::Rc;
 
 use oxc_ast::ast::{
-    Argument, ArrayExpressionElement, AssignmentTarget, BinaryOperator, BindingPattern,
-    CallExpression, Class, ClassElement, Declaration, ExportDefaultDeclarationKind, Expression,
-    ForStatementLeft, FunctionBody, ImportDeclarationSpecifier, LogicalOperator, MethodDefinition,
-    MethodDefinitionKind, ModuleExportName, ObjectProperty, ObjectPropertyKind, Program,
-    PropertyKey, PropertyKind, Statement, VariableDeclaration, VariableDeclarator,
+    Argument, ArrayExpressionElement, AssignmentOperator, AssignmentTarget, BinaryOperator,
+    BindingPattern, CallExpression, Class, ClassElement, Declaration, ExportDefaultDeclarationKind,
+    Expression, ForStatementLeft, FunctionBody, ImportDeclarationSpecifier, LogicalOperator,
+    MethodDefinition, MethodDefinitionKind, ModuleExportName, ObjectProperty, ObjectPropertyKind,
+    Program, PropertyKey, PropertyKind, Statement, VariableDeclaration, VariableDeclarationKind,
+    VariableDeclarator,
 };
 use oxc_span::GetSpan;
 
@@ -61,7 +63,7 @@ const CALLABLE_WALK_BUDGET: usize = 4096;
 /// What a guarded walk frame is keyed on. Two different recursions share the
 /// guard, and their keys must not collide: a call's start offset and a
 /// function's identity are separate namespaces.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum WalkKey {
     /// A call whose returned object shape is being resolved, keyed by the
     /// call's start offset (unique within the file the collector is built for).
@@ -128,6 +130,127 @@ impl CallableWalkGuard {
             key,
         })
     }
+
+    /// The guard state a walk started now can observe. With no frame in flight
+    /// the next `enter` refreshes the budget, so only the depth is visible and
+    /// every such state is the same; with frames in flight the walk sees the
+    /// remaining budget and which frames it may not re-enter.
+    fn observable_state(&self) -> WalkGuardState {
+        let depth = self.depth.get();
+        if depth == 0 {
+            return WalkGuardState::default();
+        }
+        WalkGuardState {
+            depth,
+            budget: self.budget.get(),
+            active: self.active.borrow().iter().copied().collect(),
+        }
+    }
+}
+
+/// [`CallableWalkGuard::observable_state`]: everything about the guard that
+/// can change what a walk does.
+#[derive(Default, PartialEq, Eq, Hash)]
+struct WalkGuardState {
+    depth: usize,
+    budget: usize,
+    active: Vec<WalkKey>,
+}
+
+/// The input of one callee-body walk in
+/// `TsCallableFlowCollector::collect_function_flow_invocation`, apart from the
+/// env the walk starts from and the collector's tables, which
+/// `InvocationRecord::generation` covers. The body is identified by its address
+/// in the AST arena, which outlives the collector.
+#[derive(PartialEq, Eq, Hash)]
+struct InvocationInput {
+    function: FunctionId,
+    body: usize,
+    invocation_depth: usize,
+    this_method_walk: bool,
+    current_super: Option<ObjectTargets>,
+    guard: WalkGuardState,
+}
+
+/// One callee-body walk: its complete input, and what it produced besides the
+/// rows it emitted, which are its return value, the env it left behind and the
+/// guard budget it left. The rows are already in the collector, which keeps
+/// every row it emits and deduplicates them at the end, so replaying a record
+/// loses none.
+struct InvocationRecord {
+    input: InvocationInput,
+    env_before: FlowEnv,
+    /// The collector's `table_generation` the walk ran under. The record is
+    /// valid only while no table a walk reads has changed since.
+    generation: u64,
+    returned: CollectionTargets,
+    env_after: FlowEnv,
+    budget: usize,
+    /// The walks the recorded walk made, itself included, which a replay
+    /// counts as made.
+    walks: usize,
+}
+
+/// Hashes an invocation's input and starting env into its key in
+/// `TsCallableFlowCollector::invocations`.
+type InvocationHasher = std::hash::BuildHasherDefault<std::hash::DefaultHasher>;
+
+/// The callee-body walks a call tree makes before its walks are keyed in
+/// `TsCallableFlowCollector::invocations`. Keying hashes the callee env, which
+/// inherits the caller's, and recording an input that comes again copies that
+/// env twice, which costs more than the repeats a call tree of a few thousand
+/// walks has to save. A tree that grows past this many walks makes this many
+/// unkeyed and is linear after, so the extra walks are bounded per call tree.
+pub(super) const INVOCATION_KEYING_AFTER_WALKS: usize = 4096;
+
+#[cfg(all(test, feature = "lang-go"))]
+thread_local! {
+    /// Callee bodies walked on this thread, counting walks whose outcome was
+    /// replayed from an earlier one as none.
+    static BODY_WALKS: Cell<usize> = const { Cell::new(0) };
+    /// The `BODY_WALKS` count past which a walk on this thread panics.
+    static BODY_WALK_LIMIT: Cell<usize> = const { Cell::new(usize::MAX) };
+    /// The walks a call tree on this thread makes before its walks are keyed.
+    static KEYING_AFTER_WALKS: Cell<usize> = const { Cell::new(INVOCATION_KEYING_AFTER_WALKS) };
+    /// Walks on this thread answered from a record instead of walked.
+    static REPLAYED_WALKS: Cell<usize> = const { Cell::new(0) };
+}
+
+/// The walks a call tree makes before its walks are keyed: the threshold, or
+/// on a test thread the value `key_walks_after` set there.
+fn keying_after_walks() -> usize {
+    #[cfg(all(test, feature = "lang-go"))]
+    return KEYING_AFTER_WALKS.with(Cell::get);
+    #[cfg(not(all(test, feature = "lang-go")))]
+    INVOCATION_KEYING_AFTER_WALKS
+}
+
+/// Keys the walks of every call tree on the calling thread after `walks` of
+/// them, so a small fixture can exercise the walk cache. Returns the previous
+/// setting.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn key_walks_after(walks: usize) -> usize {
+    KEYING_AFTER_WALKS.with(|threshold| threshold.replace(walks))
+}
+
+/// Walks on the calling thread answered from a record so far.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn replayed_walks() -> usize {
+    REPLAYED_WALKS.with(Cell::get)
+}
+
+/// Callee bodies walked on the calling thread so far.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn body_walks() -> usize {
+    BODY_WALKS.with(Cell::get)
+}
+
+/// Makes a walk on the calling thread panic once `body_walks` would pass
+/// `limit`, so a test of the walk count fails quickly where the walks would
+/// not finish.
+#[cfg(all(test, feature = "lang-go"))]
+pub(super) fn limit_body_walks(limit: usize) {
+    BODY_WALK_LIMIT.with(|cap| cap.set(limit));
 }
 
 /// Releases one walk frame. A guard object rather than paired calls because the
@@ -197,6 +320,10 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
             current_super: None,
             invocation_depth: 0,
             walk_guard: Rc::default(),
+            table_generation: 0,
+            invocations: HashMap::new(),
+            invocation_walks: 0,
+            tree_walks: 0,
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -258,6 +385,29 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     invocation_depth: usize,
     /// Bounds the recursive callable walks that `invocation_depth` cannot reach.
     walk_guard: Rc<CallableWalkGuard>,
+    /// Advanced by every write a walk makes to a table walks read (`classes`,
+    /// `export_aliases`, `exports`), so a recorded invocation outcome is reused
+    /// only while the tables it was computed from are unchanged.
+    table_generation: u64,
+    /// The callee-body walks of the call tree of the outermost walk in flight,
+    /// by the hash of their whole input: `None` for an input walked once, the
+    /// record of a later walk for an input walked again. Without it a function
+    /// whose body follows `k` calls back into itself is walked once per path
+    /// through the call tree, `k^d` walks for `d` levels of nesting, although
+    /// every walk at one level computes the same answer. With it an input is
+    /// walked at most twice while the tables do not change, and an input that
+    /// comes only once costs no copy of its env. A call tree keys its walks
+    /// only after `INVOCATION_KEYING_AFTER_WALKS` of them. Emptied when the
+    /// outermost walk returns, so it holds one call tree at a time. Only looked
+    /// up, never iterated, so it cannot affect row order.
+    invocations: HashMap<u64, Option<Box<InvocationRecord>>>,
+    /// Callee-body walks in flight; zero outside the outermost one.
+    invocation_walks: usize,
+    /// Callee-body walks made in the call tree of the outermost walk in flight,
+    /// a replay counted as the walks its record stands for. It saturates rather
+    /// than wraps: it is only compared with `keying_after_walks()`, and a
+    /// wrapped count would turn keying off again partway through a tree.
+    tree_walks: usize,
     /// Program-global positional index of every `receiver.next()` call: maps the
     /// `.next()` call's `span.start` to its 0-based ordinal among `.next()` calls
     /// on the same receiver name (in source order). Used to sequence generator
@@ -392,6 +542,10 @@ fn compute_module_export_summaries<'ast>(
                 current_super: None,
                 invocation_depth: 0,
                 walk_guard: Rc::default(),
+                table_generation: 0,
+                invocations: HashMap::new(),
+                invocation_walks: 0,
+                tree_walks: 0,
                 iterator_next_ordinals: BTreeMap::new(),
                 iterator_next_starts: BTreeMap::new(),
                 rows: Vec::new(),
@@ -455,6 +609,10 @@ fn compute_function_return_summaries<'ast>(
             current_super: None,
             invocation_depth: 0,
             walk_guard: Rc::default(),
+            table_generation: 0,
+            invocations: HashMap::new(),
+            invocation_walks: 0,
+            tree_walks: 0,
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -1831,6 +1989,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             Statement::ForOfStatement(statement) => {
                 let iterable_targets =
                     self.targets_for_iterable(&statement.right, env, statement.span.start);
+                forget_var_loop_head(&statement.left, env);
                 self.collect_for_of_bindings(
                     &statement.left,
                     &iterable_targets,
@@ -1869,6 +2028,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             Statement::ForInStatement(statement) => {
                 // `for (const k in obj) … obj[k]() …`: mark `k` as an iteration
                 // key so a computed access keyed on it ranges over all properties.
+                forget_var_loop_head(&statement.left, env);
                 if let ForStatementLeft::VariableDeclaration(variable) = &statement.left {
                     for declarator in &variable.declarations {
                         if let Some(name) = binding_identifier_name(&declarator.id) {
@@ -1889,6 +2049,10 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         env: &mut FlowEnv,
     ) {
         for declarator in &variable.declarations {
+            // `var fn = v` in a body whose `fn` is already bound, typically a
+            // parameter, assigns rather than declares: `var` names one binding per
+            // function. It is rebound as `fn = v` would be.
+            let redeclared = self.redeclared_binding(variable, declarator, env);
             // `var app = exports = module.exports = {}` aliases the export object;
             // later `app.X = fn` / `app[k] = fn` writes build the exports. Seed an
             // empty object so those member writes land (member assignment requires
@@ -1897,7 +2061,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 && let Some(init) = &declarator.init
                 && expression_aliases_exports(init)
             {
-                self.export_aliases.insert(name.clone());
+                if self.export_aliases.insert(name.clone()) {
+                    self.table_generation += 1;
+                }
                 env.objects.entry(name).or_default();
             }
             // `var mixin = require('merge-descriptors')`: a property-copy helper.
@@ -1920,6 +2086,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 && let Some(Expression::ClassExpression(class)) = &declarator.init
             {
                 self.classes.insert(name.clone(), self.class_targets(class));
+                self.table_generation += 1;
                 if let Some(statics) = self.class_static_targets(&name) {
                     env.objects.insert(name, statics);
                 }
@@ -1992,8 +2159,12 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             if let Some(name) = binding_identifier_name(&declarator.id)
                 && let Some(init) = &declarator.init
             {
+                // A partial set is not the full answer, nor is a first-return
+                // summary recorded above, so neither survives an unfollowed source.
                 let returned = self.callable_return_targets_from_expression(init, env, 0);
-                if !returned.is_empty() {
+                if returned.incomplete {
+                    env.bindings.remove(&name);
+                } else if !returned.is_empty() {
                     env.bindings.insert(name, returned);
                 }
             }
@@ -2095,6 +2266,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             if let Some(init) = &declarator.init {
                 self.collect_expression(init, owner, env);
             }
+            if let Some(redeclared) = redeclared {
+                redeclared.rebind(env);
+            }
         }
     }
 
@@ -2177,6 +2351,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     }
                 }
                 self.collect_expression(&assignment.right, owner, env);
+                self.rebind_assigned_identifier(assignment, env);
             }
             Expression::ArrayExpression(array) => {
                 for element in &array.elements {
@@ -2243,6 +2418,97 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The binding a `var` declarator with an initializer replaces, with whether
+    /// the new value is one this walk follows, judged as `rebind_assigned_identifier`
+    /// judges an assignment. `None` when the name is not bound yet, or the
+    /// initializer is `fn || d` or `fn ?? d`, which keeps a bound function.
+    fn redeclared_binding(
+        &mut self,
+        variable: &VariableDeclaration<'ast>,
+        declarator: &'ast VariableDeclarator<'ast>,
+        env: &FlowEnv,
+    ) -> Option<RedeclaredBinding> {
+        if variable.kind != VariableDeclarationKind::Var {
+            return None;
+        }
+        let init = declarator.init.as_ref()?;
+        let name = binding_identifier_name(&declarator.id)?;
+        let bindings = env
+            .bindings
+            .get(&name)
+            .filter(|targets| !targets.is_empty())
+            .cloned();
+        let bound_functions = env.bound_functions.get(&name).cloned();
+        if bindings.is_none() && bound_functions.is_none() {
+            return None;
+        }
+        if matches!(
+            init.without_parentheses(),
+            Expression::LogicalExpression(logical)
+                if matches!(logical.operator, LogicalOperator::Or | LogicalOperator::Coalesce)
+                    && expression_identifier(&logical.left) == Some(name.as_str())
+        ) {
+            return None;
+        }
+        let followed = !self.returned_value_targets(init, env).incomplete;
+        Some(RedeclaredBinding {
+            name,
+            bindings,
+            bound_functions,
+            followed,
+        })
+    }
+
+    /// `fn = wrap(fn)` replaces a value this walk already bound, typically a
+    /// parameter bound from the call site. The environment is not branch
+    /// sensitive, so the assignment may not have run: a followed right-hand side
+    /// joins the existing binding, and one this walk cannot follow drops the
+    /// binding so later calls through the name stay unresolved instead of
+    /// reporting the stale value as complete. `fn ||= d`, `fn ??= d` and
+    /// `fn = fn || d` keep a bound function, which is truthy and not nullish.
+    /// Names without a binding are left alone.
+    fn rebind_assigned_identifier(
+        &mut self,
+        assignment: &'ast oxc_ast::ast::AssignmentExpression<'ast>,
+        env: &mut FlowEnv,
+    ) {
+        let Some(name) = assigned_identifier(&assignment.left) else {
+            return;
+        };
+        let bound = env
+            .bindings
+            .get(name)
+            .is_some_and(|targets| !targets.is_empty())
+            || env.bound_functions.contains_key(name);
+        if !bound {
+            return;
+        }
+        let keeps_bound_function = match assignment.operator {
+            AssignmentOperator::LogicalOr | AssignmentOperator::LogicalNullish => true,
+            AssignmentOperator::Assign => matches!(
+                assignment.right.without_parentheses(),
+                Expression::LogicalExpression(logical)
+                    if matches!(logical.operator, LogicalOperator::Or | LogicalOperator::Coalesce)
+                        && expression_identifier(&logical.left) == Some(name)
+            ),
+            AssignmentOperator::LogicalAnd => false,
+            _ => return,
+        };
+        if keeps_bound_function {
+            return;
+        }
+        let returned = self.returned_value_targets(&assignment.right, env);
+        if returned.incomplete {
+            env.bindings.remove(name);
+            env.bound_functions.remove(name);
+        } else if !returned.is_empty() {
+            env.bindings
+                .entry(name.to_string())
+                .or_default()
+                .extend(returned);
         }
     }
 
@@ -2314,6 +2580,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 // A function-constructor (`function IPv4(){}`) is not yet in the
                 // class table; the first `IPv4.prototype.m = fn` creates it, so
                 // classic prototype OOP registers its instance methods.
+                self.table_generation += 1;
                 let class = self.classes.entry(class_name.to_string()).or_default();
                 for target in targets {
                     class
@@ -2376,6 +2643,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             }
 
             if self.classes.contains_key(object_name) {
+                self.table_generation += 1;
                 if handled_by_setter {
                     if let Some(object) = env.objects.get(object_name).cloned()
                         && let Some(class) = self.classes.get_mut(object_name)
@@ -2409,6 +2677,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let Some(target) = export_assignment_target(&assignment.left) else {
             return;
         };
+        self.table_generation += 1;
         let mut callables = self.callable_targets_from_expression(&assignment.right, env);
         // An identifier RHS may name a top-level function declaration (e.g.
         // `function foo() {}` ... `module.exports = foo`), which lives in
@@ -3114,7 +3383,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 owner,
                 call.span,
                 "call-result",
-                Some(returned.all_targets()),
+                (!returned.incomplete).then(|| returned.all_targets()),
             );
             // `o.foo()()`: the result of `o.foo()` is a `this`-capturing arrow; walk
             // its body with the captured `this = o` now that it is actually invoked.
@@ -3283,7 +3552,11 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 let (returned, receiver) = self.collect_getter_return_targets(getters, receiver, 1);
                 env.objects
                     .insert(object_name.to_string(), receiver.clone());
-                let targets = returned.all_targets();
+                let targets = if returned.incomplete {
+                    Vec::new()
+                } else {
+                    returned.all_targets()
+                };
                 if !targets.is_empty() {
                     self.emit_call_span_targets(owner, call.span, property, Some(targets.clone()));
                     self.emit_member_targets(owner, property, call.span, Some(targets.clone()));
@@ -3448,7 +3721,11 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                             env.objects
                                 .insert(object_name.to_string(), receiver.clone());
                         }
-                        let targets = returned.all_targets();
+                        let targets = if returned.incomplete {
+                            Vec::new()
+                        } else {
+                            returned.all_targets()
+                        };
                         if !targets.is_empty() {
                             self.emit_call_span_targets(
                                 owner,
@@ -3722,6 +3999,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                             .is_some_and(|name| self.export_aliases.contains(name)))
                 {
                     self.exports.esmodule = true;
+                    self.table_generation += 1;
                     return;
                 }
                 let Some(target_name) = expression_identifier(receiver) else {
@@ -3959,7 +4237,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         depth: usize,
     ) -> (CollectionTargets, ObjectTargets) {
         if depth > 8 {
-            return (CollectionTargets::default(), receiver);
+            return (CollectionTargets::unfollowed(), receiver);
         }
 
         let mut returned = CollectionTargets::default();
@@ -4273,18 +4551,116 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // forever here (the per-call `depth` is reset to 0 each time a return
         // statement re-enters `callable_return_targets_from_expression`).
         if self.invocation_depth > 16 {
-            return CollectionTargets::default();
+            return CollectionTargets::unfollowed();
         }
+        // A function declaration directly in the body named like a parameter
+        // replaces the argument from the start of the body. One in a nested
+        // block binds the name only inside that block, because legacy
+        // block-function hoisting skips names that are parameters, but the walk
+        // does not track block scope. Either way the argument is not known to be
+        // the name's complete value, so calls through the name stay unresolved.
+        let replaced = parameters_replaced_by_declarations(flow);
+        if !replaced.is_empty() {
+            env.shadow_parameters(&replaced);
+        }
+        // A walk with the same input under unchanged tables already ran in this
+        // call tree: replay its effect instead of walking the body again. Nested
+        // invocations run one level deeper, so a walk never meets its own input
+        // while in flight. The outermost walk has nothing to reuse and nothing
+        // to share, so it is not keyed, and neither are the first walks of its
+        // call tree.
+        let outermost = self.invocation_walks == 0;
+        // A finished call tree leaves nothing for the next one to replay.
+        debug_assert!(!outermost || (self.invocations.is_empty() && self.tree_walks == 0));
+        let keyed = !outermost && self.tree_walks >= keying_after_walks();
+        let key = keyed.then(|| {
+            let input = InvocationInput {
+                function: flow.function.id,
+                body: std::ptr::from_ref(flow.body).addr(),
+                invocation_depth: self.invocation_depth,
+                this_method_walk: self.this_method_walk,
+                current_super: self.current_super.clone(),
+                guard: self.walk_guard.observable_state(),
+            };
+            let hash = InvocationHasher::default().hash_one((&input, &*env));
+            (input, hash)
+        });
+        let mut walked_before = false;
+        if let Some((input, hash)) = &key {
+            match self.invocations.get(hash) {
+                // Equal hashes alone do not make equal inputs.
+                Some(Some(record))
+                    if record.generation == self.table_generation
+                        && record.input == *input
+                        && record.env_before == *env =>
+                {
+                    env.clone_from(&record.env_after);
+                    self.walk_guard.budget.set(record.budget);
+                    // A replay counts every walk its record stands for, and records
+                    // nest, so the count grows with the walks saved rather than
+                    // made and can pass `usize::MAX` on a deep enough tree.
+                    self.tree_walks = self.tree_walks.saturating_add(record.walks);
+                    #[cfg(all(test, feature = "lang-go"))]
+                    REPLAYED_WALKS.with(|walks| walks.set(walks.get() + 1));
+                    return record.returned.clone();
+                }
+                Some(_) => walked_before = true,
+                None => {}
+            }
+        }
+        // Only an input that comes again is recorded, so an input walked once
+        // costs no copy of its env. A repeated input is walked a second time to
+        // record it, and its record answers it after that.
+        let env_before = walked_before.then(|| env.clone());
+        #[cfg(all(test, feature = "lang-go"))]
+        BODY_WALKS.with(|walks| {
+            walks.set(walks.get() + 1);
+            assert!(
+                walks.get() <= BODY_WALK_LIMIT.with(Cell::get),
+                "walked more callee bodies than the limit"
+            );
+        });
+        let generation = self.table_generation;
+        let walks_before = self.tree_walks;
         self.invocation_depth += 1;
+        self.invocation_walks += 1;
+        self.tree_walks = self.tree_walks.saturating_add(1);
         // Calls in the invoked body belong to `flow.function`, which is the
         // owner every model row emitted from it names.
         let result = if let Some(expression) = flow.expression_body {
             self.collect_expression(expression, flow.function, env);
-            self.callable_return_targets_from_expression(expression, env, 0)
+            self.returned_value_targets(expression, env)
         } else {
             self.collect_invocation_statements(&flow.body.statements, flow.function, env)
         };
+        self.invocation_walks -= 1;
         self.invocation_depth -= 1;
+        match (key, env_before) {
+            // A walk that changed a table may not reproduce itself, because a
+            // later walk with the same input reads the changed table.
+            (Some((input, hash)), Some(env_before)) if self.table_generation == generation => {
+                self.invocations.insert(
+                    hash,
+                    Some(Box::new(InvocationRecord {
+                        input,
+                        env_before,
+                        generation,
+                        returned: result.clone(),
+                        env_after: env.clone(),
+                        budget: self.walk_guard.budget.get(),
+                        walks: self.tree_walks - walks_before,
+                    })),
+                );
+            }
+            (Some((_, hash)), None) => {
+                self.invocations.entry(hash).or_insert(None);
+            }
+            (Some(_), Some(_)) | (None, _) => {}
+        }
+        if outermost {
+            self.invocations.clear();
+            self.tree_walks = 0;
+        }
         result
     }
 
@@ -4346,14 +4722,18 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         owner: &'db FunctionFact,
         env: &mut FlowEnv,
     ) -> CollectionTargets {
+        // The invocation returns whichever reachable `return` runs, so the result
+        // is the union over every one of them, not the first that resolves: a
+        // function returning a declared function in one branch and a parameter in
+        // another can produce either. The walk stops only where control
+        // definitely leaves the block.
+        let mut returned = CollectionTargets::default();
         for statement in statements {
             // Absence-folded guard with an early return: `if (depth == null) { return … }`
             // followed by `return flattenWithDepth(…)`. When the param is known-absent
             // the guard's live arm is taken; if it terminates (return/throw), the rest
             // of the block is dead and must not be walked (so `flattenWithDepth` is
-            // never reached). The plain `collect_invocation_statement` only stops on a
-            // non-empty *return target*, which misses guards whose live arm returns a
-            // non-callable (an array), so handle the termination here.
+            // never reached).
             if let Statement::IfStatement(if_stmt) = statement
                 && let Some(branch) = self.decide_branch(&if_stmt.test, env)
             {
@@ -4364,22 +4744,19 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     if_stmt.alternate.as_ref()
                 };
                 if let Some(live_stmt) = live {
-                    let returned = self.collect_invocation_statement(live_stmt, owner, env);
-                    if !returned.is_empty() {
-                        return returned;
-                    }
+                    returned.extend(self.collect_invocation_statement(live_stmt, owner, env));
                     if branch_terminates(live_stmt) {
-                        return CollectionTargets::default();
+                        return returned;
                     }
                 }
                 continue;
             }
-            let returned = self.collect_invocation_statement(statement, owner, env);
-            if !returned.is_empty() {
-                return returned;
+            returned.extend(self.collect_invocation_statement(statement, owner, env));
+            if branch_terminates(statement) {
+                break;
             }
         }
-        CollectionTargets::default()
+        returned
     }
 
     fn collect_invocation_statement(
@@ -4392,7 +4769,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             Statement::ReturnStatement(statement) => {
                 if let Some(argument) = &statement.argument {
                     self.collect_expression(argument, owner, env);
-                    self.callable_return_targets_from_expression(argument, env, 0)
+                    self.returned_value_targets(argument, env)
                 } else {
                     CollectionTargets::default()
                 }
@@ -4422,10 +4799,49 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     }
                 }
             }
+            // `switch`, `try`, loops and labelled statements are walked for their
+            // calls only; a `return` inside one that may yield a function is a
+            // source this walk does not follow.
             _ => {
                 self.collect_statement(statement, owner, env);
-                CollectionTargets::default()
+                if statement_may_return_callable(statement) {
+                    CollectionTargets::unfollowed()
+                } else {
+                    CollectionTargets::default()
+                }
             }
+        }
+    }
+
+    /// The callables a returned value evaluates to. An empty answer for a value
+    /// that may still be a function (an unbound parameter, an unknown call, a
+    /// `?:` or `||` this walk does not split) marks the result unfollowed, so a
+    /// sibling `return`'s targets are not taken for the complete set. A call to a
+    /// declared function is walked, and that walk reports its own unfollowed
+    /// sources.
+    fn returned_value_targets(
+        &mut self,
+        argument: &'ast Expression<'ast>,
+        env: &FlowEnv,
+    ) -> CollectionTargets {
+        let mut targets = self.callable_return_targets_from_expression(argument, env, 0);
+        if targets.is_empty()
+            && !cannot_be_callable(argument)
+            && !self.calls_declared_function(argument)
+        {
+            targets.incomplete = true;
+        }
+        targets
+    }
+
+    fn calls_declared_function(&self, expression: &Expression<'ast>) -> bool {
+        match expression {
+            Expression::ParenthesizedExpression(inner) => {
+                self.calls_declared_function(&inner.expression)
+            }
+            Expression::CallExpression(call) => callee_identifier(&call.callee)
+                .is_some_and(|name| self.function_declarations.contains_key(name)),
+            _ => false,
         }
     }
 
@@ -4436,7 +4852,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         depth: usize,
     ) -> CollectionTargets {
         if depth > 8 {
-            return CollectionTargets::default();
+            return CollectionTargets::unfollowed();
         }
         match expression {
             Expression::CallExpression(call) => {
@@ -4491,7 +4907,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         depth: usize,
     ) -> CollectionTargets {
         if depth > 8 {
-            return CollectionTargets::default();
+            return CollectionTargets::unfollowed();
         }
         if let Some(name) = callee_identifier(&call.callee) {
             let mut targets = CollectionTargets::default();
@@ -4602,7 +5018,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                     CollectionTargets::default(),
                     depth + 1,
                 );
-                if !result.is_empty() {
+                if !result.is_empty() || result.incomplete {
                     return result;
                 }
             }
@@ -4663,7 +5079,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         depth: usize,
     ) -> CollectionTargets {
         if depth > 8 {
-            return CollectionTargets::default();
+            return CollectionTargets::unfollowed();
         }
         let mut returned = CollectionTargets::default();
         for target in target_ids {
@@ -7289,7 +7705,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct FlowEnv {
     bindings: BTreeMap<String, CollectionTargets>,
     bound_functions: BTreeMap<String, Vec<BoundFunctionTarget>>,
@@ -7382,7 +7798,7 @@ impl FlowEnv {
 /// Jelly models generators sequence-sensitively — the first `.next()` yields the
 /// first value, the next `.next()` the second, etc. — so resolving every
 /// `.next()` to every yield (the flow-insensitive lump) over-approximates.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct GeneratorSequence {
     steps: Vec<CollectionTargets>,
     ret: CollectionTargets,
@@ -7423,7 +7839,43 @@ impl GeneratorSequence {
     }
 }
 
-#[derive(Clone, Debug)]
+/// A bound name a `var` declarator redeclares, kept while the declarator binds
+/// its new value.
+struct RedeclaredBinding {
+    name: String,
+    bindings: Option<CollectionTargets>,
+    bound_functions: Option<Vec<BoundFunctionTarget>>,
+    followed: bool,
+}
+
+impl RedeclaredBinding {
+    /// The environment is not branch sensitive, so the declarator may not have
+    /// run: a followed value joins the old binding, and one this walk cannot
+    /// follow leaves the name unbound so later calls through it stay unresolved.
+    fn rebind(self, env: &mut FlowEnv) {
+        if !self.followed {
+            env.bindings.remove(&self.name);
+            env.bound_functions.remove(&self.name);
+            return;
+        }
+        if let Some(bindings) = self.bindings {
+            env.bindings
+                .entry(self.name.clone())
+                .or_default()
+                .extend(bindings);
+        }
+        if let Some(bound_functions) = self.bound_functions {
+            let targets = env.bound_functions.entry(self.name).or_default();
+            for bound in bound_functions {
+                if !targets.contains(&bound) {
+                    targets.push(bound);
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct BoundFunctionTarget {
     function: FunctionId,
     this_object: ObjectTargets,
@@ -7431,7 +7883,7 @@ struct BoundFunctionTarget {
     bound_arguments: Vec<CollectionTargets>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct CollectionTargets {
     keys: Vec<FunctionId>,
     /// Index-ordered array element cells (numeric indices). `value_at(i)` reads
@@ -7456,10 +7908,25 @@ struct CollectionTargets {
     /// element, not an element placed at some other index (`arrays.js` `x[42]=`,
     /// `x[x]=` must not surface from `x.pop()`).
     dynamic: Vec<FunctionId>,
+    /// Some source of the value was not followed: a returned value the walk
+    /// could not resolve, a `return` inside a statement form it does not walk, or
+    /// a depth cut-off. The targets above are then a lower bound, so a consumer
+    /// that would report them as a call's complete answer drops them instead and
+    /// leaves the call unresolved.
+    incomplete: bool,
 }
 
 impl CollectionTargets {
+    /// A value with at least one source the walk did not follow.
+    fn unfollowed() -> Self {
+        Self {
+            incomplete: true,
+            ..Self::default()
+        }
+    }
+
     fn extend(&mut self, other: Self) {
+        self.incomplete |= other.incomplete;
         self.keys.extend(other.keys);
         self.values.extend(other.values);
         self.object_values.extend(other.object_values);
@@ -7477,6 +7944,7 @@ impl CollectionTargets {
     }
 
     fn append_ordered(&mut self, other: Self) {
+        self.incomplete |= other.incomplete;
         for key in other.keys {
             if !self.keys.contains(&key) {
                 self.keys.push(key);
@@ -7603,7 +8071,7 @@ impl CollectionTargets {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct ObjectTargets {
     properties: BTreeMap<String, Vec<FunctionId>>,
     getter_properties: BTreeMap<String, Vec<FunctionId>>,
@@ -7914,7 +8382,7 @@ enum ConstructorAssignment {
     Param { property: String, index: usize },
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct PromiseTargets {
     fulfilled: CollectionTargets,
     rejected: CollectionTargets,
@@ -8086,12 +8554,117 @@ fn bind_collection_pattern(
 /// Whether control definitely leaves the enclosing block at `statement`
 /// (`return`/`throw`, or a block whose last statement does), so statements after
 /// it are unreachable. Used to prune the tail after an absence-folded early-return
-/// guard (`if (depth == null) { return … }`).
+/// guard (`if (depth == null) { return … }`), and to stop collecting returns
+/// once a block has definitely returned.
 fn branch_terminates(statement: &Statement<'_>) -> bool {
     match statement {
         Statement::ReturnStatement(_) | Statement::ThrowStatement(_) => true,
         Statement::BlockStatement(block) => block.body.last().is_some_and(branch_terminates),
+        Statement::IfStatement(statement) => {
+            branch_terminates(&statement.consequent)
+                && statement.alternate.as_ref().is_some_and(branch_terminates)
+        }
         _ => false,
+    }
+}
+
+/// Whether `expression` syntactically evaluates to something other than a
+/// function: a primitive literal, `undefined`, an array or object literal, or an
+/// operator that yields a primitive. Heuristic: everything else, including
+/// identifiers, calls, `this` and `new`, may be a function.
+pub(in crate::ts) fn cannot_be_callable(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::ArrayExpression(_) | Expression::ObjectExpression(_) => true,
+        _ => is_inert_value(expression),
+    }
+}
+
+/// A returned value that is never a function nor an object a caller could read
+/// a function from: primitives, `undefined`, and operators that yield them.
+fn is_inert_value(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BigIntLiteral(_)
+        | Expression::RegExpLiteral(_)
+        | Expression::StringLiteral(_)
+        | Expression::TemplateLiteral(_)
+        | Expression::UnaryExpression(_)
+        | Expression::BinaryExpression(_)
+        | Expression::UpdateExpression(_) => true,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        Expression::ParenthesizedExpression(inner) => is_inert_value(&inner.expression),
+        Expression::SequenceExpression(sequence) => {
+            sequence.expressions.last().is_some_and(is_inert_value)
+        }
+        Expression::ConditionalExpression(conditional) => {
+            is_inert_value(&conditional.consequent) && is_inert_value(&conditional.alternate)
+        }
+        Expression::LogicalExpression(logical) => {
+            is_inert_value(&logical.left) && is_inert_value(&logical.right)
+        }
+        _ => false,
+    }
+}
+
+/// Whether a statement the invocation walk does not descend into for returns
+/// (`switch`, `try`, loops, labelled statements) holds a `return` whose value may
+/// be a function. Nested functions and classes are not entered.
+fn statement_may_return_callable(statement: &Statement<'_>) -> bool {
+    let mut returns = Vec::new();
+    collect_value_returns(statement, &mut returns);
+    returns
+        .into_iter()
+        .any(|expression| !cannot_be_callable(expression))
+}
+
+/// Every `return` argument reachable in `statement` without entering a nested
+/// function or class body.
+fn collect_value_returns<'a>(statement: &'a Statement<'a>, returns: &mut Vec<&'a Expression<'a>>) {
+    match statement {
+        Statement::ReturnStatement(statement) => returns.extend(statement.argument.as_ref()),
+        Statement::BlockStatement(block) => {
+            for statement in &block.body {
+                collect_value_returns(statement, returns);
+            }
+        }
+        Statement::IfStatement(statement) => {
+            collect_value_returns(&statement.consequent, returns);
+            if let Some(alternate) = &statement.alternate {
+                collect_value_returns(alternate, returns);
+            }
+        }
+        Statement::SwitchStatement(statement) => {
+            for case in &statement.cases {
+                for statement in &case.consequent {
+                    collect_value_returns(statement, returns);
+                }
+            }
+        }
+        Statement::TryStatement(statement) => {
+            for statement in &statement.block.body {
+                collect_value_returns(statement, returns);
+            }
+            if let Some(handler) = &statement.handler {
+                for statement in &handler.body.body {
+                    collect_value_returns(statement, returns);
+                }
+            }
+            if let Some(finalizer) = &statement.finalizer {
+                for statement in &finalizer.body {
+                    collect_value_returns(statement, returns);
+                }
+            }
+        }
+        Statement::ForStatement(statement) => collect_value_returns(&statement.body, returns),
+        Statement::ForInStatement(statement) => collect_value_returns(&statement.body, returns),
+        Statement::ForOfStatement(statement) => collect_value_returns(&statement.body, returns),
+        Statement::WhileStatement(statement) => collect_value_returns(&statement.body, returns),
+        Statement::DoWhileStatement(statement) => collect_value_returns(&statement.body, returns),
+        Statement::LabeledStatement(statement) => collect_value_returns(&statement.body, returns),
+        Statement::WithStatement(statement) => collect_value_returns(&statement.body, returns),
+        _ => {}
     }
 }
 
@@ -8189,6 +8762,88 @@ fn flow_param_names(flow: &FunctionFlow<'_, '_>) -> std::collections::BTreeSet<S
         param_pattern_names(rest, &mut names);
     }
     names
+}
+
+/// A `var` in a `for…in` / `for…of` head writes the function's binding of that
+/// name: after the loop it holds the last item, or its old value when the loop
+/// did not run. The walk tracks neither, so the name's facts are dropped.
+fn forget_var_loop_head(left: &ForStatementLeft<'_>, env: &mut FlowEnv) {
+    let ForStatementLeft::VariableDeclaration(variable) = left else {
+        return;
+    };
+    if variable.kind != VariableDeclarationKind::Var {
+        return;
+    }
+    let names = variable
+        .declarations
+        .iter()
+        .flat_map(|declarator| declarator.id.get_binding_identifiers())
+        .map(|identifier| identifier.name.to_string())
+        .collect();
+    env.shadow_parameters(&names);
+}
+
+/// The parameters `flow`'s body redeclares as functions, in any block of the
+/// body but not in nested functions.
+fn parameters_replaced_by_declarations(
+    flow: &FunctionFlow<'_, '_>,
+) -> std::collections::BTreeSet<String> {
+    let mut declared = std::collections::BTreeSet::new();
+    for statement in &flow.body.statements {
+        declared_function_names(statement, &mut declared);
+    }
+    if declared.is_empty() {
+        return declared;
+    }
+    let params = flow_param_names(flow);
+    declared.retain(|name| params.contains(name));
+    declared
+}
+
+fn declared_function_names(
+    statement: &Statement<'_>,
+    out: &mut std::collections::BTreeSet<String>,
+) {
+    let nested = |statements: &[Statement<'_>], out: &mut std::collections::BTreeSet<String>| {
+        for inner in statements {
+            declared_function_names(inner, out);
+        }
+    };
+    match statement {
+        Statement::FunctionDeclaration(function) => {
+            if let Some(id) = &function.id {
+                out.insert(id.name.to_string());
+            }
+        }
+        Statement::BlockStatement(block) => nested(&block.body, out),
+        Statement::IfStatement(statement) => {
+            declared_function_names(&statement.consequent, out);
+            if let Some(alternate) = &statement.alternate {
+                declared_function_names(alternate, out);
+            }
+        }
+        Statement::LabeledStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::ForStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::ForInStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::ForOfStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::WhileStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::DoWhileStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::TryStatement(statement) => {
+            nested(&statement.block.body, out);
+            if let Some(handler) = &statement.handler {
+                nested(&handler.body.body, out);
+            }
+            if let Some(finalizer) = &statement.finalizer {
+                nested(&finalizer.body, out);
+            }
+        }
+        Statement::SwitchStatement(statement) => {
+            for case in &statement.cases {
+                nested(&case.consequent, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn bind_param_pattern(pattern: &ParamPattern, targets: &CollectionTargets, env: &mut FlowEnv) {
@@ -8533,30 +9188,22 @@ fn async_arrow_returned_expression<'a>(
         .or_else(|| returned_expression_from_statements(&function.body.statements))
 }
 
+/// The single value a function body returns, ignoring returns of primitives and
+/// `undefined`. A body with several such returns has no single summary: taking
+/// the first would present one branch's value as the whole answer, so callers
+/// treat it as not followed.
 fn returned_expression_from_statements<'a>(
     statements: &'a oxc_allocator::Vec<'a, Statement<'a>>,
 ) -> Option<&'a Expression<'a>> {
-    statements
-        .iter()
-        .find_map(returned_expression_from_statement)
-}
-
-fn returned_expression_from_statement<'a>(
-    statement: &'a Statement<'a>,
-) -> Option<&'a Expression<'a>> {
-    match statement {
-        Statement::ReturnStatement(statement) => statement.argument.as_ref(),
-        Statement::BlockStatement(block) => returned_expression_from_statements(&block.body),
-        Statement::IfStatement(statement) => {
-            returned_expression_from_statement(&statement.consequent).or_else(|| {
-                statement
-                    .alternate
-                    .as_ref()
-                    .and_then(|alternate| returned_expression_from_statement(alternate))
-            })
-        }
-        _ => None,
+    let mut returns = Vec::new();
+    for statement in statements {
+        collect_value_returns(statement, &mut returns);
     }
+    let mut values = returns
+        .into_iter()
+        .filter(|expression| !is_inert_value(expression));
+    let value = values.next()?;
+    values.next().is_none().then_some(value)
 }
 
 fn callback_returned_function<'a>(expression: &'a Expression<'a>) -> Option<&'a Expression<'a>> {
@@ -8579,27 +9226,7 @@ fn callback_returned_function<'a>(expression: &'a Expression<'a>) -> Option<&'a 
 fn returned_function_from_statements<'a>(
     statements: &'a oxc_allocator::Vec<'a, Statement<'a>>,
 ) -> Option<&'a Expression<'a>> {
-    statements.iter().find_map(returned_function_from_statement)
-}
-
-fn returned_function_from_statement<'a>(
-    statement: &'a Statement<'a>,
-) -> Option<&'a Expression<'a>> {
-    match statement {
-        Statement::ReturnStatement(statement) => {
-            statement.argument.as_ref().and_then(expression_as_function)
-        }
-        Statement::BlockStatement(block) => returned_function_from_statements(&block.body),
-        Statement::IfStatement(statement) => {
-            returned_function_from_statement(&statement.consequent).or_else(|| {
-                statement
-                    .alternate
-                    .as_ref()
-                    .and_then(|alternate| returned_function_from_statement(alternate))
-            })
-        }
-        _ => None,
-    }
+    returned_expression_from_statements(statements).and_then(expression_as_function)
 }
 
 fn expression_as_function<'a>(expression: &'a Expression<'a>) -> Option<&'a Expression<'a>> {
@@ -8659,6 +9286,18 @@ fn array_element_expression<'a>(
         ArrayExpressionElement::SpreadElement(spread) => Some(&spread.argument),
         ArrayExpressionElement::Elision(_) => None,
         _ => Some(element.to_expression()),
+    }
+}
+
+/// The name an assignment writes, also through a parenthesized or TypeScript
+/// wrapper target such as `(fn as any) = value` or `fn! = value`.
+fn assigned_identifier<'a>(target: &'a AssignmentTarget<'a>) -> Option<&'a str> {
+    if let AssignmentTarget::AssignmentTargetIdentifier(identifier) = target {
+        return Some(identifier.name.as_str());
+    }
+    match target.get_expression()?.get_inner_expression() {
+        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
+        _ => None,
     }
 }
 

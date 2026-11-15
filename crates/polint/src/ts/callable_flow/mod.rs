@@ -6,6 +6,8 @@ use crate::internal_core::FunctionId;
 #[cfg(feature = "lang-typescript")]
 mod extract;
 #[cfg(feature = "lang-typescript")]
+pub(super) use extract::cannot_be_callable;
+#[cfg(feature = "lang-typescript")]
 pub(super) use extract::collect_callable_flows;
 
 /// A bounded, heuristic callable flow extracted from the frontend AST. The graph
@@ -458,7 +460,7 @@ mod tests {
     }
 
     /// Resolved-target texts for the unique call site starting at `call` in
-    /// `main.js`. Returning the whole set (not a membership check) makes every
+    /// `main.ts`, or `main.js` when there is no `main.ts`. Returning the whole set (not a membership check) makes every
     /// fixture below a precision control too: an extra target fails the same way
     /// a missing one does.
     fn resolved_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
@@ -467,7 +469,12 @@ mod tests {
             std::fs::write(repo.path().join(name), body).unwrap();
         }
         let sources = files.iter().copied().collect::<BTreeMap<_, _>>();
-        let source = sources["main.js"];
+        let main_path = if sources.contains_key("main.ts") {
+            "main.ts"
+        } else {
+            "main.js"
+        };
+        let source = sources[main_path];
         assert_eq!(
             source.matches(call).count(),
             1,
@@ -490,7 +497,7 @@ mod tests {
             .db
             .files()
             .iter()
-            .find(|file| file.relative_path == "main.js")
+            .find(|file| file.relative_path == main_path)
             .unwrap();
         let start = source.find(call).unwrap() as u32;
         // `arr.reduce(fn)` and `arr.reduce(fn)()` share a start byte; the snippet
@@ -1098,6 +1105,393 @@ mod tests {
                     .collect::<BTreeSet<_>>(),
                 "{call:?}: {why}"
             );
+        }
+    }
+
+    /// A returned or reassigned callable is answered with every source that can
+    /// produce it, or with nothing when one of those sources is not followed: an
+    /// empty answer leaves the call unresolved, while a partial one would report
+    /// a call as complete that reaches further targets at run time.
+    #[test]
+    fn returned_callables_are_complete_or_left_unresolved() {
+        const HEADER: &str = "function a() {}\nfunction b() {}\nfunction c() {}\n";
+        // (source after the shared declarations, call snippet, exact targets, why)
+        let cases: &[(&str, &str, &[&str], &str)] = &[
+            (
+                "function pick(k, fn) {\n  if (k === 1) return a;\n  if (k === 2) return b;\n  return fn;\n}\nconst f = pick(3, c);\nf();\n",
+                "f();",
+                &["function a() {}", "function b() {}", "function c() {}"],
+                "every branch return is part of the answer, not the first that resolves",
+            ),
+            (
+                "function resolve(k, fn) {\n  if (k) return a;\n  return fn;\n}\nfunction apply(k, fn) {\n  fn = resolve(k, fn);\n  return fn();\n}\napply(1, b);\n",
+                "fn();",
+                &["function a() {}", "function b() {}"],
+                "a reassigned parameter joins the value it is replaced with",
+            ),
+            (
+                "function apply(fn) {\n  fn = wrap(fn);\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a reassignment from an unknown call drops the stale parameter binding",
+            ),
+            (
+                "function apply(fn) {\n  fn = fn || b;\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &["function a() {}"],
+                "a bound function is truthy, so an `||` default does not replace it",
+            ),
+            (
+                "function pick(k, fn) {\n  if (k) return a;\n  return lookup(fn);\n}\nconst f = pick(1, b);\nf();\n",
+                "f();",
+                &[],
+                "a return this walk cannot follow leaves the call unresolved",
+            ),
+            (
+                "function pick(k, fn) {\n  switch (k) {\n    case 1:\n      return fn;\n  }\n  return a;\n}\nconst f = pick(1, b);\nf();\n",
+                "f();",
+                &[],
+                "a return inside a switch is not followed, so the later return is not the whole answer",
+            ),
+            (
+                "function pick(k, fn) {\n  if (k) return a;\n  return lookup(fn);\n}\nfunction main() {\n  const f = pick(1, b);\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "an unknown return also blocks the returned value bound inside a function",
+            ),
+            (
+                "function pick(k, fn) {\n  switch (k) {\n    case 1:\n      return fn;\n  }\n  return a;\n}\nfunction main() {\n  const f = pick(1, b);\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a returned parameter blocks the single returned value bound inside a function",
+            ),
+            (
+                "function make() {\n  let g = a;\n  g = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a reassigned local alias no longer names its first value",
+            ),
+            (
+                "function pick(k) {\n  if (k) return a;\n  return null;\n}\nconst f = pick(1);\nf();\n",
+                "f();",
+                &["function a() {}"],
+                "a returned primitive cannot be called, so it does not block the answer",
+            ),
+            (
+                "function apply(fn) {\n  var fn = lookup();\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a `var` redeclaring a parameter replaces its value",
+            ),
+            (
+                "function apply(fn) {\n  return fn();\n  function fn() {}\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a function declaration named like a parameter replaces it from the start of the body",
+            ),
+            (
+                "function apply(fn) {\n  if (flag) {\n    function fn() {}\n  }\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a function declaration in a block named like a parameter leaves calls through the name unresolved",
+            ),
+            (
+                "function apply(fn, fns) {\n  for (var fn of fns) {}\n  return fn();\n}\napply(a, [lookup()]);\n",
+                "fn();",
+                &[],
+                "a `var` in a `for…of` head writes the parameter it redeclares",
+            ),
+            (
+                "function apply(fn) {\n  if (flag) {\n    var fn = b;\n  }\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &["function a() {}", "function b() {}"],
+                "a `var` redeclaration that may not run joins the parameter's value",
+            ),
+            (
+                "function pick(k) {\n  if (k) return a;\n  return lookup();\n}\npick(1)();\n",
+                "pick(1)();",
+                &[],
+                "a call through a call result with an unfollowed return stays unresolved",
+            ),
+            (
+                "var o = {\n  get f() {\n    if (flag) return a;\n    return lookup();\n  },\n};\no.f();\n",
+                "o.f();",
+                &[],
+                "a getter with an unfollowed return leaves its call unresolved",
+            ),
+            (
+                "var o = {\n  get f() {\n    if (flag) return a;\n    return lookup();\n  },\n};\no[\"f\"]();\n",
+                "o[\"f\"]();",
+                &[],
+                "a computed getter call with an unfollowed return stays unresolved",
+            ),
+            (
+                "function f1() {\n  if (flag) return b;\n  return f2();\n}\nfunction f2() {\n  return f3();\n}\nfunction f3() {\n  return f4();\n}\nfunction f4() {\n  return f5();\n}\nfunction f5() {\n  return f6();\n}\nfunction f6() {\n  return f7();\n}\nfunction f7() {\n  return f8();\n}\nfunction f8() {\n  return f9();\n}\nfunction f9() {\n  return f10();\n}\nfunction f10() {\n  return f11();\n}\nfunction f11() {\n  return f12();\n}\nfunction f12() {\n  return f13();\n}\nfunction f13() {\n  return f14();\n}\nfunction f14() {\n  return f15();\n}\nfunction f15() {\n  return f16();\n}\nfunction f16() {\n  return f17();\n}\nfunction f17() {\n  return f18();\n}\nfunction f18() {\n  return f19();\n}\nfunction f19() {\n  return f20();\n}\nfunction f20() {\n  return a;\n}\nf1()();\n",
+                "f1()();",
+                &[],
+                "a return chain deeper than the walk follows leaves the call unresolved",
+            ),
+            (
+                "function main() {\n  var o = {\n    m() {\n      return lookup();\n    },\n  };\n  var f = a;\n  {\n    let f = o.m();\n    f();\n  }\n}\nmain();\n",
+                "f();",
+                &[],
+                "a method whose only return is unfollowed does not keep a shadowed binding",
+            ),
+        ];
+        // TypeScript assignment targets may wrap the written name.
+        let ts_cases: &[(&str, &str, &[&str], &str)] = &[
+            (
+                "function make() {\n  let g = a;\n  (g as any) = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a write through a type assertion still replaces the local alias",
+            ),
+            (
+                "function make() {\n  let g = a;\n  g! = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a write through a non-null assertion still replaces the local alias",
+            ),
+            (
+                "function make() {\n  let g = a;\n  (g) = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
+                "f();",
+                &[],
+                "a parenthesized write still replaces the local alias",
+            ),
+        ];
+        let all_cases = cases
+            .iter()
+            .map(|case| ("main.js", case))
+            .chain(ts_cases.iter().map(|case| ("main.ts", case)));
+        for (path, (body, call, expected, why)) in all_cases {
+            let source = format!("{HEADER}{body}");
+            assert_eq!(
+                resolved_targets_at(&[(path, &source)], call),
+                expected
+                    .iter()
+                    .map(|text| (*text).to_string())
+                    .collect::<BTreeSet<_>>(),
+                "{call:?}: {why}"
+            );
+        }
+    }
+
+    /// Callee bodies walked collecting the flows of a file whose one function
+    /// calls itself at `self_calls` sites. A walk limit a few keyed call trees
+    /// above the keyed count makes unkeyed walks fail in bounded time.
+    fn self_call_walks(self_calls: usize) -> usize {
+        let threshold = super::extract::INVOCATION_KEYING_AFTER_WALKS;
+        super::extract::limit_body_walks(
+            super::extract::body_walks() + (8 + 2 * self_calls) * threshold,
+        );
+        let calls = (0..self_calls)
+            .map(|index| format!("  walk(node.child{index});\n"))
+            .collect::<String>();
+        let source = format!("function walk(node) {{\n{calls}  return node;\n}}\nwalk({{}});\n");
+        let repo = tempfile::tempdir().unwrap();
+        std::fs::write(repo.path().join("main.js"), source).unwrap();
+        let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+        let file = &output.db.files()[0];
+        let arena = oxc_allocator::Allocator::default();
+        let parsed = crate::ts::parse::parse_ts_file(&arena, file);
+        let programs = BTreeMap::from([(file.id, parsed.program())]);
+        let before = super::extract::body_walks();
+        super::collect_callable_flows(&output.db, &programs);
+        super::extract::body_walks() - before
+    }
+
+    /// A function whose body calls itself at several sites does not walk its
+    /// body once per path through the call tree. Walking every call again
+    /// walks about `k^d` bodies per call tree for `k` self-calls and `d` levels
+    /// of nesting, `2^17` for two self-calls. Once a call tree has walked
+    /// `INVOCATION_KEYING_AFTER_WALKS` bodies, a callee input is recorded the
+    /// second time it comes and answered from the record every time after, so
+    /// a call tree walks little more than the threshold, and a further
+    /// self-call adds one call tree, entered from its own call site.
+    #[test]
+    fn self_call_walks_grow_linearly_past_the_keying_threshold() {
+        let threshold = super::extract::INVOCATION_KEYING_AFTER_WALKS;
+        assert!(
+            self_call_walks(1) > 0,
+            "the self-call is followed into the callee body"
+        );
+        let double = self_call_walks(2);
+        assert!(
+            double <= 8 * threshold,
+            "two self-calls walked {double} callee bodies"
+        );
+        let triple = self_call_walks(3);
+        assert!(
+            triple - double <= 2 * threshold,
+            "a third self-call added {} callee-body walks to {double}",
+            triple - double
+        );
+    }
+
+    /// A replay counts the walks its record stands for, which nest, so the
+    /// count of a call tree with `k` self-calls grows like `k^16` and passes
+    /// `usize::MAX` from 16 self-calls on. It saturates instead of overflowing,
+    /// and the tree stays keyed, so each further self-call still adds at most
+    /// one call tree of walks.
+    #[test]
+    fn many_self_calls_keep_the_walk_count_bounded() {
+        let threshold = super::extract::INVOCATION_KEYING_AFTER_WALKS;
+        let double = self_call_walks(2);
+        for self_calls in [17, 32] {
+            let walks = self_call_walks(self_calls);
+            assert!(
+                walks - double <= (self_calls - 2) * 2 * threshold,
+                "{self_calls} self-calls walked {walks} callee bodies"
+            );
+        }
+    }
+
+    /// Keying every walk changes no flow. Past the first case, each case
+    /// repeats a callee walk whose outcome differs between repeats through one
+    /// input the walk cache keys on, one table it guards or one effect it
+    /// restores, so a replay that ignored it would lose a flow the unkeyed walk
+    /// finds or find one it does not.
+    #[test]
+    fn keyed_walks_find_the_flows_unkeyed_walks_find() {
+        const PRELUDE: &str = "function a() {}\nfunction b() {}\n";
+        let cases: &[(&str, &str, bool)] = &[
+            (
+                "a callee called three times with nothing changed between the calls",
+                "function leaf(f) { f(); }\n\
+                 function use(f) { leaf(f); }\n\
+                 function main(f) { use(f); use(f); use(f); }\n\
+                 main(a);\n",
+                true,
+            ),
+            (
+                "a prototype method assigned between the second and third call",
+                "function Foo() {}\n\
+                 function use() { const o = new Foo(); o.m(); }\n\
+                 function main() { use(); use(); Foo.prototype.m = a; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "prototype methods assigned during the recorded walk",
+                "function Foo() {}\n\
+                 function use() {\n\
+                 \x20 const o = new Foo();\n\
+                 \x20 o.n4();\n\
+                 \x20 Foo.prototype.n4 = o.n3;\n\
+                 \x20 Foo.prototype.n3 = o.n2;\n\
+                 \x20 Foo.prototype.n2 = o.n1;\n\
+                 \x20 Foo.prototype.n1 = o.m;\n\
+                 \x20 Foo.prototype.m = a;\n\
+                 }\n\
+                 function main() { use(); use(); use(); use(); use(); use(); use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "a class declared between the second and third call",
+                "function use() { const o = new Foo(); o.m(); }\n\
+                 function main() { use(); use(); const Foo = class { m() {} }; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "a class with static members declared between the second and third call",
+                "function use() { Foo.z = b; Foo.m(); }\n\
+                 function main() { use(); use(); const Foo = class { static m() {} }; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "a static member assigned between the second and third call",
+                "class Foo {}\n\
+                 function use() { Foo.z = b; Foo.m(); }\n\
+                 function main() { use(); use(); Foo.m = a; use(); }\n\
+                 main();\n",
+                false,
+            ),
+            (
+                "the same callee at another invocation depth",
+                &format!(
+                    "function leaf(f) {{ f(); }}\n\
+                     function use() {{ leaf(a); }}\n\
+                     {}function d15() {{ use(); }}\n\
+                     function main() {{ d1(); d1(); use(); }}\n\
+                     main();\n",
+                    (1..15)
+                        .map(|depth| format!("function d{depth}() {{ d{}(); }}\n", depth + 1))
+                        .collect::<String>()
+                ),
+                false,
+            ),
+            (
+                "the same callee under another walk guard",
+                "function use(x, k) { x.f(k); }\n\
+                 function main(bb) {\n\
+                 \x20 const o = { f(cb) { cb(); use(this, bb); use(this, bb); } };\n\
+                 \x20 o.f(a);\n\
+                 \x20 use(o, bb);\n\
+                 }\n\
+                 main(b);\n",
+                false,
+            ),
+            (
+                "the same callee under another super",
+                "function main(pp) {\n\
+                 \x20 const t = { h() { super.m1(); } };\n\
+                 \x20 const r = { m3() { q.g(); (t || t).h(); } };\n\
+                 \x20 const r2 = { m3: r.m3 };\n\
+                 \x20 const q = { g() { r.m3(); (t || t).h(); (t || t).h(); } };\n\
+                 \x20 Object.setPrototypeOf(r, pp);\n\
+                 \x20 r2.m3();\n\
+                 \x20 q.g();\n\
+                 }\n\
+                 const p = { m1() {} };\n\
+                 main(p);\n",
+                false,
+            ),
+            (
+                "a callee that spends the walk budget, then a walk that needs it",
+                &format!(
+                    "function use(x) {{ x.g1(x); }}\n\
+                     function main(cb) {{\n\
+                     \x20 const o = {{\n\
+                     {}\x20   g13() {{}},\n\
+                     \x20   mk() {{ return {{ run(j) {{ j(); }} }}; }},\n\
+                     \x20   f(k) {{ use(o); o.mk().run(k); }},\n\
+                     \x20 }};\n\
+                     \x20 o.f(cb);\n\
+                     \x20 o.f(cb);\n\
+                     \x20 o.f(cb);\n\
+                     }}\n\
+                     main(a);\n",
+                    (1..13)
+                        .map(|level| format!(
+                            "    g{level}(y) {{ y.g{next}(y); y.g{next}(y); }},\n",
+                            next = level + 1
+                        ))
+                        .collect::<String>()
+                ),
+                true,
+            ),
+        ];
+        for (case, body, replays) in cases {
+            let repo = tempfile::tempdir().unwrap();
+            std::fs::write(repo.path().join("main.js"), format!("{PRELUDE}{body}")).unwrap();
+            let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+            let file = &output.db.files()[0];
+            let arena = oxc_allocator::Allocator::default();
+            let parsed = crate::ts::parse::parse_ts_file(&arena, file);
+            let programs = BTreeMap::from([(file.id, parsed.program())]);
+            let previous = super::extract::key_walks_after(usize::MAX);
+            let unkeyed = super::collect_callable_flows(&output.db, &programs);
+            super::extract::key_walks_after(0);
+            let before = super::extract::replayed_walks();
+            let keyed = super::collect_callable_flows(&output.db, &programs);
+            let replayed = super::extract::replayed_walks() - before;
+            super::extract::key_walks_after(previous);
+            assert!(!unkeyed.is_empty(), "{case}: no flows");
+            assert_eq!(keyed, unkeyed, "{case}");
+            assert!(!replays || replayed > 0, "{case}: no walk replayed");
         }
     }
 }

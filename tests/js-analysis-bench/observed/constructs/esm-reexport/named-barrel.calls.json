@@ -1,0 +1,29 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "index.js",
+    "main.js",
+    "parse.js",
+    "render.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@57..77",
+      "syntax": "identifier",
+      "callee": "render.js@26..105",
+      "callee_name": "render"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@64..76",
+      "syntax": "identifier",
+      "callee": "parse.js@25..101",
+      "callee_name": "parse"
+    }
+  ]
+}

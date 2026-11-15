@@ -1,0 +1,40 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@385..403",
+      "syntax": "identifier",
+      "callee": "main.js@65..271",
+      "callee_name": "pick"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@422..427",
+      "syntax": "identifier",
+      "callee": "main.js@12..64",
+      "callee_name": "double"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@422..427",
+      "syntax": "identifier",
+      "callee": "main.js@185..245",
+      "callee_name": "wrapped"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@422..427",
+      "syntax": "identifier",
+      "callee": "main.js@272..321",
+      "callee_name": "negate"
+    }
+  ]
+}

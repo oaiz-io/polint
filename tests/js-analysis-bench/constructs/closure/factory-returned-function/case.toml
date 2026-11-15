@@ -1,0 +1,3 @@
+construct = "closure"
+held_out = false
+description = "A factory returns an inner function that captures a variable and a helper; callers invoke the returned function."

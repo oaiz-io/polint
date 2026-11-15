@@ -1,0 +1,4600 @@
+{
+  "schema": "polint-js-bench-observed-calls-1",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "apply.js",
+    "applyEach.js",
+    "applyEachSeries.js",
+    "asyncify.js",
+    "auto.js",
+    "autoInject.js",
+    "cargo.js",
+    "cargoQueue.js",
+    "compose.js",
+    "concat.js",
+    "concatLimit.js",
+    "concatSeries.js",
+    "constant.js",
+    "detect.js",
+    "detectLimit.js",
+    "detectSeries.js",
+    "dir.js",
+    "doUntil.js",
+    "doWhilst.js",
+    "each.js",
+    "eachLimit.js",
+    "eachOf.js",
+    "eachOfLimit.js",
+    "eachOfSeries.js",
+    "eachSeries.js",
+    "ensureAsync.js",
+    "every.js",
+    "everyLimit.js",
+    "everySeries.js",
+    "filter.js",
+    "filterLimit.js",
+    "filterSeries.js",
+    "forever.js",
+    "groupBy.js",
+    "groupByLimit.js",
+    "groupBySeries.js",
+    "index.js",
+    "internal/DoublyLinkedList.js",
+    "internal/Heap.js",
+    "internal/applyEach.js",
+    "internal/asyncEachOfLimit.js",
+    "internal/awaitify.js",
+    "internal/breakLoop.js",
+    "internal/consoleFunc.js",
+    "internal/createTester.js",
+    "internal/eachOfLimit.js",
+    "internal/filter.js",
+    "internal/getIterator.js",
+    "internal/initialParams.js",
+    "internal/isArrayLike.js",
+    "internal/iterator.js",
+    "internal/map.js",
+    "internal/once.js",
+    "internal/onlyOnce.js",
+    "internal/parallel.js",
+    "internal/promiseCallback.js",
+    "internal/queue.js",
+    "internal/range.js",
+    "internal/reject.js",
+    "internal/setImmediate.js",
+    "internal/withoutIndex.js",
+    "internal/wrapAsync.js",
+    "log.js",
+    "map.js",
+    "mapLimit.js",
+    "mapSeries.js",
+    "mapValues.js",
+    "mapValuesLimit.js",
+    "mapValuesSeries.js",
+    "memoize.js",
+    "nextTick.js",
+    "parallel.js",
+    "parallelLimit.js",
+    "priorityQueue.js",
+    "queue.js",
+    "race.js",
+    "reduce.js",
+    "reduceRight.js",
+    "reflect.js",
+    "reflectAll.js",
+    "reject.js",
+    "rejectLimit.js",
+    "rejectSeries.js",
+    "retry.js",
+    "retryable.js",
+    "seq.js",
+    "series.js",
+    "setImmediate.js",
+    "some.js",
+    "someLimit.js",
+    "someSeries.js",
+    "sortBy.js",
+    "timeout.js",
+    "times.js",
+    "timesLimit.js",
+    "timesSeries.js",
+    "transform.js",
+    "tryEach.js",
+    "unmemoize.js",
+    "until.js",
+    "waterfall.js",
+    "whilst.js"
+  ],
+  "instrumented_functions": 412,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "applyEach.js@155..189",
+      "syntax": "identifier",
+      "callee": "applyEach.js@268..363",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "applyEach.js@1914..1953",
+      "syntax": "expression",
+      "callee": "internal/applyEach.js@101..454",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "applyEach.js@237..265",
+      "syntax": "identifier",
+      "callee": "applyEach.js@268..363",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "applyEachSeries.js@1222..1267",
+      "syntax": "expression",
+      "callee": "internal/applyEach.js@101..454",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "applyEachSeries.js@155..189",
+      "syntax": "identifier",
+      "callee": "applyEachSeries.js@292..387",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "applyEachSeries.js@255..289",
+      "syntax": "identifier",
+      "callee": "applyEachSeries.js@292..387",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "asyncify.js@195..233",
+      "syntax": "identifier",
+      "callee": "asyncify.js@411..506",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "asyncify.js@2589..2618",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@359..438",
+      "callee_name": "isAsync"
+    },
+    {
+      "kind": "call",
+      "site": "asyncify.js@2785..2817",
+      "syntax": "identifier",
+      "callee": "asyncify.js@3272..3526",
+      "callee_name": "handlePromise"
+    },
+    {
+      "kind": "call",
+      "site": "asyncify.js@2848..3267",
+      "syntax": "expression",
+      "callee": "internal/initialParams.js@101..253",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "asyncify.js@317..354",
+      "syntax": "identifier",
+      "callee": "asyncify.js@411..506",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "asyncify.js@3359..3396",
+      "syntax": "identifier",
+      "callee": "asyncify.js@3528..3728",
+      "callee_name": "invokeCallback"
+    },
+    {
+      "kind": "call",
+      "site": "asyncify.js@3596..3618",
+      "syntax": "identifier",
+      "callee": "internal/map.js@587..667",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@10422..10439",
+      "syntax": "identifier",
+      "callee": "auto.js@9429..9590",
+      "callee_name": "taskComplete"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@10513..10560",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@10605..10634",
+      "syntax": "identifier",
+      "callee": "autoInject.js@6804..7002",
+      "callee_name": "newTask"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@11103..11129",
+      "syntax": "identifier",
+      "callee": "auto.js@11463..11762",
+      "callee_name": "getDependents"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@164..193",
+      "syntax": "identifier",
+      "callee": "auto.js@476..571",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@265..298",
+      "syntax": "identifier",
+      "callee": "auto.js@476..571",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@373..407",
+      "syntax": "identifier",
+      "callee": "auto.js@476..571",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@7066..7138",
+      "syntax": "expression",
+      "callee": "internal/once.js@106..328",
+      "callee_name": "once"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@7830..7854",
+      "syntax": "identifier",
+      "callee": "auto.js@8790..8880",
+      "callee_name": "enqueueTask"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@8513..8717",
+      "syntax": "identifier",
+      "callee": "auto.js@9205..9423",
+      "callee_name": "addListener"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@8661..8683",
+      "syntax": "identifier",
+      "callee": "auto.js@8790..8880",
+      "callee_name": "enqueueTask"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@8744..8763",
+      "syntax": "identifier",
+      "callee": "auto.js@10708..11457",
+      "callee_name": "checkForDeadlocks"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@8769..8783",
+      "syntax": "identifier",
+      "callee": "auto.js@8886..9199",
+      "callee_name": "processQueue"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@8854..8872",
+      "syntax": "identifier",
+      "callee": "auto.js@9596..10702",
+      "callee_name": "runTask"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@9022..9045",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@9177..9182",
+      "syntax": "identifier",
+      "callee": "auto.js@8848..8872",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@9554..9558",
+      "syntax": "identifier",
+      "callee": "auto.js@8541..8716",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@9569..9583",
+      "syntax": "identifier",
+      "callee": "auto.js@8886..9199",
+      "callee_name": "processQueue"
+    },
+    {
+      "kind": "call",
+      "site": "auto.js@9684..10465",
+      "syntax": "expression",
+      "callee": "internal/onlyOnce.js@110..326",
+      "callee_name": "onlyOnce"
+    },
+    {
+      "kind": "call",
+      "site": "autoInject.js@1569..1599",
+      "syntax": "identifier",
+      "callee": "autoInject.js@609..1522",
+      "callee_name": "stripComments"
+    },
+    {
+      "kind": "call",
+      "site": "autoInject.js@161..190",
+      "syntax": "identifier",
+      "callee": "autoInject.js@302..397",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "autoInject.js@265..299",
+      "syntax": "identifier",
+      "callee": "autoInject.js@302..397",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "autoInject.js@5972..6003",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@359..438",
+      "callee_name": "isAsync"
+    },
+    {
+      "kind": "call",
+      "site": "autoInject.js@6450..6469",
+      "syntax": "identifier",
+      "callee": "autoInject.js@1524..1917",
+      "callee_name": "parseParams"
+    },
+    {
+      "kind": "call",
+      "site": "autoInject.js@6947..6979",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "autoInject.js@7023..7062",
+      "syntax": "expression",
+      "callee": "auto.js@6844..11819",
+      "callee_name": "auto"
+    },
+    {
+      "kind": "call",
+      "site": "cargo.js@168..198",
+      "syntax": "identifier",
+      "callee": "cargo.js@201..296",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "cargo.js@2669..2709",
+      "syntax": "expression",
+      "callee": "internal/queue.js@641..8488",
+      "callee_name": "queue"
+    },
+    {
+      "kind": "call",
+      "site": "cargoQueue.js@168..198",
+      "syntax": "identifier",
+      "callee": "cargoQueue.js@201..296",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "compose.js@1491..1528",
+      "syntax": "expression",
+      "callee": "seq.js@1977..2619",
+      "callee_name": "seq"
+    },
+    {
+      "kind": "call",
+      "site": "compose.js@155..183",
+      "syntax": "identifier",
+      "callee": "compose.js@186..281",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "concat.js@152..188",
+      "syntax": "identifier",
+      "callee": "concat.js@296..391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "concat.js@260..293",
+      "syntax": "identifier",
+      "callee": "concat.js@296..391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "concat.js@3499..3561",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "concat.js@3583..3617",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "concatLimit.js@1491..1525",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "concatLimit.js@1538..1997",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "concatLimit.js@155..189",
+      "syntax": "identifier",
+      "callee": "concatLimit.js@393..488",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "concatLimit.js@1697..1714",
+      "syntax": "identifier",
+      "callee": "internal/map.js@587..667",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "concatLimit.js@2019..2058",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "concatLimit.js@252..285",
+      "syntax": "identifier",
+      "callee": "concatLimit.js@393..488",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "concatLimit.js@357..390",
+      "syntax": "identifier",
+      "callee": "concatLimit.js@393..488",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "concatSeries.js@1399..1439",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "concatSeries.js@152..188",
+      "syntax": "identifier",
+      "callee": "concatSeries.js@296..391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "concatSeries.js@260..293",
+      "syntax": "identifier",
+      "callee": "concatSeries.js@296..391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detect.js@164..201",
+      "syntax": "identifier",
+      "callee": "detect.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detect.js@258..289",
+      "syntax": "identifier",
+      "callee": "detect.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detect.js@3052..3114",
+      "syntax": "expression",
+      "callee": "internal/createTester.js@413..1194",
+      "callee_name": "_createTester"
+    },
+    {
+      "kind": "call",
+      "site": "detect.js@3052..3158",
+      "syntax": "expression",
+      "callee": "internal/createTester.js@467..1191",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "detect.js@3180..3214",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "detect.js@361..394",
+      "syntax": "identifier",
+      "callee": "detect.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detectLimit.js@164..201",
+      "syntax": "identifier",
+      "callee": "detectLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detectLimit.js@1761..1800",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "detectLimit.js@282..318",
+      "syntax": "identifier",
+      "callee": "detectLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detectLimit.js@390..423",
+      "syntax": "identifier",
+      "callee": "detectLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detectSeries.js@164..201",
+      "syntax": "identifier",
+      "callee": "detectSeries.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detectSeries.js@1666..1706",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "detectSeries.js@282..318",
+      "syntax": "identifier",
+      "callee": "detectSeries.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "detectSeries.js@390..423",
+      "syntax": "identifier",
+      "callee": "detectSeries.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "dir.js@1228..1261",
+      "syntax": "expression",
+      "callee": "internal/consoleFunc.js@311..885",
+      "callee_name": "consoleFunc"
+    },
+    {
+      "kind": "call",
+      "site": "dir.js@161..197",
+      "syntax": "identifier",
+      "callee": "dir.js@200..295",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "doUntil.js@170..203",
+      "syntax": "identifier",
+      "callee": "doUntil.js@315..410",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "doUntil.js@278..312",
+      "syntax": "identifier",
+      "callee": "doUntil.js@315..410",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "doWhilst.js@152..185",
+      "syntax": "identifier",
+      "callee": "doWhilst.js@402..497",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "doWhilst.js@2229..2265",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "doWhilst.js@260..294",
+      "syntax": "identifier",
+      "callee": "doWhilst.js@402..497",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "doWhilst.js@366..399",
+      "syntax": "identifier",
+      "callee": "doWhilst.js@402..497",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@137..168",
+      "syntax": "identifier",
+      "callee": "each.js@506..601",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@252..289",
+      "syntax": "identifier",
+      "callee": "each.js@506..601",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@364..398",
+      "syntax": "identifier",
+      "callee": "each.js@506..601",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@3828..3930",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@3856..3919",
+      "syntax": "expression",
+      "callee": "internal/withoutIndex.js@115..217",
+      "callee_name": "_withoutIndex"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@3884..3918",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@3953..3990",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "each.js@470..503",
+      "syntax": "identifier",
+      "callee": "each.js@506..601",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@1582..1615",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@743..2602",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@1582..1696",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@765..2599",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@161..197",
+      "syntax": "identifier",
+      "callee": "eachLimit.js@535..630",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@1622..1685",
+      "syntax": "expression",
+      "callee": "internal/withoutIndex.js@115..217",
+      "callee_name": "_withoutIndex"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@1650..1684",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@1718..1755",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@281..318",
+      "syntax": "identifier",
+      "callee": "eachLimit.js@535..630",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@393..427",
+      "syntax": "identifier",
+      "callee": "eachLimit.js@535..630",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachLimit.js@499..532",
+      "syntax": "identifier",
+      "callee": "eachLimit.js@535..630",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1041..1070",
+      "syntax": "expression",
+      "callee": "internal/once.js@106..328",
+      "callee_name": "once"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1404..1417",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1509..1523",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1588..1659",
+      "syntax": "identifier",
+      "callee": "internal/createTester.js@639..1060",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1588..1659",
+      "syntax": "identifier",
+      "callee": "internal/filter.js@532..670",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1588..1659",
+      "syntax": "identifier",
+      "callee": "internal/map.js@507..675",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1588..1659",
+      "syntax": "identifier",
+      "callee": "internal/parallel.js@639..888",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1588..1659",
+      "syntax": "identifier",
+      "callee": "internal/withoutIndex.js@161..214",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@161..197",
+      "syntax": "identifier",
+      "callee": "eachOf.js@825..920",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1617..1658",
+      "syntax": "expression",
+      "callee": "internal/onlyOnce.js@110..326",
+      "callee_name": "onlyOnce"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@1815..1877",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@272..306",
+      "syntax": "identifier",
+      "callee": "eachOf.js@825..920",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@378..414",
+      "syntax": "identifier",
+      "callee": "eachOf.js@825..920",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@474..503",
+      "syntax": "identifier",
+      "callee": "eachOf.js@825..920",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@5500..5532",
+      "syntax": "expression",
+      "callee": "internal/isArrayLike.js@113..245",
+      "callee_name": "isArrayLike"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@5579..5651",
+      "syntax": "identifier",
+      "callee": "eachOf.js@1753..1880",
+      "callee_name": "eachOfGeneric"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@5579..5651",
+      "syntax": "identifier",
+      "callee": "eachOf.js@973..1668",
+      "callee_name": "eachOfArrayLike"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@5606..5640",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@5674..5708",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@575..608",
+      "syntax": "identifier",
+      "callee": "eachOf.js@825..920",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@683..717",
+      "syntax": "identifier",
+      "callee": "eachOf.js@825..920",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOf.js@789..822",
+      "syntax": "identifier",
+      "callee": "eachOf.js@825..920",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfLimit.js@1456..1489",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@743..2602",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfLimit.js@1456..1541",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@765..2599",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "eachOfLimit.js@1496..1530",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfLimit.js@1564..1603",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfLimit.js@162..199",
+      "syntax": "identifier",
+      "callee": "eachOfLimit.js@416..511",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfLimit.js@274..308",
+      "syntax": "identifier",
+      "callee": "eachOfLimit.js@416..511",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfLimit.js@380..413",
+      "syntax": "identifier",
+      "callee": "eachOfLimit.js@416..511",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfSeries.js@1178..1233",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfSeries.js@1255..1295",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfSeries.js@152..188",
+      "syntax": "identifier",
+      "callee": "eachOfSeries.js@296..391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachOfSeries.js@260..293",
+      "syntax": "identifier",
+      "callee": "eachOfSeries.js@296..391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachSeries.js@1428..1481",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "eachSeries.js@146..180",
+      "syntax": "identifier",
+      "callee": "eachSeries.js@288..383",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "eachSeries.js@1503..1541",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "eachSeries.js@252..285",
+      "syntax": "identifier",
+      "callee": "eachSeries.js@288..383",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "ensureAsync.js@1846..1873",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@359..438",
+      "callee_name": "isAsync"
+    },
+    {
+      "kind": "call",
+      "site": "ensureAsync.js@195..232",
+      "syntax": "identifier",
+      "callee": "ensureAsync.js@289..384",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "ensureAsync.js@2071..2128",
+      "syntax": "expression",
+      "callee": "internal/setImmediate.js@564..605",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "ensureAsync.js@2105..2127",
+      "syntax": "identifier",
+      "callee": "forever.js@1892..2008",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "every.js@164..201",
+      "syntax": "identifier",
+      "callee": "every.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "every.js@258..289",
+      "syntax": "identifier",
+      "callee": "every.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "every.js@3370..3425",
+      "syntax": "expression",
+      "callee": "internal/createTester.js@413..1194",
+      "callee_name": "_createTester"
+    },
+    {
+      "kind": "call",
+      "site": "every.js@3370..3469",
+      "syntax": "expression",
+      "callee": "internal/createTester.js@467..1191",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "every.js@3491..3524",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "every.js@361..394",
+      "syntax": "identifier",
+      "callee": "every.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "everyLimit.js@164..201",
+      "syntax": "identifier",
+      "callee": "everyLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "everyLimit.js@1678..1716",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "everyLimit.js@282..318",
+      "syntax": "identifier",
+      "callee": "everyLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "everyLimit.js@390..423",
+      "syntax": "identifier",
+      "callee": "everyLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "everySeries.js@1571..1610",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "everySeries.js@164..201",
+      "syntax": "identifier",
+      "callee": "everySeries.js@421..516",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "everySeries.js@276..313",
+      "syntax": "identifier",
+      "callee": "everySeries.js@421..516",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "everySeries.js@385..418",
+      "syntax": "identifier",
+      "callee": "everySeries.js@421..516",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filter.js@147..179",
+      "syntax": "identifier",
+      "callee": "filter.js@375..470",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filter.js@236..267",
+      "syntax": "identifier",
+      "callee": "filter.js@375..470",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filter.js@2742..2807",
+      "syntax": "expression",
+      "callee": "internal/filter.js@1372..1586",
+      "callee_name": "_filter"
+    },
+    {
+      "kind": "call",
+      "site": "filter.js@2829..2863",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "filter.js@339..372",
+      "syntax": "identifier",
+      "callee": "filter.js@375..470",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filterLimit.js@147..179",
+      "syntax": "identifier",
+      "callee": "filterLimit.js@404..499",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filterLimit.js@1581..1620",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "filterLimit.js@260..296",
+      "syntax": "identifier",
+      "callee": "filterLimit.js@404..499",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filterLimit.js@368..401",
+      "syntax": "identifier",
+      "callee": "filterLimit.js@404..499",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filterSeries.js@147..179",
+      "syntax": "identifier",
+      "callee": "filterSeries.js@399..494",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filterSeries.js@1472..1512",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "filterSeries.js@254..291",
+      "syntax": "identifier",
+      "callee": "filterSeries.js@399..494",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "filterSeries.js@363..396",
+      "syntax": "identifier",
+      "callee": "filterSeries.js@399..494",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@152..185",
+      "syntax": "identifier",
+      "callee": "forever.js@510..605",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@1780..1812",
+      "syntax": "expression",
+      "callee": "internal/onlyOnce.js@110..326",
+      "callee_name": "onlyOnce"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@1829..1885",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@1854..1884",
+      "syntax": "expression",
+      "callee": "ensureAsync.js@1811..2277",
+      "callee_name": "ensureAsync"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@1937..1946",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@1991..2001",
+      "syntax": "identifier",
+      "callee": "ensureAsync.js@1897..2274",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@2020..2026",
+      "syntax": "identifier",
+      "callee": "forever.js@1892..2008",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@2048..2083",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@257..293",
+      "syntax": "identifier",
+      "callee": "forever.js@510..605",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@368..402",
+      "syntax": "identifier",
+      "callee": "forever.js@510..605",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "forever.js@474..507",
+      "syntax": "identifier",
+      "callee": "forever.js@510..605",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "groupBy.js@182..219",
+      "syntax": "identifier",
+      "callee": "groupBy.js@222..317",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "groupBy.js@3498..3561",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "groupByLimit.js@143..176",
+      "syntax": "identifier",
+      "callee": "groupByLimit.js@393..488",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "groupByLimit.js@1503..1537",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "groupByLimit.js@1550..2348",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "groupByLimit.js@1705..1730",
+      "syntax": "identifier",
+      "callee": "internal/map.js@587..667",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "groupByLimit.js@2371..2411",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "groupByLimit.js@251..285",
+      "syntax": "identifier",
+      "callee": "groupByLimit.js@393..488",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "groupByLimit.js@357..390",
+      "syntax": "identifier",
+      "callee": "groupByLimit.js@393..488",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "groupBySeries.js@188..225",
+      "syntax": "identifier",
+      "callee": "groupBySeries.js@228..323",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2156..2186",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2249..2283",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2364..2404",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2464..2497",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2545..2574",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2640..2675",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2726..2756",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2822..2857",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2914..2946",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3000..3031",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3100..3136",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3208..3245",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3305..3338",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3392..3423",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3492..3528",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3600..3637",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3682..3710",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3767..3799",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3859..3892",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3940..3969",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4032..4066",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4120..4151",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4220..4256",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4328..4365",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4431..4466",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4535..4571",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4622..4652",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4718..4753",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4822..4858",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4912..4943",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5012..5048",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5120..5157",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5214..5246",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5303..5335",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5407..5444",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5519..5557",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5602..5630",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5675..5703",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5763..5796",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5859..5893",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@5956..5990",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6068..6107",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6188..6228",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6285..6317",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6377..6410",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6470..6503",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6578..6616",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6691..6729",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6780..6810",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6858..6887",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@6941..6972",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7041..7077",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7134..7166",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7232..7267",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7321..7352",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7421..7457",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7529..7566",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7617..7647",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7710..7744",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7789..7817",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7871..7902",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@7974..8011",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8059..8088",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8151..8185",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8251..8286",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8340..8371",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8428..8460",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8511..8541",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8607..8642",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8711..8747",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8810..8844",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8901..8933",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@8996..9030",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@9081..9111",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@9174..9208",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@9262..9293",
+      "syntax": "identifier",
+      "callee": "index.js@9296..9391",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/DoublyLinkedList.js@1460..1493",
+      "syntax": "member",
+      "callee": "internal/DoublyLinkedList.js@845..1071",
+      "callee_name": "insertAfter"
+    },
+    {
+      "kind": "call",
+      "site": "internal/DoublyLinkedList.js@1499..1521",
+      "syntax": "identifier",
+      "callee": "internal/DoublyLinkedList.js@2162..2248",
+      "callee_name": "setInitial"
+    },
+    {
+      "kind": "call",
+      "site": "internal/DoublyLinkedList.js@1572..1598",
+      "syntax": "member",
+      "callee": "internal/DoublyLinkedList.js@491..757",
+      "callee_name": "removeLink"
+    },
+    {
+      "kind": "call",
+      "site": "internal/Heap.js@1310..1343",
+      "syntax": "member",
+      "callee": "internal/Heap.js@463..734",
+      "callee_name": "percUp"
+    },
+    {
+      "kind": "call",
+      "site": "internal/Heap.js@1551..1567",
+      "syntax": "member",
+      "callee": "internal/Heap.js@740..1210",
+      "callee_name": "percDown"
+    },
+    {
+      "kind": "call",
+      "site": "internal/Heap.js@523..578",
+      "syntax": "identifier",
+      "callee": "internal/Heap.js@2299..2463",
+      "callee_name": "smaller"
+    },
+    {
+      "kind": "call",
+      "site": "internal/Heap.js@563..576",
+      "syntax": "identifier",
+      "callee": "internal/Heap.js@2246..2297",
+      "callee_name": "parent"
+    },
+    {
+      "kind": "call",
+      "site": "internal/Heap.js@794..808",
+      "syntax": "identifier",
+      "callee": "internal/Heap.js@2196..2244",
+      "callee_name": "leftChi"
+    },
+    {
+      "kind": "call",
+      "site": "internal/applyEach.js@190..425",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "internal/applyEach.js@284..413",
+      "syntax": "identifier",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "internal/applyEach.js@326..354",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/applyEach.js@520..554",
+      "syntax": "identifier",
+      "callee": "internal/applyEach.js@653..748",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/applyEach.js@617..650",
+      "syntax": "identifier",
+      "callee": "internal/applyEach.js@653..748",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/asyncEachOfLimit.js@182..216",
+      "syntax": "identifier",
+      "callee": "internal/asyncEachOfLimit.js@219..314",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "concat.js@3444..3564",
+      "callee_name": "concat"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "concatLimit.js@1415..2000",
+      "callee_name": "concatLimit"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "detect.js@2997..3161",
+      "callee_name": "detect"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "each.js@3770..3933",
+      "callee_name": "eachLimit"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "eachLimit.js@1517..1699",
+      "callee_name": "eachLimit"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "eachOf.js@5425..5654",
+      "callee_name": "eachOf"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "eachOfLimit.js@1389..1544",
+      "callee_name": "eachOfLimit"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "eachOfSeries.js@1117..1236",
+      "callee_name": "eachOfSeries"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "eachSeries.js@1369..1484",
+      "callee_name": "eachSeries"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "every.js@3316..3472",
+      "callee_name": "every"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "filter.js@2687..2810",
+      "callee_name": "filter"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "forever.js@1733..2029",
+      "callee_name": "forever"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "groupByLimit.js@1426..2351",
+      "callee_name": "groupByLimit"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "internal/applyEach.js@214..424",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "internal/parallel.js@526..923",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "map.js@4394..4511",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "mapLimit.js@1384..1530",
+      "callee_name": "mapLimit"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "mapSeries.js@1295..1424",
+      "callee_name": "mapSeries"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "mapValuesLimit.js@1573..2020",
+      "callee_name": "mapValuesLimit"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "race.js@1692..2045",
+      "callee_name": "race"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "reduce.js@4436..4790",
+      "callee_name": "reduce"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "reject.js@2465..2588",
+      "callee_name": "reject"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "some.js@3569..3717",
+      "callee_name": "some"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "sortBy.js@5530..6122",
+      "callee_name": "sortBy"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "tryEach.js@1956..2453",
+      "callee_name": "tryEach"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "waterfall.js@2467..3114",
+      "callee_name": "waterfall"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@436..461",
+      "syntax": "member",
+      "callee": "whilst.js@1660..2250",
+      "callee_name": "whilst"
+    },
+    {
+      "kind": "call",
+      "site": "internal/awaitify.js@713..738",
+      "syntax": "member",
+      "callee": "map.js@4394..4511",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "internal/consoleFunc.js@177..211",
+      "syntax": "identifier",
+      "callee": "internal/consoleFunc.js@214..309",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@1023..1033",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@1155..1171",
+      "syntax": "identifier",
+      "callee": "every.js@3413..3424",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@1155..1171",
+      "syntax": "identifier",
+      "callee": "some.js@3659..3669",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@179..213",
+      "syntax": "identifier",
+      "callee": "internal/createTester.js@316..411",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@279..313",
+      "syntax": "identifier",
+      "callee": "internal/createTester.js@316..411",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@582..617",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@627..1184",
+      "syntax": "identifier",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@797..810",
+      "syntax": "identifier",
+      "callee": "detect.js@3080..3092",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@797..810",
+      "syntax": "identifier",
+      "callee": "every.js@3398..3411",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@901..923",
+      "syntax": "identifier",
+      "callee": "detect.js@3094..3113",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/createTester.js@952..987",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@1036..1073",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@440..529",
+      "callee_name": "isAsyncGenerator"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@1183..1219",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@531..624",
+      "callee_name": "isAsyncIterable"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@131..160",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@628..723",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@1364..1392",
+      "syntax": "expression",
+      "callee": "internal/iterator.js@1164..1426",
+      "callee_name": "createIterator"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@1681..1694",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@1930..1944",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@1997..2008",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@2043..2571",
+      "callee_name": "replenish"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2168..2178",
+      "syntax": "identifier",
+      "callee": "internal/iterator.js@521..606",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2168..2178",
+      "syntax": "identifier",
+      "callee": "internal/iterator.js@976..1159",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@223..256",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@628..723",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2314..2328",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2444..2517",
+      "syntax": "identifier",
+      "callee": "internal/map.js@507..675",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2444..2517",
+      "syntax": "identifier",
+      "callee": "internal/parallel.js@639..888",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2444..2517",
+      "syntax": "identifier",
+      "callee": "internal/withoutIndex.js@161..214",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2444..2517",
+      "syntax": "identifier",
+      "callee": "mapValuesLimit.js@1804..1986",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2444..2517",
+      "syntax": "identifier",
+      "callee": "reduce.js@4633..4758",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2475..2516",
+      "syntax": "expression",
+      "callee": "internal/onlyOnce.js@110..326",
+      "callee_name": "onlyOnce"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@2581..2592",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@2043..2571",
+      "callee_name": "replenish"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@319..352",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@628..723",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@484..525",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@628..723",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@591..625",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@628..723",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/eachOfLimit.js@815..844",
+      "syntax": "expression",
+      "callee": "internal/once.js@106..328",
+      "callee_name": "once"
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@1442..1474",
+      "syntax": "expression",
+      "callee": "internal/isArrayLike.js@113..245",
+      "callee_name": "isArrayLike"
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@1517..1583",
+      "syntax": "identifier",
+      "callee": "internal/filter.js@415..899",
+      "callee_name": "filterArray"
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@1538..1572",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@179..215",
+      "syntax": "identifier",
+      "callee": "internal/filter.js@318..413",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@281..315",
+      "syntax": "identifier",
+      "callee": "internal/filter.js@318..413",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@520..896",
+      "syntax": "identifier",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@564..663",
+      "syntax": "identifier",
+      "callee": "internal/reject.js@550..647",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/filter.js@640..651",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/initialParams.js@214..243",
+      "syntax": "member",
+      "callee": "asyncify.js@2877..3266",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/initialParams.js@214..243",
+      "syntax": "member",
+      "callee": "memoize.js@2234..2955",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/initialParams.js@214..243",
+      "syntax": "member",
+      "callee": "reflect.js@1714..2228",
+      "callee_name": "reflectOn"
+    },
+    {
+      "kind": "call",
+      "site": "internal/initialParams.js@214..243",
+      "syntax": "member",
+      "callee": "timeout.js@1994..2717",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/iterator.js@1204..1236",
+      "syntax": "expression",
+      "callee": "internal/isArrayLike.js@113..245",
+      "callee_name": "isArrayLike"
+    },
+    {
+      "kind": "call",
+      "site": "internal/iterator.js@1255..1280",
+      "syntax": "identifier",
+      "callee": "internal/iterator.js@430..609",
+      "callee_name": "createArrayIterator"
+    },
+    {
+      "kind": "call",
+      "site": "internal/iterator.js@1308..1340",
+      "syntax": "expression",
+      "callee": "internal/getIterator.js@101..181",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "internal/iterator.js@1397..1423",
+      "syntax": "identifier",
+      "callee": "internal/iterator.js@839..1162",
+      "callee_name": "createObjectIterator"
+    },
+    {
+      "kind": "call",
+      "site": "internal/iterator.js@186..222",
+      "syntax": "identifier",
+      "callee": "internal/iterator.js@333..428",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/iterator.js@294..330",
+      "syntax": "identifier",
+      "callee": "internal/iterator.js@333..428",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@175..209",
+      "syntax": "identifier",
+      "callee": "internal/map.js@212..307",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@447..481",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@495..724",
+      "syntax": "identifier",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@495..724",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@765..2599",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@570..668",
+      "syntax": "identifier",
+      "callee": "asyncify.js@2637..2828",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@570..668",
+      "syntax": "identifier",
+      "callee": "concatLimit.js@1575..1733",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@570..668",
+      "syntax": "identifier",
+      "callee": "groupByLimit.js@1587..1749",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@570..668",
+      "syntax": "identifier",
+      "callee": "internal/applyEach.js@296..402",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@570..668",
+      "syntax": "identifier",
+      "callee": "sortBy.js@5666..5832",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@645..656",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@694..716",
+      "syntax": "identifier",
+      "callee": "concatLimit.js@1735..1996",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@694..716",
+      "syntax": "identifier",
+      "callee": "groupByLimit.js@1751..2347",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@694..716",
+      "syntax": "identifier",
+      "callee": "internal/awaitify.js@554..699",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/map.js@694..716",
+      "syntax": "identifier",
+      "callee": "sortBy.js@5834..5966",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "internal/createTester.js@1062..1183",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "internal/filter.js@672..895",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "internal/map.js@677..723",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "internal/parallel.js@890..919",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "mapValuesLimit.js@1988..2016",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "reduce.js@4760..4786",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "seq.js@2518..2555",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/once.js@243..267",
+      "syntax": "member",
+      "callee": "tryEach.js@2420..2449",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/onlyOnce.js@292..316",
+      "syntax": "member",
+      "callee": "auto.js@9708..10464",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/onlyOnce.js@292..316",
+      "syntax": "member",
+      "callee": "eachOf.js@1226..1540",
+      "callee_name": "iteratorCallback"
+    },
+    {
+      "kind": "call",
+      "site": "internal/onlyOnce.js@292..316",
+      "syntax": "member",
+      "callee": "internal/eachOfLimit.js@1513..2033",
+      "callee_name": "iterateeCallback"
+    },
+    {
+      "kind": "call",
+      "site": "internal/onlyOnce.js@292..316",
+      "syntax": "member",
+      "callee": "internal/queue.js@3018..3803",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/onlyOnce.js@292..316",
+      "syntax": "member",
+      "callee": "waterfall.js@2897..3093",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@152..188",
+      "syntax": "identifier",
+      "callee": "internal/parallel.js@387..482",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@254..288",
+      "syntax": "identifier",
+      "callee": "internal/parallel.js@387..482",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@351..384",
+      "syntax": "identifier",
+      "callee": "internal/parallel.js@387..482",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@502..927",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@575..608",
+      "syntax": "expression",
+      "callee": "internal/isArrayLike.js@113..245",
+      "callee_name": "isArrayLike"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@625..920",
+      "syntax": "identifier",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@625..920",
+      "syntax": "identifier",
+      "callee": "internal/eachOfLimit.js@765..2599",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@672..702",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@672..881",
+      "syntax": "expression",
+      "callee": "internal/initialParams.js@128..250",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/parallel.js@858..869",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@168..201",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@544..639",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@2341..2427",
+      "syntax": "member",
+      "callee": "internal/queue.js@4532..4658",
+      "callee_name": "_createTaskItem"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@2341..2427",
+      "syntax": "member",
+      "callee": "priorityQueue.js@338..468",
+      "callee_name": "_createTaskItem"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@2524..2543",
+      "syntax": "member",
+      "callee": "internal/DoublyLinkedList.js@1424..1528",
+      "callee_name": "push"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@2524..2543",
+      "syntax": "member",
+      "callee": "internal/Heap.js@1216..1350",
+      "callee_name": "push"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@2644..2768",
+      "syntax": "expression",
+      "callee": "internal/setImmediate.js@564..605",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@2741..2752",
+      "syntax": "member",
+      "callee": "internal/queue.js@6162..7313",
+      "callee_name": "process"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@276..313",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@544..639",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@3428..3455",
+      "syntax": "member",
+      "callee": "internal/queue.js@2027..2320",
+      "callee_name": "promiseCallback"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@3654..3676",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1621..1721",
+      "callee_name": "trigger"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@3709..3717",
+      "syntax": "member",
+      "callee": "internal/queue.js@7518..7591",
+      "callee_name": "idle"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@3737..3753",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1621..1721",
+      "callee_name": "trigger"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@3781..3792",
+      "syntax": "member",
+      "callee": "internal/queue.js@6162..7313",
+      "callee_name": "process"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@400..441",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@544..639",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@4384..4393",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1383..1615",
+      "callee_name": "off"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@4403..4420",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1088..1160",
+      "callee_name": "on"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@4490..4522",
+      "syntax": "new",
+      "callee": "internal/DoublyLinkedList.js@401..485",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@4958..4975",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@3816..4077",
+      "callee_name": "_maybeDrain"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@5026..5064",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1764..2969",
+      "callee_name": "_insert"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@507..541",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@544..639",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@5100..5137",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1764..2969",
+      "callee_name": "_insert"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@6743..6759",
+      "syntax": "member",
+      "callee": "internal/DoublyLinkedList.js@1534..1605",
+      "callee_name": "shift"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@6743..6759",
+      "syntax": "member",
+      "callee": "internal/Heap.js@1420..1595",
+      "callee_name": "shift"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@7003..7019",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1621..1721",
+      "callee_name": "trigger"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@7112..7132",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@1621..1721",
+      "callee_name": "trigger"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@7178..7219",
+      "syntax": "expression",
+      "callee": "internal/onlyOnce.js@110..326",
+      "callee_name": "onlyOnce"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@7202..7218",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@2975..3810",
+      "callee_name": "_createCB"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@7237..7254",
+      "syntax": "identifier",
+      "callee": "queue.js@218..271",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@8030..8054",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@4103..4427",
+      "callee_name": "eventMethod"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@8137..8163",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@4103..4427",
+      "callee_name": "eventMethod"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@8240..8260",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@4103..4427",
+      "callee_name": "eventMethod"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@8337..8357",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@4103..4427",
+      "callee_name": "eventMethod"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@8434..8454",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@4103..4427",
+      "callee_name": "eventMethod"
+    },
+    {
+      "kind": "call",
+      "site": "internal/queue.js@867..899",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/reject.js@163..194",
+      "syntax": "identifier",
+      "callee": "internal/reject.js@297..392",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/reject.js@260..294",
+      "syntax": "identifier",
+      "callee": "internal/reject.js@297..392",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/reject.js@467..502",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/reject.js@515..658",
+      "syntax": "expression",
+      "callee": "internal/filter.js@1372..1586",
+      "callee_name": "_filter"
+    },
+    {
+      "kind": "call",
+      "site": "internal/reject.js@617..628",
+      "syntax": "identifier",
+      "callee": "internal/filter.js@576..662",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/setImmediate.js@593..604",
+      "syntax": "identifier",
+      "callee": "ensureAsync.js@2099..2127",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/setImmediate.js@593..604",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@2672..2767",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/setImmediate.js@593..604",
+      "syntax": "identifier",
+      "callee": "memoize.js@2358..2392",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/setImmediate.js@844..856",
+      "syntax": "identifier",
+      "callee": "internal/setImmediate.js@530..608",
+      "callee_name": "wrap"
+    },
+    {
+      "kind": "call",
+      "site": "internal/withoutIndex.js@189..214",
+      "syntax": "identifier",
+      "callee": "tryEach.js@2074..2418",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "internal/wrapAsync.js@226..259",
+      "syntax": "identifier",
+      "callee": "internal/wrapAsync.js@262..357",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "internal/wrapAsync.js@746..762",
+      "syntax": "identifier",
+      "callee": "internal/wrapAsync.js@359..438",
+      "callee_name": "isAsync"
+    },
+    {
+      "kind": "call",
+      "site": "internal/wrapAsync.js@765..797",
+      "syntax": "expression",
+      "callee": "asyncify.js@2555..3270",
+      "callee_name": "asyncify"
+    },
+    {
+      "kind": "call",
+      "site": "log.js@1128..1161",
+      "syntax": "expression",
+      "callee": "internal/consoleFunc.js@311..885",
+      "callee_name": "consoleFunc"
+    },
+    {
+      "kind": "call",
+      "site": "log.js@161..197",
+      "syntax": "identifier",
+      "callee": "log.js@200..295",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "map.js@138..167",
+      "syntax": "identifier",
+      "callee": "map.js@363..458",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "map.js@224..255",
+      "syntax": "identifier",
+      "callee": "map.js@363..458",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "map.js@327..360",
+      "syntax": "identifier",
+      "callee": "map.js@363..458",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "map.js@4446..4508",
+      "syntax": "expression",
+      "callee": "internal/map.js@309..727",
+      "callee_name": "_asyncMap"
+    },
+    {
+      "kind": "call",
+      "site": "map.js@4530..4561",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "mapLimit.js@138..167",
+      "syntax": "identifier",
+      "callee": "mapLimit.js@392..487",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapLimit.js@1448..1527",
+      "syntax": "expression",
+      "callee": "internal/map.js@309..727",
+      "callee_name": "_asyncMap"
+    },
+    {
+      "kind": "call",
+      "site": "mapLimit.js@1467..1500",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@743..2602",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "mapLimit.js@1549..1585",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "mapLimit.js@248..284",
+      "syntax": "identifier",
+      "callee": "mapLimit.js@392..487",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapLimit.js@356..389",
+      "syntax": "identifier",
+      "callee": "mapLimit.js@392..487",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapSeries.js@1353..1421",
+      "syntax": "expression",
+      "callee": "internal/map.js@309..727",
+      "callee_name": "_asyncMap"
+    },
+    {
+      "kind": "call",
+      "site": "mapSeries.js@138..167",
+      "syntax": "identifier",
+      "callee": "mapSeries.js@387..482",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapSeries.js@1443..1480",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "mapSeries.js@242..279",
+      "syntax": "identifier",
+      "callee": "mapSeries.js@387..482",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapSeries.js@351..384",
+      "syntax": "identifier",
+      "callee": "mapSeries.js@387..482",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapValues.js@190..229",
+      "syntax": "identifier",
+      "callee": "mapValues.js@232..327",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapValues.js@4489..4553",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@161..197",
+      "syntax": "identifier",
+      "callee": "mapValuesLimit.js@503..598",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@1646..1675",
+      "syntax": "expression",
+      "callee": "internal/once.js@106..328",
+      "callee_name": "once"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@1718..1752",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@1765..1798",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@743..2602",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@1765..2017",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@765..2599",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@1958..1967",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@1995..2016",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@2040..2082",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@269..302",
+      "syntax": "identifier",
+      "callee": "mapValuesLimit.js@503..598",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@362..391",
+      "syntax": "identifier",
+      "callee": "mapValuesLimit.js@503..598",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesLimit.js@466..500",
+      "syntax": "identifier",
+      "callee": "mapValuesLimit.js@503..598",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "mapValuesSeries.js@196..235",
+      "syntax": "identifier",
+      "callee": "mapValuesSeries.js@238..333",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "memoize.js@191..228",
+      "syntax": "identifier",
+      "callee": "memoize.js@465..560",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "memoize.js@2156..2184",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "memoize.js@2205..2956",
+      "syntax": "expression",
+      "callee": "internal/initialParams.js@101..253",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "memoize.js@2274..2289",
+      "syntax": "identifier",
+      "callee": "memoize.js@2058..2064",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "memoize.js@2330..2393",
+      "syntax": "expression",
+      "callee": "internal/setImmediate.js@564..605",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "memoize.js@315..353",
+      "syntax": "identifier",
+      "callee": "memoize.js@465..560",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "memoize.js@428..462",
+      "syntax": "identifier",
+      "callee": "memoize.js@465..560",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "nextTick.js@1409..1440",
+      "syntax": "expression",
+      "callee": "internal/setImmediate.js@530..608",
+      "callee_name": "wrap"
+    },
+    {
+      "kind": "call",
+      "site": "parallel.js@165..196",
+      "syntax": "identifier",
+      "callee": "parallel.js@306..401",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "parallel.js@269..303",
+      "syntax": "identifier",
+      "callee": "parallel.js@306..401",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "parallel.js@5479..5537",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "parallelLimit.js@1399..1474",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "parallelLimit.js@1423..1456",
+      "syntax": "expression",
+      "callee": "internal/eachOfLimit.js@743..2602",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "parallelLimit.js@194..230",
+      "syntax": "identifier",
+      "callee": "parallelLimit.js@338..433",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "parallelLimit.js@302..335",
+      "syntax": "identifier",
+      "callee": "parallelLimit.js@338..433",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "priorityQueue.js@1190..1220",
+      "syntax": "identifier",
+      "callee": "priorityQueue.js@1312..1407",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "priorityQueue.js@1280..1309",
+      "syntax": "identifier",
+      "callee": "priorityQueue.js@1312..1407",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "priorityQueue.js@179..220",
+      "syntax": "expression",
+      "callee": "queue.js@101..291",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "priorityQueue.js@292..312",
+      "syntax": "new",
+      "callee": "internal/Heap.js@237..332",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "priorityQueue.js@845..892",
+      "syntax": "identifier",
+      "callee": "internal/queue.js@4876..5148",
+      "callee_name": "push"
+    },
+    {
+      "kind": "call",
+      "site": "priorityQueue.js@850..881",
+      "syntax": "identifier",
+      "callee": "priorityQueue.js@475..703",
+      "callee_name": "createDataItems"
+    },
+    {
+      "kind": "call",
+      "site": "queue.js@152..184",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "queue.js@197..288",
+      "syntax": "expression",
+      "callee": "internal/queue.js@641..8488",
+      "callee_name": "queue"
+    },
+    {
+      "kind": "call",
+      "site": "queue.js@354..384",
+      "syntax": "identifier",
+      "callee": "queue.js@496..591",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "queue.js@459..493",
+      "syntax": "identifier",
+      "callee": "queue.js@496..591",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "race.js@140..169",
+      "syntax": "identifier",
+      "callee": "race.js@386..481",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "race.js@1740..1769",
+      "syntax": "expression",
+      "callee": "internal/once.js@106..328",
+      "callee_name": "once"
+    },
+    {
+      "kind": "call",
+      "site": "race.js@1992..2026",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "race.js@2065..2097",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "race.js@244..278",
+      "syntax": "identifier",
+      "callee": "race.js@386..481",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "race.js@350..383",
+      "syntax": "identifier",
+      "callee": "race.js@386..481",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@155..192",
+      "syntax": "identifier",
+      "callee": "reduce.js@498..593",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@252..281",
+      "syntax": "identifier",
+      "callee": "reduce.js@498..593",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@356..390",
+      "syntax": "identifier",
+      "callee": "reduce.js@498..593",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@4501..4530",
+      "syntax": "expression",
+      "callee": "internal/once.js@106..328",
+      "callee_name": "once"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@4552..4586",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@4599..4787",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@462..495",
+      "syntax": "identifier",
+      "callee": "reduce.js@498..593",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@4661..4751",
+      "syntax": "identifier",
+      "callee": "seq.js@2358..2516",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@4728..4739",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@4767..4786",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "reduce.js@4809..4843",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "reduceRight.js@168..199",
+      "syntax": "identifier",
+      "callee": "reduceRight.js@202..297",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reflect.js@1644..1672",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "reflect.js@1685..2229",
+      "syntax": "expression",
+      "callee": "internal/initialParams.js@101..253",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "reflect.js@194..232",
+      "syntax": "identifier",
+      "callee": "reflect.js@344..439",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reflect.js@2141..2170",
+      "syntax": "identifier",
+      "callee": "internal/parallel.js@703..880",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "reflect.js@307..341",
+      "syntax": "identifier",
+      "callee": "reflect.js@344..439",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reflectAll.js@170..202",
+      "syntax": "identifier",
+      "callee": "reflectAll.js@205..300",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reject.js@147..179",
+      "syntax": "identifier",
+      "callee": "reject.js@375..470",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reject.js@236..267",
+      "syntax": "identifier",
+      "callee": "reject.js@375..470",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "reject.js@2520..2585",
+      "syntax": "expression",
+      "callee": "internal/reject.js@394..661",
+      "callee_name": "reject"
+    },
+    {
+      "kind": "call",
+      "site": "reject.js@2607..2641",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "reject.js@339..372",
+      "syntax": "identifier",
+      "callee": "reject.js@375..470",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "rejectLimit.js@147..179",
+      "syntax": "identifier",
+      "callee": "rejectLimit.js@404..499",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "rejectLimit.js@1504..1543",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "rejectLimit.js@260..296",
+      "syntax": "identifier",
+      "callee": "rejectLimit.js@404..499",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "rejectLimit.js@368..401",
+      "syntax": "identifier",
+      "callee": "rejectLimit.js@404..499",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "rejectSeries.js@1395..1435",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "rejectSeries.js@147..179",
+      "syntax": "identifier",
+      "callee": "rejectSeries.js@399..494",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "rejectSeries.js@254..291",
+      "syntax": "identifier",
+      "callee": "rejectSeries.js@399..494",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "rejectSeries.js@363..396",
+      "syntax": "identifier",
+      "callee": "rejectSeries.js@399..494",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "retry.js@180..214",
+      "syntax": "identifier",
+      "callee": "retry.js@283..378",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "retry.js@4064..4090",
+      "syntax": "identifier",
+      "callee": "retry.js@380..462",
+      "callee_name": "constant"
+    },
+    {
+      "kind": "call",
+      "site": "retry.js@4271..4296",
+      "syntax": "identifier",
+      "callee": "retry.js@5031..5490",
+      "callee_name": "parseTimes"
+    },
+    {
+      "kind": "call",
+      "site": "retry.js@4500..4530",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "retry.js@4824..4857",
+      "syntax": "member",
+      "callee": "retry.js@418..459",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "retry.js@4958..4972",
+      "syntax": "identifier",
+      "callee": "retry.js@4558..4952",
+      "callee_name": "retryAttempt"
+    },
+    {
+      "kind": "call",
+      "site": "retry.js@5217..5258",
+      "syntax": "identifier",
+      "callee": "retry.js@380..462",
+      "callee_name": "constant"
+    },
+    {
+      "kind": "call",
+      "site": "retryable.js@163..193",
+      "syntax": "identifier",
+      "callee": "retryable.js@496..591",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "retryable.js@280..318",
+      "syntax": "identifier",
+      "callee": "retryable.js@496..591",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "retryable.js@393..427",
+      "syntax": "identifier",
+      "callee": "retryable.js@496..591",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "seq.js@160..191",
+      "syntax": "identifier",
+      "callee": "seq.js@369..464",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "seq.js@2318..2556",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "seq.js@2467..2488",
+      "syntax": "identifier",
+      "callee": "reduce.js@4680..4750",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "seq.js@266..300",
+      "syntax": "identifier",
+      "callee": "seq.js@369..464",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "series.js@179..213",
+      "syntax": "identifier",
+      "callee": "series.js@328..423",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "series.js@288..325",
+      "syntax": "identifier",
+      "callee": "series.js@328..423",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "series.js@5722..5786",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "setImmediate.js@164..201",
+      "syntax": "identifier",
+      "callee": "setImmediate.js@204..299",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "some.js@164..201",
+      "syntax": "identifier",
+      "callee": "some.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "some.js@258..289",
+      "syntax": "identifier",
+      "callee": "some.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "some.js@361..394",
+      "syntax": "identifier",
+      "callee": "some.js@397..492",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "some.js@3622..3670",
+      "syntax": "expression",
+      "callee": "internal/createTester.js@413..1194",
+      "callee_name": "_createTester"
+    },
+    {
+      "kind": "call",
+      "site": "some.js@3622..3714",
+      "syntax": "expression",
+      "callee": "internal/createTester.js@467..1191",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "some.js@3736..3768",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "someLimit.js@164..201",
+      "syntax": "identifier",
+      "callee": "someLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "someLimit.js@1714..1751",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "someLimit.js@282..318",
+      "syntax": "identifier",
+      "callee": "someLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "someLimit.js@390..423",
+      "syntax": "identifier",
+      "callee": "someLimit.js@426..521",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "someSeries.js@1607..1645",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "someSeries.js@164..201",
+      "syntax": "identifier",
+      "callee": "someSeries.js@421..516",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "someSeries.js@276..313",
+      "syntax": "identifier",
+      "callee": "someSeries.js@421..516",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "someSeries.js@385..418",
+      "syntax": "identifier",
+      "callee": "someSeries.js@421..516",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "sortBy.js@128..156",
+      "syntax": "identifier",
+      "callee": "sortBy.js@373..468",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "sortBy.js@231..265",
+      "syntax": "identifier",
+      "callee": "sortBy.js@373..468",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "sortBy.js@337..370",
+      "syntax": "identifier",
+      "callee": "sortBy.js@373..468",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "sortBy.js@5594..5628",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "sortBy.js@5641..5967",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "sortBy.js@5778..5813",
+      "syntax": "identifier",
+      "callee": "internal/map.js@587..667",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "sortBy.js@6141..6175",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "timeout.js@1918..1951",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "timeout.js@194..232",
+      "syntax": "identifier",
+      "callee": "timeout.js@344..439",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "timeout.js@1965..2718",
+      "syntax": "expression",
+      "callee": "internal/initialParams.js@101..253",
+      "callee_name": "default"
+    },
+    {
+      "kind": "call",
+      "site": "timeout.js@307..341",
+      "syntax": "identifier",
+      "callee": "timeout.js@344..439",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "times.js@1392..1450",
+      "syntax": "expression",
+      "callee": "timesLimit.js@1211..1417",
+      "callee_name": "timesLimit"
+    },
+    {
+      "kind": "call",
+      "site": "times.js@174..209",
+      "syntax": "identifier",
+      "callee": "times.js@212..307",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "timesLimit.js@1287..1321",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "timesLimit.js@1334..1414",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "timesLimit.js@1358..1385",
+      "syntax": "expression",
+      "callee": "internal/range.js@107..236",
+      "callee_name": "range"
+    },
+    {
+      "kind": "call",
+      "site": "timesLimit.js@173..206",
+      "syntax": "identifier",
+      "callee": "timesLimit.js@411..506",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "timesLimit.js@269..299",
+      "syntax": "identifier",
+      "callee": "timesLimit.js@411..506",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "timesLimit.js@374..408",
+      "syntax": "identifier",
+      "callee": "timesLimit.js@411..506",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "timesSeries.js@180..215",
+      "syntax": "identifier",
+      "callee": "timesSeries.js@218..313",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "transform.js@166..197",
+      "syntax": "identifier",
+      "callee": "transform.js@464..559",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "transform.js@257..286",
+      "syntax": "identifier",
+      "callee": "transform.js@464..559",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "transform.js@361..395",
+      "syntax": "identifier",
+      "callee": "transform.js@464..559",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "tryEach.js@149..184",
+      "syntax": "identifier",
+      "callee": "tryEach.js@401..496",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "tryEach.js@2041..2450",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "tryEach.js@2102..2132",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "tryEach.js@2376..2399",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "tryEach.js@2473..2505",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "tryEach.js@259..293",
+      "syntax": "identifier",
+      "callee": "tryEach.js@401..496",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "tryEach.js@365..398",
+      "syntax": "identifier",
+      "callee": "tryEach.js@401..496",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "until.js@162..193",
+      "syntax": "identifier",
+      "callee": "until.js@305..400",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "until.js@1913..1943",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "until.js@1956..2043",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@334..757",
+      "callee_name": "awaitable"
+    },
+    {
+      "kind": "call",
+      "site": "until.js@2006..2021",
+      "syntax": "identifier",
+      "callee": "whilst.js@2040..2222",
+      "callee_name": "check"
+    },
+    {
+      "kind": "call",
+      "site": "until.js@268..302",
+      "syntax": "identifier",
+      "callee": "until.js@305..400",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@140..169",
+      "syntax": "identifier",
+      "callee": "waterfall.js@491..586",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@241..274",
+      "syntax": "identifier",
+      "callee": "waterfall.js@491..586",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@2520..2549",
+      "syntax": "expression",
+      "callee": "internal/once.js@106..328",
+      "callee_name": "once"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@2786..2830",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@2854..2883",
+      "syntax": "expression",
+      "callee": "internal/onlyOnce.js@110..326",
+      "callee_name": "onlyOnce"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@3030..3052",
+      "syntax": "identifier",
+      "callee": "internal/once.js@130..274",
+      "callee_name": "wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@3072..3086",
+      "syntax": "identifier",
+      "callee": "waterfall.js@2741..2891",
+      "callee_name": "nextTask"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@3099..3111",
+      "syntax": "identifier",
+      "callee": "waterfall.js@2741..2891",
+      "callee_name": "nextTask"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@3134..3168",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@349..383",
+      "syntax": "identifier",
+      "callee": "waterfall.js@491..586",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "waterfall.js@455..488",
+      "syntax": "identifier",
+      "callee": "waterfall.js@491..586",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@152..185",
+      "syntax": "identifier",
+      "callee": "whilst.js@402..497",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@1719..1752",
+      "syntax": "expression",
+      "callee": "internal/onlyOnce.js@110..326",
+      "callee_name": "onlyOnce"
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@1768..1802",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@1820..1850",
+      "syntax": "expression",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@2015..2027",
+      "syntax": "identifier",
+      "callee": "until.js@1978..2022",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@2170..2196",
+      "syntax": "identifier",
+      "callee": "internal/onlyOnce.js@145..323",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@2235..2247",
+      "syntax": "identifier",
+      "callee": "until.js@1978..2022",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@2269..2303",
+      "syntax": "expression",
+      "callee": "internal/awaitify.js@199..782",
+      "callee_name": "awaitify"
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@260..294",
+      "syntax": "identifier",
+      "callee": "whilst.js@402..497",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "call",
+      "site": "whilst.js@366..399",
+      "syntax": "identifier",
+      "callee": "whilst.js@402..497",
+      "callee_name": "_interopRequireDefault"
+    },
+    {
+      "kind": "callback",
+      "site": "auto.js@11103..11299",
+      "syntax": "member",
+      "callee": "auto.js@11138..11298",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "auto.js@11531..11732",
+      "syntax": "member",
+      "callee": "auto.js@11558..11731",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "auto.js@7684..8737",
+      "syntax": "member",
+      "callee": "auto.js@7711..8736",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "auto.js@8253..8729",
+      "syntax": "member",
+      "callee": "auto.js@8274..8728",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "auto.js@9526..9559",
+      "syntax": "member",
+      "callee": "auto.js@9548..9558",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "autoInject.js@1828..1914",
+      "syntax": "member",
+      "callee": "autoInject.js@1876..1913",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "autoInject.js@5859..7009",
+      "syntax": "member",
+      "callee": "autoInject.js@5886..7008",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "autoInject.js@6866..6899",
+      "syntax": "member",
+      "callee": "autoInject.js@6877..6898",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "internal/awaitify.js@489..750",
+      "syntax": "new",
+      "callee": "internal/awaitify.js@501..749",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "internal/queue.js@1664..1714",
+      "syntax": "member",
+      "callee": "internal/queue.js@1686..1713",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "internal/queue.js@2842..2952",
+      "syntax": "new",
+      "callee": "internal/queue.js@2854..2951",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "internal/queue.js@5008..5065",
+      "syntax": "member",
+      "callee": "internal/queue.js@5017..5064",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "seq.js@2027..2061",
+      "syntax": "member",
+      "callee": "internal/wrapAsync.js@626..810",
+      "callee_name": "wrapAsync"
+    },
+    {
+      "kind": "callback",
+      "site": "sortBy.js@5916..5940",
+      "syntax": "member",
+      "callee": "sortBy.js@5974..6120",
+      "callee_name": "comparator"
+    },
+    {
+      "kind": "callback",
+      "site": "sortBy.js@5916..5958",
+      "syntax": "member",
+      "callee": "sortBy.js@5945..5957",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "internal/queue.js@6493",
+      "syntax": "implicit",
+      "callee": "internal/Heap.js@338..391",
+      "callee_name": "length"
+    },
+    {
+      "kind": "implicit",
+      "site": "internal/queue.js@6599",
+      "syntax": "implicit",
+      "callee": "internal/Heap.js@338..391",
+      "callee_name": "length"
+    },
+    {
+      "kind": "implicit",
+      "site": "internal/queue.js@6967",
+      "syntax": "implicit",
+      "callee": "internal/Heap.js@338..391",
+      "callee_name": "length"
+    },
+    {
+      "kind": "implicit",
+      "site": "internal/queue.js@7555",
+      "syntax": "implicit",
+      "callee": "internal/Heap.js@338..391",
+      "callee_name": "length"
+    }
+  ]
+}

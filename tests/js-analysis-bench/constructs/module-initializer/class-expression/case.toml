@@ -1,0 +1,3 @@
+construct = "module-initializer"
+held_out = true
+description = "An exported constant holds a class expression whose methods call a module function and each other through this."

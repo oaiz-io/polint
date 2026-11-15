@@ -1,0 +1,20 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "dayjs.min.js": {
+      "system": "cjs",
+      "names": [
+        "Ls",
+        "en",
+        "extend",
+        "isDayjs",
+        "locale",
+        "p",
+        "unix"
+      ],
+      "whole_value": "function"
+    }
+  }
+}
