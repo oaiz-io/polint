@@ -49,6 +49,7 @@ pub fn derive_ts_js_type_value_alias(db: &impl AnalysisHost) -> TypeValueAliasOu
         .iter()
         .map(|place| (place.id, place))
         .collect::<BTreeMap<_, _>>();
+    let ts_places_by_function = ts_places_by_function(&place_by_id);
     let file_by_id = db
         .files()
         .iter()
@@ -109,7 +110,7 @@ pub fn derive_ts_js_type_value_alias(db: &impl AnalysisHost) -> TypeValueAliasOu
             interner,
             operation,
             &body_by_id,
-            &place_by_id,
+            &ts_places_by_function,
             &file_by_id,
             &mut types,
             &mut narrowed,
@@ -831,11 +832,26 @@ fn collect_module_namespace_values(
     }
 }
 
+/// TS-family places grouped by their function, each group in place-id order.
+fn ts_places_by_function<'db>(
+    place_by_id: &BTreeMap<PlaceId, &'db PlaceFact>,
+) -> BTreeMap<FunctionId, Vec<&'db PlaceFact>> {
+    let mut grouped = BTreeMap::<FunctionId, Vec<&PlaceFact>>::new();
+    for place in place_by_id.values() {
+        if let Some(function) = place.function
+            && place.language.is_ts_family()
+        {
+            grouped.entry(function).or_default().push(place);
+        }
+    }
+    grouped
+}
+
 fn collect_narrowing_for_operation(
     interner: &crate::internal_core::StableKeyInterner,
     operation: &MirOperation,
     body_by_id: &BTreeMap<crate::analysis_neutral::ids::MirBodyId, &MirBody>,
-    place_by_id: &BTreeMap<PlaceId, &PlaceFact>,
+    ts_places_by_function: &BTreeMap<FunctionId, Vec<&PlaceFact>>,
     file_by_id: &BTreeMap<FileId, &SourceFile>,
     types: &mut Vec<TypeFact>,
     narrowed: &mut Vec<NarrowedTypeFact>,
@@ -855,10 +871,10 @@ fn collect_narrowing_for_operation(
     let Some(shape) = narrowing_shape(evidence) else {
         return;
     };
-    let candidate_places = place_by_id
-        .values()
-        .filter(|place| place.language.is_ts_family())
-        .filter(|place| place.function == Some(body.function))
+    let candidate_places = ts_places_by_function
+        .get(&body.function)
+        .into_iter()
+        .flatten()
         .filter(|place| evidence_mentions_place(evidence, place))
         .copied()
         .collect::<Vec<_>>();
