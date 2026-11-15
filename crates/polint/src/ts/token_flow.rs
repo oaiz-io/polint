@@ -6,7 +6,10 @@ use crate::analysis_api::{FactFamily, SourceFile};
 use crate::analysis_neutral::stable_key::semantic_stable_key;
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
-use oxc_ast::ast::{Argument, BindingPattern, Expression, Function, Statement, VariableDeclarator};
+use oxc_ast::ast::{
+    Argument, BindingPattern, Expression, Function, FunctionType, Statement,
+    VariableDeclarationKind, VariableDeclarator,
+};
 use oxc_semantic::{AstNodes, NodeId, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
 
@@ -98,6 +101,7 @@ pub fn collect_ts_token_source_flows_from_nodes(
     let source = file.source.as_ref();
     let mut index = TsTokenSourceFlowIndex::from_inventory(interner, inventory, nodes);
     index.collect_written_names(nodes);
+    index.collect_parameter_redeclarations(nodes);
     index.collect_parameter_calls(source, nodes);
     index.collect_local_alias_assignments(nodes);
     index.collect_returned_functions(nodes);
@@ -170,6 +174,49 @@ impl TsTokenSourceFlowIndex {
                 ) {
                     self.written_names_by_function
                         .insert((ancestor_id, identifier.name.to_string()));
+                }
+            }
+        }
+    }
+
+    /// Marks a parameter as written in its function when the function's body
+    /// redeclares it with a value: a hoisted function declaration of the same
+    /// name, a `var` with an initializer, or a `var` in a `for…in` / `for…of`
+    /// head. A bare `var name;` keeps the parameter's value.
+    fn collect_parameter_redeclarations(&mut self, nodes: &AstNodes<'_>) {
+        for (node_id, node) in nodes.iter_enumerated() {
+            let names = match node.kind() {
+                AstKind::Function(function)
+                    if function.r#type == FunctionType::FunctionDeclaration =>
+                {
+                    function.id.iter().map(|id| id.name.to_string()).collect()
+                }
+                AstKind::VariableDeclarator(declarator)
+                    if declarator.kind == VariableDeclarationKind::Var
+                        && (declarator.init.is_some()
+                            || matches!(
+                                nodes.ancestor_kinds(node_id).nth(1),
+                                Some(AstKind::ForInStatement(_) | AstKind::ForOfStatement(_))
+                            )) =>
+                {
+                    declarator
+                        .id
+                        .get_binding_identifiers()
+                        .into_iter()
+                        .map(|id| id.name.to_string())
+                        .collect::<Vec<_>>()
+                }
+                _ => continue,
+            };
+            let Some(function) = enclosing_function_node(nodes, node_id) else {
+                continue;
+            };
+            let Some(parameters) = self.parameter_name_by_function.get(&function) else {
+                continue;
+            };
+            for name in names {
+                if parameters.contains(&name) {
+                    self.written_names_by_function.insert((function, name));
                 }
             }
         }

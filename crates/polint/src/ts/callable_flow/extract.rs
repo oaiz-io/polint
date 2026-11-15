@@ -8,7 +8,8 @@ use oxc_ast::ast::{
     BindingPattern, CallExpression, Class, ClassElement, Declaration, ExportDefaultDeclarationKind,
     Expression, ForStatementLeft, FunctionBody, ImportDeclarationSpecifier, LogicalOperator,
     MethodDefinition, MethodDefinitionKind, ModuleExportName, ObjectProperty, ObjectPropertyKind,
-    Program, PropertyKey, PropertyKind, Statement, VariableDeclaration, VariableDeclarator,
+    Program, PropertyKey, PropertyKind, Statement, VariableDeclaration, VariableDeclarationKind,
+    VariableDeclarator,
 };
 use oxc_span::GetSpan;
 
@@ -1985,6 +1986,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             Statement::ForOfStatement(statement) => {
                 let iterable_targets =
                     self.targets_for_iterable(&statement.right, env, statement.span.start);
+                forget_var_loop_head(&statement.left, env);
                 self.collect_for_of_bindings(
                     &statement.left,
                     &iterable_targets,
@@ -2023,6 +2025,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             Statement::ForInStatement(statement) => {
                 // `for (const k in obj) … obj[k]() …`: mark `k` as an iteration
                 // key so a computed access keyed on it ranges over all properties.
+                forget_var_loop_head(&statement.left, env);
                 if let ForStatementLeft::VariableDeclaration(variable) = &statement.left {
                     for declarator in &variable.declarations {
                         if let Some(name) = binding_identifier_name(&declarator.id) {
@@ -2043,6 +2046,10 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         env: &mut FlowEnv,
     ) {
         for declarator in &variable.declarations {
+            // `var fn = v` in a body whose `fn` is already bound, typically a
+            // parameter, assigns rather than declares: `var` names one binding per
+            // function. It is rebound as `fn = v` would be.
+            let redeclared = self.redeclared_binding(variable, declarator, env);
             // `var app = exports = module.exports = {}` aliases the export object;
             // later `app.X = fn` / `app[k] = fn` writes build the exports. Seed an
             // empty object so those member writes land (member assignment requires
@@ -2256,6 +2263,9 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             if let Some(init) = &declarator.init {
                 self.collect_expression(init, owner, env);
             }
+            if let Some(redeclared) = redeclared {
+                redeclared.rebind(env);
+            }
         }
     }
 
@@ -2406,6 +2416,47 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             }
             _ => {}
         }
+    }
+
+    /// The binding a `var` declarator with an initializer replaces, with whether
+    /// the new value is one this walk follows, judged as `rebind_assigned_identifier`
+    /// judges an assignment. `None` when the name is not bound yet, or the
+    /// initializer is `fn || d` or `fn ?? d`, which keeps a bound function.
+    fn redeclared_binding(
+        &mut self,
+        variable: &VariableDeclaration<'ast>,
+        declarator: &'ast VariableDeclarator<'ast>,
+        env: &FlowEnv,
+    ) -> Option<RedeclaredBinding> {
+        if variable.kind != VariableDeclarationKind::Var {
+            return None;
+        }
+        let init = declarator.init.as_ref()?;
+        let name = binding_identifier_name(&declarator.id)?;
+        let bindings = env
+            .bindings
+            .get(&name)
+            .filter(|targets| !targets.is_empty())
+            .cloned();
+        let bound_functions = env.bound_functions.get(&name).cloned();
+        if bindings.is_none() && bound_functions.is_none() {
+            return None;
+        }
+        if matches!(
+            init.without_parentheses(),
+            Expression::LogicalExpression(logical)
+                if matches!(logical.operator, LogicalOperator::Or | LogicalOperator::Coalesce)
+                    && expression_identifier(&logical.left) == Some(name.as_str())
+        ) {
+            return None;
+        }
+        let followed = !self.returned_value_targets(init, env).incomplete;
+        Some(RedeclaredBinding {
+            name,
+            bindings,
+            bound_functions,
+            followed,
+        })
     }
 
     /// `fn = wrap(fn)` replaces a value this walk already bound, typically a
@@ -4498,6 +4549,13 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // statement re-enters `callable_return_targets_from_expression`).
         if self.invocation_depth > 16 {
             return CollectionTargets::unfollowed();
+        }
+        // A function declaration named like a parameter replaces the argument,
+        // from the start of the body or when its block runs, so the argument is
+        // not the name's complete value.
+        let replaced = parameters_replaced_by_declarations(flow);
+        if !replaced.is_empty() {
+            env.shadow_parameters(&replaced);
         }
         // A walk with the same input under unchanged tables already ran in this
         // call tree: replay its effect instead of walking the body again. Nested
@@ -7772,6 +7830,42 @@ impl GeneratorSequence {
     }
 }
 
+/// A bound name a `var` declarator redeclares, kept while the declarator binds
+/// its new value.
+struct RedeclaredBinding {
+    name: String,
+    bindings: Option<CollectionTargets>,
+    bound_functions: Option<Vec<BoundFunctionTarget>>,
+    followed: bool,
+}
+
+impl RedeclaredBinding {
+    /// The environment is not branch sensitive, so the declarator may not have
+    /// run: a followed value joins the old binding, and one this walk cannot
+    /// follow leaves the name unbound so later calls through it stay unresolved.
+    fn rebind(self, env: &mut FlowEnv) {
+        if !self.followed {
+            env.bindings.remove(&self.name);
+            env.bound_functions.remove(&self.name);
+            return;
+        }
+        if let Some(bindings) = self.bindings {
+            env.bindings
+                .entry(self.name.clone())
+                .or_default()
+                .extend(bindings);
+        }
+        if let Some(bound_functions) = self.bound_functions {
+            let targets = env.bound_functions.entry(self.name).or_default();
+            for bound in bound_functions {
+                if !targets.contains(&bound) {
+                    targets.push(bound);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct BoundFunctionTarget {
     function: FunctionId,
@@ -8659,6 +8753,88 @@ fn flow_param_names(flow: &FunctionFlow<'_, '_>) -> std::collections::BTreeSet<S
         param_pattern_names(rest, &mut names);
     }
     names
+}
+
+/// A `var` in a `for…in` / `for…of` head writes the function's binding of that
+/// name: after the loop it holds the last item, or its old value when the loop
+/// did not run. The walk tracks neither, so the name's facts are dropped.
+fn forget_var_loop_head(left: &ForStatementLeft<'_>, env: &mut FlowEnv) {
+    let ForStatementLeft::VariableDeclaration(variable) = left else {
+        return;
+    };
+    if variable.kind != VariableDeclarationKind::Var {
+        return;
+    }
+    let names = variable
+        .declarations
+        .iter()
+        .flat_map(|declarator| declarator.id.get_binding_identifiers())
+        .map(|identifier| identifier.name.to_string())
+        .collect();
+    env.shadow_parameters(&names);
+}
+
+/// The parameters `flow`'s body redeclares as functions, in any block of the
+/// body but not in nested functions.
+fn parameters_replaced_by_declarations(
+    flow: &FunctionFlow<'_, '_>,
+) -> std::collections::BTreeSet<String> {
+    let mut declared = std::collections::BTreeSet::new();
+    for statement in &flow.body.statements {
+        declared_function_names(statement, &mut declared);
+    }
+    if declared.is_empty() {
+        return declared;
+    }
+    let params = flow_param_names(flow);
+    declared.retain(|name| params.contains(name));
+    declared
+}
+
+fn declared_function_names(
+    statement: &Statement<'_>,
+    out: &mut std::collections::BTreeSet<String>,
+) {
+    let nested = |statements: &[Statement<'_>], out: &mut std::collections::BTreeSet<String>| {
+        for inner in statements {
+            declared_function_names(inner, out);
+        }
+    };
+    match statement {
+        Statement::FunctionDeclaration(function) => {
+            if let Some(id) = &function.id {
+                out.insert(id.name.to_string());
+            }
+        }
+        Statement::BlockStatement(block) => nested(&block.body, out),
+        Statement::IfStatement(statement) => {
+            declared_function_names(&statement.consequent, out);
+            if let Some(alternate) = &statement.alternate {
+                declared_function_names(alternate, out);
+            }
+        }
+        Statement::LabeledStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::ForStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::ForInStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::ForOfStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::WhileStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::DoWhileStatement(statement) => declared_function_names(&statement.body, out),
+        Statement::TryStatement(statement) => {
+            nested(&statement.block.body, out);
+            if let Some(handler) = &statement.handler {
+                nested(&handler.body.body, out);
+            }
+            if let Some(finalizer) = &statement.finalizer {
+                nested(&finalizer.body, out);
+            }
+        }
+        Statement::SwitchStatement(statement) => {
+            for case in &statement.cases {
+                nested(&case.consequent, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn bind_param_pattern(pattern: &ParamPattern, targets: &CollectionTargets, env: &mut FlowEnv) {

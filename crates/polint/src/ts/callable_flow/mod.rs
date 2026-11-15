@@ -1177,6 +1177,36 @@ mod tests {
                 &["function a() {}"],
                 "a returned primitive cannot be called, so it does not block the answer",
             ),
+            (
+                "function apply(fn) {\n  var fn = lookup();\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a `var` redeclaring a parameter replaces its value",
+            ),
+            (
+                "function apply(fn) {\n  return fn();\n  function fn() {}\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a function declaration named like a parameter replaces it from the start of the body",
+            ),
+            (
+                "function apply(fn) {\n  if (flag) {\n    function fn() {}\n  }\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &[],
+                "a function declaration in a block replaces a parameter of the same name when the block runs",
+            ),
+            (
+                "function apply(fn, fns) {\n  for (var fn of fns) {}\n  return fn();\n}\napply(a, [lookup()]);\n",
+                "fn();",
+                &[],
+                "a `var` in a `for…of` head writes the parameter it redeclares",
+            ),
+            (
+                "function apply(fn) {\n  if (flag) {\n    var fn = b;\n  }\n  return fn();\n}\napply(a);\n",
+                "fn();",
+                &["function a() {}", "function b() {}"],
+                "a `var` redeclaration that may not run joins the parameter's value",
+            ),
         ];
         // TypeScript assignment targets may wrap the written name.
         let ts_cases: &[(&str, &str, &[&str], &str)] = &[
