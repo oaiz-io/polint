@@ -1,11 +1,16 @@
+use std::collections::HashMap;
+
 use crate::analysis::adaptation::facts::RejectionReason;
-use crate::analysis::calls::facts::CallTargetStatus;
 #[cfg(test)]
 use crate::analysis::calls::facts::UnresolvedCallReason;
+use crate::analysis::calls::facts::{CallSiteFact, CallTargetStatus};
 #[cfg(test)]
 use crate::analysis::data_flow::facts::DataFlowBudgetReason;
-use crate::analysis::data_flow::facts::{DataFlowBudgetFact, DataFlowEdgeFact, DataFlowStatus};
+use crate::analysis::data_flow::facts::{
+    DataFlowBudgetFact, DataFlowEdgeFact, DataFlowNodeFact, DataFlowStatus,
+};
 use crate::analysis::evidence::facts::{EvidenceUnknownFact, EvidenceUnknownReason};
+use crate::analysis::ids::{CallSiteId, DataFlowNodeId};
 #[cfg(test)]
 use crate::analysis::points_to::facts::PointsToPrecision;
 use crate::analysis::points_to::facts::PointsToStatus;
@@ -373,12 +378,14 @@ fn solver_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
 }
 
 fn refined_call_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
+    let sites = call_sites_by_id(db);
     db.refined_call_edges()
         .iter()
         .filter(|edge| edge.status != CallTargetStatus::Resolved)
         .map(|edge| {
             refined_call_unknown(
                 db,
+                &sites,
                 edge,
                 "refined_calls",
                 "docs/facts/capability-plans.md",
@@ -388,8 +395,18 @@ fn refined_call_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
         .collect()
 }
 
+/// The first call site with each id.
+fn call_sites_by_id(db: &AnalysisDb) -> HashMap<CallSiteId, &CallSiteFact> {
+    let mut sites = HashMap::new();
+    for site in db.call_sites() {
+        sites.entry(site.id).or_insert(site);
+    }
+    sites
+}
+
 fn refined_call_unknown(
     db: &AnalysisDb,
+    sites: &HashMap<CallSiteId, &CallSiteFact>,
     edge: &RefinedCallEdgeFact,
     capability: &str,
     docs_path: &str,
@@ -403,7 +420,7 @@ fn refined_call_unknown(
         CallTargetStatus::Unresolved | CallTargetStatus::Ambiguous => UnknownCategory::MissingFact,
         CallTargetStatus::Resolved => UnknownCategory::MissingFact,
     };
-    let site = db.call_sites().iter().find(|site| site.id == edge.site);
+    let site = sites.get(&edge.site).copied();
     UnknownRow::new(UnknownRowInput {
         category,
         capability: Some(capability.to_string()),
@@ -457,12 +474,14 @@ fn adaptation_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
 }
 
 fn policy_call_unknowns(db: &AnalysisDb, capability: &str) -> Vec<UnknownRow> {
+    let sites = call_sites_by_id(db);
     db.refined_call_edges()
         .iter()
         .filter(|edge| edge.status != CallTargetStatus::Resolved)
         .map(|edge| {
             refined_call_unknown(
                 db,
+                &sites,
                 edge,
                 capability,
                 policy_capability_docs_path(capability),
@@ -475,12 +494,16 @@ fn policy_call_unknowns(db: &AnalysisDb, capability: &str) -> Vec<UnknownRow> {
 fn data_flow_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    let mut nodes: HashMap<DataFlowNodeId, &DataFlowNodeFact> = HashMap::new();
+    for node in db.data_flow_nodes() {
+        nodes.entry(node.id).or_insert(node);
+    }
     let mut rows = Vec::new();
     rows.extend(
         db.data_flow_edges()
             .iter()
             .filter(|edge| edge.status != DataFlowStatus::Present)
-            .map(|edge| data_flow_edge_unknown(db, edge)),
+            .map(|edge| data_flow_edge_unknown(db, interner, &nodes, edge)),
     );
     rows.extend(
         db.data_flow_budgets()
@@ -496,10 +519,13 @@ fn data_flow_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     rows
 }
 
-fn data_flow_edge_unknown(db: &AnalysisDb, edge: &DataFlowEdgeFact) -> UnknownRow {
-    let interner_handle = db.stable_key_interner();
-    let interner = &interner_handle;
-    let (file, span) = data_flow_edge_location(db, edge);
+fn data_flow_edge_unknown(
+    db: &AnalysisDb,
+    interner: &crate::core::StableKeyInterner,
+    nodes: &HashMap<DataFlowNodeId, &DataFlowNodeFact>,
+    edge: &DataFlowEdgeFact,
+) -> UnknownRow {
+    let (file, span) = data_flow_edge_location(db, nodes, edge);
     UnknownRow::new(UnknownRowInput {
         category: data_flow_status_category(edge.status),
         capability: Some("dataflow".to_string()),
@@ -567,17 +593,13 @@ fn evidence_unknown_for_data_flow(
 
 fn data_flow_edge_location(
     db: &AnalysisDb,
+    nodes: &HashMap<DataFlowNodeId, &DataFlowNodeFact>,
     edge: &DataFlowEdgeFact,
 ) -> (String, Option<UnknownSpan>) {
-    let node = db
-        .data_flow_nodes()
-        .iter()
-        .find(|node| node.id == edge.to)
-        .or_else(|| {
-            db.data_flow_nodes()
-                .iter()
-                .find(|node| node.id == edge.from)
-        });
+    let node = nodes
+        .get(&edge.to)
+        .or_else(|| nodes.get(&edge.from))
+        .copied();
     let file = node
         .and_then(|node| node.file)
         .map(|file| db.path_for(file))
