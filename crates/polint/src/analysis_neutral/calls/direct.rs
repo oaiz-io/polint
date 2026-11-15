@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis_api::FactFamily;
 use crate::analysis_api::{
-    FunctionFact, ReferenceFact, ReferenceKind, SymbolFact, SymbolKind, SymbolPrecision,
-    SymbolResolutionStatus,
+    FunctionFact, ReferenceFact, ReferenceKind, SymbolFact, SymbolKind, SymbolNamespace,
+    SymbolPrecision, SymbolResolutionStatus, TS_JS_MODULE_FUNCTION_NAME,
 };
 use crate::analysis_api::{SemanticImportKind, SemanticStatus};
 use crate::analysis_neutral::AnalysisHost;
@@ -80,7 +80,10 @@ pub fn resolve_direct_call_targets(
         };
         let target_function = if is_direct_callable_symbol(symbol) {
             index.function_for_symbol(symbol)
-        } else if let Some(function) = index.value_function_for_symbol(symbol) {
+        } else if let Some(function) = index
+            .value_function_for_symbol(symbol)
+            .or_else(|| index.declared_function_for_symbol(symbol))
+        {
             Some(function)
         } else {
             continue;
@@ -395,14 +398,43 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
     }
 
     fn declared_function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
-        if !matches!(
-            symbol.kind,
-            SymbolKind::Function | SymbolKind::Method | SymbolKind::Class
-        ) {
-            return None;
+        match symbol.kind {
+            SymbolKind::Function | SymbolKind::Method | SymbolKind::Class => self
+                .function_declaring_symbol(symbol)
+                .or_else(|| self.function_named_like_symbol(symbol)),
+            SymbolKind::Interface if symbol.namespace == SymbolNamespace::Value => {
+                self.function_merged_with_interface(symbol)
+            }
+            _ => None,
         }
-        self.function_declaring_symbol(symbol)
-            .or_else(|| self.function_named_like_symbol(symbol))
+    }
+
+    /// An interface merged with a same-named function declaration is one value
+    /// symbol whose declared name is the interface's, so the function is found
+    /// by name among the file's functions that no other function encloses. Only
+    /// a single implementation counts; anything else stays unproven.
+    fn function_merged_with_interface(&self, symbol: &SymbolFact) -> Option<FunctionId> {
+        let functions = self.functions_by_file.get(&symbol.file?)?;
+        let encloses = |outer: &FunctionFact, inner: &FunctionFact| {
+            outer.name != TS_JS_MODULE_FUNCTION_NAME
+                && outer.span.start_byte <= inner.span.start_byte
+                && inner.span.end_byte <= outer.span.end_byte
+                && outer.span != inner.span
+        };
+        let outermost = functions
+            .iter()
+            .filter(|function| function.name == symbol.name)
+            .filter(|function| !functions.iter().any(|outer| encloses(outer, function)))
+            .collect::<Vec<_>>();
+        let implementations = outermost
+            .iter()
+            .filter(|function| self.has_body(function))
+            .collect::<Vec<_>>();
+        match (implementations.as_slice(), outermost.as_slice()) {
+            ([implementation], _) => Some(implementation.id),
+            ([], [declaration]) => Some(declaration.id),
+            _ => None,
+        }
     }
 
     /// The innermost same-named function whose span holds the declared name,
@@ -1536,6 +1568,50 @@ mod linked_bindings {
 
         assert_eq!(targets.len(), 1, "{targets:#?}");
         assert_eq!(targets[0].target_function, Some(implementation));
+    }
+
+    #[test]
+    fn interface_merged_with_a_function_targets_the_function() {
+        let source = "interface make { x: number }\n\
+                      function make() { function make() {} }\n";
+        let mut graph = Graph::with_sources(&[("src/make.ts", source)]);
+        let file = graph.files[0];
+        let outer = range_of(source, "function make() { function make() {} }");
+        let inner = range_of(source, "function make() {} }");
+        let outer = graph.function(file, "make", outer.0, outer.1);
+        graph.function(file, "make", inner.0, inner.1 - 2);
+        let declared = graph.symbol(file, "make", SymbolKind::Interface, 10, 14);
+        let call = graph.reference(file, "make", ReferenceKind::Call, 1100, 1104, declared);
+
+        let targets = graph.resolve(file, call, "make", 1100, 1106);
+
+        assert_eq!(targets.len(), 1, "{targets:#?}");
+        assert_eq!(targets[0].target_function, Some(outer));
+    }
+
+    #[test]
+    fn interface_merged_with_two_implementations_has_no_declared_target() {
+        let source = "interface make { x: number }\n\
+                      function make() {}\n\
+                      function make() {}\n";
+        let mut graph = Graph::with_sources(&[("src/make.ts", source)]);
+        let file = graph.files[0];
+        let first = source.find("function make() {}").expect("first") as u32;
+        let second = source.rfind("function make() {}").expect("second") as u32;
+        let width = "function make() {}".len() as u32;
+        graph.function(file, "make", first, first + width);
+        graph.function(file, "make", second, second + width);
+        let declared = graph.symbol(file, "make", SymbolKind::Interface, 10, 14);
+        let call = graph.reference(file, "make", ReferenceKind::Call, 1100, 1104, declared);
+
+        let targets = graph.resolve(file, call, "make", 1100, 1106);
+
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.algorithm != CallAlgorithm::DirectReference),
+            "{targets:#?}"
+        );
     }
 
     #[test]

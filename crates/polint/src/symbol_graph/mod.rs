@@ -3137,12 +3137,13 @@ export function run() {
   ns.parse();
   ns.dup();
   ns.missing();
+  ns.merged();
   const value = ns.parse;
   return value;
 }
 "#;
         let index = "export * from \"./core\";\nexport * from \"./a\";\nexport * from \"./b\";\n";
-        let core = "export function parse() {}\n";
+        let core = "export function parse() {}\nexport interface merged { x: number }\nexport function merged() {}\n";
         let a = "export function dup() {}\n";
         let b = "export function dup() {}\n";
         let handlers_file = add_file(&mut db, temp.path(), "src/handlers.ts", handlers);
@@ -3212,6 +3213,13 @@ export function run() {
         );
         assert_eq!(parse[0].status, SymbolResolutionStatus::Resolved);
         assert_eq!(parse[0].precision, SymbolPrecision::ModuleLinked);
+
+        let merged = member_calls("merged");
+        assert_eq!(merged.len(), 1, "{merged:#?}");
+        assert!(
+            merged[0].target.is_some(),
+            "an interface merged with a function still calls the function: {merged:#?}"
+        );
 
         assert!(
             member_calls("dup")
