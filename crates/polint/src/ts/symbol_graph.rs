@@ -48,6 +48,7 @@ struct TsFileSymbolSummary {
     import_aliases: Vec<ImportAlias>,
     exports: BTreeMap<String, Vec<PolintSymbolId>>,
     re_exports: Vec<ReExport>,
+    namespace_member_calls: Vec<NamespaceMemberCall>,
 }
 
 impl TsFileSymbolSummary {
@@ -57,8 +58,20 @@ impl TsFileSymbolSummary {
             import_aliases: Vec::new(),
             exports: BTreeMap::new(),
             re_exports: Vec::new(),
+            namespace_member_calls: Vec::new(),
         }
     }
+}
+
+/// A call `ns.name(...)` whose callee is a member of a namespace import
+/// binding. A module namespace object is immutable, so the member is the
+/// binding `name` exported by the imported module.
+#[derive(Debug, Clone)]
+struct NamespaceMemberCall {
+    /// Index of the namespace import in the file's import aliases.
+    alias: usize,
+    property: String,
+    property_span: Span,
 }
 
 /// An `export ... from "m"` statement: the names it forwards are bindings of
@@ -234,11 +247,17 @@ fn derive_ts_file_symbols(
     ));
     let export_names = collect_export_names(parsed.program(), scoping);
     let parameter_symbols = collect_parameter_symbols(nodes);
+    let namespace_member_calls = if requests_references {
+        collect_namespace_member_calls(file, scoping, nodes, &import_aliases)
+    } else {
+        Vec::new()
+    };
     let mut summary = TsFileSymbolSummary {
         file: file.id,
         import_aliases,
         exports: BTreeMap::new(),
         re_exports,
+        namespace_member_calls,
     };
     let mut symbol_ids = BTreeMap::<OxcSymbolId, PolintSymbolId>::new();
     let mut oxc_symbols = scoping.symbol_ids().collect::<Vec<_>>();
@@ -1676,10 +1695,13 @@ fn add_import_alias_references(
         file_by_node: &file_by_node,
     };
 
-    for alias in summaries
-        .iter()
-        .flat_map(|summary| summary.import_aliases.iter())
-    {
+    for (summary, index, alias) in summaries.iter().flat_map(|summary| {
+        summary
+            .import_aliases
+            .iter()
+            .enumerate()
+            .map(move |(index, alias)| (summary, index, alias))
+    }) {
         let key = (
             alias.file,
             alias.import_path.clone(),
@@ -1697,6 +1719,60 @@ fn add_import_alias_references(
         };
 
         add_import_alias_reference(builder, alias, resolved, &modules);
+        if alias.target == ImportAliasTarget::Namespace {
+            add_namespace_member_call_references(builder, summary, index, resolved, &modules);
+        }
+    }
+}
+
+/// Links each `ns.name(...)` call to the one declaration `name` is exported
+/// as. A member the module exports ambiguously or not at all gets no
+/// reference, so the call keeps no target.
+fn add_namespace_member_call_references(
+    builder: &mut SymbolGraphBuilder,
+    summary: &TsFileSymbolSummary,
+    alias_index: usize,
+    resolved: &ResolvedImportFact,
+    modules: &ModuleExports<'_>,
+) {
+    if resolved.status != ResolutionStatus::Resolved {
+        return;
+    }
+    let Some(target_file) = resolved
+        .target_node
+        .and_then(|target_node| modules.file_by_node.get(&target_node).copied())
+    else {
+        return;
+    };
+    let alias = &summary.import_aliases[alias_index];
+    for call in summary
+        .namespace_member_calls
+        .iter()
+        .filter(|call| call.alias == alias_index)
+    {
+        let [target] = modules.exported(target_file, &call.property)[..] else {
+            continue;
+        };
+        builder.add_reference(
+            target,
+            ReferenceDraft {
+                language: alias.language,
+                name: call.property.clone(),
+                qualified_name: format!(
+                    "{}::{}.{}",
+                    alias.file_key, alias.local_name, call.property
+                ),
+                kind: ReferenceKind::Call,
+                namespace: SymbolNamespace::Value,
+                file: Some(alias.file),
+                package: None,
+                module: None,
+                owner: None,
+                file_key: alias.file_key.clone(),
+                primary_span: Some(call.property_span.clone()),
+                precision: SymbolPrecision::ModuleLinked,
+            },
+        );
     }
 }
 
@@ -2279,6 +2355,61 @@ fn collect_import_aliases(
     }
 
     aliases
+}
+
+/// Calls whose callee is exactly `ns.name`, with `ns` bound to one of the
+/// file's namespace imports (a shadowing local of the same name is not).
+fn collect_namespace_member_calls(
+    file: &SourceFile,
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    import_aliases: &[ImportAlias],
+) -> Vec<NamespaceMemberCall> {
+    let namespace_by_binding = import_aliases
+        .iter()
+        .enumerate()
+        .filter(|(_, alias)| alias.target == ImportAliasTarget::Namespace)
+        .map(|(index, alias)| {
+            (
+                (alias.local_span.start_byte, alias.local_span.end_byte),
+                index,
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    if namespace_by_binding.is_empty() {
+        return Vec::new();
+    }
+
+    let mut calls = Vec::new();
+    for node in nodes.iter() {
+        let AstKind::CallExpression(call) = node.kind() else {
+            continue;
+        };
+        let Expression::StaticMemberExpression(member) = &call.callee else {
+            continue;
+        };
+        let Expression::Identifier(object) = &member.object else {
+            continue;
+        };
+        let Some(binding) = object
+            .reference_id
+            .get()
+            .and_then(|reference| scoping.get_reference(reference).symbol_id())
+        else {
+            continue;
+        };
+        let binding_span = scoping.symbol_span(binding);
+        let Some(alias) = namespace_by_binding.get(&(binding_span.start, binding_span.end)) else {
+            continue;
+        };
+        calls.push(NamespaceMemberCall {
+            alias: *alias,
+            property: member.property.name.to_string(),
+            property_span: span_from_oxc(file, member.property.span),
+        });
+    }
+    calls.sort_by_key(|call| (call.property_span.start_byte, call.property_span.end_byte));
+    calls
 }
 
 fn collect_re_exports(file: &SourceFile, program: &Program<'_>) -> Vec<ReExport> {

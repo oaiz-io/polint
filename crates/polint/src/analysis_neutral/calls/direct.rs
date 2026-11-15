@@ -145,6 +145,9 @@ struct DirectIndex<'db, H: AnalysisHost + ?Sized> {
     /// `(file, local name)` of namespace imports, whose binding is the module
     /// object rather than any one export.
     namespace_imports: BTreeSet<(FileId, String)>,
+    /// `(file, property start)` -> the module-linked call reference on the
+    /// property of an `ns.name(...)` callee, `ns` being a namespace import.
+    namespace_member_calls: BTreeMap<(FileId, u32), &'db ReferenceFact>,
     sources_by_file: BTreeMap<FileId, &'db str>,
 }
 
@@ -156,6 +159,40 @@ fn span_key(span: &Span) -> SpanKey {
 
 /// Re-export chains longer than this are left unresolved.
 const MAX_IMPORT_HOPS: usize = 8;
+
+/// Module-linked call references whose source is directly preceded by
+/// `ns.`, `ns` being a namespace import of the same file. They name one
+/// `ns.name(...)` callee, so only the site spelled that way may use them.
+fn namespace_member_calls<'db>(
+    references: &'db [ReferenceFact],
+    namespace_imports: &BTreeSet<(FileId, String)>,
+    sources_by_file: &BTreeMap<FileId, &str>,
+) -> BTreeMap<(FileId, u32), &'db ReferenceFact> {
+    references
+        .iter()
+        .filter(|reference| {
+            reference.kind == ReferenceKind::Call
+                && matches!(reference.precision, SymbolPrecision::ModuleLinked)
+        })
+        .filter_map(|reference| {
+            let span = reference.primary_span.as_ref()?;
+            let before = sources_by_file
+                .get(&span.file)?
+                .get(..span.start_byte as usize)?
+                .strip_suffix('.')?;
+            let namespace_start = before
+                .rfind(|character: char| !is_identifier_char(character))
+                .map_or(0, |index| index + 1);
+            namespace_imports
+                .contains(&(span.file, before[namespace_start..].to_owned()))
+                .then_some(((span.file, span.start_byte), reference))
+        })
+        .collect()
+}
+
+fn is_identifier_char(character: char) -> bool {
+    character.is_alphanumeric() || character == '_' || character == '$'
+}
 
 impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
     fn new(db: &'db H) -> Self {
@@ -175,6 +212,8 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             .iter()
             .map(|file| (file.id, file.source.as_ref()))
             .collect::<BTreeMap<_, _>>();
+        let namespace_member_calls =
+            namespace_member_calls(db.references(), &namespace_imports, &sources_by_file);
         Self {
             db,
             references_by_id: db
@@ -206,6 +245,7 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
                 .collect(),
             import_links: import_links(db.references()),
             namespace_imports,
+            namespace_member_calls,
             sources_by_file,
         }
     }
@@ -225,10 +265,41 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
                     CallSyntaxKind::StaticMember | CallSyntaxKind::Member
                 ) =>
             {
-                self.unique_reference_by_site_name(site, property)
+                self.namespace_member_reference(site, property)
+                    .or_else(|| self.unique_reference_by_site_name(site, property))
             }
             _ => None,
         }
+    }
+
+    /// The reference on `name` when the site's callee is spelled `ns.name`
+    /// from its first byte and `ns` is a namespace import of the file.
+    fn namespace_member_reference(
+        &self,
+        site: &CallSiteFact,
+        property: &str,
+    ) -> Option<&'db ReferenceFact> {
+        let source = self.sources_by_file.get(&site.file)?;
+        let text = source.get(site.span.start_byte as usize..site.span.end_byte as usize)?;
+        let (namespace, rest) = text.split_once('.')?;
+        let spelled_exactly = rest.strip_prefix(property).is_some_and(|after| {
+            after
+                .chars()
+                .next()
+                .is_none_or(|next| !is_identifier_char(next) && next != '.')
+        });
+        if !spelled_exactly
+            || !self
+                .namespace_imports
+                .contains(&(site.file, namespace.to_owned()))
+        {
+            return None;
+        }
+        let property_start = site.span.start_byte + namespace.len() as u32 + 1;
+        self.namespace_member_calls
+            .get(&(site.file, property_start))
+            .copied()
+            .filter(|reference| reference.name == property)
     }
 
     fn unique_reference_by_site_name(
@@ -241,6 +312,13 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             .references_for_file(site.file)
             .into_iter()
             .filter(|reference| reference.name == name)
+            .filter(|reference| {
+                reference.primary_span.as_ref().is_none_or(|span| {
+                    !self
+                        .namespace_member_calls
+                        .contains_key(&(span.file, span.start_byte))
+                })
+            })
             .filter(|reference| {
                 reference
                     .primary_span
@@ -1293,7 +1371,7 @@ mod linked_bindings {
         CallAlgorithm, CallCallee, CallPrecision, CallSiteFact, CallSyntaxKind, CallTargetFact,
         CallTargetStatus,
     };
-    use crate::analysis_neutral::ids::{CallSiteId, MirBodyId, MirOpId};
+    use crate::analysis_neutral::ids::{CallSiteId, MirBodyId, MirOpId, PlaceId};
     use crate::analysis_neutral::symbol_graph::semantic::ValueFunctionFact;
     use crate::internal_core::{FileId, FunctionId, Language, ReferenceId, Span, SymbolId};
 
@@ -1479,6 +1557,48 @@ mod linked_bindings {
         assert_eq!(targets[0].target_function, Some(ambient));
     }
 
+    #[test]
+    fn namespace_member_call_targets_only_its_own_site() {
+        let caller_source = "import * as ns from \"./util\";\n\
+                             ns.parse(x);\n\
+                             obj.parse(ns.parse());\n";
+        let util_source = "export function parse() {}\n";
+        let mut graph = Graph::with_sources(&[
+            ("src/caller.ts", caller_source),
+            ("src/util.ts", util_source),
+        ]);
+        let (caller_file, util_file) = (graph.files[0], graph.files[1]);
+        let parse_range = range_of(util_source, "export function parse() {}");
+        let parse = graph.function(util_file, "parse", parse_range.0, parse_range.1);
+        let declared = graph.symbol(util_file, "parse", SymbolKind::Function, 16, 21);
+        graph.namespace_import(caller_file, "ns");
+        let direct = range_of(caller_source, "ns.parse(x)");
+        let outer = range_of(caller_source, "obj.parse(ns.parse())");
+        let inner = range_of(caller_source, "ns.parse()");
+        for site in [direct, inner] {
+            let property = (site.0 + 3, site.0 + 8);
+            graph.member_reference(caller_file, "parse", property, declared);
+        }
+
+        for site in [direct, inner] {
+            let targets = graph.resolve_member(caller_file, "parse", site);
+            assert_eq!(targets.len(), 1, "{targets:#?}");
+            assert_eq!(targets[0].target_function, Some(parse));
+            assert_eq!(targets[0].algorithm, CallAlgorithm::ImportBinding);
+        }
+
+        // `obj.parse` is not the namespace member, so only the name-only
+        // fallback may guess at it.
+        let targets = graph.resolve_member(caller_file, "parse", outer);
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.algorithm == CallAlgorithm::SyntaxOnly
+                    && target.precision == CallPrecision::Heuristic),
+            "{targets:#?}"
+        );
+    }
+
     fn range_of(source: &str, needle: &str) -> (u32, u32) {
         let start = source.find(needle).expect("needle in source");
         (start as u32, (start + needle.len()) as u32)
@@ -1618,6 +1738,19 @@ mod linked_bindings {
             id
         }
 
+        /// A namespace member call reference as the symbol graph links it.
+        fn member_reference(
+            &mut self,
+            file: FileId,
+            name: &str,
+            (start, end): (u32, u32),
+            target: SymbolId,
+        ) -> ReferenceId {
+            let id = self.reference(file, name, ReferenceKind::Call, start, end, target);
+            self.references[id.0 as usize].precision = SymbolPrecision::ModuleLinked;
+            id
+        }
+
         fn value_function(&mut self, binding: Span, function: Span) {
             self.value_functions
                 .push(ValueFunctionFact { binding, function });
@@ -1659,6 +1792,23 @@ mod linked_bindings {
                 CallCallee::Identifier {
                     reference: Some(reference),
                     name: name.to_string(),
+                },
+            )
+        }
+
+        fn resolve_member(
+            &mut self,
+            file: FileId,
+            property: &str,
+            (start, end): (u32, u32),
+        ) -> Vec<CallTargetFact> {
+            self.resolve_site(
+                file,
+                (start, end),
+                CallSyntaxKind::StaticMember,
+                CallCallee::Member {
+                    base: PlaceId(u64::MAX),
+                    property: property.to_string(),
                 },
             )
         }

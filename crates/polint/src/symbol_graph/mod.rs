@@ -3126,4 +3126,103 @@ export * from "./b";
         }));
     }
 
+    #[test]
+    fn links_namespace_member_calls_through_star_re_exports() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let handlers = r#"
+import * as ns from "./index";
+
+export function run() {
+  ns.parse();
+  ns.dup();
+  ns.missing();
+  const value = ns.parse;
+  return value;
+}
+"#;
+        let index = "export * from \"./core\";\nexport * from \"./a\";\nexport * from \"./b\";\n";
+        let core = "export function parse() {}\n";
+        let a = "export function dup() {}\n";
+        let b = "export function dup() {}\n";
+        let handlers_file = add_file(&mut db, temp.path(), "src/handlers.ts", handlers);
+        let index_file = add_file(&mut db, temp.path(), "src/index.ts", index);
+        let core_file = add_file(&mut db, temp.path(), "src/core.ts", core);
+        let a_file = add_file(&mut db, temp.path(), "src/a.ts", a);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let nodes = [
+            (ModuleNodeId::from_raw(0), "src/handlers.ts", handlers_file),
+            (ModuleNodeId::from_raw(1), "src/index.ts", index_file),
+            (ModuleNodeId::from_raw(2), "src/core.ts", core_file),
+            (ModuleNodeId::from_raw(3), "src/a.ts", a_file),
+            (ModuleNodeId::from_raw(4), "src/b.ts", b_file),
+        ];
+        let imports = vec![
+            resolved(
+                push_import(&mut db, handlers_file, handlers, "./index", 0),
+                handlers_file,
+                nodes[1].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./core", 0),
+                index_file,
+                nodes[2].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./a", 0),
+                index_file,
+                nodes[3].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./b", 0),
+                index_file,
+                nodes[4].0,
+            ),
+        ];
+        db.replace_module_graph_facts(
+            imports,
+            nodes
+                .iter()
+                .map(|(id, label, file)| file_node(*id, label, *file))
+                .collect(),
+            vec![],
+        );
+
+        let (symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+        let member_calls = |name: &str| {
+            references
+                .iter()
+                .filter(|reference| {
+                    reference.name == name
+                        && reference.kind == ReferenceKind::Call
+                        && reference.file == Some(handlers_file)
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let parse = member_calls("parse");
+        assert_eq!(parse.len(), 1, "{parse:#?}");
+        let call_start = handlers.find("ns.parse()").expect("call") as u32;
+        let span = parse[0].primary_span.as_ref().expect("span");
+        assert_eq!(span.start_byte, call_start + "ns.".len() as u32);
+        assert_eq!(span.end_byte, span.start_byte + "parse".len() as u32);
+        assert_eq!(
+            parse[0].target,
+            Some(exported_symbol_in(&symbols, core_file, "parse").id)
+        );
+        assert_eq!(parse[0].status, SymbolResolutionStatus::Resolved);
+        assert_eq!(parse[0].precision, SymbolPrecision::ModuleLinked);
+
+        assert!(
+            member_calls("dup")
+                .iter()
+                .all(|reference| reference.target.is_none()),
+            "an export bound by two star sources is not one target"
+        );
+        assert!(
+            member_calls("missing")
+                .iter()
+                .all(|reference| reference.target.is_none())
+        );
+    }
 }
