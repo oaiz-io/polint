@@ -22,6 +22,7 @@ write the same scores.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import platform
@@ -56,7 +57,7 @@ CENSUS_CAPS = "syntax"
 EXAMPLES_PER_OUTCOME = 5
 EXAMPLES_PER_GAP = 3
 FALSE_COMPLETE = "other targets, no unresolved marker"
-RULES_TARGET_DIR = bench.REPO_ROOT / "target" / "js-analysis-bench-rules"
+RULES_TARGET_SUBDIR = "js-analysis-bench-rules"
 MB = 1_000_000
 OBSERVED_KINDS = ("call", "callback", "implicit")
 LABEL_RE = re.compile(r"//\s*(@\S.*)$")
@@ -1111,11 +1112,27 @@ def gzip_bytes(root: Path) -> int:
     return total
 
 
+@functools.cache
+def cargo_target_dir() -> Path:
+    """The target directory cargo builds into for this workspace.
+
+    Read from `cargo metadata`, so a `CARGO_TARGET_DIR` or a configured target
+    directory is honoured the way `build` honours it."""
+    completed = subprocess.run(
+        ["cargo", "metadata", "--format-version", "1", "--no-deps", "--locked"],
+        cwd=bench.REPO_ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    return Path(json.loads(completed.stdout)["target_directory"])
+
+
 def check_env(cost_path: Path) -> dict:
     env = dict(os.environ)
     env.update(
         {
-            "POLINT_RULES_TARGET_DIR": str(RULES_TARGET_DIR),
+            "POLINT_RULES_TARGET_DIR": str(cargo_target_dir() / RULES_TARGET_SUBDIR),
             "POLINT_RULES_PROFILE": "release",
             "POLINT_CACHE_STORE": "off",
             "POLINT_GOLDEN_COST_PATH": str(cost_path),

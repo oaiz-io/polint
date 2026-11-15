@@ -403,7 +403,10 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     invocations: HashMap<u64, Option<Box<InvocationRecord>>>,
     /// Callee-body walks in flight; zero outside the outermost one.
     invocation_walks: usize,
-    /// Callee-body walks made in the call tree of the outermost walk in flight.
+    /// Callee-body walks made in the call tree of the outermost walk in flight,
+    /// a replay counted as the walks its record stands for. It saturates rather
+    /// than wraps: it is only compared with `keying_after_walks()`, and a
+    /// wrapped count would turn keying off again partway through a tree.
     tree_walks: usize,
     /// Program-global positional index of every `receiver.next()` call: maps the
     /// `.next()` call's `span.start` to its 0-based ordinal among `.next()` calls
@@ -4550,9 +4553,12 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         if self.invocation_depth > 16 {
             return CollectionTargets::unfollowed();
         }
-        // A function declaration named like a parameter replaces the argument,
-        // from the start of the body or when its block runs, so the argument is
-        // not the name's complete value.
+        // A function declaration directly in the body named like a parameter
+        // replaces the argument from the start of the body. One in a nested
+        // block binds the name only inside that block, because legacy
+        // block-function hoisting skips names that are parameters, but the walk
+        // does not track block scope. Either way the argument is not known to be
+        // the name's complete value, so calls through the name stay unresolved.
         let replaced = parameters_replaced_by_declarations(flow);
         if !replaced.is_empty() {
             env.shadow_parameters(&replaced);
@@ -4590,7 +4596,10 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
                 {
                     env.clone_from(&record.env_after);
                     self.walk_guard.budget.set(record.budget);
-                    self.tree_walks += record.walks;
+                    // A replay counts every walk its record stands for, and records
+                    // nest, so the count grows with the walks saved rather than
+                    // made and can pass `usize::MAX` on a deep enough tree.
+                    self.tree_walks = self.tree_walks.saturating_add(record.walks);
                     #[cfg(all(test, feature = "lang-go"))]
                     REPLAYED_WALKS.with(|walks| walks.set(walks.get() + 1));
                     return record.returned.clone();
@@ -4615,7 +4624,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let walks_before = self.tree_walks;
         self.invocation_depth += 1;
         self.invocation_walks += 1;
-        self.tree_walks += 1;
+        self.tree_walks = self.tree_walks.saturating_add(1);
         // Calls in the invoked body belong to `flow.function`, which is the
         // owner every model row emitted from it names.
         let result = if let Some(expression) = flow.expression_body {

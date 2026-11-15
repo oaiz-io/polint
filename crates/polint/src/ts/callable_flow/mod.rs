@@ -1193,7 +1193,7 @@ mod tests {
                 "function apply(fn) {\n  if (flag) {\n    function fn() {}\n  }\n  return fn();\n}\napply(a);\n",
                 "fn();",
                 &[],
-                "a function declaration in a block replaces a parameter of the same name when the block runs",
+                "a function declaration in a block named like a parameter leaves calls through the name unresolved",
             ),
             (
                 "function apply(fn, fns) {\n  for (var fn of fns) {}\n  return fn();\n}\napply(a, [lookup()]);\n",
@@ -1276,6 +1276,30 @@ mod tests {
         }
     }
 
+    /// Callee bodies walked collecting the flows of a file whose one function
+    /// calls itself at `self_calls` sites. A walk limit a few keyed call trees
+    /// above the keyed count makes unkeyed walks fail in bounded time.
+    fn self_call_walks(self_calls: usize) -> usize {
+        let threshold = super::extract::INVOCATION_KEYING_AFTER_WALKS;
+        super::extract::limit_body_walks(
+            super::extract::body_walks() + (8 + 2 * self_calls) * threshold,
+        );
+        let calls = (0..self_calls)
+            .map(|index| format!("  walk(node.child{index});\n"))
+            .collect::<String>();
+        let source = format!("function walk(node) {{\n{calls}  return node;\n}}\nwalk({{}});\n");
+        let repo = tempfile::tempdir().unwrap();
+        std::fs::write(repo.path().join("main.js"), source).unwrap();
+        let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+        let file = &output.db.files()[0];
+        let arena = oxc_allocator::Allocator::default();
+        let parsed = crate::ts::parse::parse_ts_file(&arena, file);
+        let programs = BTreeMap::from([(file.id, parsed.program())]);
+        let before = super::extract::body_walks();
+        super::collect_callable_flows(&output.db, &programs);
+        super::extract::body_walks() - before
+    }
+
     /// A function whose body calls itself at several sites does not walk its
     /// body once per path through the call tree. Walking every call again
     /// walks about `k^d` bodies per call tree for `k` self-calls and `d` levels
@@ -1283,40 +1307,20 @@ mod tests {
     /// `INVOCATION_KEYING_AFTER_WALKS` bodies, a callee input is recorded the
     /// second time it comes and answered from the record every time after, so
     /// a call tree walks little more than the threshold, and a further
-    /// self-call adds one call tree, entered from its own call site. A walk
-    /// limit far above the keyed count makes the unkeyed walks fail in bounded
-    /// time.
+    /// self-call adds one call tree, entered from its own call site.
     #[test]
     fn self_call_walks_grow_linearly_past_the_keying_threshold() {
         let threshold = super::extract::INVOCATION_KEYING_AFTER_WALKS;
-        let walks_with = |self_calls: usize| {
-            super::extract::limit_body_walks(super::extract::body_walks() + 16 * threshold);
-            let calls = (0..self_calls)
-                .map(|index| format!("  walk(node.child{index});\n"))
-                .collect::<String>();
-            let source =
-                format!("function walk(node) {{\n{calls}  return node;\n}}\nwalk({{}});\n");
-            let repo = tempfile::tempdir().unwrap();
-            std::fs::write(repo.path().join("main.js"), source).unwrap();
-            let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
-            let file = &output.db.files()[0];
-            let arena = oxc_allocator::Allocator::default();
-            let parsed = crate::ts::parse::parse_ts_file(&arena, file);
-            let programs = BTreeMap::from([(file.id, parsed.program())]);
-            let before = super::extract::body_walks();
-            super::collect_callable_flows(&output.db, &programs);
-            super::extract::body_walks() - before
-        };
         assert!(
-            walks_with(1) > 0,
+            self_call_walks(1) > 0,
             "the self-call is followed into the callee body"
         );
-        let double = walks_with(2);
+        let double = self_call_walks(2);
         assert!(
             double <= 8 * threshold,
             "two self-calls walked {double} callee bodies"
         );
-        let triple = walks_with(3);
+        let triple = self_call_walks(3);
         assert!(
             triple - double <= 2 * threshold,
             "a third self-call added {} callee-body walks to {double}",
@@ -1324,10 +1328,29 @@ mod tests {
         );
     }
 
+    /// A replay counts the walks its record stands for, which nest, so the
+    /// count of a call tree with `k` self-calls grows like `k^16` and passes
+    /// `usize::MAX` from 16 self-calls on. It saturates instead of overflowing,
+    /// and the tree stays keyed, so each further self-call still adds at most
+    /// one call tree of walks.
+    #[test]
+    fn many_self_calls_keep_the_walk_count_bounded() {
+        let threshold = super::extract::INVOCATION_KEYING_AFTER_WALKS;
+        let double = self_call_walks(2);
+        for self_calls in [17, 32] {
+            let walks = self_call_walks(self_calls);
+            assert!(
+                walks - double <= (self_calls - 2) * 2 * threshold,
+                "{self_calls} self-calls walked {walks} callee bodies"
+            );
+        }
+    }
+
     /// Keying every walk changes no flow. Past the first case, each case
     /// repeats a callee walk whose outcome differs between repeats through one
-    /// input the walk cache keys on or one table it guards, so a replay that
-    /// ignored it would lose a flow the unkeyed walk finds.
+    /// input the walk cache keys on, one table it guards or one effect it
+    /// restores, so a replay that ignored it would lose a flow the unkeyed walk
+    /// finds or find one it does not.
     #[test]
     fn keyed_walks_find_the_flows_unkeyed_walks_find() {
         const PRELUDE: &str = "function a() {}\nfunction b() {}\n";
@@ -1425,6 +1448,30 @@ mod tests {
                  const p = { m1() {} };\n\
                  main(p);\n",
                 false,
+            ),
+            (
+                "a callee that spends the walk budget, then a walk that needs it",
+                &format!(
+                    "function use(x) {{ x.g1(x); }}\n\
+                     function main(cb) {{\n\
+                     \x20 const o = {{\n\
+                     {}\x20   g13() {{}},\n\
+                     \x20   mk() {{ return {{ run(j) {{ j(); }} }}; }},\n\
+                     \x20   f(k) {{ use(o); o.mk().run(k); }},\n\
+                     \x20 }};\n\
+                     \x20 o.f(cb);\n\
+                     \x20 o.f(cb);\n\
+                     \x20 o.f(cb);\n\
+                     }}\n\
+                     main(a);\n",
+                    (1..13)
+                        .map(|level| format!(
+                            "    g{level}(y) {{ y.g{next}(y); y.g{next}(y); }},\n",
+                            next = level + 1
+                        ))
+                        .collect::<String>()
+                ),
+                true,
             ),
         ];
         for (case, body, replays) in cases {
