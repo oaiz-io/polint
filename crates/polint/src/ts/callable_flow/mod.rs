@@ -1207,6 +1207,36 @@ mod tests {
                 &["function a() {}", "function b() {}"],
                 "a `var` redeclaration that may not run joins the parameter's value",
             ),
+            (
+                "function pick(k) {\n  if (k) return a;\n  return lookup();\n}\npick(1)();\n",
+                "pick(1)();",
+                &[],
+                "a call through a call result with an unfollowed return stays unresolved",
+            ),
+            (
+                "var o = {\n  get f() {\n    if (flag) return a;\n    return lookup();\n  },\n};\no.f();\n",
+                "o.f();",
+                &[],
+                "a getter with an unfollowed return leaves its call unresolved",
+            ),
+            (
+                "var o = {\n  get f() {\n    if (flag) return a;\n    return lookup();\n  },\n};\no[\"f\"]();\n",
+                "o[\"f\"]();",
+                &[],
+                "a computed getter call with an unfollowed return stays unresolved",
+            ),
+            (
+                "function f1() {\n  if (flag) return b;\n  return f2();\n}\nfunction f2() {\n  return f3();\n}\nfunction f3() {\n  return f4();\n}\nfunction f4() {\n  return f5();\n}\nfunction f5() {\n  return f6();\n}\nfunction f6() {\n  return f7();\n}\nfunction f7() {\n  return f8();\n}\nfunction f8() {\n  return f9();\n}\nfunction f9() {\n  return f10();\n}\nfunction f10() {\n  return f11();\n}\nfunction f11() {\n  return f12();\n}\nfunction f12() {\n  return f13();\n}\nfunction f13() {\n  return f14();\n}\nfunction f14() {\n  return f15();\n}\nfunction f15() {\n  return f16();\n}\nfunction f16() {\n  return f17();\n}\nfunction f17() {\n  return f18();\n}\nfunction f18() {\n  return f19();\n}\nfunction f19() {\n  return f20();\n}\nfunction f20() {\n  return a;\n}\nf1()();\n",
+                "f1()();",
+                &[],
+                "a return chain deeper than the walk follows leaves the call unresolved",
+            ),
+            (
+                "function main() {\n  var o = {\n    m() {\n      return lookup();\n    },\n  };\n  var f = a;\n  {\n    let f = o.m();\n    f();\n  }\n}\nmain();\n",
+                "f();",
+                &[],
+                "a method whose only return is unfollowed does not keep a shadowed binding",
+            ),
         ];
         // TypeScript assignment targets may wrap the written name.
         let ts_cases: &[(&str, &str, &[&str], &str)] = &[
