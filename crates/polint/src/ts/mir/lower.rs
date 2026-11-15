@@ -5385,12 +5385,13 @@ boot();
         assert_eq!(module_boot_calls, 1);
     }
 
-    /// `(owner function name, callee evidence)` for every unknown-callee call.
+    /// `(owner function name, callee evidence)` for every unknown-callee call,
+    /// sorted. Duplicates are kept, so a body lowered twice shows up twice.
     fn direct_calls_by_owner(
         output: &MirOutput,
         interner: &crate::internal_core::StableKeyInterner,
-    ) -> BTreeSet<(String, String)> {
-        output
+    ) -> Vec<(String, String)> {
+        let mut calls: Vec<_> = output
             .operations
             .iter()
             .filter_map(|operation| {
@@ -5413,7 +5414,9 @@ boot();
                 };
                 Some((owner, evidence.clone()))
             })
-            .collect()
+            .collect();
+        calls.sort();
+        calls
     }
 
     #[test]
@@ -5425,12 +5428,16 @@ function load(id) { return id; }
 function normalize(input) { return input; }
 function define(build) { return build; }
 function boot() { return 1; }
+function start() { return 2; }
 
 export const config = makeConfig(defaultName());
 export const api = {
   get(id) { return load(id); },
 };
 export const parse = define((input) => normalize(input));
+export class Service {
+  items = start();
+}
 export default config && (() => boot());
 "#;
         let (exported, exported_interner) = lower("src/exported.ts", source);
@@ -5438,19 +5445,17 @@ export default config && (() => boot());
             "src/exported.ts",
             &source
                 .replace("export const", "const       ")
+                .replace("export class", "class       ")
                 .replace("export default", "const d =     "),
         );
         let exported_calls = direct_calls_by_owner(&exported, &exported_interner);
-        let module_calls: BTreeSet<_> = exported_calls
+        let module_calls: Vec<_> = exported_calls
             .iter()
             .filter(|(owner, _)| owner == TS_JS_MODULE_FUNCTION_NAME)
             .map(|(_, callee)| callee.as_str())
             .collect();
-        assert_eq!(
-            module_calls,
-            BTreeSet::from(["defaultName", "define", "makeConfig"])
-        );
-        for callee in ["load", "normalize", "boot"] {
+        assert_eq!(module_calls, ["defaultName", "define", "makeConfig"]);
+        for callee in ["load", "normalize", "boot", "start"] {
             let owners: Vec<_> = exported_calls
                 .iter()
                 .filter(|(_, evidence)| evidence == callee)
