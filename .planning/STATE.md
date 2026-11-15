@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Static Analysis 2.0 Implementation
-status: in_progress
-last_updated: "2026-09-08T06:59:01Z"
-last_activity: 2026-09-08
+milestone: v2.1
+milestone_name: Engine Depth
+status: planned
+last_updated: "2026-11-02T12:00:00Z"
+last_activity: 2026-11-02
 progress:
-  total_phases: 9
-  completed_phases: 2
-  total_plans: 9
-  completed_plans: 9
-  percent: 22
+  total_phases: 18
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State: polint
@@ -21,7 +21,7 @@ See: `.planning/PROJECT.md` (updated 2026-07-10)
 
 **Core value:** Make it easy to express a repo-specific engineering policy as a small rule and run it locally, in CI, and with AI coding agents.
 
-**Current focus:** Phase 65 — Generation Manifest and Metadata Mirroring
+**Current focus:** Phase 72 — Identity and invalidation fixes (first PR of v2.1 Engine Depth)
 
 ## Current Status
 
@@ -42,14 +42,16 @@ See: `.planning/PROJECT.md` (updated 2026-07-10)
 
 ## Current Position
 
-Phase: 65
-Plan: 02 (R2 only)
-Status: R1 and R2 complete and code-review clean; broader Phase 65 remains open for R3-R6
-Last activity: 2026-08-29 - Completed quick task 260829-s1l: Refuse cross-checkout sharing for rule hosts that embed Cargo-provided checkout paths
+Phase: 72
+Plan: none yet
+Status: v2.1 roadmap and requirements written on 2026-11-02; Phase 72 (identity and invalidation fixes: #86, #91, #90) is next
+Last activity: 2026-11-02 - Completed quick task 261102-v2x: v2.1 engine research and roadmap rewrite
 
 ### Active Milestone Phase Progress
 
-9 phases planned (63-71), 2 complete. Phase 65 (Generation Manifest and Metadata Mirroring) is next; it adds complete-generation discipline and mirrors the kernel's existing identity/invalidation vocabulary behind Phase 64's private store boundary. Phase 70 (Lexical Search) remains the designated scope-cut. Locked decisions (regression budgets, benchmark repo set, search cut) are recorded in `.planning/REQUIREMENTS.md`.
+18 phases planned (72-89), one pull request each, 0 complete. Merge order: kernel truth (72-73), Go edit tier (74-78), graph envelope (79), TypeScript parity (80-83), graph path/taint (84), thin SDK (85-88, conditional on the spike), closeout (89). Track S may run in parallel with the rest after 72-73. Gates G1-G8 and locked decisions are in `.planning/ROADMAP.md` and `.planning/REQUIREMENTS.md`; the research is in `.planning/research/v2.1-engine/`.
+
+v2.0 disposition: phases 63-65 shipped (STATE previously under-reported Phase 65: plans 01-06 are complete on `main` via PR #94, so R1-R4 and the first R5 slice are done); the remaining v2.0 phases were cut or folded into v2.1 (see `MILESTONES.md`).
 
 ### Open repo-admin action (T-42-04-10)
 
@@ -59,6 +61,7 @@ Add `public surface leak gate (ubuntu-latest)` AND `public surface leak gate (ma
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261102-v2x | v2.1 engine research (edit-tier latency, TS parity, store re-scoping, thin SDK, kernel issues #86-#91) and the roadmap rewrite: v2.0 archived, v2.1 Engine Depth defined as 18 PR-sized phases (72-89) with gates G1-G8 | 2026-11-02 | this commit | [261102-v2x-roadmap-rewrite-research-and-pr-plan](./quick/261102-v2x-roadmap-rewrite-research-and-pr-plan/) |
 | 261007-r1v | final review of the deep-analysis build: byte identity, default-profile isolation, corpus, mutations, determinism and gate magnitudes re-derived on the fixed tip; fixed the data-flow setup gap (Go-only scans with no loaded package are blocked with `setup_missing`, mixed scans get `FlowUnknown::NoProgram`) and documented the route middleware chain's limits | 2026-10-07 | bfa45724 | [261007-r1v-final-review-fixes-deep-analysis](./quick/261007-r1v-final-review-fixes-deep-analysis/) |
 | 261003-d3f | deep-analysis step 3: Go flow programs from the semantic sidecar's SSA, a summary-based taint solver with access paths, budgets and unknowns, models as data, `DataFlow<'_>::flows` with paths and SARIF code flows, a 53-case taint corpus with twins; gate 3 PASS (corpus 0.946 / 1.000, L4 10/10 with twins clean, whole-core cold 70.0 s / 4.25 GB, warm 15.0 s, budget unknowns visible); one-file edit 68.2 s reported (sidecar floor), review/CI path only | 2026-10-04 | bb051d19 | [261003-d3f-deep-analysis-step-3-interprocedural-dataflow](./quick/261003-d3f-deep-analysis-step-3-interprocedural-dataflow/) |
 | 261003-u2r | deep-analysis step 2: framework routes interpreted in the semantic sidecar (gin, chi, net/http, Watermill; repository `[[go_route]]` models), `Routes<'_>`, the layer-cache miss path made linear; gate 2 PASS on five criteria (whole-core `calls` warm 5.7 s, cold 43.5 s / 3.84 GB, reports byte-identical, route inventory 292/292, endpoint-authority 0.49 s) and the one-file edit tier FAILED (41.7 s; whole-program VTA floor 15.8 s) -> kill path: deep providers stay review/CI-only, step 3 re-scoped to the review path | 2026-10-03 | 8990619d | [261003-u2r-deep-analysis-step-2-routes-and-edit-tier](./quick/261003-u2r-deep-analysis-step-2-routes-and-edit-tier/) |
@@ -671,16 +674,13 @@ Items acknowledged and deferred at v1.2 milestone close on 2026-05-27. These are
 
 ## Next Action
 
-Discuss and plan R3 as a new bounded slice: closed provider execution outcomes,
-dependency blocking, planned absence and failure states, plus post-validation
-capability revocation without SQLite changes. Phase 65 and
-STORE-04/STORE-05/META-01/META-04 remain open. The sub-five-minute CI target
-also remains a separate non-blocking follow-up.
+Start Phase 72 through `/gsd-plan-phase 72` (identity and invalidation fixes: port `d2bb4f57` for #86, bind Go reachability roots into solver identity for #91, strip unread inputs from the semantic-graph digest for #90). Phase 74 (sidecar instrumentation and the edit cell) has no dependency on 72-73 and can start in parallel.
 
 ## Operator Next Steps
 
-- Re-run `/gsd-discuss-phase 65` specifically for the R3 provider-outcome and capability-revocation slice before creating Plan 03.
-- Preserve the restart sequence: R3 provider outcomes/capability revocation → one audited provider family at a time.
+- Decide whether Track S (thin SDK, phases 85-88) runs in parallel on a second track after 72-73 or waits for the Go edit tier.
+- Close #49 (superseded by the committed accuracy baselines) and PR #126 (superseded by #133); keep #115 and #130 as research records.
+- Repo-admin action T-42-04-10 (leak-gate branch protection) is still open.
 
 ## Performance Metrics
 
