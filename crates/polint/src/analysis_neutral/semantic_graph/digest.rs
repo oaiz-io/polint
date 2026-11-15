@@ -4,7 +4,9 @@
 //! module owns the language-neutral graph-row digest and the lifecycle component
 //! folding shared by all hosts.
 
-use crate::analysis_api::{Digest, DigestKind, InputComponent, InputSnapshot, ProviderManifest};
+use crate::analysis_api::{
+    Digest, DigestKind, DigestParts, InputComponent, InputSnapshot, ProviderManifest,
+};
 use crate::internal_core::StableKeyInterner;
 
 use super::cache_key::semantic_graph_provider_parameter_digest;
@@ -17,6 +19,7 @@ pub fn semantic_graph_output_digest(
     interner: &StableKeyInterner,
     output: &SemanticGraphOutput,
 ) -> Digest {
+    use std::fmt::Write as _;
     parts.extend_component_parts("go_lifecycle", &input_snapshot.go_lifecycle.components);
     parts.extend_component_parts(
         "ts_js_lifecycle",
@@ -28,21 +31,26 @@ pub fn semantic_graph_output_digest(
         .iter()
         .map(|node| interner.resolve(node.stable_key))
         .collect();
-    parts.extend(output.nodes.iter().map(|node| {
-        format!(
+    let header = parts;
+    let mut parts = DigestParts::default();
+    parts.extend(header);
+    parts.extend_in_order(&output.nodes, |text, node| {
+        let _ = write!(
+            text,
             "node={}|prec={:?}",
             interner.resolve(node.stable_key),
             node.precision
-        )
-    }));
-    parts.extend(output.edges.iter().map(|edge| {
-        format!(
+        );
+    });
+    parts.extend_in_order(&output.edges, |text, edge| {
+        let _ = write!(
+            text,
             "edge={}|prec={:?}",
             interner.resolve(edge.stable_key),
             edge.precision
-        )
-    }));
-    parts.extend(output.constraints.iter().map(|constraint| {
+        );
+    });
+    parts.extend_in_order(&output.constraints, |text, constraint| {
         let mut refs: Vec<_> = constraint
             .kind
             .referenced_nodes()
@@ -55,28 +63,27 @@ pub fn semantic_graph_output_digest(
             })
             .collect();
         refs.sort_unstable();
-        format!(
+        let _ = write!(
+            text,
             "constraint={}|status={:?}|prec={:?}|refs=[{}]",
             interner.resolve(constraint.stable_key),
             constraint.status,
             constraint.precision,
             refs.join(","),
-        )
-    }));
+        );
+    });
     if output.nodes.is_empty() && output.edges.is_empty() && output.constraints.is_empty() {
-        parts.push("semantic_graph_output=empty".to_string());
+        parts.push("semantic_graph_output=empty");
     }
 
-    parts.push(format!("provider_id={}", manifest.id));
-    parts.push(format!("provider_version={}", manifest.provider_version()));
-    parts.push(format!("schema={}", manifest.primary_schema_label()));
-    parts.push(format!(
+    parts.push(&format!("provider_id={}", manifest.id));
+    parts.push(&format!("provider_version={}", manifest.provider_version()));
+    parts.push(&format!("schema={}", manifest.primary_schema_label()));
+    parts.push(&format!(
         "parameters={}",
         semantic_graph_provider_parameter_digest()
     ));
-    parts.sort();
-    let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    Digest::from_parts(DigestKind::ProviderOutput, "semantic_graph_output", &refs)
+    parts.digest(DigestKind::ProviderOutput, "semantic_graph_output")
 }
 
 trait ComponentParts {

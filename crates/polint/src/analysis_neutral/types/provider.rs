@@ -46,7 +46,7 @@ pub struct TypeValueAliasProviderOutput {
 
 #[allow(clippy::too_many_arguments)]
 pub fn derive_type_value_alias_with_cache_stats(
-    db: &mut impl AnalysisHost,
+    db: &mut (impl AnalysisHost + Sync),
     input_snapshot: &InputSnapshot,
     manifest: &ProviderManifest,
     semantic_mir_output_digest: Digest,
@@ -83,7 +83,7 @@ pub fn derive_type_value_alias_with_cache_stats(
 /// `analysis_kernel::provider::go_points_to_requested` for when a run needs them.
 #[allow(clippy::too_many_arguments)]
 pub fn derive_type_value_alias_with_go_points_to(
-    db: &mut impl AnalysisHost,
+    db: &mut (impl AnalysisHost + Sync),
     input_snapshot: &InputSnapshot,
     manifest: &ProviderManifest,
     semantic_mir_output_digest: Digest,
@@ -215,7 +215,7 @@ pub fn derive_type_value_alias_with_go_points_to(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn type_value_alias_output_digest<H: AnalysisHost + ?Sized>(
+fn type_value_alias_output_digest<H: AnalysisHost + Sync + ?Sized>(
     db: &H,
     manifest: &ProviderManifest,
     input_snapshot: &InputSnapshot,
@@ -288,48 +288,42 @@ fn type_value_alias_output_digest<H: AnalysisHost + ?Sized>(
             .iter()
             .map(|digest| format!("upstream_syntax={digest}")),
     );
-    for row in &output.types.types {
-        parts.push(format!("type={}", type_fact_payload(&keys, row)?));
-    }
-    for row in &output.types.narrowed {
-        parts.push(format!(
-            "narrowed_type={}",
-            narrowed_type_fact_payload(&keys, row)?
-        ));
-    }
-    for row in &output.values.values {
-        parts.push(format!("value={}", value_fact_payload(&keys, row)?));
-    }
-    for row in &output.values.allocations {
-        parts.push(format!(
-            "allocation={}",
-            allocation_fact_payload(&keys, row)?
-        ));
-    }
-    for row in &output.access_paths.access_paths {
-        parts.push(format!(
-            "access_path={}",
-            access_path_fact_payload(&keys, row)?
-        ));
-    }
-    for row in &output.points_to.constraints {
-        parts.push(format!(
-            "points_to_constraint={}",
-            points_to_constraint_payload(&keys, row)?
-        ));
-    }
-    for row in &output.points_to.sets {
-        parts.push(format!(
-            "points_to_set={}",
-            points_to_set_payload(&keys, row)?
-        ));
-    }
-    for row in &output.aliases.answers {
-        parts.push(format!(
-            "alias_answer={}",
-            alias_answer_payload(&keys, row)?
-        ));
-    }
+    let header = parts;
+    let mut parts = crate::analysis_api::DigestParts::default();
+    parts.extend(header);
+    extend_row_parts(&mut parts, "type", &output.types.types, |row| {
+        type_fact_payload(&keys, row)
+    })?;
+    extend_row_parts(&mut parts, "narrowed_type", &output.types.narrowed, |row| {
+        narrowed_type_fact_payload(&keys, row)
+    })?;
+    extend_row_parts(&mut parts, "value", &output.values.values, |row| {
+        value_fact_payload(&keys, row)
+    })?;
+    extend_row_parts(
+        &mut parts,
+        "allocation",
+        &output.values.allocations,
+        |row| allocation_fact_payload(&keys, row),
+    )?;
+    extend_row_parts(
+        &mut parts,
+        "access_path",
+        &output.access_paths.access_paths,
+        |row| access_path_fact_payload(&keys, row),
+    )?;
+    extend_row_parts(
+        &mut parts,
+        "points_to_constraint",
+        &output.points_to.constraints,
+        |row| points_to_constraint_payload(&keys, row),
+    )?;
+    extend_row_parts(&mut parts, "points_to_set", &output.points_to.sets, |row| {
+        points_to_set_payload(&keys, row)
+    })?;
+    extend_row_parts(&mut parts, "alias_answer", &output.aliases.answers, |row| {
+        alias_answer_payload(&keys, row)
+    })?;
     if output.types.types.is_empty()
         && output.types.narrowed.is_empty()
         && output.values.values.is_empty()
@@ -339,16 +333,26 @@ fn type_value_alias_output_digest<H: AnalysisHost + ?Sized>(
         && output.points_to.sets.is_empty()
         && output.aliases.answers.is_empty()
     {
-        parts.push("type_value_alias_output=empty".to_string());
+        parts.push("type_value_alias_output=empty");
     }
 
-    parts.sort();
-    let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    Ok(Digest::from_parts(
-        DigestKind::ProviderOutput,
-        "type_value_alias_output",
-        &refs,
-    ))
+    Ok(parts.digest(DigestKind::ProviderOutput, "type_value_alias_output"))
+}
+
+/// Appends `{prefix}={payload}` for every row, in row order.
+fn extend_row_parts<T: Sync>(
+    parts: &mut crate::analysis_api::DigestParts,
+    prefix: &str,
+    rows: &[T],
+    payload: impl Fn(&T) -> DigestBuildResult<String> + Sync,
+) -> DigestBuildResult<()> {
+    parts.try_extend_in_order(rows, |text, row| {
+        let payload = payload(row)?;
+        text.push_str(prefix);
+        text.push('=');
+        text.push_str(&payload);
+        Ok(())
+    })
 }
 
 fn digest_error_diagnostic(error: &DigestBuildError) -> Diagnostic {

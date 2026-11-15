@@ -15,7 +15,7 @@ use super::store::EvidenceOutput;
 
 use crate::analysis_api::ProviderManifest;
 use crate::analysis_api::{
-    CacheStats, Digest, DigestBuilder, DigestKind, InputComponent, InputSnapshot,
+    CacheStats, Digest, DigestBuilder, DigestKind, DigestParts, InputComponent, InputSnapshot,
     ProviderExecution, ProviderFailureReason, ProviderFailureStage,
 };
 use crate::analysis_api::{FactFamily, stable_key_from_parts};
@@ -653,27 +653,21 @@ fn evidence_output_digest(
         EVIDENCE_FAMILY_PREFIXES[0],
         family_parts(interner, EVIDENCE_FAMILY_PREFIXES[0], &output.bundles),
     );
-    emit_family(
+    emit_indexed_family(
         &mut digest,
         &mut header,
+        interner,
         EVIDENCE_FAMILY_PREFIXES[1],
-        indexed_family_parts(
-            interner,
-            EVIDENCE_FAMILY_PREFIXES[1],
-            &output.edges,
-            |fact| fact.id.0,
-        ),
+        &output.edges,
+        |fact| fact.id.0,
     );
-    emit_family(
+    emit_indexed_family(
         &mut digest,
         &mut header,
+        interner,
         EVIDENCE_FAMILY_PREFIXES[2],
-        indexed_family_parts(
-            interner,
-            EVIDENCE_FAMILY_PREFIXES[2],
-            &output.nodes,
-            |fact| fact.id.0,
-        ),
+        &output.nodes,
+        |fact| fact.id.0,
     );
     emit_family(
         &mut digest,
@@ -715,20 +709,21 @@ fn evidence_output_digest(
     digest.finish()
 }
 
-/// `<prefix><payload>` for one fact family, materialised on its own.
+/// `<prefix><payload>` for one fact family, materialised on its own and sorted.
 ///
 /// Taking the same `prefix` the emission order is keyed on keeps the two in
 /// lockstep: a family cannot be hashed under one label and ordered under
 /// another.
-fn family_parts<T: Debug>(
+fn family_parts<T: Debug + Sync>(
     interner: &crate::internal_core::StableKeyInterner,
     prefix: &str,
     facts: &[T],
-) -> Vec<String> {
-    let mut parts = facts
-        .iter()
-        .map(|fact| format!("{prefix}{}", stable_fact_payload(interner, fact)))
-        .collect::<Vec<_>>();
+) -> DigestParts {
+    let mut parts = DigestParts::default();
+    parts.extend_in_order(facts, |text, fact| {
+        text.push_str(prefix);
+        text.push_str(&stable_fact_payload(interner, fact));
+    });
     parts.sort();
     parts
 }
@@ -737,38 +732,70 @@ fn emit_family(
     digest: &mut DigestBuilder,
     header: &mut Peekable<std::vec::IntoIter<String>>,
     prefix: &str,
-    parts: impl IntoIterator<Item = String>,
+    parts: DigestParts,
+) {
+    emit_header_before(digest, header, prefix);
+    for part in parts.iter() {
+        digest.part(part);
+    }
+}
+
+fn emit_header_before(
+    digest: &mut DigestBuilder,
+    header: &mut Peekable<std::vec::IntoIter<String>>,
+    prefix: &str,
 ) {
     while header.peek().is_some_and(|part| part.as_str() < prefix) {
         digest.part(&header.next().expect("peeked part is present"));
-    }
-    for part in parts {
-        digest.part(&part);
     }
 }
 
 /// These row types start their Debug payload with an integer ID. Decimal IDs
 /// order the payloads because the closing ')' sorts before every digit. Keep
-/// references in that order and materialize only the current row. Equal IDs
-/// still compare their full payload, preserving the order of unnormalized input.
-fn indexed_family_parts<'a, T: Debug>(
-    interner: &'a crate::internal_core::StableKeyInterner,
-    prefix: &'a str,
+/// references in that order and materialize only a bounded chunk of rows at a
+/// time. Equal IDs still compare their full payload, preserving the order of
+/// unnormalized input.
+fn emit_indexed_family<T: Debug + Sync>(
+    digest: &mut DigestBuilder,
+    header: &mut Peekable<std::vec::IntoIter<String>>,
+    interner: &crate::internal_core::StableKeyInterner,
+    prefix: &str,
+    facts: &[T],
+    id: impl Fn(&T) -> u64,
+) {
+    const ROWS_PER_CHUNK: usize = 4096;
+    emit_header_before(digest, header, prefix);
+    let ordered = indexed_family_order(interner, facts, id);
+    let mut parts = DigestParts::default();
+    for chunk in ordered.chunks(ROWS_PER_CHUNK) {
+        parts.clear();
+        parts.extend_in_order(chunk, |text, fact| {
+            text.push_str(prefix);
+            text.push_str(&stable_fact_payload(interner, fact));
+        });
+        for part in parts.iter() {
+            digest.part(part);
+        }
+    }
+}
+
+/// The facts of an indexed family in the order their parts sort.
+fn indexed_family_order<'a, T: Debug + Sync>(
+    interner: &crate::internal_core::StableKeyInterner,
     facts: &'a [T],
     id: impl Fn(&T) -> u64,
-) -> impl Iterator<Item = String> + 'a {
+) -> Vec<&'a T> {
+    use rayon::slice::ParallelSliceMut as _;
     let mut indexed = facts
         .iter()
         .map(|fact| (id(fact).to_string(), fact))
         .collect::<Vec<_>>();
-    indexed.sort_by(|(left_id, left), (right_id, right)| {
+    indexed.par_sort_by(|(left_id, left), (right_id, right)| {
         left_id.cmp(right_id).then_with(|| {
             stable_fact_payload(interner, left).cmp(&stable_fact_payload(interner, right))
         })
     });
-    indexed
-        .into_iter()
-        .map(move |(_, fact)| format!("{prefix}{}", stable_fact_payload(interner, fact)))
+    indexed.into_iter().map(|(_, fact)| fact).collect()
 }
 
 fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[InputComponent]) {
@@ -888,18 +915,22 @@ mod digest_order_tests {
             .collect::<Vec<_>>();
         for count in 0..=ids.len() {
             assert_eq!(
-                indexed_family_parts(&interner, "evidence_node=", &nodes[..count], |node| node
-                    .id
-                    .0)
-                .collect::<Vec<_>>(),
-                family_parts(&interner, "evidence_node=", &nodes[..count]),
+                indexed_family_order(&interner, &nodes[..count], |node| node.id.0)
+                    .into_iter()
+                    .map(|node| format!("evidence_node={}", stable_fact_payload(&interner, node)))
+                    .collect::<Vec<_>>(),
+                family_parts(&interner, "evidence_node=", &nodes[..count])
+                    .iter()
+                    .collect::<Vec<_>>(),
             );
             assert_eq!(
-                indexed_family_parts(&interner, "evidence_edge=", &edges[..count], |edge| edge
-                    .id
-                    .0)
-                .collect::<Vec<_>>(),
-                family_parts(&interner, "evidence_edge=", &edges[..count]),
+                indexed_family_order(&interner, &edges[..count], |edge| edge.id.0)
+                    .into_iter()
+                    .map(|edge| format!("evidence_edge={}", stable_fact_payload(&interner, edge)))
+                    .collect::<Vec<_>>(),
+                family_parts(&interner, "evidence_edge=", &edges[..count])
+                    .iter()
+                    .collect::<Vec<_>>(),
             );
         }
     }
