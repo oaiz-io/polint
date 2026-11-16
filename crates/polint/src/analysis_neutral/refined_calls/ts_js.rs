@@ -1,4 +1,5 @@
 use crate::analysis_neutral::AnalysisHost;
+use std::cell::LazyCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -20,20 +21,30 @@ use crate::internal_core::StableKeyId;
 pub fn derive_ts_js_refinements(db: &impl AnalysisHost) -> RefinedCallOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let index = SiteIndex::new(db);
+    let sites = LazyCell::new(|| {
+        let mut sites = HashMap::new();
+        for site in db.call_sites() {
+            if site.language.is_ts_family() {
+                sites.entry(site.id).or_insert(site);
+            }
+        }
+        sites
+    });
+    let index = LazyCell::new(|| SiteIndex::new(db));
     let edges = db
         .unresolved_calls()
         .iter()
-        .filter_map(|unresolved| unresolved_edge(db, &index, unresolved))
+        .filter_map(|unresolved| {
+            let site = *sites.get(&unresolved.site)?;
+            unresolved_edge(db, &index, site, unresolved)
+        })
         .collect();
     RefinedCallOutput { edges }.normalized(interner)
 }
 
 /// The facts each unresolved call is matched against, indexed once per run so
 /// matching stays linear in the number of facts.
-struct SiteIndex<'db> {
-    /// The first TS-family call site with each id.
-    sites: HashMap<CallSiteId, &'db CallSiteFact>,
+struct SiteIndex {
     /// Call sites whose first callsite node carries a call constraint that a
     /// present solver edge was derived from.
     solver_resolved: HashSet<CallSiteId>,
@@ -41,20 +52,15 @@ struct SiteIndex<'db> {
     places: HashMap<PlaceId, StableKeyId>,
 }
 
-impl<'db> SiteIndex<'db> {
-    fn new(db: &'db impl AnalysisHost) -> Self {
-        let mut sites = HashMap::new();
-        for site in db.call_sites() {
-            if site.language.is_ts_family() {
-                sites.entry(site.id).or_insert(site);
-            }
-        }
+impl SiteIndex {
+    fn new(db: &impl AnalysisHost) -> Self {
+        #[cfg(test)]
+        tests::REFINEMENT_INDEX_BUILDS.with(|count| count.set(count.get() + 1));
         let mut places = HashMap::new();
         for place in db.mir_places() {
             places.entry(place.id).or_insert(place.stable_key);
         }
         Self {
-            sites,
             solver_resolved: solver_resolved_sites(db),
             places,
         }
@@ -105,12 +111,12 @@ fn solver_resolved_sites(db: &impl AnalysisHost) -> HashSet<CallSiteId> {
 
 fn unresolved_edge(
     db: &impl AnalysisHost,
-    index: &SiteIndex<'_>,
+    index: &SiteIndex,
+    site: &CallSiteFact,
     unresolved: &UnresolvedCallFact,
 ) -> Option<RefinedCallEdgeFact> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
-    let site = *index.sites.get(&unresolved.site)?;
     if index.solver_resolved.contains(&site.id) {
         return None;
     }
@@ -158,7 +164,7 @@ fn unresolved_edge(
 
 fn callable_place_stable_key(
     db: &impl AnalysisHost,
-    index: &SiteIndex<'_>,
+    index: &SiteIndex,
     site: &CallSiteFact,
 ) -> Option<String> {
     let place = match site.callee {
@@ -185,8 +191,79 @@ mod tests {
     use crate::analysis_neutral::places::{PlaceFact, PlaceRoot, PlaceStatus};
     use crate::internal_core::{FileId, FunctionId, Language, Span};
 
+    std::thread_local! {
+        pub(super) static REFINEMENT_INDEX_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
     #[test]
-    fn unresolved_ts_call_is_reported_as_points_to_unresolved() {
+    fn empty_and_go_only_refinements_skip_expensive_indexes() {
+        let mut resolved = refinement_db(Language::TypeScript);
+        let sites = resolved.call_sites().to_vec();
+        resolved
+            .replace_call_facts(CallOutput {
+                sites,
+                ..CallOutput::default()
+            })
+            .expect("resolved calls");
+        for db in [
+            LocalAnalysisDb::new(),
+            resolved,
+            refinement_db(Language::Go),
+        ] {
+            REFINEMENT_INDEX_BUILDS.set(0);
+            assert!(derive_ts_js_refinements(&db).edges.is_empty());
+            assert_eq!(REFINEMENT_INDEX_BUILDS.get(), 0);
+        }
+    }
+
+    #[test]
+    #[ignore = "release microbenchmark: empty unresolved set and Go-only unresolved calls"]
+    fn benchmark_empty_and_go_only_refinements() {
+        for language in [Language::TypeScript, Language::Go] {
+            let mut db = refinement_db(language);
+            let template = db.call_sites()[0].clone();
+            let sites = (0..20_000)
+                .map(|id| CallSiteFact {
+                    id: CallSiteId(id),
+                    stable_key: db.stable_key_interner().intern(format!("site:{id}")),
+                    ..template.clone()
+                })
+                .collect();
+            let unresolved = if language == Language::Go {
+                db.unresolved_calls().to_vec()
+            } else {
+                Vec::new()
+            };
+            db.replace_call_facts(CallOutput {
+                sites,
+                unresolved,
+                ..CallOutput::default()
+            })
+            .expect("call facts");
+            REFINEMENT_INDEX_BUILDS.set(0);
+            let start = std::time::Instant::now();
+            for _ in 0..100 {
+                assert!(
+                    std::hint::black_box(derive_ts_js_refinements(&db))
+                        .edges
+                        .is_empty()
+                );
+            }
+            let language_name = if language.is_ts_family() {
+                "TypeScript"
+            } else {
+                "Go"
+            };
+            eprintln!(
+                "TS refinement language={language_name}: {} ns/100 runs; expensive index builds={}",
+                start.elapsed().as_nanos(),
+                REFINEMENT_INDEX_BUILDS.get()
+            );
+            assert_eq!(REFINEMENT_INDEX_BUILDS.get(), 0);
+        }
+    }
+
+    fn refinement_db(language: Language) -> LocalAnalysisDb {
         let mut db = LocalAnalysisDb::new();
         let file = db.add_file(
             "src/app.ts".into(),
@@ -198,7 +275,7 @@ mod tests {
             file,
             "caller".to_string(),
             Span::point(file, 1, 1),
-            Language::TypeScript,
+            language,
             false,
             true,
             1,
@@ -207,7 +284,7 @@ mod tests {
         let site = CallSiteFact {
             in_throw: false,
             id: CallSiteId(0),
-            language: Language::TypeScript,
+            language,
             file: FileId::from_raw(0),
             caller: FunctionId::from_raw(0),
             owner_symbol: None,
@@ -221,12 +298,12 @@ mod tests {
             result: None,
             status: CallTargetStatus::Unresolved,
             precision: CallPrecision::Unknown,
-            stable_key: crate::internal_core::StableKeyId(0),
+            stable_key: db.stable_key_interner().intern("callsite:callable"),
         };
         db.replace_semantic_mir(MirOutput {
             places: vec![PlaceFact {
                 id: PlaceId(0),
-                language: Language::TypeScript,
+                language,
                 file: Some(file),
                 function: Some(FunctionId::from_raw(0)),
                 root: PlaceRoot::Local {
@@ -251,12 +328,20 @@ mod tests {
                 algorithm: CallAlgorithm::Unsupported,
                 provenance: CallProvenance::MirShape,
                 precision: CallPrecision::Unknown,
-                stable_key: crate::internal_core::StableKeyId(1),
+                stable_key: db.stable_key_interner().intern("unresolved:callable"),
             }],
         })
         .expect("valid call facts");
 
+        db
+    }
+
+    #[test]
+    fn unresolved_ts_call_is_reported_as_points_to_unresolved() {
+        let db = refinement_db(Language::TypeScript);
+        REFINEMENT_INDEX_BUILDS.set(0);
         let output = derive_ts_js_refinements(&db);
+        assert_eq!(REFINEMENT_INDEX_BUILDS.get(), 1);
 
         assert_eq!(output.edges.len(), 1);
         assert_eq!(output.edges[0].algorithm, CallAlgorithm::PointsTo);
