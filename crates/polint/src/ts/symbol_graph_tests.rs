@@ -465,7 +465,7 @@ mod value_functions {
         let text = |span: &crate::internal_core::Span| {
             source[span.start_byte as usize..span.end_byte as usize].to_string()
         };
-        let mut rows = output.value_functions.clone();
+        let mut rows = output.value_functions;
         rows.sort_by_key(|row| (row.binding.start_byte, row.function.start_byte));
         rows.iter()
             .map(|row| {
