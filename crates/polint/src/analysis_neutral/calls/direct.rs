@@ -1519,6 +1519,34 @@ mod linked_bindings {
         );
     }
 
+    /// An import binding whose module links name two different exports has
+    /// no single declaring symbol, so a call through it gets no target.
+    #[test]
+    fn import_binding_linked_to_two_exports_has_no_target_function() {
+        let mut graph = Graph::new(&["src/caller.ts", "src/a.ts", "src/b.ts"]);
+        let (caller_file, a_file, b_file) = (graph.files[0], graph.files[1], graph.files[2]);
+        let mut exports = Vec::new();
+        for file in [a_file, b_file] {
+            graph.function(file, "run", 0, 50);
+            exports.push(graph.symbol(file, "run", SymbolKind::Function, 9, 12));
+            graph.callee_row(file, (9, 12), (0, 50), ValueFunctionKind::Implementation);
+        }
+        let import = graph.symbol(caller_file, "run", SymbolKind::Import, 9, 12);
+        for export in exports {
+            graph.reference(caller_file, "run", ReferenceKind::Import, 9, 12, export);
+        }
+        let call = graph.reference(caller_file, "run", ReferenceKind::Call, 50, 53, import);
+
+        let targets = graph.resolve(caller_file, call, "run", 50, 55);
+
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.target_function.is_none()),
+            "{targets:#?}"
+        );
+    }
+
     /// Links `imports` import bindings into a chain ending at an exported
     /// function and resolves a call through the first binding.
     fn resolve_through_import_chain(imports: u32) -> (Option<FunctionId>, FunctionId) {
@@ -1840,17 +1868,54 @@ mod linked_bindings {
         );
     }
 
+    /// The namespace row ties a call span to a property reference. When the
+    /// call site names a different property than that reference, the two
+    /// producers disagree about the callee, so the call gets no precise target.
+    #[test]
+    fn namespace_member_reference_with_another_name_gives_no_target() {
+        let NamespaceCalls {
+            mut graph,
+            caller_file,
+            direct,
+            ..
+        } = namespace_calls();
+
+        let targets = graph.resolve_member(caller_file, "format", direct);
+
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.precision == CallPrecision::Heuristic),
+            "{targets:#?}"
+        );
+    }
+
     /// Resolution is one index probe per call, never a scan of the file's
     /// functions: a file with many distinct functions, each called once,
     /// resolves in time linear in its size. Go symbols take the declared-name
     /// lookup, which is where a per-call scan would make this quadratic.
     #[test]
     fn resolution_scales_with_one_index_probe_per_call() {
-        const FUNCTIONS: u32 = 40_000;
+        // Wall time alone moves with machine load, so compare two sizes. One
+        // index probe per call grows about 4x from 10k to 40k calls; a scan
+        // of every function per call grows about 16x.
+        let small = fastest_resolution(10_000);
+        let large = fastest_resolution(40_000);
+        let ratio = large.as_secs_f64() / small.as_secs_f64().max(1e-6);
+        assert!(
+            ratio < 10.0,
+            "resolving 4x the calls took {ratio:.1}x as long ({small:?} -> {large:?})"
+        );
+    }
+
+    /// Builds `functions` functions that each call themselves once, checks
+    /// that every call reaches its own function, and returns the fastest of
+    /// three resolutions.
+    fn fastest_resolution(functions: u32) -> std::time::Duration {
         let mut graph = Graph::with_language(Language::Go, &[("big.go", "")]);
         let file = graph.files[0];
         let mut calls = Vec::new();
-        for index in 0..FUNCTIONS {
+        for index in 0..functions {
             let at = 100 + index * 100;
             let name = format!("f{index}");
             let function = graph.function(file, &name, at, at + 50);
@@ -1876,25 +1941,26 @@ mod linked_bindings {
             })
             .collect::<Vec<_>>();
         graph.store();
-
-        let started = std::time::Instant::now();
-        let targets = resolve_direct_call_targets(&graph.db, &sites);
-        let elapsed = started.elapsed();
-
-        let reached = targets
-            .iter()
-            .map(|target| (target.site, target.target_function))
-            .collect::<BTreeSet<_>>();
         let expected = sites
             .iter()
             .zip(&calls)
             .map(|(site, (.., function))| (site.id, Some(*function)))
             .collect::<BTreeSet<_>>();
-        assert_eq!(reached, expected, "every call reaches its own function");
-        assert!(
-            elapsed < std::time::Duration::from_secs(5),
-            "resolving {FUNCTIONS} calls took {elapsed:?}"
-        );
+
+        (0..3)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                let targets = resolve_direct_call_targets(&graph.db, &sites);
+                let elapsed = started.elapsed();
+                let reached = targets
+                    .iter()
+                    .map(|target| (target.site, target.target_function))
+                    .collect::<BTreeSet<_>>();
+                assert_eq!(reached, expected, "every call reaches its own function");
+                elapsed
+            })
+            .min()
+            .expect("three runs")
     }
 
     fn range_of(source: &str, needle: &str) -> (u32, u32) {
