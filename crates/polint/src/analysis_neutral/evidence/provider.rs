@@ -752,8 +752,7 @@ fn emit_header_before(
 
 /// These row types start their Debug payload with an integer ID. Decimal IDs
 /// order the payloads because the closing ')' sorts before every digit. Keep
-/// references in that order and materialize only a bounded chunk of rows at a
-/// time. Equal IDs still compare their full payload, preserving the order of
+/// references in that order and materialize only one row at a time. Equal IDs still compare their full payload, preserving the order of
 /// unnormalized input.
 fn emit_indexed_family<T: Debug + Sync>(
     digest: &mut DigestBuilder,
@@ -763,19 +762,13 @@ fn emit_indexed_family<T: Debug + Sync>(
     facts: &[T],
     id: impl Fn(&T) -> u64,
 ) {
-    const ROWS_PER_CHUNK: usize = 4096;
     emit_header_before(digest, header, prefix);
-    let ordered = indexed_family_order(interner, facts, id);
-    let mut parts = DigestParts::default();
-    for chunk in ordered.chunks(ROWS_PER_CHUNK) {
-        parts.clear();
-        parts.extend_in_order(chunk, |text, fact| {
-            text.push_str(prefix);
-            text.push_str(&stable_fact_payload(interner, fact));
-        });
-        for part in parts.iter() {
-            digest.part(part);
-        }
+    for fact in indexed_family_order(interner, facts, id) {
+        // Stable keys can expand a tiny row into a large payload. Hash it
+        // before expanding the next row rather than retaining a row-count batch.
+        let mut part = String::from(prefix);
+        part.push_str(&stable_fact_payload(interner, fact));
+        digest.part(&part);
     }
 }
 
@@ -859,6 +852,95 @@ fn provider_error_diagnostic(message: String) -> Diagnostic {
 #[cfg(test)]
 mod digest_order_tests {
     use super::*;
+
+    #[test]
+    fn indexed_family_streams_large_payloads() {
+        const CHILD: &str = "POLINT_TEST_INDEXED_PAYLOAD_MEMORY";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+                .args(["--exact", "analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads", "--nocapture"])
+                .env(CHILD, "1")
+                .output()
+                .expect("isolated memory test");
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        // Keep the input tiny while stable-key expansion makes each row large.
+        // A fresh process keeps unrelated tests out of the resident-set bound.
+        struct Row {
+            id: u64,
+        }
+        impl Debug for Row {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "Row({}, StableKeyId(0))", self.id)
+            }
+        }
+        let interner = crate::internal_core::StableKeyInterner::default();
+        interner.intern("x".repeat(64 * 1024));
+        let rows = (0..4097).map(|id| Row { id }).collect::<Vec<_>>();
+        let mut digest = Digest::builder(DigestKind::ProviderOutput, "evidence");
+        let mut header = Vec::new().into_iter().peekable();
+        let before = crate::measure::peak_rss_bytes();
+        emit_indexed_family(&mut digest, &mut header, &interner, "row=", &rows, |row| {
+            row.id
+        });
+        let growth = crate::measure::peak_rss_bytes().saturating_sub(before);
+        assert!(
+            growth < 64 * 1024 * 1024,
+            "expanded payloads retained {growth} bytes; expected one-row streaming"
+        );
+    }
+
+    #[test]
+    fn indexed_family_emission_matches_full_sort_across_batches_and_headers() {
+        struct Row(u64, &'static str);
+        impl Debug for Row {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_tuple("Row").field(&self.0).field(&self.1).finish()
+            }
+        }
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let rows = (0..8200)
+            .rev()
+            .map(|id| {
+                Row(
+                    id % 4100,
+                    if id % 3 == 0 {
+                        "λ"
+                    } else {
+                        "escaped\\quote\""
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut expected = rows
+            .iter()
+            .map(|row| format!("row={}", stable_fact_payload(&interner, row)))
+            .collect::<Vec<_>>();
+        let mut header = vec!["aaa=before".to_string(), "zzz=after".to_string()];
+        expected.extend(header.iter().cloned());
+        expected.sort();
+        header.sort();
+        let mut header = header.into_iter().peekable();
+        let mut actual = Digest::builder(DigestKind::ProviderOutput, "evidence");
+        emit_indexed_family(&mut actual, &mut header, &interner, "row=", &rows, |row| {
+            row.0
+        });
+        for part in header {
+            actual.part(&part);
+        }
+        let refs = expected.iter().map(String::as_str).collect::<Vec<_>>();
+        assert_eq!(
+            actual.finish(),
+            Digest::from_parts(DigestKind::ProviderOutput, "evidence", &refs)
+        );
+    }
 
     #[test]
     fn id_ordered_payloads_match_full_sort_for_sparse_and_repeated_ids() {
