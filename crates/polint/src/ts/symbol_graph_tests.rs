@@ -430,14 +430,18 @@ export const used = localThing;
 mod value_functions {
     use super::derive_ts_semantic_index;
     use crate::analysis_api::SourceFile;
+    use crate::analysis_neutral::symbol_graph::semantic::ValueFunctionKind;
     use crate::internal_core::{FileId, Language};
     use crate::ts::parse::parse_ts_file;
     use oxc_allocator::Allocator;
     use oxc_semantic::SemanticBuilder;
     use std::path::PathBuf;
 
-    /// Returns `(binding text, function text)` for every value-function row.
-    fn links(path: &str, source: &str) -> Vec<(String, String)> {
+    /// One callee identity row: its kind, the binding's start byte and text,
+    /// and the function's text.
+    type Row = (ValueFunctionKind, u32, String, String);
+
+    fn rows(path: &str, source: &str) -> Vec<Row> {
         let file = SourceFile::new(
             FileId::from_raw(0),
             PathBuf::from(path),
@@ -461,11 +465,41 @@ mod value_functions {
         let text = |span: &crate::internal_core::Span| {
             source[span.start_byte as usize..span.end_byte as usize].to_string()
         };
-        output
-            .value_functions
-            .iter()
-            .map(|row| (text(&row.binding), text(&row.function)))
+        let mut rows = output.value_functions.clone();
+        rows.sort_by_key(|row| (row.binding.start_byte, row.function.start_byte));
+        rows.iter()
+            .map(|row| {
+                (
+                    row.kind,
+                    row.binding.start_byte,
+                    text(&row.binding),
+                    text(&row.function),
+                )
+            })
             .collect()
+    }
+
+    /// Returns `(binding text, function text)` for every function literal row.
+    fn links(path: &str, source: &str) -> Vec<(String, String)> {
+        rows(path, source)
+            .into_iter()
+            .filter(|(kind, ..)| *kind == ValueFunctionKind::Literal)
+            .map(|(_, _, binding, function)| (binding, function))
+            .collect()
+    }
+
+    /// Returns `(kind, binding text, function text)` for every function
+    /// declaration row, in source order of the binding.
+    fn declarations(path: &str, source: &str) -> Vec<(ValueFunctionKind, String, String)> {
+        rows(path, source)
+            .into_iter()
+            .filter(|(kind, ..)| *kind != ValueFunctionKind::Literal)
+            .map(|(kind, _, binding, function)| (kind, binding, function))
+            .collect()
+    }
+
+    fn pair(binding: &str, function: &str) -> (String, String) {
+        (binding.to_string(), function.to_string())
     }
 
     #[test]
@@ -478,11 +512,8 @@ mod value_functions {
         assert_eq!(
             found,
             vec![
-                ("top".to_string(), "() => 1".to_string()),
-                (
-                    "inner".to_string(),
-                    "function () { return 2; }".to_string()
-                ),
+                pair("top", "() => 1"),
+                pair("inner", "function () { return 2; }"),
             ]
         );
     }
@@ -494,13 +525,7 @@ mod value_functions {
             "function outer() {\n  let a = () => 1;\n  var b = () => 2;\n  return a() + b();\n}\n",
         );
 
-        assert_eq!(
-            found
-                .iter()
-                .map(|(binding, _)| binding.as_str())
-                .collect::<Vec<_>>(),
-            vec!["a", "b"]
-        );
+        assert_eq!(found, vec![pair("a", "() => 1"), pair("b", "() => 2")]);
     }
 
     #[test]
@@ -513,28 +538,195 @@ mod value_functions {
         assert!(found.is_empty(), "{found:?}");
     }
 
+    /// Another script can assign a script's top-level `var`.
     #[test]
-    fn skips_mutable_bindings_that_another_value_can_reach() {
+    fn skips_a_script_top_level_var() {
         let found = links(
             "src/value.js",
-            "var scriptGlobal = () => 1;\nfunction outer() {\n  let reassigned = () => 1;\n  reassigned = () => 2;\n  var redeclared = () => 3;\n  var redeclared = () => 4;\n  return reassigned() + redeclared();\n}\n",
+            "var scriptGlobal = () => 1;\nscriptGlobal();\n",
         );
 
         assert!(found.is_empty(), "{found:?}");
     }
 
     #[test]
-    fn module_scope_let_links_only_in_files_with_module_syntax() {
-        let module = links(
+    fn module_top_level_let_links() {
+        let found = links(
             "src/value.js",
             "export let handler = () => 1;\nhandler();\n",
         );
-        let with_eval = links(
+
+        assert_eq!(found, vec![pair("handler", "() => 1")]);
+    }
+
+    #[test]
+    fn skips_a_reassigned_let() {
+        let found = links(
+            "src/value.js",
+            "function outer() {\n  let reassigned = () => 1;\n  reassigned = () => 2;\n  return reassigned();\n}\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    /// `var r;` writes nothing, yet the binding has two declarations.
+    #[test]
+    fn skips_a_var_redeclared_without_an_initializer() {
+        let found = links(
+            "src/value.js",
+            "function outer() {\n  var redeclared = () => 3;\n  var redeclared;\n  return redeclared();\n}\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn skips_a_let_merged_with_an_interface() {
+        let found = rows(
+            "src/value.ts",
+            "function outer() {\n  interface run {}\n  let run = () => 1;\n  return run();\n}\n",
+        );
+
+        assert!(
+            found.iter().all(|(_, _, binding, _)| binding != "run"),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn a_mention_of_eval_drops_every_row() {
+        let found = rows(
             "src/value.js",
             "function outer() {\n  let local = () => 1;\n  eval(code);\n  return local();\n}\n",
         );
 
-        assert_eq!(module.len(), 1, "{module:?}");
-        assert!(with_eval.is_empty(), "{with_eval:?}");
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    /// A parameter named `eval` does not make `eval(...)` an indirect call
+    /// the analysis can trust: the argument may still be the global `eval`.
+    #[test]
+    fn an_eval_parameter_drops_every_row() {
+        let found = rows(
+            "src/value.cjs",
+            "function run(eval) {\n  let f = () => 1;\n  eval(\"f = () => 2\");\n  return f();\n}\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn a_with_statement_drops_every_row() {
+        let found = rows(
+            "src/value.js",
+            "function outer(scope) {\n  const local = () => 1;\n  with (scope) { local(); }\n}\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn function_declaration_names_its_implementation() {
+        let found = declarations("src/value.ts", "function make() {}\nmake();\n");
+
+        assert_eq!(
+            found,
+            vec![(
+                ValueFunctionKind::Implementation,
+                "make".to_string(),
+                "function make() {}".to_string()
+            )]
+        );
+    }
+
+    /// A signature whose return type is an object literal ends in `}` like a
+    /// body does; the AST body flag still tells the two apart.
+    #[test]
+    fn overload_signatures_are_not_implementations() {
+        let found = declarations(
+            "src/value.ts",
+            "function pick(x: string): { value: string };\nfunction pick(x: any) { return x; }\n",
+        );
+
+        assert_eq!(
+            found,
+            vec![
+                (
+                    ValueFunctionKind::Signature,
+                    "pick".to_string(),
+                    "function pick(x: string): { value: string };".to_string()
+                ),
+                (
+                    ValueFunctionKind::Implementation,
+                    "pick".to_string(),
+                    "function pick(x: any) { return x; }".to_string()
+                ),
+            ]
+        );
+    }
+
+    /// Each `make` binding names only the function declared in its own scope.
+    #[test]
+    fn interface_merged_function_rows_stay_in_their_own_scope() {
+        let source = "function make() {}\nfunction run() {\n  interface make {}\n  function make() { return 2; }\n  return make();\n}\n";
+        let found = rows("src/value.ts", source);
+        let inner_binding = source.rfind("make() { return 2; }").unwrap() as u32;
+        let inner_interface = source.find("make {}").unwrap() as u32;
+
+        let make_rows = found
+            .iter()
+            .filter(|(_, _, binding, _)| binding == "make")
+            .map(|(kind, start, _, function)| (*kind, *start, function.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(make_rows.len(), 2, "{found:?}");
+        assert!(
+            make_rows.contains(&(ValueFunctionKind::Implementation, 9, "function make() {}")),
+            "{found:?}"
+        );
+        // Oxc names a merged symbol by its first declaration: the interface.
+        let inner = make_rows
+            .iter()
+            .find(|(_, start, _)| *start != 9)
+            .expect("inner make row");
+        assert!(
+            [inner_binding, inner_interface].contains(&inner.1),
+            "{found:?}"
+        );
+        assert_eq!(inner.2, "function make() { return 2; }", "{found:?}");
+    }
+
+    #[test]
+    fn skips_a_reassigned_function() {
+        let found = declarations(
+            "src/value.js",
+            "function make() {}\nmake = other;\nmake();\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    /// A binding declared both as a function and a `var` is not a function
+    /// declaration alone, even when the `var` writes nothing.
+    #[test]
+    fn skips_a_function_redeclared_as_a_var() {
+        let found = declarations(
+            "src/value.js",
+            "function outer() {\n  var make;\n  function make() {}\n  return make();\n}\n",
+        );
+
+        assert!(
+            found.iter().all(|(_, binding, _)| binding != "make"),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn let_merged_with_an_interface_and_reassigned_has_no_row() {
+        let found = rows(
+            "src/value.ts",
+            "interface run {}\nlet run = () => 1;\nrun = other;\nrun();\nexport {};\n",
+        );
+
+        assert!(found.is_empty(), "{found:?}");
     }
 }

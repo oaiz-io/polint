@@ -7,10 +7,11 @@ use crate::analysis_neutral::symbol_graph::{
     LanguageCapabilitySupport, LanguageSymbolOutput, SymbolCapabilityStatus, SymbolGraphRequest,
     model::{DefinitionDraft, ReferenceDraft, SymbolDraft, SymbolGraphBuilder},
     semantic::{
-        AliasFact, AliasId, AliasKind, ExportFact, ExportId, ExportKind, ResolutionFact,
-        ResolutionId, ResolutionStepKind, ScopeFact, ScopeId, ScopeKind, SemanticImportFact,
-        SemanticImportId, SemanticImportKind, SemanticIndexBuilder, SemanticIndexOutput,
-        SemanticStatus, StableExportId, StableExportIdentity, ValueFunctionFact,
+        AliasFact, AliasId, AliasKind, ExportFact, ExportId, ExportKind, NamespaceMemberCallFact,
+        ResolutionFact, ResolutionId, ResolutionStepKind, ScopeFact, ScopeId, ScopeKind,
+        SemanticImportFact, SemanticImportId, SemanticImportKind, SemanticIndexBuilder,
+        SemanticIndexOutput, SemanticStatus, StableExportId, StableExportIdentity,
+        ValueFunctionFact, ValueFunctionKind,
     },
     stable_id::{StableReferenceKey, StableSymbolKey},
 };
@@ -72,6 +73,8 @@ struct NamespaceMemberCall {
     alias: usize,
     property: String,
     property_span: Span,
+    /// The call site's span, as call-site facts record it.
+    call_span: Span,
 }
 
 /// An `export ... from "m"` statement: the names it forwards are bindings of
@@ -248,10 +251,21 @@ fn derive_ts_file_symbols(
     let export_names = collect_export_names(parsed.program(), scoping);
     let parameter_symbols = collect_parameter_symbols(nodes);
     let namespace_member_calls = if requests_references {
-        collect_namespace_member_calls(file, scoping, nodes, &import_aliases)
+        collect_namespace_member_calls(file, source, scoping, nodes, &import_aliases)
     } else {
         Vec::new()
     };
+    output
+        .semantic
+        .namespace_member_calls
+        .extend(
+            namespace_member_calls
+                .iter()
+                .map(|call| NamespaceMemberCallFact {
+                    call: call.call_span.clone(),
+                    property: call.property_span.clone(),
+                }),
+        );
     let mut summary = TsFileSymbolSummary {
         file: file.id,
         import_aliases,
@@ -452,16 +466,26 @@ fn derive_ts_semantic_index(
     builder.finish(interner)
 }
 
-/// Records bindings that can only ever hold the function literal they are
-/// declared with, so a call through the binding has exactly one callee.
+/// Records the functions a binding can hold, keyed by the binding symbol.
 ///
-/// The initializer must be the function or arrow expression itself; calls,
-/// conditionals, wrappers and type assertions around it are not followed.
-/// `const` bindings always qualify. `let`/`var` bindings qualify only when they
-/// are declared once, never written, and the file has no direct `eval` that
-/// could write them. A top-level `let`/`var` also needs import or export syntax
-/// in the file: without it the file may run as a classic script, whose global
+/// A variable gets a [`ValueFunctionKind::Literal`] row when its initializer is
+/// the function or arrow expression itself; calls, conditionals, wrappers and
+/// type assertions around it are not followed. `const` bindings always
+/// qualify. `let`/`var` bindings qualify only when they are declared once and
+/// never written. A top-level `let`/`var` also needs import or export syntax in
+/// the file: without it the file may run as a classic script, whose global
 /// bindings other scripts can reassign.
+///
+/// Each function declaration or named function expression gets an
+/// [`ValueFunctionKind::Implementation`] or [`ValueFunctionKind::Signature`]
+/// row from its own body, provided its symbol is never written and every
+/// declaration of the symbol is a function, interface or namespace.
+///
+/// A file that mentions `eval` or has a `with` statement gets no rows at all:
+/// a direct eval can write a binding or declare a `var` that shadows one, and
+/// a `with` body can see an object property instead of the binding, neither
+/// through a reference Oxc sees. Any call through an identifier named `eval`
+/// counts, since a parameter or local of that name may hold the global.
 fn add_ts_value_function_rows(
     builder: &mut SemanticIndexBuilder,
     file: &SourceFile,
@@ -469,42 +493,86 @@ fn add_ts_value_function_rows(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
 ) {
-    let mutable_bindings_are_sealed = !scoping.root_unresolved_references().contains_key("eval");
+    let bindings_are_sealed = !nodes.iter().any(|node| match node.kind() {
+        AstKind::IdentifierReference(identifier) => identifier.name == "eval",
+        AstKind::WithStatement(_) => true,
+        _ => false,
+    });
+    if !bindings_are_sealed {
+        return;
+    }
     let root_is_module_scope = program.body.iter().any(Statement::is_module_declaration);
     for node in nodes.iter() {
-        let AstKind::VariableDeclarator(declarator) = node.kind() else {
-            continue;
-        };
-        let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
-            continue;
-        };
-        let Some(symbol) = binding.symbol_id.get() else {
-            continue;
-        };
-        let function_span = match &declarator.init {
-            Some(Expression::ArrowFunctionExpression(function)) => function.span,
-            Some(Expression::FunctionExpression(function)) => function.span,
+        let (symbol, function_span, kind) = match node.kind() {
+            AstKind::VariableDeclarator(declarator) => {
+                let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+                    continue;
+                };
+                let Some(symbol) = binding.symbol_id.get() else {
+                    continue;
+                };
+                let function_span = match &declarator.init {
+                    Some(Expression::ArrowFunctionExpression(function)) => function.span,
+                    Some(Expression::FunctionExpression(function)) => function.span,
+                    _ => continue,
+                };
+                let single_value = match declarator.kind {
+                    VariableDeclarationKind::Const => true,
+                    VariableDeclarationKind::Let | VariableDeclarationKind::Var => {
+                        scoping.symbol_redeclarations(symbol).is_empty()
+                            && !scoping.symbol_is_mutated(symbol)
+                            && (root_is_module_scope
+                                || scoping.symbol_scope_id(symbol) != scoping.root_scope_id())
+                    }
+                    VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing => false,
+                };
+                if !single_value {
+                    continue;
+                }
+                (symbol, function_span, ValueFunctionKind::Literal)
+            }
+            AstKind::Function(function) => {
+                let Some(symbol) = function.id.as_ref().and_then(|id| id.symbol_id.get()) else {
+                    continue;
+                };
+                if scoping.symbol_is_mutated(symbol)
+                    || !only_function_declarations(scoping, nodes, symbol)
+                {
+                    continue;
+                }
+                let kind = if function.body.is_some() {
+                    ValueFunctionKind::Implementation
+                } else {
+                    ValueFunctionKind::Signature
+                };
+                (symbol, function.span, kind)
+            }
             _ => continue,
         };
-        let single_value = match declarator.kind {
-            VariableDeclarationKind::Const => true,
-            VariableDeclarationKind::Let | VariableDeclarationKind::Var => {
-                mutable_bindings_are_sealed
-                    && scoping.symbol_redeclarations(symbol).is_empty()
-                    && !scoping.symbol_is_mutated(symbol)
-                    && (root_is_module_scope
-                        || scoping.symbol_scope_id(symbol) != scoping.root_scope_id())
-            }
-            VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing => false,
-        };
-        if !single_value {
-            continue;
-        }
         builder.add_value_function(ValueFunctionFact {
             binding: span_from_oxc(file, scoping.symbol_span(symbol)),
             function: span_from_oxc(file, function_span),
+            kind,
         });
     }
+}
+
+/// Whether every declaration of `symbol` is a function, or a type-side
+/// interface or namespace merged with one, so no variable, parameter, class
+/// or import shares the binding.
+fn only_function_declarations(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    symbol: OxcSymbolId,
+) -> bool {
+    scoping.symbol_declarations(symbol).all(|declaration| {
+        matches!(
+            nodes.kind(declaration),
+            AstKind::Function(_)
+                | AstKind::TSInterfaceDeclaration(_)
+                | AstKind::TSModuleDeclaration(_)
+        )
+    })
 }
 
 fn export_symbol_stable_keys(
@@ -2361,6 +2429,7 @@ fn collect_import_aliases(
 /// file's namespace imports (a shadowing local of the same name is not).
 fn collect_namespace_member_calls(
     file: &SourceFile,
+    source: &str,
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     import_aliases: &[ImportAlias],
@@ -2406,6 +2475,10 @@ fn collect_namespace_member_calls(
             alias: *alias,
             property: member.property.name.to_string(),
             property_span: span_from_oxc(file, member.property.span),
+            call_span: span_from_oxc(
+                file,
+                crate::ts::spans::normalized_call_expression_span(source, call),
+            ),
         });
     }
     calls.sort_by_key(|call| (call.property_span.start_byte, call.property_span.end_byte));

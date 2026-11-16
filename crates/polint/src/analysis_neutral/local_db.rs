@@ -42,7 +42,7 @@ use crate::analysis_neutral::semantic_graph::store::SemanticGraphStore;
 use crate::analysis_neutral::solver::store::SolverStore;
 use crate::analysis_neutral::store::SemanticStore;
 use crate::analysis_neutral::summaries::store::SummaryStore;
-use crate::analysis_neutral::symbol_graph::semantic::ValueFunctionFact;
+use crate::analysis_neutral::symbol_graph::semantic::{NamespaceMemberCallFact, ValueFunctionFact};
 use crate::analysis_neutral::types::store::TypeStore;
 use crate::analysis_neutral::values::store::ValueStore;
 
@@ -70,6 +70,7 @@ pub struct LocalAnalysisDb {
     references: Vec<ReferenceFact>,
     semantic_imports: Vec<SemanticImportFact>,
     value_functions: Vec<ValueFunctionFact>,
+    namespace_member_calls: Vec<NamespaceMemberCallFact>,
     file_metrics: Vec<FileMetricFact>,
     function_metrics: Vec<FunctionMetricFact>,
     complexity_metrics: Vec<ComplexityMetricFact>,
@@ -144,6 +145,7 @@ impl LocalAnalysisDb {
             references: Vec::new(),
             semantic_imports: Vec::new(),
             value_functions: Vec::new(),
+            namespace_member_calls: Vec::new(),
             file_metrics: Vec::new(),
             function_metrics: Vec::new(),
             complexity_metrics: Vec::new(),
@@ -371,6 +373,17 @@ impl LocalAnalysisDb {
 
     pub fn value_functions(&self) -> &[ValueFunctionFact] {
         &self.value_functions
+    }
+
+    pub fn replace_namespace_member_calls(
+        &mut self,
+        namespace_member_calls: Vec<NamespaceMemberCallFact>,
+    ) {
+        self.namespace_member_calls = namespace_member_calls;
+    }
+
+    pub fn namespace_member_calls(&self) -> &[NamespaceMemberCallFact] {
+        &self.namespace_member_calls
     }
 
     pub fn symbols(&self) -> &[SymbolFact] {

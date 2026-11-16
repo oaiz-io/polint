@@ -380,7 +380,10 @@ fn derive_requested_symbols_uncached_with_payload(
         semantic_output.generated_symbols,
         semantic_output.stable_exports,
     );
-    db.replace_value_function_facts(semantic_output.value_functions);
+    db.replace_callee_identity_facts(
+        semantic_output.value_functions,
+        semantic_output.namespace_member_calls,
+    );
     db.replace_symbol_graph_facts(output.symbols, output.definitions, output.references);
     derivation.diagnostics.extend(output.diagnostics);
     derivation
@@ -693,7 +696,7 @@ fn restore_symbol_graph_layer_payload(db: &mut AnalysisDb, payload: &SymbolGraph
         semantic.generated_symbols,
         semantic.stable_exports,
     );
-    db.replace_value_function_facts(semantic.value_functions);
+    db.replace_callee_identity_facts(semantic.value_functions, semantic.namespace_member_calls);
 }
 
 fn validate_symbol_graph_layer_payload(
@@ -733,6 +736,7 @@ fn semantic_index_payload(db: &AnalysisDb) -> SemanticIndexOutput {
             stable_export_payload_sort_key(&interner, row)
         }),
         value_functions: db.value_functions().to_vec(),
+        namespace_member_calls: db.namespace_member_calls().to_vec(),
     }
 }
 
@@ -3232,5 +3236,67 @@ export function run() {
                 .iter()
                 .all(|reference| reference.target.is_none())
         );
+    }
+
+    /// `export * as tools` binds `tools` to a module namespace object, which is
+    /// no declared symbol; it also shadows a same-named export a star source
+    /// provides, so the import stays unlinked rather than reaching that export.
+    #[test]
+    fn star_as_re_export_shadows_a_same_named_star_export() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let handlers = "import { tools } from \"./index\";\nexport const used = tools;\n";
+        let index = "export * as tools from \"./ns\";\nexport * from \"./b\";\n";
+        let ns = "export function parse() {}\n";
+        let b = "export function tools() {}\n";
+        let handlers_file = add_file(&mut db, temp.path(), "src/handlers.ts", handlers);
+        let index_file = add_file(&mut db, temp.path(), "src/index.ts", index);
+        let ns_file = add_file(&mut db, temp.path(), "src/ns.ts", ns);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let nodes = [
+            (ModuleNodeId::from_raw(0), "src/handlers.ts", handlers_file),
+            (ModuleNodeId::from_raw(1), "src/index.ts", index_file),
+            (ModuleNodeId::from_raw(2), "src/ns.ts", ns_file),
+            (ModuleNodeId::from_raw(3), "src/b.ts", b_file),
+        ];
+        let imports = vec![
+            resolved(
+                push_import(&mut db, handlers_file, handlers, "./index", 0),
+                handlers_file,
+                nodes[1].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./ns", 0),
+                index_file,
+                nodes[2].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./b", 0),
+                index_file,
+                nodes[3].0,
+            ),
+        ];
+        db.replace_module_graph_facts(
+            imports,
+            nodes
+                .iter()
+                .map(|(id, label, file)| file_node(*id, label, *file))
+                .collect(),
+            vec![],
+        );
+
+        let (symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+        let tools = references
+            .iter()
+            .find(|reference| {
+                reference.name == "tools"
+                    && reference.kind == ReferenceKind::Import
+                    && reference.file == Some(handlers_file)
+            })
+            .expect("import reference `tools`");
+        let star_tools = exported_symbol_in(&symbols, b_file, "tools").id;
+
+        assert_eq!(tools.target, None, "{tools:#?}");
+        assert!(!tools.candidates.contains(&star_tools), "{tools:#?}");
     }
 }

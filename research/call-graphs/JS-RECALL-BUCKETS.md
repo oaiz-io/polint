@@ -157,20 +157,31 @@ solver. They are planned below for after the performance branch merges.
 ## Fixed in This Branch
 
 - **Barrel re-exports.** An import of a name that a barrel re-exports with
-  `export { x } from`, `export * from`, or `export * as ns from` now links to
-  the declaring symbol instead of the barrel's binding. This removed almost all
+  `export { x } from` or `export * from` now links to the declaring symbol
+  instead of the barrel's binding. A name a barrel binds with
+  `export * as ns from` names a module namespace object, not a symbol, so it
+  stays unlinked, and it shadows a same-named name from an `export *` source. This removed almost all
   of the `stops-at-import-binding` silent outcomes: axios 57 → 1, zod 25 → 2,
   chalk 2 → 0.
 - **Namespace member calls.** `ns.name(...)`, where `ns` comes from
   `import * as ns` and the barrels behind it, now resolves `name` through the
-  module's export table.
-- **Single-literal bindings and overloads.** A `const`/`let` binding that only
-  ever holds one function or arrow literal is a direct target. A call to an
-  overloaded function targets the implementation, not each signature.
+  module's export table. The frontend records each such call with the span of
+  its callee member expression, and the resolver matches a call site to it by
+  that span, so nothing is rebuilt from source text.
+- **Single-literal bindings and overloads.** The TS frontend records, from the
+  AST and the Oxc symbol table, which function each binding names: the literal
+  initializer of a `const`, or of a `let`/`var` that is never written, never
+  redeclared, and not a script's top-level binding; or the implementation of a
+  function declaration that is never written (the declaration whose AST node
+  has a body, so an overload signature is never the target). A call through a
+  binding with exactly one such function is a direct target. A file that
+  mentions `eval` or contains `with` gets no rows, because either can rebind a
+  local by name.
 - **Interface merged with a function.** Oxc gives `interface X` and
-  `function X` one symbol, of kind interface. A call through that symbol now
-  targets the function, but only when exactly one outermost implementation
-  exists. Otherwise the resolver emits nothing and leaves the site unresolved.
+  `function X` one symbol, of kind interface. The row for that symbol comes
+  from its own declarations, in its own scope, so a call through it targets
+  that scope's function and never a same-named function elsewhere. A merged
+  `let` or `var` gets a row only when it passes the single-value checks above.
   zod declares `interface $constructor` and `function $constructor` in
   `core.ts` and calls `$constructor(...)` 252 times, so this one shape
   accounts for zod base module_member 342 → 90.

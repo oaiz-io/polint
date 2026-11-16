@@ -413,13 +413,16 @@ fn is_static_member_evidence(language: Language, evidence: &str) -> bool {
             .is_some_and(|base| base.chars().next().is_some_and(char::is_uppercase))
 }
 
+/// Whether the callee text is a single name. JS and Go both allow Unicode
+/// letters and digits in identifiers, so `café` is a name like `cafe`; the text
+/// came from a parsed callee, so this only tells a bare name from an expression.
 fn is_identifier_like(value: &str) -> bool {
     let mut chars = value.chars();
     let Some(first) = chars.next() else {
         return false;
     };
-    (first == '_' || first == '$' || first.is_ascii_alphabetic())
-        && chars.all(|ch| ch == '_' || ch == '$' || ch.is_ascii_alphanumeric())
+    (first == '_' || first == '$' || first.is_alphabetic())
+        && chars.all(|ch| ch == '_' || ch == '$' || ch.is_alphanumeric())
 }
 
 fn temporary_callee(value: MirValueId) -> (CallCallee, Option<PlaceId>, CallSyntaxKind, String) {
@@ -871,6 +874,27 @@ mod tests {
             );
             assert_eq!(receiver, None);
             assert_eq!(kind, CallSyntaxKind::Function);
+        }
+    }
+
+    #[test]
+    fn non_ascii_names_are_identifier_evidence() {
+        for name in ["café", "ünïcode", "名前", "x\u{0663}"] {
+            let (callee, _, kind, _) = super::evidence_callee(name, Language::TypeScript);
+            assert_eq!(
+                callee,
+                CallCallee::Identifier {
+                    reference: None,
+                    name: name.to_string(),
+                }
+            );
+            assert_eq!(kind, CallSyntaxKind::Function);
+        }
+        let (_, _, kind, _) = super::evidence_callee("obj.prénom", Language::TypeScript);
+        assert_eq!(kind, CallSyntaxKind::Member);
+        for expression in ["(café)", "café()", "a é"] {
+            let (_, _, kind, _) = super::evidence_callee(expression, Language::TypeScript);
+            assert_eq!(kind, CallSyntaxKind::Unknown, "{expression}");
         }
     }
 

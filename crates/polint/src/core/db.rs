@@ -91,8 +91,8 @@ use crate::module_graph::topology::{
 };
 use crate::symbol_graph::semantic::{
     AliasFact, AliasId, ExportFact, ExportId, GeneratedSymbolFact, GeneratedSymbolId,
-    ResolutionFact, ResolutionId, ScopeFact, ScopeId, SemanticImportFact, SemanticImportId,
-    SemanticStatus, StableExportId, StableExportIdentity, ValueFunctionFact,
+    NamespaceMemberCallFact, ResolutionFact, ResolutionId, ScopeFact, ScopeId, SemanticImportFact,
+    SemanticImportId, SemanticStatus, StableExportId, StableExportIdentity, ValueFunctionFact,
 };
 use crate::ts::object_model::facts::{
     TsObjectAllocationFact, TsPropertyReadFact, TsPropertyWriteFact, TsPrototypeLinkFact,
@@ -1156,11 +1156,12 @@ impl AnalysisDb {
         self.refresh_semantic_index_metadata();
     }
 
-    /// Stores the value-function rows of the current semantic index. Call after
-    /// [`Self::replace_semantic_index_facts`], which clears them.
-    pub(crate) fn replace_value_function_facts(
+    /// Stores the callee-identity rows of the current semantic index. Call
+    /// after [`Self::replace_semantic_index_facts`], which clears them.
+    pub(crate) fn replace_callee_identity_facts(
         &mut self,
         mut value_functions: Vec<ValueFunctionFact>,
+        mut namespace_member_calls: Vec<NamespaceMemberCallFact>,
     ) {
         value_functions.sort_by_key(|row| {
             (
@@ -1169,11 +1170,22 @@ impl AnalysisDb {
                 row.binding.end_byte,
                 row.function.start_byte,
                 row.function.end_byte,
+                row.kind,
             )
         });
         value_functions.dedup();
+        namespace_member_calls.sort_by_key(|row| {
+            (
+                row.call.file,
+                row.call.start_byte,
+                row.call.end_byte,
+                row.property.start_byte,
+                row.property.end_byte,
+            )
+        });
+        namespace_member_calls.dedup();
         self.semantic_index_store_mut()
-            .replace_value_functions(value_functions);
+            .replace_callee_identities(value_functions, namespace_member_calls);
     }
 
     pub(crate) fn replace_semantic_mir(&mut self, output: MirOutput) -> Result<(), AnalysisError> {
@@ -3800,6 +3812,10 @@ impl AnalysisDb {
 
     pub(crate) fn value_functions(&self) -> &[ValueFunctionFact] {
         self.semantic_index_store().value_functions()
+    }
+
+    pub(crate) fn namespace_member_calls(&self) -> &[NamespaceMemberCallFact] {
+        self.semantic_index_store().namespace_member_calls()
     }
 
     pub(crate) fn exports(&self) -> &[ExportFact] {
@@ -6486,6 +6502,10 @@ impl crate::analysis_neutral::AnalysisHost for AnalysisDb {
 
     fn value_functions(&self) -> &[ValueFunctionFact] {
         self.value_functions()
+    }
+
+    fn namespace_member_calls(&self) -> &[NamespaceMemberCallFact] {
+        self.namespace_member_calls()
     }
 
     /// Route the trait's symbol and reference lookups to the indexed inherent
