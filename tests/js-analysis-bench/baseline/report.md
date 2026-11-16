@@ -1,6 +1,6 @@
 # JS/TS analysis benchmark
 
-polint 0.5.1. Written by `python3 tests/js-analysis-bench/bench.py report`;
+polint 0.5.2. Written by `python3 tests/js-analysis-bench/bench.py report`;
 see `tests/js-analysis-bench/README.md` for the measures, the decisions and their limits.
 There is no overall accuracy number on purpose: read the rows.
 
@@ -139,13 +139,13 @@ Dump time and peak RSS are one fact dump each, sidecar included.
 
 | package | recall refined | recall typed | false-complete refined / typed | type callsite rows | dump s refined / typed | dump peak MB refined / typed |
 |---|---|---|---|---|---|---|
-| axios | 270/675 (40%) | 511/675 (76%) | 0 / 0 | 2098 | 2.2 / 3.3 | 285.5 / 308.0 |
-| zod | 719/1308 (55%) | 764/1308 (58%) | 0 / 0 | 49041 | 86.3 / 129.1 | 3897.8 / 4418.0 |
-| commander | 119/318 (37%) | 248/318 (78%) | 0 / 0 | 814 | 1.8 / 2.4 | 145.5 / 230.8 |
-| async | 328/637 (51%) | 338/637 (53%) | 0 / 0 | 1605 | 3.1 / 3.3 | 267.6 / 281.8 |
-| chalk | 17/72 (24%) | 17/72 (24%) | 0 / 0 | 60 | 0.1 / 0.6 | 41.1 / 216.0 |
-| dayjs | 0/117 (0%) | 0/117 (0%) | 0 / 0 | 181 | 0.1 / 0.9 | 36.2 / 225.3 |
-| underscore | 158/262 (60%) | 202/262 (77%) | 0 / 0 | 455 | 1.2 / 2.5 | 121.0 / 228.3 |
+| axios | 270/675 (40%) | 511/675 (76%) | 0 / 0 | 2098 | 2.1 / 3.2 | 288.4 / 311.8 |
+| zod | 719/1308 (55%) | 764/1308 (58%) | 0 / 0 | 49041 | 48.8 / 58.7 | 3837.5 / 4362.2 |
+| commander | 119/318 (37%) | 248/318 (78%) | 0 / 0 | 814 | 1.7 / 2.4 | 153.8 / 235.1 |
+| async | 328/637 (51%) | 338/637 (53%) | 0 / 0 | 1605 | 1.9 / 2.7 | 296.4 / 298.5 |
+| chalk | 17/72 (24%) | 17/72 (24%) | 0 / 0 | 60 | 0.1 / 0.6 | 41.4 / 211.5 |
+| dayjs | 0/117 (0%) | 0/117 (0%) | 0 / 0 | 181 | 0.1 / 0.6 | 35.2 / 217.8 |
+| underscore | 158/262 (60%) | 202/262 (77%) | 0 / 0 | 455 | 0.7 / 1.3 | 126.0 / 225.3 |
 
 Constructs, typed: false-complete hidden paths 0, false-complete call lines 0.
 
@@ -371,33 +371,33 @@ Both are compared with the export keys the loaded module actually has.
 
 ## Cost
 
-The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 5baf5f78cca2.
+The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 956786ec189c.
 
 `polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 31 MB; the analysis column has no such floor.
 
 | tree | source KB | cold analysis ms (per MB) | cold process ms | warm analysis ms (per MB) | warm process ms | cold peak RSS MB (analysis / process) | warm peak RSS MB | stored bytes per MB (gzip) |
 |---|---|---|---|---|---|---|---|---|
-| constructs (all cases) | 13 | 93 (7271) | 208 | 49 (3831) | 159 | 73 / 73 | 73 / 73 | 112394214 (10946990) |
-| axios | 282 | 633 (2245) | 750 | 417 (1479) | 538 | 100 / 100 | 101 / 101 | 75833297 (5409069) |
-| zod | 3088 | 10792 (3495) | 10984 | 10818 (3504) | 11002 | 1061 / 1061 | 1041 / 1041 | 97353526 (6935648) |
-| commander | 127 | 247 (1951) | 357 | 175 (1382) | 290 | 73 / 73 | 73 / 73 | 44266921 (3200439) |
-| async | 321 | 442 (1379) | 563 | 297 (927) | 412 | 78 / 78 | 78 / 78 | 44436456 (3481001) |
-| chalk | 10 | 43 (4516) | 157 | 23 (2416) | 134 | 73 / 73 | 73 / 73 | 87413717 (6979414) |
-| dayjs | 7 | 39 (5446) | 150 | 18 (2514) | 128 | 73 / 73 | 73 / 73 | 222145650 (12890518) |
-| underscore | 69 | 207 (3004) | 322 | 151 (2191) | 269 | 73 / 73 | 73 / 73 | 91434297 (5881609) |
+| constructs (all cases) | 13 | 95 (7428) | 208 | 50 (3909) | 163 | 73 / 73 | 74 / 74 | 112394214 (10946755) |
+| axios | 282 | 644 (2284) | 774 | 495 (1755) | 615 | 101 / 101 | 102 / 102 | 75833297 (5409094) |
+| zod | 3088 | 12256 (3969) | 12477 | 12458 (4035) | 12651 | 1062 / 1062 | 1042 / 1042 | 97353526 (6935648) |
+| commander | 127 | 268 (2117) | 412 | 193 (1525) | 345 | 72 / 72 | 74 / 74 | 44266928 (3200455) |
+| async | 321 | 487 (1519) | 651 | 359 (1120) | 515 | 78 / 78 | 79 / 79 | 44436456 (3480983) |
+| chalk | 10 | 69 (7247) | 205 | 25 (2626) | 145 | 73 / 73 | 73 / 73 | 87413717 (6979624) |
+| dayjs | 7 | 42 (5865) | 184 | 19 (2653) | 143 | 73 / 73 | 73 / 73 | 222145650 (12890518) |
+| underscore | 69 | 225 (3265) | 348 | 179 (2597) | 315 | 73 / 73 | 73 / 73 | 91434282 (5881609) |
 
 Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is
 the only way to time the refined plan, because no public view asks for it.
 
 | tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |
 |---|---|---|---|---|---|
-| axios | 618 | 119 | 2247 | 285 | none |
-| zod | 13281 | 1344 | 86311 | 3898 | 180 |
-| commander | 291 | 61 | 1762 | 145 | none |
-| async | 441 | 93 | 3067 | 268 | none |
-| chalk | 49 | 31 | 94 | 41 | none |
-| dayjs | 44 | 31 | 138 | 36 | none |
-| underscore | 379 | 53 | 1221 | 121 | none |
+| axios | 681 | 120 | 2117 | 288 | none |
+| zod | 13203 | 1345 | 48811 | 3837 | 180 |
+| commander | 290 | 60 | 1669 | 154 | none |
+| async | 474 | 92 | 1916 | 296 | none |
+| chalk | 57 | 31 | 101 | 41 | none |
+| dayjs | 50 | 32 | 101 | 35 | none |
+| underscore | 221 | 53 | 699 | 126 | none |
 
 ## Decisions recorded by this run
 
