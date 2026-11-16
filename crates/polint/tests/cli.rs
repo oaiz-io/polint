@@ -64,6 +64,32 @@ fn assert_schema_object_is_closed(value: &serde_json::Value, label: &str) {
     );
 }
 
+/// Test rule packs build in one shared rules target directory. A test's rule
+/// pack keeps its name from run to run, so a re-run rebuilds that host in place
+/// instead of adding another, while tests running at the same time never share
+/// one.
+#[test]
+fn a_test_rule_pack_is_named_the_same_on_every_run() {
+    let manifest = |dir: &Path| dir.join("repo/.polint/rules/Cargo.toml");
+    let first = tempfile::tempdir().expect("first run's temporary directory");
+    let second = tempfile::tempdir().expect("second run's temporary directory");
+    let name = rule_pack_suffix(&manifest(first.path()));
+    assert_eq!(name, rule_pack_suffix(&manifest(second.path())));
+
+    let path = manifest(second.path());
+    let another_test = std::thread::Builder::new()
+        .name("another_test".to_string())
+        .spawn(move || rule_pack_suffix(&path))
+        .expect("spawn another test's thread")
+        .join()
+        .expect("name another test's rule pack");
+    assert_ne!(name, another_test);
+    assert_ne!(
+        name,
+        rule_pack_suffix(&second.path().join("other/.polint/rules/Cargo.toml"))
+    );
+}
+
 #[test]
 fn top_level_help_only_lists_supported_public_commands() {
     let help = polint_help(&["--help"]);
