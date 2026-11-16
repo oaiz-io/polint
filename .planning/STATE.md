@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Static Analysis 2.0 Implementation
 status: in_progress
-last_updated: "2026-09-08T06:59:01Z"
-last_activity: 2026-09-08
+last_updated: "2026-11-16T09:56:33Z"
+last_activity: 2026-11-16
 progress:
   total_phases: 9
   completed_phases: 2
@@ -45,7 +45,7 @@ See: `.planning/PROJECT.md` (updated 2026-07-10)
 Phase: 65
 Plan: 02 (R2 only)
 Status: R1 and R2 complete and code-review clean; broader Phase 65 remains open for R3-R6
-Last activity: 2026-08-29 - Completed quick task 260829-s1l: Refuse cross-checkout sharing for rule hosts that embed Cargo-provided checkout paths
+Last activity: 2026-11-16 - Validated quick task 261116-bgb review fixes for PR #138; commits blocked by Git metadata permissions
 
 ### Active Milestone Phase Progress
 
@@ -54,6 +54,10 @@ Last activity: 2026-08-29 - Completed quick task 260829-s1l: Refuse cross-checko
 ### Open repo-admin action (T-42-04-10)
 
 Add `public surface leak gate (ubuntu-latest)` AND `public surface leak gate (macos-latest)` to GitHub branch protection required checks on `main` and `release/*`. Only a repo admin can configure branch protection; until then a PR can merge with the v1.3 leak gate failing. Source: Phase 42 Plan 04 (`crates/polint/tests/public_surface_leak.rs`).
+
+### Quick Task Awaiting Commit
+
+Quick task **261116-bgb** fixes all three PR #138 review findings on `perf/js-callgraph-speed`. Mutation proofs, every required CI command, the full Linux workspace suite and `make js-bench` passed; all non-cost/version benchmark fields are unchanged. Git staging is blocked because the worktree index lies outside the writable roots. No commits, pushes, merges or branch changes were made. [Validation and remaining blocker](./quick/261116-bgb-fix-pr-138-review-findings-with-mutation/SUMMARY.md).
 
 ### Quick Tasks Completed
 

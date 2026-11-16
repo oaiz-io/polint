@@ -1,0 +1,23 @@
+    Finished `test` profile [unoptimized] target(s) in 0.12s
+     Running unittests src/lib.rs (target/debug/deps/polint-0ee715acc0af48c6)
+
+running 1 test
+test analysis_api::digest::tests::packed_parts_report_the_first_failing_row ... FAILED
+
+failures:
+
+---- analysis_api::digest::tests::packed_parts_report_the_first_failing_row stdout ----
+
+thread 'analysis_api::digest::tests::packed_parts_report_the_first_failing_row' (107299983) panicked at crates/polint/src/analysis_api/digest/mod.rs:424:13:
+assertion `left == right` failed: lowest row must win with 1 workers
+  left: Err(2999)
+ right: Err(127)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    analysis_api::digest::tests::packed_parts_report_the_first_failing_row
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2874 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p polint --lib`

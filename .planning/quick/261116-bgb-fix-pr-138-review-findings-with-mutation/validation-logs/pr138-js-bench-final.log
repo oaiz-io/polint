@@ -1,0 +1,20 @@
+python3 tests/js-analysis-bench/bench.py fetch
+ok axios-1.21.1 (already fetched)
+ok zod-4.6.7 (already fetched)
+ok commander-14.0.3 (already fetched)
+ok async-3.2.6 (already fetched)
+ok chalk-6.0.1 (already fetched)
+ok dayjs-1.11.23 (already fetched)
+ok underscore-1.13.8 (already fetched)
+python3 tests/js-analysis-bench/bench.py report 
+    Finished `release` profile [optimized] target(s) in 0.42s
+    Finished `release` profile [optimized] target(s) in 0.16s
+dumped axios
+dumped zod
+dumped commander
+dumped async
+dumped chalk
+dumped dayjs
+dumped underscore
+wrote /Users/emilwareus/Development/polint-review/pr138-speed/tests/js-analysis-bench/baseline/report.json and /Users/emilwareus/Development/polint-review/pr138-speed/tests/js-analysis-bench/baseline/report.md
+{"exit_code": 0, "wall_seconds": 163.368, "child_peak_rss_bytes": 5645402112}

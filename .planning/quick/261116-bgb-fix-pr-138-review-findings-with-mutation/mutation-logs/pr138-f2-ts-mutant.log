@@ -1,0 +1,23 @@
+    Finished `test` profile [unoptimized] target(s) in 0.12s
+     Running unittests src/lib.rs (target/debug/deps/polint-0ee715acc0af48c6)
+
+running 1 test
+test analysis_neutral::refined_calls::ts_js::tests::empty_and_go_only_refinements_skip_expensive_indexes ... FAILED
+
+failures:
+
+---- analysis_neutral::refined_calls::ts_js::tests::empty_and_go_only_refinements_skip_expensive_indexes stdout ----
+
+thread 'analysis_neutral::refined_calls::ts_js::tests::empty_and_go_only_refinements_skip_expensive_indexes' (107299945) panicked at crates/polint/src/analysis_neutral/refined_calls/ts_js.rs:211:13:
+assertion `left == right` failed
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    analysis_neutral::refined_calls::ts_js::tests::empty_and_go_only_refinements_skip_expensive_indexes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2874 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p polint --lib`

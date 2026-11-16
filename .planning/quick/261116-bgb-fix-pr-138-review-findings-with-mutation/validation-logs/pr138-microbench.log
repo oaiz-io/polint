@@ -1,0 +1,13 @@
+    Finished `release` profile [optimized] target(s) in 0.63s
+     Running unittests src/lib.rs (/tmp/pr138-release-target/release/deps/polint-c61f8d2de5517055)
+
+running 2 tests
+test analysis::unknown_taxonomy::collect::tests::benchmark_empty_and_resolved_completeness ... completeness refined=false: 256083 ns/100 runs; index builds=0
+completeness refined=true: 5801667 ns/100 runs; index builds=0
+ok
+test analysis_neutral::refined_calls::ts_js::tests::benchmark_empty_and_go_only_refinements ... TS refinement language=TypeScript: 28000 ns/100 runs; expensive index builds=0
+TS refinement language=Go: 1504333 ns/100 runs; expensive index builds=0
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2873 filtered out; finished in 0.24s
+
