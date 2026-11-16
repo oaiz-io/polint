@@ -406,3 +406,126 @@ fn a_rule_host_is_shared_between_cargo_homes_at_different_paths() {
     // As above: the first build stamped the target directory the suite shares.
     let _ = fs::remove_file(shared_rules_target_dir().join("polint-store-stamp.json"));
 }
+
+/// The arguments of the one `cargo run` a `dev` check asks for, with `env`
+/// applied and a cargo home that configures nothing.
+fn dev_rule_host_run_arguments(env: &[(&str, &str)]) -> String {
+    let workspace = fixture_workspace();
+    let tools = tempfile::tempdir().expect("create a tools directory");
+    let (cargo, invocations) = cargo_that_refuses_to_compile(tools.path());
+    let mut command = polint_cmd();
+    command
+        .current_dir(workspace.path())
+        .env("POLINT_CACHE_STORE", "off")
+        .env("POLINT_CARGO", &cargo)
+        .env("CARGO_HOME", tools.path())
+        .env_remove("CARGO_PROFILE_DEV_DEBUG")
+        .env_remove("CARGO_PROFILE_DEV_INCREMENTAL");
+    for (name, value) in env {
+        command.env(name, value);
+    }
+    command
+        .args(["check", "--format", "json", "--fail-on", "none"])
+        .assert()
+        .failure();
+    let recorded = fs::read_to_string(&invocations).expect("cargo was asked to run the host");
+    recorded
+        .lines()
+        .find(|line| line.starts_with("run "))
+        .unwrap_or_else(|| panic!("no `cargo run` was recorded: {recorded}"))
+        .to_string()
+}
+
+#[test]
+fn a_dev_rule_host_is_built_without_full_debug_info_unless_the_user_asks() {
+    let run = dev_rule_host_run_arguments(&[]);
+    for setting in [
+        r#"--config profile.dev.debug="line-tables-only""#,
+        r#"--config profile.dev.package."*".debug=0"#,
+        r#"--config profile.dev.package."*".incremental=false"#,
+    ] {
+        assert!(run.contains(setting), "missing `{setting}` in: {run}");
+    }
+
+    let chosen = dev_rule_host_run_arguments(&[("CARGO_PROFILE_DEV_DEBUG", "2")]);
+    assert!(
+        !chosen.contains("debug="),
+        "a debug level the user chose is never overridden: {chosen}"
+    );
+    assert!(chosen.contains(r#"--config profile.dev.package."*".incremental=false"#));
+
+    let release = dev_rule_host_run_arguments(&[("POLINT_RULES_PROFILE", "release")]);
+    assert!(
+        !release.contains("--config"),
+        "only the dev profile gets size defaults: {release}"
+    );
+}
+
+/// The package name `replace_generated_rule_pack_with_static_host` gave `root`.
+fn static_host_package(root: &Path) -> String {
+    format!(
+        "polint-store-host-{}",
+        path_hash_suffix(&root.join(".polint/rules/Cargo.toml"))
+    )
+}
+
+/// A rules target directory over its budget loses its least recently used rule
+/// hosts after a check, never one another polint process still holds, and the
+/// check reports the same either way. An evicted host is rebuilt on its next use.
+#[test]
+fn a_check_over_the_rules_target_budget_evicts_only_hosts_nobody_holds() {
+    let target = tempfile::tempdir().expect("create a rules target directory");
+    let first = fixture_workspace();
+    let second = fixture_workspace();
+    let check = |root: &Path| {
+        stdout_string(
+            polint_cmd()
+                .current_dir(root)
+                .env("POLINT_CACHE_STORE", "off")
+                .env("POLINT_RULES_TARGET_DIR", target.path())
+                .env("POLINT_RULES_TARGET_MAX_MB", "0")
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        )
+    };
+    let host = |root: &Path| target.path().join("debug").join(static_host_package(root));
+
+    let first_report = check(first.path());
+    assert!(
+        host(first.path()).is_file(),
+        "the host this check used stays"
+    );
+
+    // Another polint process is still building or running the first host.
+    let lease = fs::File::open(
+        target
+            .path()
+            .join("polint-hosts")
+            .join(format!("{}.lock", static_host_package(first.path()))),
+    )
+    .expect("the first check leased its host");
+    lease.lock_shared().expect("hold the first host");
+    let second_report = check(second.path());
+    assert!(
+        host(first.path()).is_file(),
+        "a host another process holds is never evicted"
+    );
+    assert!(host(second.path()).is_file());
+
+    drop(lease);
+    assert_eq!(check(second.path()), second_report);
+    assert!(
+        !host(first.path()).exists(),
+        "an unheld host beyond the budget is evicted"
+    );
+    assert!(host(second.path()).is_file());
+
+    assert_eq!(
+        check(first.path()),
+        first_report,
+        "an evicted host is rebuilt and reports the same"
+    );
+    assert!(host(first.path()).is_file());
+    assert!(!host(second.path()).exists());
+}
