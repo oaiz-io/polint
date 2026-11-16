@@ -88,6 +88,15 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   lines are counted next to it. Labelled `@calls` lines count apart as
   false-complete call lines when polint resolves them to targets that miss a
   labelled callee and marks no call site on the line unresolved.
+- **Wrong targets** (packages): claimed targets (resolved, not heuristic) at
+  a call site the run was seen calling from, in an instrumented file, that the
+  run never called from that site. On a single-target answer this is a false
+  precise edge: polint names one callee and every observed execution of the
+  site went elsewhere. On a multi-target answer it is only an upper bound,
+  because the run may not have taken the path to the other targets. A site
+  counts as executed only when one of its observed callees maps to a polint
+  function, so sites that only reached code the run does not record are left
+  out. Every single-target case is listed in `report.md`.
 - **Export-set accuracy**: per file, exported names from `Symbols` and from
   the module export facts against the keys of the module as Node loads it.
 - **Unresolved share**: share of call sites with an unresolved marker, and of

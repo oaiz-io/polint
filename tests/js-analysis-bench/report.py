@@ -323,6 +323,8 @@ class Facts:
 
         # Edges this plan's answer gives: site -> {target function key}.
         self.targets: dict[str, set[str]] = defaultdict(set)
+        # The subset of `targets` the answer claims: resolved and not heuristic.
+        self.claimed_targets: dict[str, set[str]] = defaultdict(set)
         # Sites whose answer stops at an import binding (base edges only).
         self.import_stops: set[str] = set()
         # Sites this plan's answer itself marks as unresolved.
@@ -334,6 +336,8 @@ class Facts:
             for edge in dump["base_edges"]:
                 if edge["function"] is not None:
                     self.targets[edge["site"]].add(edge["function"])
+                    if edge["precision"] != "Heuristic":
+                        self.claimed_targets[edge["site"]].add(edge["function"])
             self.marked_unresolved = set(self.unresolved_sites)
         else:
             resolved_sites = set()
@@ -342,6 +346,8 @@ class Facts:
                     continue
                 if edge["function"] is not None:
                     self.targets[edge["site"]].add(edge["function"])
+                    if edge["status"] == "Resolved" and edge["precision"] != "Heuristic":
+                        self.claimed_targets[edge["site"]].add(edge["function"])
                 if edge["status"] == "Resolved":
                     resolved_sites.add(edge["site"])
                 else:
@@ -1139,6 +1145,41 @@ def polint_answer(example: dict) -> str:
     return answer
 
 
+def unobserved_claimed_targets(observed: dict, observed_at: dict, facts: Facts, sources: Sources) -> dict:
+    """Claimed targets at sites the run executed that the run never called there.
+
+    A site counts once the run was seen calling a polint function from it. A
+    claimed target (resolved, not heuristic) counts when it is in an
+    instrumented file, so the run would have recorded a call to it, and the run
+    never called it from that site. On a single-target answer that is a false
+    precise edge: polint names one callee and every execution of the site went
+    elsewhere. On a multi-target answer it is only an upper bound, because the
+    run may not have taken the path that reaches the other targets.
+    """
+    instrumented = set(observed["instrumented_files"])
+    counts = Counter({"single_target": 0, "multi_target": 0})
+    examples = []
+    for site_key, called in sorted(observed_at.items()):
+        claimed = facts.claimed_targets.get(site_key, set())
+        for target in sorted(claimed - called):
+            function = facts.functions.get(target)
+            if function is None or function["module"] or function["file"] not in instrumented:
+                continue
+            shape = "single_target" if len(claimed) == 1 else "multi_target"
+            counts[shape] += 1
+            if shape == "single_target" or len(examples) < EXAMPLES_PER_OUTCOME:
+                examples.append(
+                    {
+                        "answer": shape,
+                        "site": sources.at(site_key),
+                        "site_text": sources.excerpt(site_key),
+                        "target": describe_function(facts, target, sources),
+                        "observed_callees": [describe_function(facts, key, sources) for key in sorted(called)],
+                    }
+                )
+    return {**dict(sorted(counts.items())), "examples": examples}
+
+
 def score_package_calls(observed: dict, facts: Facts, census: Census | None, sources: Sources) -> dict:
     by_kind = defaultdict(Counter)
     by_syntax = defaultdict(Counter)
@@ -1151,6 +1192,8 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
     gap_examples = defaultdict(list)
     inherited = 0
     other_shapes = Counter()
+    # Polint site -> the polint functions the run was seen calling from it.
+    observed_at: dict[str, set[str]] = defaultdict(set)
     for edge in observed["edges"]:
         kind, syntax = edge["kind"], edge["syntax"]
         if kind == "implicit":
@@ -1181,6 +1224,8 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             outcome = "no target, marked unresolved"
         else:
             outcome = "no target, no unresolved marker"
+        if site is not None and callee is not None:
+            observed_at[site["key"]].add(callee["key"])
         outcomes[outcome] += 1
         for bucket in (by_kind[kind], by_syntax[syntax]):
             bucket["observed"] += 1
@@ -1202,6 +1247,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             inherited += gap == "class_method" and through_inheritance
             if len(gap_examples[gap]) < EXAMPLES_PER_GAP:
                 gap_examples[gap].append(describe_edge(edge, outcome, facts, sources))
+    wrong = unobserved_claimed_targets(observed, observed_at, facts, sources)
     found = outcomes["found"]
     total = sum(outcomes.values())
     result = {
@@ -1210,6 +1256,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
         "found": found,
         "recall": ratio(found, total),
         "outcomes": dict(sorted(outcomes.items())),
+        "wrong_targets": wrong,
         "outcome_examples": dict(sorted(examples.items())),
         "causes": {"counts": dict(sorted(causes.items())), "examples": dict(sorted(cause_examples.items()))},
         "by_kind": {k: {**v, "recall": ratio(v["found"], v["observed"])} for k, v in sorted(by_kind.items())},
@@ -1538,6 +1585,53 @@ def render_false_complete(report: dict, add) -> None:
     add("")
 
 
+def render_wrong_targets(report: dict, add) -> None:
+    plans = list(report["plans"])
+    add("### Claimed targets the run never called")
+    add("")
+    add("A claimed target is resolved and not heuristic. It counts here when the run executed the site, the target is")
+    add("in an instrumented file, and the run never called it from that site. On a **single-target** answer that is a")
+    add("false precise edge: every execution of the site went elsewhere. On a **multi-target** answer it is an upper")
+    add("bound only, since the run may not have taken the paths to the other targets. A site matched to a polint site")
+    add("by its end byte can also inflate both counts.")
+    add("")
+    add("| package | " + " | ".join(f"{plan}: single / multi" for plan in plans) + " |")
+    add("|---|" + "---|" * len(plans))
+    totals = {plan: Counter() for plan in plans}
+    for name, entry in report["packages"].items():
+        cells = []
+        for plan in plans:
+            wrong = entry.get(plan, {}).get("wrong_targets")
+            if wrong is None:
+                cells.append("n/a")
+                continue
+            totals[plan].update({key: wrong[key] for key in ("single_target", "multi_target")})
+            cells.append(f"{wrong['single_target']} / {wrong['multi_target']}")
+        add(f"| {name} | " + " | ".join(cells) + " |")
+    add(
+        "| **total** | "
+        + " | ".join(f"**{totals[plan]['single_target']} / {totals[plan]['multi_target']}**" for plan in plans)
+        + " |"
+    )
+    add("")
+    add("| package | plan | site | site text | single-target answer | the run called |")
+    add("|---|---|---|---|---|---|")
+    any_case = False
+    for name, entry in report["packages"].items():
+        for plan in plans:
+            for example in entry.get(plan, {}).get("wrong_targets", {}).get("examples", []):
+                if example["answer"] != "single_target":
+                    continue
+                any_case = True
+                add(
+                    f"| {name} | {plan} | {example['site']} | `{cell(example['site_text'])}` "
+                    f"| {cell(example['target'])} | {cell(', '.join(example['observed_callees']))} |"
+                )
+    if not any_case:
+        add("| none | | | | | |")
+    add("")
+
+
 def render_outcome_examples(report: dict, add) -> None:
     add("### One example per package, plan and outcome")
     add("")
@@ -1734,6 +1828,7 @@ def render_markdown(report: dict) -> str:
             f"| {pct(base.get('references', {}).get('not_resolved_share'))} |"
         )
     add("")
+    render_wrong_targets(report, add)
     if TYPED_PLAN in report["plans"]:
         render_types(report, add)
     else:
