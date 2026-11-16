@@ -557,6 +557,8 @@ mod tests {
         assert!(!target.join("debug/oldest").exists());
         assert!(!target.join("debug/.fingerprint/oldest-0123").exists());
         assert!(!target.join("debug/incremental/oldest-0456").exists());
+        // Elsewhere an evicted host's lease file is left as an empty file.
+        #[cfg(unix)]
         assert!(!target.join(LEASES_DIR_NAME).join("oldest.lock").exists());
         assert!(deps.join("newer-0123").exists(), "within budget already");
         for path in &helper {
