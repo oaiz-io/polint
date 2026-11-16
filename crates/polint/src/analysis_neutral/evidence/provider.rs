@@ -15,7 +15,7 @@ use super::store::EvidenceOutput;
 
 use crate::analysis_api::ProviderManifest;
 use crate::analysis_api::{
-    CacheStats, Digest, DigestBuilder, DigestKind, InputComponent, InputSnapshot,
+    CacheStats, Digest, DigestBuilder, DigestKind, DigestParts, InputComponent, InputSnapshot,
     ProviderExecution, ProviderFailureReason, ProviderFailureStage,
 };
 use crate::analysis_api::{FactFamily, stable_key_from_parts};
@@ -653,27 +653,21 @@ fn evidence_output_digest(
         EVIDENCE_FAMILY_PREFIXES[0],
         family_parts(interner, EVIDENCE_FAMILY_PREFIXES[0], &output.bundles),
     );
-    emit_family(
+    emit_indexed_family(
         &mut digest,
         &mut header,
+        interner,
         EVIDENCE_FAMILY_PREFIXES[1],
-        indexed_family_parts(
-            interner,
-            EVIDENCE_FAMILY_PREFIXES[1],
-            &output.edges,
-            |fact| fact.id.0,
-        ),
+        &output.edges,
+        |fact| fact.id.0,
     );
-    emit_family(
+    emit_indexed_family(
         &mut digest,
         &mut header,
+        interner,
         EVIDENCE_FAMILY_PREFIXES[2],
-        indexed_family_parts(
-            interner,
-            EVIDENCE_FAMILY_PREFIXES[2],
-            &output.nodes,
-            |fact| fact.id.0,
-        ),
+        &output.nodes,
+        |fact| fact.id.0,
     );
     emit_family(
         &mut digest,
@@ -715,20 +709,21 @@ fn evidence_output_digest(
     digest.finish()
 }
 
-/// `<prefix><payload>` for one fact family, materialised on its own.
+/// `<prefix><payload>` for one fact family, materialised on its own and sorted.
 ///
 /// Taking the same `prefix` the emission order is keyed on keeps the two in
 /// lockstep: a family cannot be hashed under one label and ordered under
 /// another.
-fn family_parts<T: Debug>(
+fn family_parts<T: Debug + Sync>(
     interner: &crate::internal_core::StableKeyInterner,
     prefix: &str,
     facts: &[T],
-) -> Vec<String> {
-    let mut parts = facts
-        .iter()
-        .map(|fact| format!("{prefix}{}", stable_fact_payload(interner, fact)))
-        .collect::<Vec<_>>();
+) -> DigestParts {
+    let mut parts = DigestParts::default();
+    parts.extend_in_order(facts, |text, fact| {
+        text.push_str(prefix);
+        text.push_str(&stable_fact_payload(interner, fact));
+    });
     parts.sort();
     parts
 }
@@ -737,38 +732,63 @@ fn emit_family(
     digest: &mut DigestBuilder,
     header: &mut Peekable<std::vec::IntoIter<String>>,
     prefix: &str,
-    parts: impl IntoIterator<Item = String>,
+    parts: DigestParts,
+) {
+    emit_header_before(digest, header, prefix);
+    for part in parts.iter() {
+        digest.part(part);
+    }
+}
+
+fn emit_header_before(
+    digest: &mut DigestBuilder,
+    header: &mut Peekable<std::vec::IntoIter<String>>,
+    prefix: &str,
 ) {
     while header.peek().is_some_and(|part| part.as_str() < prefix) {
         digest.part(&header.next().expect("peeked part is present"));
-    }
-    for part in parts {
-        digest.part(&part);
     }
 }
 
 /// These row types start their Debug payload with an integer ID. Decimal IDs
 /// order the payloads because the closing ')' sorts before every digit. Keep
-/// references in that order and materialize only the current row. Equal IDs
-/// still compare their full payload, preserving the order of unnormalized input.
-fn indexed_family_parts<'a, T: Debug>(
-    interner: &'a crate::internal_core::StableKeyInterner,
-    prefix: &'a str,
+/// references in that order and materialize only one row at a time. Equal IDs still compare their full payload, preserving the order of
+/// unnormalized input.
+fn emit_indexed_family<T: Debug + Sync>(
+    digest: &mut DigestBuilder,
+    header: &mut Peekable<std::vec::IntoIter<String>>,
+    interner: &crate::internal_core::StableKeyInterner,
+    prefix: &str,
+    facts: &[T],
+    id: impl Fn(&T) -> u64,
+) {
+    emit_header_before(digest, header, prefix);
+    for fact in indexed_family_order(interner, facts, id) {
+        // Stable keys can expand a tiny row into a large payload. Hash it
+        // before expanding the next row rather than retaining a row-count batch.
+        let mut part = String::from(prefix);
+        part.push_str(&stable_fact_payload(interner, fact));
+        digest.part(&part);
+    }
+}
+
+/// The facts of an indexed family in the order their parts sort.
+fn indexed_family_order<'a, T: Debug + Sync>(
+    interner: &crate::internal_core::StableKeyInterner,
     facts: &'a [T],
     id: impl Fn(&T) -> u64,
-) -> impl Iterator<Item = String> + 'a {
+) -> Vec<&'a T> {
+    use rayon::slice::ParallelSliceMut as _;
     let mut indexed = facts
         .iter()
         .map(|fact| (id(fact).to_string(), fact))
         .collect::<Vec<_>>();
-    indexed.sort_by(|(left_id, left), (right_id, right)| {
+    indexed.par_sort_by(|(left_id, left), (right_id, right)| {
         left_id.cmp(right_id).then_with(|| {
             stable_fact_payload(interner, left).cmp(&stable_fact_payload(interner, right))
         })
     });
-    indexed
-        .into_iter()
-        .map(move |(_, fact)| format!("{prefix}{}", stable_fact_payload(interner, fact)))
+    indexed.into_iter().map(|(_, fact)| fact).collect()
 }
 
 fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[InputComponent]) {
@@ -834,6 +854,95 @@ mod digest_order_tests {
     use super::*;
 
     #[test]
+    fn indexed_family_streams_large_payloads() {
+        const CHILD: &str = "POLINT_TEST_INDEXED_PAYLOAD_MEMORY";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+                .args(["--exact", "analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads", "--nocapture"])
+                .env(CHILD, "1")
+                .output()
+                .expect("isolated memory test");
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        // Keep the input tiny while stable-key expansion makes each row large.
+        // A fresh process keeps unrelated tests out of the resident-set bound.
+        struct Row {
+            id: u64,
+        }
+        impl Debug for Row {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "Row({}, StableKeyId(0))", self.id)
+            }
+        }
+        let interner = crate::internal_core::StableKeyInterner::default();
+        interner.intern("x".repeat(64 * 1024));
+        let rows = (0..4097).map(|id| Row { id }).collect::<Vec<_>>();
+        let mut digest = Digest::builder(DigestKind::ProviderOutput, "evidence");
+        let mut header = Vec::new().into_iter().peekable();
+        let before = crate::measure::peak_rss_bytes();
+        emit_indexed_family(&mut digest, &mut header, &interner, "row=", &rows, |row| {
+            row.id
+        });
+        let growth = crate::measure::peak_rss_bytes().saturating_sub(before);
+        assert!(
+            growth < 64 * 1024 * 1024,
+            "expanded payloads retained {growth} bytes; expected one-row streaming"
+        );
+    }
+
+    #[test]
+    fn indexed_family_emission_matches_full_sort_across_batches_and_headers() {
+        struct Row(u64, &'static str);
+        impl Debug for Row {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_tuple("Row").field(&self.0).field(&self.1).finish()
+            }
+        }
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let rows = (0..8200)
+            .rev()
+            .map(|id| {
+                Row(
+                    id % 4100,
+                    if id % 3 == 0 {
+                        "λ"
+                    } else {
+                        "escaped\\quote\""
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut expected = rows
+            .iter()
+            .map(|row| format!("row={}", stable_fact_payload(&interner, row)))
+            .collect::<Vec<_>>();
+        let mut header = vec!["aaa=before".to_string(), "zzz=after".to_string()];
+        expected.extend(header.iter().cloned());
+        expected.sort();
+        header.sort();
+        let mut header = header.into_iter().peekable();
+        let mut actual = Digest::builder(DigestKind::ProviderOutput, "evidence");
+        emit_indexed_family(&mut actual, &mut header, &interner, "row=", &rows, |row| {
+            row.0
+        });
+        for part in header {
+            actual.part(&part);
+        }
+        let refs = expected.iter().map(String::as_str).collect::<Vec<_>>();
+        assert_eq!(
+            actual.finish(),
+            Digest::from_parts(DigestKind::ProviderOutput, "evidence", &refs)
+        );
+    }
+
+    #[test]
     fn id_ordered_payloads_match_full_sort_for_sparse_and_repeated_ids() {
         let interner = crate::internal_core::StableKeyInterner::default();
         let stable_key = interner.intern("source: unicode λ and escaped \"quote\"\\newline\n");
@@ -888,18 +997,22 @@ mod digest_order_tests {
             .collect::<Vec<_>>();
         for count in 0..=ids.len() {
             assert_eq!(
-                indexed_family_parts(&interner, "evidence_node=", &nodes[..count], |node| node
-                    .id
-                    .0)
-                .collect::<Vec<_>>(),
-                family_parts(&interner, "evidence_node=", &nodes[..count]),
+                indexed_family_order(&interner, &nodes[..count], |node| node.id.0)
+                    .into_iter()
+                    .map(|node| format!("evidence_node={}", stable_fact_payload(&interner, node)))
+                    .collect::<Vec<_>>(),
+                family_parts(&interner, "evidence_node=", &nodes[..count])
+                    .iter()
+                    .collect::<Vec<_>>(),
             );
             assert_eq!(
-                indexed_family_parts(&interner, "evidence_edge=", &edges[..count], |edge| edge
-                    .id
-                    .0)
-                .collect::<Vec<_>>(),
-                family_parts(&interner, "evidence_edge=", &edges[..count]),
+                indexed_family_order(&interner, &edges[..count], |edge| edge.id.0)
+                    .into_iter()
+                    .map(|edge| format!("evidence_edge={}", stable_fact_payload(&interner, edge)))
+                    .collect::<Vec<_>>(),
+                family_parts(&interner, "evidence_edge=", &edges[..count])
+                    .iter()
+                    .collect::<Vec<_>>(),
             );
         }
     }

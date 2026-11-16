@@ -22,6 +22,7 @@ pub use cache_api::{
 pub use callable_names::{
     ANONYMOUS_CALLABLE_PREFIX, anonymous_callable_name, is_anonymous_callable_name,
 };
+pub(crate) use digest::DigestParts;
 pub use digest::{
     CacheStats, Digest, DigestBuilder, DigestKind, FileSnapshot, GoLifecycleSnapshot,
     INPUT_SNAPSHOT_SCHEMA_VERSION, InputComponent, InputComponentStatus, InputSnapshot, LayerKind,

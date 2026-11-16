@@ -252,6 +252,25 @@ impl StableKeyInterner {
         }
     }
 
+    /// Stable-sorts `rows` by the text of `key`, then by `rest`.
+    ///
+    /// Equivalent to comparing `(resolve(key(row)), rest(row))` tuples, but
+    /// reads every key under one read view instead of one lock and `Arc`
+    /// clone per comparison. Runs on the calling thread, so the view rules
+    /// of [`read_view`](Self::read_view) hold as long as `key` and `rest` do
+    /// not touch this interner.
+    pub(crate) fn sort_by_key_text<T, R: Ord>(
+        &self,
+        rows: &mut [T],
+        key: impl Fn(&T) -> StableKeyId,
+        rest: impl Fn(&T) -> R,
+    ) {
+        let keys = self.read_view();
+        rows.sort_by(|left, right| {
+            (keys.text(key(left)), rest(left)).cmp(&(keys.text(key(right)), rest(right)))
+        });
+    }
+
     fn read(&self) -> RwLockReadGuard<'_, StableKeyInternerState> {
         self.state.read().unwrap_or_else(|error| error.into_inner())
     }

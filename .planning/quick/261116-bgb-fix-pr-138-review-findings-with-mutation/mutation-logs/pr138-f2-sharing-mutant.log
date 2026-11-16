@@ -1,0 +1,23 @@
+    Finished `test` profile [unoptimized] target(s) in 0.49s
+     Running unittests src/lib.rs (target/debug/deps/polint-0ee715acc0af48c6)
+
+running 1 test
+test analysis::unknown_taxonomy::collect::tests::aggregate_unknowns_include_policy_capabilities ... FAILED
+
+failures:
+
+---- analysis::unknown_taxonomy::collect::tests::aggregate_unknowns_include_policy_capabilities stdout ----
+
+thread 'analysis::unknown_taxonomy::collect::tests::aggregate_unknowns_include_policy_capabilities' (107299823) panicked at crates/polint/src/analysis/unknown_taxonomy/collect.rs:998:9:
+assertion `left == right` failed: all five collectors share one index
+  left: 5
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    analysis::unknown_taxonomy::collect::tests::aggregate_unknowns_include_policy_capabilities
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2874 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p polint --lib`

@@ -1,0 +1,24 @@
+   Compiling polint v0.5.1 (/Users/emilwareus/Development/polint-review/pr138-speed/crates/polint)
+    Finished `test` profile [unoptimized] target(s) in 38.87s
+     Running unittests src/lib.rs (target/debug/deps/polint-0ee715acc0af48c6)
+
+running 1 test
+test analysis::unknown_taxonomy::collect::tests::completeness_skips_call_site_index_without_unknown_edges ... FAILED
+
+failures:
+
+---- analysis::unknown_taxonomy::collect::tests::completeness_skips_call_site_index_without_unknown_edges stdout ----
+
+thread 'analysis::unknown_taxonomy::collect::tests::completeness_skips_call_site_index_without_unknown_edges' (107299577) panicked at crates/polint/src/analysis/unknown_taxonomy/collect.rs:833:13:
+assertion `left == right` failed: no call-site lookup is needed
+  left: 5
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    analysis::unknown_taxonomy::collect::tests::completeness_skips_call_site_index_without_unknown_edges
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2874 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p polint --lib`

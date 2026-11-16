@@ -526,6 +526,12 @@ mod tests {
     #[test]
     #[ignore = "JS/TS benchmark dump: run explicitly with POLINT_JS_BENCH_MANIFEST set"]
     fn dump_js_bench_facts() {
+        // `RUST_LOG=polint::kernel::stage=info` reports each provider stage's
+        // wall time and memory on stderr; without it only errors are logged.
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_writer(std::io::stderr)
+            .try_init();
         let manifest = std::env::var_os(MANIFEST_ENV)
             .unwrap_or_else(|| panic!("{MANIFEST_ENV} names the manifest; it is required"));
         let capabilities = std::env::var(CAPS_ENV)

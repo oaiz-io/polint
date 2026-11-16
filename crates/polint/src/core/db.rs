@@ -2168,27 +2168,30 @@ impl AnalysisDb {
         self.fact_meta.remove_family(FactFamily::DataFlowModel);
         self.fact_meta.remove_family(FactFamily::DataFlowBudget);
 
-        let nodes = self.data_flow_nodes().to_vec();
-        let edges = self.data_flow_edges().to_vec();
-        let models = self.data_flow_models().to_vec();
-        let budgets = self.data_flow_budgets().to_vec();
-
-        for fact in &nodes {
-            let metadata = self.data_flow_node_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::DataFlowNode, fact.id.0, metadata);
-        }
-        for fact in &edges {
-            let metadata = self.data_flow_edge_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::DataFlowEdge, fact.id.0, metadata);
-        }
-        for fact in &models {
-            let metadata = self.data_flow_model_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::DataFlowModel, fact.id.0, metadata);
-        }
-        for fact in &budgets {
-            let metadata = self.data_flow_budget_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::DataFlowBudget, fact.id.0, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::DataFlowNode,
+            |db| db.data_flow_nodes(),
+            |_, fact| fact.id.0,
+            |db, fact| db.data_flow_node_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::DataFlowEdge,
+            |db| db.data_flow_edges(),
+            |_, fact| fact.id.0,
+            |db, fact| db.data_flow_edge_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::DataFlowModel,
+            |db| db.data_flow_models(),
+            |_, fact| fact.id.0,
+            |db, fact| db.data_flow_model_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::DataFlowBudget,
+            |db| db.data_flow_budgets(),
+            |_, fact| fact.id.0,
+            |db, fact| db.data_flow_budget_metadata(interner, fact),
+        );
 
         self.finish_fact_meta_insertions(&[
             FactFamily::DataFlowNode,
@@ -2216,47 +2219,54 @@ impl AnalysisDb {
             self.fact_meta.remove_family(family);
         }
 
-        let nodes = self.evidence_nodes().to_vec();
-        let edges = self.evidence_edges().to_vec();
-        let bundles = self.evidence_bundles().to_vec();
-        let paths = self.evidence_paths().to_vec();
-        let slices = self.evidence_slices().to_vec();
-        let unknowns = self.evidence_unknowns().to_vec();
-        let omitted = self.evidence_omitted_regions().to_vec();
-        let replay_keys = self.evidence_replay_keys().to_vec();
-
-        for fact in &nodes {
-            let metadata = self.evidence_node_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidenceNode, fact.id.0, metadata);
-        }
-        for fact in &edges {
-            let metadata = self.evidence_edge_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidenceEdge, fact.id.0, metadata);
-        }
-        for fact in &bundles {
-            let metadata = self.evidence_bundle_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidenceBundle, fact.id.0, metadata);
-        }
-        for fact in &paths {
-            let metadata = self.evidence_path_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidencePath, fact.id.0, metadata);
-        }
-        for fact in &slices {
-            let metadata = self.evidence_slice_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidenceSlice, fact.id.0, metadata);
-        }
-        for (index, fact) in unknowns.iter().enumerate() {
-            let metadata = self.evidence_unknown_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidenceUnknown, index as u64, metadata);
-        }
-        for fact in &omitted {
-            let metadata = self.evidence_omitted_region_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidenceOmittedRegion, fact.id.0, metadata);
-        }
-        for (index, fact) in replay_keys.iter().enumerate() {
-            let metadata = self.evidence_replay_key_metadata(interner, fact);
-            self.record_fact_meta(FactFamily::EvidenceReplayKey, index as u64, metadata);
-        }
+        self.record_family_metadata(
+            FactFamily::EvidenceNode,
+            |db| db.evidence_nodes(),
+            |_, fact| fact.id.0,
+            |db, fact| db.evidence_node_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::EvidenceEdge,
+            |db| db.evidence_edges(),
+            |_, fact| fact.id.0,
+            |db, fact| db.evidence_edge_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::EvidenceBundle,
+            |db| db.evidence_bundles(),
+            |_, fact| fact.id.0,
+            |db, fact| db.evidence_bundle_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::EvidencePath,
+            |db| db.evidence_paths(),
+            |_, fact| fact.id.0,
+            |db, fact| db.evidence_path_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::EvidenceSlice,
+            |db| db.evidence_slices(),
+            |_, fact| fact.id.0,
+            |db, fact| db.evidence_slice_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::EvidenceUnknown,
+            |db| db.evidence_unknowns(),
+            |index, _| index as u64,
+            |db, fact| db.evidence_unknown_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::EvidenceOmittedRegion,
+            |db| db.evidence_omitted_regions(),
+            |_, fact| fact.id.0,
+            |db, fact| db.evidence_omitted_region_metadata(interner, fact),
+        );
+        self.record_family_metadata(
+            FactFamily::EvidenceReplayKey,
+            |db| db.evidence_replay_keys(),
+            |index, _| index as u64,
+            |db, fact| db.evidence_replay_key_metadata(interner, fact),
+        );
 
         self.finish_fact_meta_insertions(&[
             FactFamily::EvidenceNode,

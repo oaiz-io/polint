@@ -400,6 +400,7 @@ fn data_flow_output_digest(
     output: &DataFlowOutput,
     interner: &crate::internal_core::StableKeyInterner,
 ) -> Digest {
+    use std::fmt::Write as _;
     let upstream = vec![
         semantic_mir_output_digest.clone(),
         cfg_output_digest.clone(),
@@ -441,36 +442,41 @@ fn data_flow_output_digest(
     extend_component_parts(&mut parts, "model", &input_snapshot.models);
     extend_component_parts(&mut parts, "extension", &input_snapshot.extensions);
     extend_component_parts(&mut parts, "tool", &input_snapshot.tool_invocations);
-    parts.extend(output.nodes.iter().map(|node| {
-        format!(
+    let header = parts;
+    let mut parts = crate::analysis_api::DigestParts::default();
+    parts.extend(header);
+    parts.extend_in_order(&output.nodes, |text, node| {
+        let _ = write!(
+            text,
             "data_flow_node={}",
             stable_fact_payload(interner, node.stable_key, node)
-        )
-    }));
-    parts.extend(output.edges.iter().map(|edge| {
-        format!(
+        );
+    });
+    parts.extend_in_order(&output.edges, |text, edge| {
+        let _ = write!(
+            text,
             "data_flow_edge={}",
             stable_fact_payload(interner, edge.stable_key, edge)
-        )
-    }));
-    parts.extend(output.models.iter().map(|model| {
-        format!(
+        );
+    });
+    parts.extend_in_order(&output.models, |text, model| {
+        let _ = write!(
+            text,
             "data_flow_model={}",
             stable_fact_payload(interner, model.stable_key, model)
-        )
-    }));
-    parts.extend(output.budgets.iter().map(|budget| {
-        format!(
+        );
+    });
+    parts.extend_in_order(&output.budgets, |text, budget| {
+        let _ = write!(
+            text,
             "data_flow_budget={}",
             stable_fact_payload(interner, budget.stable_key, budget)
-        )
-    }));
+        );
+    });
     if output.nodes.is_empty() && output.edges.is_empty() && output.models.is_empty() {
-        parts.push("data_flow_output=empty".to_string());
+        parts.push("data_flow_output=empty");
     }
-    parts.sort();
-    let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    Digest::from_parts(DigestKind::ProviderOutput, "data_flow_output", &refs)
+    parts.digest(DigestKind::ProviderOutput, "data_flow_output")
 }
 
 fn extend_component_parts(parts: &mut Vec<String>, prefix: &str, components: &[InputComponent]) {

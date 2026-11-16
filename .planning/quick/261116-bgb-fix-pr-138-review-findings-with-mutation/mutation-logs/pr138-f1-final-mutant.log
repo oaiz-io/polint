@@ -1,0 +1,39 @@
+    Blocking waiting for file lock on artifact directory
+   Compiling polint v0.5.1 (/Users/emilwareus/Development/polint-review/pr138-speed/crates/polint)
+    Finished `test` profile [unoptimized] target(s) in 45.40s
+     Running unittests src/lib.rs (target/debug/deps/polint-0ee715acc0af48c6)
+
+running 1 test
+test analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads ... FAILED
+
+failures:
+
+---- analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads stdout ----
+
+thread 'analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads' (108041659) panicked at crates/polint/src/analysis_neutral/evidence/provider.rs:870:13:
+
+running 1 test
+test analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads ... FAILED
+
+failures:
+
+failures:
+    analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2874 filtered out; finished in 0.77s
+
+
+
+thread 'analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads' (108041662) panicked at crates/polint/src/analysis_neutral/evidence/provider.rs:899:9:
+expanded payloads retained 571408384 bytes; expected one-row streaming
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    analysis_neutral::evidence::provider::digest_order_tests::indexed_family_streams_large_payloads
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2874 filtered out; finished in 0.78s
+
+error: test failed, to rerun pass `-p polint --lib`

@@ -1,11 +1,17 @@
+use std::cell::OnceCell;
+use std::collections::HashMap;
+
 use crate::analysis::adaptation::facts::RejectionReason;
-use crate::analysis::calls::facts::CallTargetStatus;
 #[cfg(test)]
 use crate::analysis::calls::facts::UnresolvedCallReason;
+use crate::analysis::calls::facts::{CallSiteFact, CallTargetStatus};
 #[cfg(test)]
 use crate::analysis::data_flow::facts::DataFlowBudgetReason;
-use crate::analysis::data_flow::facts::{DataFlowBudgetFact, DataFlowEdgeFact, DataFlowStatus};
+use crate::analysis::data_flow::facts::{
+    DataFlowBudgetFact, DataFlowEdgeFact, DataFlowNodeFact, DataFlowStatus,
+};
 use crate::analysis::evidence::facts::{EvidenceUnknownFact, EvidenceUnknownReason};
+use crate::analysis::ids::{CallSiteId, DataFlowNodeId};
 #[cfg(test)]
 use crate::analysis::points_to::facts::PointsToPrecision;
 use crate::analysis::points_to::facts::PointsToStatus;
@@ -35,14 +41,24 @@ pub(crate) const PUBLIC_UNKNOWN_CAPABILITIES: &[&str] = &[
 ];
 
 pub(crate) fn public_capability_unknowns(db: &AnalysisDb, capability: &str) -> Vec<UnknownRow> {
+    public_capability_unknowns_with_sites(db, capability, &OnceCell::new())
+}
+
+type CallSiteIndex<'db> = OnceCell<HashMap<CallSiteId, &'db CallSiteFact>>;
+
+fn public_capability_unknowns_with_sites<'db>(
+    db: &'db AnalysisDb,
+    capability: &str,
+    sites: &CallSiteIndex<'db>,
+) -> Vec<UnknownRow> {
     let rows = match capability {
         "resolved_imports" => resolved_import_unknowns(db),
         "symbols" => symbol_unknowns(db),
         "references" => reference_unknowns(db),
-        "events" | "calls" | "control_flow" => policy_call_unknowns(db, capability),
+        "events" | "calls" | "control_flow" => policy_call_unknowns(db, capability, sites),
         "dataflow" => {
             let mut rows = data_flow_unknowns(db);
-            rows.extend(policy_call_unknowns(db, capability));
+            rows.extend(policy_call_unknowns(db, capability, sites));
             rows
         }
         _ => Vec::new(),
@@ -55,9 +71,18 @@ pub(crate) fn graph_engine_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     graph_engine_unknowns_with_diagnostics(db, &[])
 }
 
+#[cfg(test)]
 pub(crate) fn graph_engine_unknowns_with_diagnostics(
     db: &AnalysisDb,
     diagnostics: &[Diagnostic],
+) -> Vec<UnknownRow> {
+    graph_engine_unknowns_with_sites(db, diagnostics, &OnceCell::new())
+}
+
+fn graph_engine_unknowns_with_sites<'db>(
+    db: &'db AnalysisDb,
+    diagnostics: &[Diagnostic],
+    sites: &CallSiteIndex<'db>,
 ) -> Vec<UnknownRow> {
     let mut rows = Vec::new();
     rows.extend(go_semantic_unknowns(db));
@@ -65,7 +90,7 @@ pub(crate) fn graph_engine_unknowns_with_diagnostics(
     rows.extend(resource_budget_unknowns(diagnostics));
     rows.extend(unsupported_semantic_unknowns(db));
     rows.extend(solver_unknowns(db));
-    rows.extend(refined_call_unknowns(db));
+    rows.extend(refined_call_unknowns(db, sites));
     rows.extend(adaptation_unknowns(db));
     normalize_rows(rows)
 }
@@ -75,10 +100,13 @@ pub(crate) fn all_unknowns_with_diagnostics(
     diagnostics: &[Diagnostic],
 ) -> Vec<UnknownRow> {
     let mut rows = Vec::new();
+    let sites = OnceCell::new();
     for capability in PUBLIC_UNKNOWN_CAPABILITIES {
-        rows.extend(public_capability_unknowns(db, capability));
+        rows.extend(public_capability_unknowns_with_sites(
+            db, capability, &sites,
+        ));
     }
-    rows.extend(graph_engine_unknowns_with_diagnostics(db, diagnostics));
+    rows.extend(graph_engine_unknowns_with_sites(db, diagnostics, &sites));
     normalize_rows(rows)
 }
 
@@ -372,13 +400,14 @@ fn solver_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     rows
 }
 
-fn refined_call_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
+fn refined_call_unknowns<'db>(db: &'db AnalysisDb, sites: &CallSiteIndex<'db>) -> Vec<UnknownRow> {
     db.refined_call_edges()
         .iter()
         .filter(|edge| edge.status != CallTargetStatus::Resolved)
         .map(|edge| {
             refined_call_unknown(
                 db,
+                sites.get_or_init(|| call_sites_by_id(db)),
                 edge,
                 "refined_calls",
                 "docs/facts/capability-plans.md",
@@ -388,8 +417,20 @@ fn refined_call_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
         .collect()
 }
 
+/// The first call site with each id.
+fn call_sites_by_id(db: &AnalysisDb) -> HashMap<CallSiteId, &CallSiteFact> {
+    #[cfg(test)]
+    tests::CALL_SITE_INDEX_BUILDS.with(|count| count.set(count.get() + 1));
+    let mut sites = HashMap::new();
+    for site in db.call_sites() {
+        sites.entry(site.id).or_insert(site);
+    }
+    sites
+}
+
 fn refined_call_unknown(
     db: &AnalysisDb,
+    sites: &HashMap<CallSiteId, &CallSiteFact>,
     edge: &RefinedCallEdgeFact,
     capability: &str,
     docs_path: &str,
@@ -403,7 +444,7 @@ fn refined_call_unknown(
         CallTargetStatus::Unresolved | CallTargetStatus::Ambiguous => UnknownCategory::MissingFact,
         CallTargetStatus::Resolved => UnknownCategory::MissingFact,
     };
-    let site = db.call_sites().iter().find(|site| site.id == edge.site);
+    let site = sites.get(&edge.site).copied();
     UnknownRow::new(UnknownRowInput {
         category,
         capability: Some(capability.to_string()),
@@ -456,13 +497,18 @@ fn adaptation_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
         .collect()
 }
 
-fn policy_call_unknowns(db: &AnalysisDb, capability: &str) -> Vec<UnknownRow> {
+fn policy_call_unknowns<'db>(
+    db: &'db AnalysisDb,
+    capability: &str,
+    sites: &CallSiteIndex<'db>,
+) -> Vec<UnknownRow> {
     db.refined_call_edges()
         .iter()
         .filter(|edge| edge.status != CallTargetStatus::Resolved)
         .map(|edge| {
             refined_call_unknown(
                 db,
+                sites.get_or_init(|| call_sites_by_id(db)),
                 edge,
                 capability,
                 policy_capability_docs_path(capability),
@@ -475,12 +521,16 @@ fn policy_call_unknowns(db: &AnalysisDb, capability: &str) -> Vec<UnknownRow> {
 fn data_flow_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
+    let mut nodes: HashMap<DataFlowNodeId, &DataFlowNodeFact> = HashMap::new();
+    for node in db.data_flow_nodes() {
+        nodes.entry(node.id).or_insert(node);
+    }
     let mut rows = Vec::new();
     rows.extend(
         db.data_flow_edges()
             .iter()
             .filter(|edge| edge.status != DataFlowStatus::Present)
-            .map(|edge| data_flow_edge_unknown(db, edge)),
+            .map(|edge| data_flow_edge_unknown(db, interner, &nodes, edge)),
     );
     rows.extend(
         db.data_flow_budgets()
@@ -496,10 +546,13 @@ fn data_flow_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     rows
 }
 
-fn data_flow_edge_unknown(db: &AnalysisDb, edge: &DataFlowEdgeFact) -> UnknownRow {
-    let interner_handle = db.stable_key_interner();
-    let interner = &interner_handle;
-    let (file, span) = data_flow_edge_location(db, edge);
+fn data_flow_edge_unknown(
+    db: &AnalysisDb,
+    interner: &crate::core::StableKeyInterner,
+    nodes: &HashMap<DataFlowNodeId, &DataFlowNodeFact>,
+    edge: &DataFlowEdgeFact,
+) -> UnknownRow {
+    let (file, span) = data_flow_edge_location(db, nodes, edge);
     UnknownRow::new(UnknownRowInput {
         category: data_flow_status_category(edge.status),
         capability: Some("dataflow".to_string()),
@@ -567,17 +620,13 @@ fn evidence_unknown_for_data_flow(
 
 fn data_flow_edge_location(
     db: &AnalysisDb,
+    nodes: &HashMap<DataFlowNodeId, &DataFlowNodeFact>,
     edge: &DataFlowEdgeFact,
 ) -> (String, Option<UnknownSpan>) {
-    let node = db
-        .data_flow_nodes()
-        .iter()
-        .find(|node| node.id == edge.to)
-        .or_else(|| {
-            db.data_flow_nodes()
-                .iter()
-                .find(|node| node.id == edge.from)
-        });
+    let node = nodes
+        .get(&edge.to)
+        .or_else(|| nodes.get(&edge.from))
+        .copied();
     let file = node
         .and_then(|node| node.file)
         .map(|file| db.path_for(file))
@@ -723,6 +772,116 @@ mod tests {
         ));
     }
 
+    std::thread_local! {
+        pub(super) static CALL_SITE_INDEX_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    fn resolved_calls_db(count: u64, refined: bool) -> AnalysisDb {
+        let mut db = AnalysisDb::new();
+        let file = db.add_file(
+            "calls.ts".into(),
+            "calls.ts".to_string(),
+            "function caller() {}".to_string(),
+        );
+        install_caller_function(&mut db, file);
+        let sites = (0..count)
+            .map(|id| CallSiteFact {
+                in_throw: false,
+                id: CallSiteId(id),
+                language: Language::TypeScript,
+                file,
+                caller: FunctionId::from_raw(0),
+                owner_symbol: None,
+                body: MirBodyId(0),
+                operation: MirOpId(0),
+                span: Span::point(file, 1, 1),
+                kind: CallSyntaxKind::Function,
+                callee: CallCallee::Identifier {
+                    reference: None,
+                    name: "caller".to_string(),
+                },
+                receiver: None,
+                arguments: Vec::new(),
+                result: None,
+                status: CallTargetStatus::Resolved,
+                precision: CallPrecision::Exact,
+                stable_key: db.stable_key_interner().intern(format!("callsite:{id}")),
+            })
+            .collect();
+        let targets = (0..count)
+            .map(|id| crate::analysis::calls::facts::CallTargetFact {
+                id: crate::analysis::ids::CallTargetId(id),
+                site: CallSiteId(id),
+                caller: FunctionId::from_raw(0),
+                target_function: Some(FunctionId::from_raw(0)),
+                target_symbol: None,
+                synthetic_target: None,
+                edge_kind: CallEdgeKind::Direct,
+                algorithm: CallAlgorithm::PointsTo,
+                status: CallTargetStatus::Resolved,
+                reason: None,
+                provenance: CallProvenance::Native,
+                precision: CallPrecision::Exact,
+                stable_key: db.stable_key_interner().intern(format!("target:{id}")),
+            })
+            .collect();
+        db.replace_call_facts(CallOutput {
+            sites,
+            targets,
+            unresolved: Vec::new(),
+        })
+        .expect("call facts");
+        if refined {
+            let edges = (0..count)
+                .map(|id| RefinedCallEdgeFact {
+                    id: RefinedCallEdgeId(id),
+                    site: CallSiteId(id),
+                    status: CallTargetStatus::Resolved,
+                    reason: None,
+                    target_function: Some(FunctionId::from_raw(0)),
+                    stable_key: db.stable_key_interner().intern(format!("refined:{id}")),
+                    ..refined_budget_edge()
+                })
+                .collect();
+            db.replace_refined_call_facts(RefinedCallOutput { edges })
+                .expect("resolved refined calls");
+        }
+        db
+    }
+
+    #[test]
+    fn completeness_skips_call_site_index_without_unknown_edges() {
+        for refined in [false, true] {
+            let db = resolved_calls_db(128, refined);
+            CALL_SITE_INDEX_BUILDS.set(0);
+            assert!(all_unknowns_with_diagnostics(&db, &[]).is_empty());
+            assert_eq!(
+                CALL_SITE_INDEX_BUILDS.get(),
+                0,
+                "no call-site lookup is needed"
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "release microbenchmark: empty refinement sets and fully resolved programs"]
+    fn benchmark_empty_and_resolved_completeness() {
+        for refined in [false, true] {
+            let db = resolved_calls_db(20_000, refined);
+            CALL_SITE_INDEX_BUILDS.set(0);
+            let start = std::time::Instant::now();
+            for _ in 0..100 {
+                assert!(std::hint::black_box(all_unknowns_with_diagnostics(&db, &[])).is_empty());
+            }
+            eprintln!(
+                "completeness refined={refined}: {} ns/100 runs; index builds={}",
+                start.elapsed().as_nanos(),
+                CALL_SITE_INDEX_BUILDS.get()
+            );
+            assert_eq!(CALL_SITE_INDEX_BUILDS.get(), 0);
+        }
+    }
+
     #[test]
     fn public_import_unknowns_preserve_current_status_docs_and_artifact() {
         let mut db = AnalysisDb::new();
@@ -856,10 +1015,16 @@ mod tests {
         })
         .expect("refined calls");
 
+        CALL_SITE_INDEX_BUILDS.set(0);
         let capabilities = all_unknowns_with_diagnostics(&db, &[])
             .into_iter()
             .filter_map(|row| row.capability)
             .collect::<BTreeSet<_>>();
+        assert_eq!(
+            CALL_SITE_INDEX_BUILDS.get(),
+            1,
+            "all five collectors share one index"
+        );
 
         assert!(capabilities.contains("events"));
         assert!(capabilities.contains("calls"));

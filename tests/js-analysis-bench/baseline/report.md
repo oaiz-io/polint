@@ -1,6 +1,6 @@
 # JS/TS analysis benchmark
 
-polint 0.5.0. Written by `python3 tests/js-analysis-bench/bench.py report`;
+polint 0.5.1. Written by `python3 tests/js-analysis-bench/bench.py report`;
 see `tests/js-analysis-bench/README.md` for the measures, the decisions and their limits.
 There is no overall accuracy number on purpose: read the rows.
 
@@ -291,33 +291,33 @@ Both are compared with the export keys the loaded module actually has.
 
 ## Cost
 
-The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit b019a14e7b3f.
+The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 9680264f48af.
 
-`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 27 MB; the analysis column has no such floor.
+`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 28 MB; the analysis column has no such floor.
 
 | tree | source KB | cold analysis ms (per MB) | cold process ms | warm analysis ms (per MB) | warm process ms | cold peak RSS MB (analysis / process) | warm peak RSS MB | stored bytes per MB (gzip) |
 |---|---|---|---|---|---|---|---|---|
-| constructs (all cases) | 13 | 87 (6802) | 199 | 47 (3675) | 160 | 73 / 73 | 73 / 73 | 110875762 (10781079) |
-| axios | 282 | 631 (2237) | 744 | 401 (1422) | 520 | 100 / 100 | 102 / 102 | 75549990 (5370043) |
-| zod | 3088 | 10499 (3400) | 10708 | 10816 (3503) | 10999 | 1060 / 1061 | 1041 / 1041 | 95877087 (6780767) |
-| commander | 127 | 233 (1841) | 344 | 179 (1414) | 294 | 73 / 73 | 73 / 73 | 44222052 (3192816) |
-| async | 321 | 427 (1332) | 546 | 286 (892) | 402 | 78 / 78 | 78 / 78 | 44203329 (3457617) |
-| chalk | 10 | 45 (4726) | 159 | 22 (2311) | 131 | 73 / 73 | 73 / 73 | 86943598 (6904422) |
-| dayjs | 7 | 37 (5167) | 146 | 17 (2374) | 132 | 73 / 73 | 73 / 73 | 221683284 (12812456) |
-| underscore | 69 | 192 (2786) | 306 | 150 (2177) | 259 | 73 / 73 | 73 / 73 | 91000174 (5822581) |
+| constructs (all cases) | 13 | 78 (6099) | 187 | 41 (3206) | 153 | 73 / 73 | 73 / 73 | 110875762 (10781235) |
+| axios | 282 | 654 (2319) | 775 | 428 (1518) | 549 | 101 / 101 | 102 / 102 | 75549990 (5370050) |
+| zod | 3088 | 10804 (3499) | 10996 | 10887 (3526) | 11070 | 1057 / 1057 | 1041 / 1041 | 95877087 (6780766) |
+| commander | 127 | 242 (1912) | 351 | 175 (1382) | 293 | 73 / 73 | 73 / 73 | 44222052 (3192769) |
+| async | 321 | 436 (1360) | 547 | 292 (911) | 407 | 78 / 78 | 78 / 78 | 44203329 (3457592) |
+| chalk | 10 | 46 (4831) | 161 | 22 (2311) | 135 | 72 / 72 | 72 / 72 | 86943598 (6903792) |
+| dayjs | 7 | 39 (5446) | 152 | 17 (2374) | 127 | 73 / 73 | 73 / 73 | 221683284 (12812736) |
+| underscore | 69 | 201 (2917) | 314 | 149 (2162) | 257 | 72 / 72 | 74 / 74 | 91000174 (5822567) |
 
 Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is
 the only way to time the refined plan, because no public view asks for it.
 
 | tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |
 |---|---|---|---|---|---|
-| axios | 618 | 117 | 2158 | 279 | none |
-| zod | 10898 | 1333 | 81463 | 3811 | 180 |
-| commander | 235 | 59 | 1691 | 146 | none |
-| async | 410 | 93 | 1924 | 262 | none |
-| chalk | 42 | 32 | 93 | 40 | none |
-| dayjs | 41 | 32 | 93 | 37 | none |
-| underscore | 191 | 53 | 674 | 122 | none |
+| axios | 627 | 117 | 1913 | 295 | none |
+| zod | 10861 | 1333 | 37860 | 3784 | 180 |
+| commander | 236 | 60 | 1591 | 154 | none |
+| async | 409 | 92 | 1748 | 296 | none |
+| chalk | 56 | 32 | 91 | 42 | none |
+| dayjs | 40 | 32 | 110 | 37 | none |
+| underscore | 192 | 54 | 599 | 133 | none |
 
 ## Decisions recorded by this run
 

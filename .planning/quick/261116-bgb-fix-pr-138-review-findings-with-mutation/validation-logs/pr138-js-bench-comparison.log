@@ -1,0 +1,283 @@
+PASS: every non-cost, non-version JSON field is identical to pre-fix baseline
+{
+  "check": {
+    "async": {
+      "cold": {
+        "analysis_peak_rss_bytes": 108052480,
+        "analysis_wall_ms": 435,
+        "analysis_wall_ms_per_mb": 1357,
+        "process_peak_rss_bytes": 108052480,
+        "process_wall_ms": 1172,
+        "process_wall_ms_per_mb": 3656
+      },
+      "source_bytes": 320550,
+      "stored_bytes": 14169377,
+      "stored_bytes_per_mb": 44203329,
+      "stored_gzip_bytes": 1108343,
+      "stored_gzip_bytes_per_mb": 3457629,
+      "warm": {
+        "analysis_peak_rss_bytes": 102498304,
+        "analysis_wall_ms": 298,
+        "analysis_wall_ms_per_mb": 930,
+        "process_peak_rss_bytes": 102498304,
+        "process_wall_ms": 1031,
+        "process_wall_ms_per_mb": 3216
+      }
+    },
+    "axios": {
+      "cold": {
+        "analysis_peak_rss_bytes": 172621824,
+        "analysis_wall_ms": 610,
+        "analysis_wall_ms_per_mb": 2163,
+        "process_peak_rss_bytes": 172621824,
+        "process_wall_ms": 1331,
+        "process_wall_ms_per_mb": 4720
+      },
+      "source_bytes": 282016,
+      "stored_bytes": 21306306,
+      "stored_bytes_per_mb": 75549990,
+      "stored_gzip_bytes": 1514433,
+      "stored_gzip_bytes_per_mb": 5370025,
+      "warm": {
+        "analysis_peak_rss_bytes": 138018816,
+        "analysis_wall_ms": 407,
+        "analysis_wall_ms_per_mb": 1443,
+        "process_peak_rss_bytes": 138018816,
+        "process_wall_ms": 1145,
+        "process_wall_ms_per_mb": 4060
+      }
+    },
+    "chalk": {
+      "cold": {
+        "analysis_peak_rss_bytes": 21790720,
+        "analysis_wall_ms": 46,
+        "analysis_wall_ms_per_mb": 4831,
+        "process_peak_rss_bytes": 21790720,
+        "process_wall_ms": 772,
+        "process_wall_ms_per_mb": 81084
+      },
+      "source_bytes": 9521,
+      "stored_bytes": 827790,
+      "stored_bytes_per_mb": 86943598,
+      "stored_gzip_bytes": 65735,
+      "stored_gzip_bytes_per_mb": 6904212,
+      "warm": {
+        "analysis_peak_rss_bytes": 21233664,
+        "analysis_wall_ms": 34,
+        "analysis_wall_ms_per_mb": 3571,
+        "process_peak_rss_bytes": 21233664,
+        "process_wall_ms": 766,
+        "process_wall_ms_per_mb": 80454
+      }
+    },
+    "commander": {
+      "cold": {
+        "analysis_peak_rss_bytes": 72220672,
+        "analysis_wall_ms": 229,
+        "analysis_wall_ms_per_mb": 1809,
+        "process_peak_rss_bytes": 72220672,
+        "process_wall_ms": 1003,
+        "process_wall_ms_per_mb": 7923
+      },
+      "source_bytes": 126592,
+      "stored_bytes": 5598158,
+      "stored_bytes_per_mb": 44222052,
+      "stored_gzip_bytes": 404179,
+      "stored_gzip_bytes_per_mb": 3192769,
+      "warm": {
+        "analysis_peak_rss_bytes": 69812224,
+        "analysis_wall_ms": 177,
+        "analysis_wall_ms_per_mb": 1398,
+        "process_peak_rss_bytes": 69812224,
+        "process_wall_ms": 906,
+        "process_wall_ms_per_mb": 7157
+      }
+    },
+    "constructs (all cases)": {
+      "cold": {
+        "analysis_peak_rss_bytes": 25542656,
+        "analysis_wall_ms": 141,
+        "analysis_wall_ms_per_mb": 11024,
+        "process_peak_rss_bytes": 25542656,
+        "process_wall_ms": 855,
+        "process_wall_ms_per_mb": 66849
+      },
+      "source_bytes": 12790,
+      "stored_bytes": 1418101,
+      "stored_bytes_per_mb": 110875762,
+      "stored_gzip_bytes": 137886,
+      "stored_gzip_bytes_per_mb": 10780766,
+      "warm": {
+        "analysis_peak_rss_bytes": 27115520,
+        "analysis_wall_ms": 79,
+        "analysis_wall_ms_per_mb": 6177,
+        "process_peak_rss_bytes": 27115520,
+        "process_wall_ms": 807,
+        "process_wall_ms_per_mb": 63096
+      }
+    },
+    "dayjs": {
+      "cold": {
+        "analysis_peak_rss_bytes": 21741568,
+        "analysis_wall_ms": 47,
+        "analysis_wall_ms_per_mb": 6563,
+        "process_peak_rss_bytes": 21741568,
+        "process_wall_ms": 804,
+        "process_wall_ms_per_mb": 112275
+      },
+      "source_bytes": 7161,
+      "stored_bytes": 1587474,
+      "stored_bytes_per_mb": 221683284,
+      "stored_gzip_bytes": 91751,
+      "stored_gzip_bytes_per_mb": 12812596,
+      "warm": {
+        "analysis_peak_rss_bytes": 22642688,
+        "analysis_wall_ms": 21,
+        "analysis_wall_ms_per_mb": 2933,
+        "process_peak_rss_bytes": 22642688,
+        "process_wall_ms": 799,
+        "process_wall_ms_per_mb": 111577
+      }
+    },
+    "underscore": {
+      "cold": {
+        "analysis_peak_rss_bytes": 65273856,
+        "analysis_wall_ms": 204,
+        "analysis_wall_ms_per_mb": 2960,
+        "process_peak_rss_bytes": 65273856,
+        "process_wall_ms": 943,
+        "process_wall_ms_per_mb": 13683
+      },
+      "source_bytes": 68916,
+      "stored_bytes": 6271368,
+      "stored_bytes_per_mb": 91000174,
+      "stored_gzip_bytes": 401268,
+      "stored_gzip_bytes_per_mb": 5822567,
+      "warm": {
+        "analysis_peak_rss_bytes": 63586304,
+        "analysis_wall_ms": 145,
+        "analysis_wall_ms_per_mb": 2104,
+        "process_peak_rss_bytes": 63586304,
+        "process_wall_ms": 894,
+        "process_wall_ms_per_mb": 12972
+      }
+    },
+    "zod": {
+      "cold": {
+        "analysis_peak_rss_bytes": 1632583680,
+        "analysis_wall_ms": 9068,
+        "analysis_wall_ms_per_mb": 2937,
+        "process_peak_rss_bytes": 1632583680,
+        "process_wall_ms": 9825,
+        "process_wall_ms_per_mb": 3182
+      },
+      "source_bytes": 3087749,
+      "stored_bytes": 296044379,
+      "stored_bytes_per_mb": 95877087,
+      "stored_gzip_bytes": 20937302,
+      "stored_gzip_bytes_per_mb": 6780766,
+      "warm": {
+        "analysis_peak_rss_bytes": 1638400000,
+        "analysis_wall_ms": 8978,
+        "analysis_wall_ms_per_mb": 2908,
+        "process_peak_rss_bytes": 1638400000,
+        "process_wall_ms": 9755,
+        "process_wall_ms_per_mb": 3159
+      }
+    }
+  },
+  "dump": {
+    "async": {
+      "base": {
+        "error": null,
+        "peak_rss_bytes": 124715008,
+        "wall_ms": 381
+      },
+      "refined": {
+        "error": null,
+        "peak_rss_bytes": 502906880,
+        "wall_ms": 1906
+      }
+    },
+    "axios": {
+      "base": {
+        "error": null,
+        "peak_rss_bytes": 161316864,
+        "wall_ms": 564
+      },
+      "refined": {
+        "error": null,
+        "peak_rss_bytes": 466092032,
+        "wall_ms": 2017
+      }
+    },
+    "chalk": {
+      "base": {
+        "error": null,
+        "peak_rss_bytes": 27213824,
+        "wall_ms": 36
+      },
+      "refined": {
+        "error": null,
+        "peak_rss_bytes": 43843584,
+        "wall_ms": 80
+      }
+    },
+    "commander": {
+      "base": {
+        "error": null,
+        "peak_rss_bytes": 78102528,
+        "wall_ms": 209
+      },
+      "refined": {
+        "error": null,
+        "peak_rss_bytes": 242925568,
+        "wall_ms": 1423
+      }
+    },
+    "dayjs": {
+      "base": {
+        "error": null,
+        "peak_rss_bytes": 26722304,
+        "wall_ms": 37
+      },
+      "refined": {
+        "error": null,
+        "peak_rss_bytes": 32538624,
+        "wall_ms": 98
+      }
+    },
+    "underscore": {
+      "base": {
+        "error": null,
+        "peak_rss_bytes": 70123520,
+        "wall_ms": 181
+      },
+      "refined": {
+        "error": null,
+        "peak_rss_bytes": 180256768,
+        "wall_ms": 808
+      }
+    },
+    "zod": {
+      "base": {
+        "error": null,
+        "peak_rss_bytes": 1791967232,
+        "wall_ms": 8401
+      },
+      "refined": {
+        "error": null,
+        "peak_rss_bytes": 5645402112,
+        "wall_ms": 35254
+      }
+    }
+  },
+  "machine": {
+    "cpus": 16,
+    "git_head": "5efded2662d11df065037aa3a390fee746082569",
+    "launcher_peak_rss_bytes": 33554432000,
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.7"
+  },
+  "runs": 3
+}

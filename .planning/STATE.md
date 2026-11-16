@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Static Analysis 2.0 Implementation
 status: in_progress
-last_updated: "2026-09-08T06:59:01Z"
-last_activity: 2026-09-08
+last_updated: "2026-11-16T09:56:33Z"
+last_activity: 2026-11-16
 progress:
   total_phases: 9
   completed_phases: 2
@@ -45,7 +45,7 @@ See: `.planning/PROJECT.md` (updated 2026-07-10)
 Phase: 65
 Plan: 02 (R2 only)
 Status: R1 and R2 complete and code-review clean; broader Phase 65 remains open for R3-R6
-Last activity: 2026-08-29 - Completed quick task 260829-s1l: Refuse cross-checkout sharing for rule hosts that embed Cargo-provided checkout paths
+Last activity: 2026-11-16 - Validated quick task 261116-bgb review fixes for PR #138; commits blocked by Git metadata permissions
 
 ### Active Milestone Phase Progress
 
@@ -55,10 +55,15 @@ Last activity: 2026-08-29 - Completed quick task 260829-s1l: Refuse cross-checko
 
 Add `public surface leak gate (ubuntu-latest)` AND `public surface leak gate (macos-latest)` to GitHub branch protection required checks on `main` and `release/*`. Only a repo admin can configure branch protection; until then a PR can merge with the v1.3 leak gate failing. Source: Phase 42 Plan 04 (`crates/polint/tests/public_surface_leak.rs`).
 
+### Quick Task Awaiting Commit
+
+Quick task **261116-bgb** fixes all three PR #138 review findings on `perf/js-callgraph-speed`. Mutation proofs, every required CI command, the full Linux workspace suite and `make js-bench` passed; all non-cost/version benchmark fields are unchanged. Git staging is blocked because the worktree index lies outside the writable roots. No commits, pushes, merges or branch changes were made. [Validation and remaining blocker](./quick/261116-bgb-fix-pr-138-review-findings-with-mutation/SUMMARY.md).
+
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261115-p8s | JS/TS analysis speed with byte-identical results: JS/TS call refinement and unknown collection made linear, packed parallel provider digests, parallel evidence and data-flow metadata; refined zod fact dump 81.5 → 37.9 s (base 10.9 s and peak memory unchanged; the 2x-base and memory targets were not met), all 82 bench dumps byte-identical | 2026-11-15 | 9680264f | [261115-p8s-js-callgraph-speed](./quick/261115-p8s-js-callgraph-speed/) |
 | 261007-r1v | final review of the deep-analysis build: byte identity, default-profile isolation, corpus, mutations, determinism and gate magnitudes re-derived on the fixed tip; fixed the data-flow setup gap (Go-only scans with no loaded package are blocked with `setup_missing`, mixed scans get `FlowUnknown::NoProgram`) and documented the route middleware chain's limits | 2026-10-07 | bfa45724 | [261007-r1v-final-review-fixes-deep-analysis](./quick/261007-r1v-final-review-fixes-deep-analysis/) |
 | 261003-d3f | deep-analysis step 3: Go flow programs from the semantic sidecar's SSA, a summary-based taint solver with access paths, budgets and unknowns, models as data, `DataFlow<'_>::flows` with paths and SARIF code flows, a 53-case taint corpus with twins; gate 3 PASS (corpus 0.946 / 1.000, L4 10/10 with twins clean, whole-core cold 70.0 s / 4.25 GB, warm 15.0 s, budget unknowns visible); one-file edit 68.2 s reported (sidecar floor), review/CI path only | 2026-10-04 | bb051d19 | [261003-d3f-deep-analysis-step-3-interprocedural-dataflow](./quick/261003-d3f-deep-analysis-step-3-interprocedural-dataflow/) |
 | 261003-u2r | deep-analysis step 2: framework routes interpreted in the semantic sidecar (gin, chi, net/http, Watermill; repository `[[go_route]]` models), `Routes<'_>`, the layer-cache miss path made linear; gate 2 PASS on five criteria (whole-core `calls` warm 5.7 s, cold 43.5 s / 3.84 GB, reports byte-identical, route inventory 292/292, endpoint-authority 0.49 s) and the one-file edit tier FAILED (41.7 s; whole-program VTA floor 15.8 s) -> kill path: deep providers stay review/CI-only, step 3 re-scoped to the review path | 2026-10-03 | 8990619d | [261003-u2r-deep-analysis-step-2-routes-and-edit-tier](./quick/261003-u2r-deep-analysis-step-2-routes-and-edit-tier/) |

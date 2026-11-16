@@ -45,6 +45,14 @@ pub enum DigestKind {
 
 impl Digest {
     pub fn from_parts(kind: DigestKind, label: &str, parts: &[&str]) -> Self {
+        Self::from_part_iter(kind, label, parts.iter().copied())
+    }
+
+    fn from_part_iter<'a>(
+        kind: DigestKind,
+        label: &str,
+        parts: impl IntoIterator<Item = &'a str>,
+    ) -> Self {
         let kind_label = kind.as_str();
         let mut hash = FNV_OFFSET_BASIS;
         fingerprint_length_prefixed_part(&mut hash, "kind", kind_label);
@@ -114,6 +122,109 @@ impl Digest {
 
     pub fn unsupported(kind: DigestKind, label: &str, reason: &str) -> Self {
         Self::from_parts(kind, "unsupported", &[label, reason])
+    }
+}
+
+/// Digest parts packed end to end in one buffer, hashed in sorted order.
+///
+/// Large outputs have millions of parts. Owning each as its own string costs an
+/// allocation per part and leaves the freed parts scattered over the heap; one
+/// buffer is a few large allocations that go back to the operating system when
+/// it is dropped. [`DigestParts::digest`] hashes exactly what
+/// [`Digest::from_parts`] hashes over the same parts sorted as strings.
+#[derive(Debug, Default)]
+pub(crate) struct DigestParts {
+    text: String,
+    spans: Vec<(usize, usize)>,
+}
+
+impl DigestParts {
+    pub(crate) fn push(&mut self, part: &str) {
+        let start = self.text.len();
+        self.text.push_str(part);
+        self.spans.push((start, self.text.len()));
+    }
+
+    pub(crate) fn extend<S: AsRef<str>>(&mut self, parts: impl IntoIterator<Item = S>) {
+        for part in parts {
+            self.push(part.as_ref());
+        }
+    }
+
+    /// Appends one part per row, written by `write` in parallel, in row order.
+    ///
+    /// Rows are written a bounded batch at a time, each worker into a buffer
+    /// of its own that is copied into this one before the next batch starts,
+    /// so workers only ever hold one batch. A failure reports the first
+    /// failing row, as writing them one by one would.
+    pub(crate) fn try_extend_in_order<T: Sync, E: Send>(
+        &mut self,
+        rows: &[T],
+        write: impl Fn(&mut String, &T) -> Result<(), E> + Sync,
+    ) -> Result<(), E> {
+        use rayon::prelude::*;
+        const ROWS_PER_CHUNK: usize = 64;
+        const ROWS_PER_BATCH: usize = 64 * ROWS_PER_CHUNK;
+        self.spans.reserve(rows.len());
+        for batch in rows.chunks(ROWS_PER_BATCH) {
+            let chunks = batch
+                .par_chunks(ROWS_PER_CHUNK)
+                .map(|chunk| {
+                    let mut text = String::new();
+                    let mut ends = Vec::with_capacity(chunk.len());
+                    for row in chunk {
+                        write(&mut text, row)?;
+                        ends.push(text.len());
+                    }
+                    Ok((text, ends))
+                })
+                .collect::<Vec<Result<_, E>>>();
+            for chunk in chunks {
+                let (text, ends) = chunk?;
+                let base = self.text.len();
+                self.text.push_str(&text);
+                let mut start = base;
+                for end in ends {
+                    self.spans.push((start, base + end));
+                    start = base + end;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// [`DigestParts::try_extend_in_order`] for a writer that cannot fail.
+    pub(crate) fn extend_in_order<T: Sync>(
+        &mut self,
+        rows: &[T],
+        write: impl Fn(&mut String, &T) + Sync,
+    ) {
+        let Ok(()) = self.try_extend_in_order(rows, |text, row| {
+            write(text, row);
+            Ok::<_, std::convert::Infallible>(())
+        });
+    }
+
+    /// Sorts the parts as strings.
+    pub(crate) fn sort(&mut self) {
+        use rayon::slice::ParallelSliceMut as _;
+        let text = self.text.as_str();
+        // Parts that compare equal are identical bytes, so an unstable sort
+        // orders them exactly as a stable one would.
+        self.spans
+            .par_sort_unstable_by(|left, right| text[left.0..left.1].cmp(&text[right.0..right.1]));
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &str> {
+        self.spans
+            .iter()
+            .map(|&(start, end)| &self.text[start..end])
+    }
+
+    /// Digest of the parts, sorted.
+    pub(crate) fn digest(mut self, kind: DigestKind, label: &str) -> Digest {
+        self.sort();
+        Digest::from_part_iter(kind, label, self.iter())
     }
 }
 
@@ -266,6 +377,56 @@ mod tests {
             Digest::from_unordered(DigestKind::LayerOutput, "layer", vec![b.clone(), a.clone()]),
             Digest::from_unordered(DigestKind::LayerOutput, "layer", vec![a, b])
         );
+    }
+
+    #[test]
+    fn packed_parts_digest_matches_sorted_string_parts() {
+        // Enough rows to span several parallel batches, with duplicates and
+        // parts that are prefixes of each other.
+        let rows = (0..20_000_u32).rev().collect::<Vec<_>>();
+        let part = |row: &u32| format!("row={}{}", row % 997, "x".repeat((row % 3) as usize));
+
+        let mut expected = rows.iter().map(part).collect::<Vec<_>>();
+        expected.push("header".to_owned());
+        expected.sort();
+        let refs = expected.iter().map(String::as_str).collect::<Vec<_>>();
+
+        let mut packed = DigestParts::default();
+        packed.push("header");
+        packed.extend_in_order(&rows, |text, row| text.push_str(&part(row)));
+
+        assert_eq!(
+            packed.digest(DigestKind::ProviderOutput, "rows"),
+            Digest::from_parts(DigestKind::ProviderOutput, "rows", &refs)
+        );
+    }
+
+    #[test]
+    fn packed_parts_report_the_first_failing_row() {
+        let rows = (0..10_000_u32).collect::<Vec<_>>();
+        // The first two failures are in different 64-row chunks of the first
+        // 4096-row batch; later batches must not change error precedence either.
+        for threads in [1, 2, 4] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .expect("thread pool");
+            let failed = pool.install(|| {
+                let mut packed = DigestParts::default();
+                packed.try_extend_in_order(&rows, |text, row| {
+                    if [127, 191, 2_999, 5_999, 8_999].contains(row) {
+                        return Err(*row);
+                    }
+                    text.push_str(&row.to_string());
+                    Ok(())
+                })
+            });
+            assert_eq!(
+                failed,
+                Err(127),
+                "lowest row must win with {threads} workers"
+            );
+        }
     }
 
     #[test]
