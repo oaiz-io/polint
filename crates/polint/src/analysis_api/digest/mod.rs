@@ -205,12 +205,6 @@ impl DigestParts {
         });
     }
 
-    /// Drops every part, keeping the buffers for reuse.
-    pub(crate) fn clear(&mut self) {
-        self.text.clear();
-        self.spans.clear();
-    }
-
     /// Sorts the parts as strings.
     pub(crate) fn sort(&mut self) {
         use rayon::slice::ParallelSliceMut as _;
@@ -410,16 +404,29 @@ mod tests {
     #[test]
     fn packed_parts_report_the_first_failing_row() {
         let rows = (0..10_000_u32).collect::<Vec<_>>();
-        let mut packed = DigestParts::default();
-        let failed = packed.try_extend_in_order(&rows, |text, row| {
-            if row % 3_000 == 2_999 {
-                return Err(*row);
-            }
-            text.push_str(&row.to_string());
-            Ok(())
-        });
-
-        assert_eq!(failed, Err(2_999));
+        // The first two failures are in different 64-row chunks of the first
+        // 4096-row batch; later batches must not change error precedence either.
+        for threads in [1, 2, 4] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .expect("thread pool");
+            let failed = pool.install(|| {
+                let mut packed = DigestParts::default();
+                packed.try_extend_in_order(&rows, |text, row| {
+                    if [127, 191, 2_999, 5_999, 8_999].contains(row) {
+                        return Err(*row);
+                    }
+                    text.push_str(&row.to_string());
+                    Ok(())
+                })
+            });
+            assert_eq!(
+                failed,
+                Err(127),
+                "lowest row must win with {threads} workers"
+            );
+        }
     }
 
     #[test]
