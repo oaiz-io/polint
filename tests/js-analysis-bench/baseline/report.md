@@ -94,6 +94,43 @@ coercions, iterator and thenable protocol) have no call expression and are liste
 | dayjs 1.11.23 | minified UMD | 1 / 1 | 7 | 117 | 0/117 (0%) | 0/117 (0%) | 0 | 117 | 100% | 100% / 100% | 7% |
 | underscore 1.13.8 | bundled UMD (Rollup) | 1 / 1 | 69 | 262 | 157/262 (60%) | 158/262 (60%) | 0 | 0 | 55% | 58% / 58% | 6% |
 
+### Claimed targets the run never called
+
+A claimed target is resolved and not heuristic. It counts here when the run executed the site, the target is
+in an instrumented file, and the run never called it from that site. On a **single-target** answer that is a
+false precise edge: every execution of the site went elsewhere. On a **multi-target** answer it is an upper
+bound only, since the run may not have taken the paths to the other targets. A site matched to a polint site
+by its end byte can also inflate both counts.
+
+| package | base: single / multi | refined: single / multi | typed: single / multi |
+|---|---|---|---|
+| axios | 0 / 0 | 0 / 0 | 2 / 2 |
+| zod | 0 / 0 | 0 / 0 | 1 / 0 |
+| commander | 0 / 0 | 0 / 0 | 5 / 0 |
+| async | 0 / 0 | 0 / 0 | 0 / 0 |
+| chalk | 0 / 0 | 0 / 0 | 0 / 0 |
+| dayjs | 0 / 0 | 0 / 0 | 0 / 0 |
+| underscore | 0 / 0 | 0 / 0 | 7 / 0 |
+| **total** | **0 / 0** | **0 / 0** | **15 / 2** |
+
+| package | plan | site | site text | single-target answer | the run called |
+|---|---|---|---|---|---|
+| axios | typed | lib/helpers/AxiosTransformStream.js:86 | `this.emit('progress', internals.bytesSeen)` | lib/helpers/AxiosTransformStream.js:8 AxiosTransformStream | lib/helpers/progressEventReducer.js:41 <polint:anonymous:1209:1307> |
+| axios | typed | lib/helpers/AxiosTransformStream.js:88 | `this.push(_chunk)` | lib/helpers/AxiosTransformStream.js:8 AxiosTransformStream | lib/adapters/http.js:1382 <polint:anonymous:47809:48564> |
+| zod | typed | src/v4/classic/schemas.ts:2402 | `new ZodDefault({ type: "default", innerType: innerType as any as core.$ZodType, get defau…` | src/v4/core/util.ts:558 shallowClone | src/v4/core/core.ts:118 _ |
+| commander | typed | lib/command.js:535 | `this._exitCallback(new CommanderError(exitCode, code, message))` | lib/command.js:13 Command | lib/command.js:512 <polint:anonymous:17297:17494> |
+| commander | typed | lib/command.js:601 | `target.parseArg(value, previous)` | lib/argument.js:100 <polint:anonymous:2195:2491> | lib/option.js:183 <polint:anonymous:4994:5290> |
+| commander | typed | lib/command.js:1787 | `this.emit('option:${activeVariadicOption.name()}', arg)` | lib/command.js:13 Command | lib/command.js:720 <polint:anonymous:23441:23614> |
+| commander | typed | lib/command.js:1799 | `this.emit('option:${option.name()}', value)` | lib/command.js:13 Command | lib/command.js:720 <polint:anonymous:23441:23614> |
+| commander | typed | lib/command.js:1812 | `this.emit('option:${option.name()}')` | lib/command.js:13 Command | lib/command.js:720 <polint:anonymous:23441:23614>, lib/command.js:2204 <polint:anonymous:70854:70968> |
+| underscore | typed | underscore-umd.js:589 | `isFunction$1(obj[key])` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
+| underscore | typed | underscore-umd.js:759 | `isFunction$1(value)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
+| underscore | typed | underscore-umd.js:982 | `isFunction$1(prop)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
+| underscore | typed | underscore-umd.js:1036 | `isFunction$1(func)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
+| underscore | typed | underscore-umd.js:1457 | `isFunction$1(path)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
+| underscore | typed | underscore-umd.js:1653 | `isFunction$1(iteratee)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
+| underscore | typed | underscore-umd.js:1672 | `isFunction$1(iteratee)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
+
 ### What types add (refined vs typed, TypeScript 5.9.3)
 
 **typed** is the refined plan with `[languages.ts] type_sidecar = true` over a copy of each tree with a
@@ -102,13 +139,13 @@ Dump time and peak RSS are one fact dump each, sidecar included.
 
 | package | recall refined | recall typed | false-complete refined / typed | type callsite rows | dump s refined / typed | dump peak MB refined / typed |
 |---|---|---|---|---|---|---|
-| axios | 270/675 (40%) | 511/675 (76%) | 0 / 0 | 2098 | 2.3 / 3.3 | 284.8 / 305.0 |
-| zod | 719/1308 (55%) | 764/1308 (58%) | 0 / 0 | 49041 | 79.4 / 102.0 | 3898.7 / 4396.1 |
-| commander | 119/318 (37%) | 248/318 (78%) | 0 / 0 | 814 | 1.7 / 2.5 | 145.1 / 234.4 |
-| async | 328/637 (51%) | 338/637 (53%) | 0 / 0 | 1605 | 2.0 / 2.9 | 263.5 / 282.7 |
-| chalk | 17/72 (24%) | 17/72 (24%) | 0 / 0 | 60 | 0.1 / 0.6 | 40.4 / 212.5 |
-| dayjs | 0/117 (0%) | 0/117 (0%) | 0 / 0 | 181 | 0.1 / 0.6 | 34.9 / 222.5 |
-| underscore | 158/262 (60%) | 202/262 (77%) | 0 / 0 | 455 | 0.7 / 1.2 | 118.0 / 225.0 |
+| axios | 270/675 (40%) | 511/675 (76%) | 0 / 0 | 2098 | 2.2 / 3.3 | 285.5 / 308.0 |
+| zod | 719/1308 (55%) | 764/1308 (58%) | 0 / 0 | 49041 | 86.3 / 129.1 | 3897.8 / 4418.0 |
+| commander | 119/318 (37%) | 248/318 (78%) | 0 / 0 | 814 | 1.8 / 2.4 | 145.5 / 230.8 |
+| async | 328/637 (51%) | 338/637 (53%) | 0 / 0 | 1605 | 3.1 / 3.3 | 267.6 / 281.8 |
+| chalk | 17/72 (24%) | 17/72 (24%) | 0 / 0 | 60 | 0.1 / 0.6 | 41.1 / 216.0 |
+| dayjs | 0/117 (0%) | 0/117 (0%) | 0 / 0 | 181 | 0.1 / 0.9 | 36.2 / 225.3 |
+| underscore | 158/262 (60%) | 202/262 (77%) | 0 / 0 | 455 | 1.2 / 2.5 | 121.0 / 228.3 |
 
 Constructs, typed: false-complete hidden paths 0, false-complete call lines 0.
 
@@ -334,33 +371,33 @@ Both are compared with the export keys the loaded module actually has.
 
 ## Cost
 
-The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 2f433feae6f2.
+The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 5baf5f78cca2.
 
-`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 28 MB; the analysis column has no such floor.
+`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 31 MB; the analysis column has no such floor.
 
 | tree | source KB | cold analysis ms (per MB) | cold process ms | warm analysis ms (per MB) | warm process ms | cold peak RSS MB (analysis / process) | warm peak RSS MB | stored bytes per MB (gzip) |
 |---|---|---|---|---|---|---|---|---|
-| constructs (all cases) | 13 | 95 (7428) | 206 | 50 (3909) | 158 | 73 / 73 | 73 / 73 | 111018296 (10805473) |
-| axios | 282 | 636 (2255) | 755 | 419 (1486) | 533 | 101 / 101 | 102 / 102 | 75663406 (5387269) |
-| zod | 3088 | 10606 (3435) | 10790 | 10923 (3538) | 11106 | 1062 / 1062 | 1042 / 1042 | 96431009 (6824911) |
-| commander | 127 | 243 (1920) | 354 | 171 (1351) | 282 | 73 / 73 | 73 / 73 | 44242875 (3196640) |
-| async | 321 | 437 (1363) | 553 | 288 (898) | 400 | 79 / 79 | 78 / 78 | 44204842 (3458091) |
-| chalk | 10 | 45 (4726) | 152 | 22 (2311) | 129 | 73 / 73 | 74 / 74 | 87305955 (6964184) |
-| dayjs | 7 | 41 (5725) | 155 | 17 (2374) | 128 | 74 / 74 | 73 / 73 | 222010334 (12871526) |
-| underscore | 69 | 195 (2830) | 310 | 144 (2090) | 251 | 73 / 73 | 73 / 73 | 91028092 (5827834) |
+| constructs (all cases) | 13 | 93 (7271) | 208 | 49 (3831) | 159 | 73 / 73 | 73 / 73 | 112394214 (10946990) |
+| axios | 282 | 633 (2245) | 750 | 417 (1479) | 538 | 100 / 100 | 101 / 101 | 75833297 (5409069) |
+| zod | 3088 | 10792 (3495) | 10984 | 10818 (3504) | 11002 | 1061 / 1061 | 1041 / 1041 | 97353526 (6935648) |
+| commander | 127 | 247 (1951) | 357 | 175 (1382) | 290 | 73 / 73 | 73 / 73 | 44266921 (3200439) |
+| async | 321 | 442 (1379) | 563 | 297 (927) | 412 | 78 / 78 | 78 / 78 | 44436456 (3481001) |
+| chalk | 10 | 43 (4516) | 157 | 23 (2416) | 134 | 73 / 73 | 73 / 73 | 87413717 (6979414) |
+| dayjs | 7 | 39 (5446) | 150 | 18 (2514) | 128 | 73 / 73 | 73 / 73 | 222145650 (12890518) |
+| underscore | 69 | 207 (3004) | 322 | 151 (2191) | 269 | 73 / 73 | 73 / 73 | 91434297 (5881609) |
 
 Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is
 the only way to time the refined plan, because no public view asks for it.
 
 | tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |
 |---|---|---|---|---|---|
-| axios | 679 | 119 | 2282 | 285 | none |
-| zod | 11044 | 1335 | 79365 | 3899 | 180 |
-| commander | 243 | 60 | 1715 | 145 | none |
-| async | 445 | 94 | 2046 | 263 | none |
-| chalk | 48 | 32 | 105 | 40 | none |
-| dayjs | 40 | 32 | 94 | 35 | none |
-| underscore | 205 | 52 | 687 | 118 | none |
+| axios | 618 | 119 | 2247 | 285 | none |
+| zod | 13281 | 1344 | 86311 | 3898 | 180 |
+| commander | 291 | 61 | 1762 | 145 | none |
+| async | 441 | 93 | 3067 | 268 | none |
+| chalk | 49 | 31 | 94 | 41 | none |
+| dayjs | 44 | 31 | 138 | 36 | none |
+| underscore | 379 | 53 | 1221 | 121 | none |
 
 ## Decisions recorded by this run
 
