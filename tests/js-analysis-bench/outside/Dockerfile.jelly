@@ -1,0 +1,22 @@
+# Jelly (https://github.com/cs-au-dk/jelly, BSD-3-Clause) at a pinned commit,
+# on the node image the bench sandbox runs. Built by `bench.py outside`:
+#   docker build --build-arg NODE_IMAGE=<[sandbox] image> -f outside/Dockerfile.jelly outside
+# The network is used while the image builds, never while Jelly runs. The
+# image has no git, so the commit's source archive is fetched and its hash
+# checked before anything in it is used.
+ARG NODE_IMAGE
+FROM ${NODE_IMAGE}
+ARG JELLY_COMMIT=62e60eb4fd5b991c5bf4cfc992f018984f560ea4
+ARG JELLY_SHA256=f143ea01c920dfa7376f46c054ec28be5d9549fe679de60a65bd14b30a16f10b
+RUN node -e 'fetch(process.argv[1]).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(b => require("fs").writeFileSync("/tmp/jelly.tar.gz", Buffer.from(b)))' \
+      "https://codeload.github.com/cs-au-dk/jelly/tar.gz/${JELLY_COMMIT}" \
+ && echo "${JELLY_SHA256}  /tmp/jelly.tar.gz" | sha256sum -c - \
+ && mkdir /jelly \
+ && tar -xzf /tmp/jelly.tar.gz -C /jelly --strip-components 1 \
+ && rm /tmp/jelly.tar.gz
+WORKDIR /jelly
+RUN npm ci && npm run build && npm prune --omit=dev
+ENV NODE_ENV=production
+# The sandbox runs as the host uid; the install must be world-readable.
+RUN chmod -R a+rX /jelly
+ENTRYPOINT ["node", "/jelly/lib/main.js"]

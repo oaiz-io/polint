@@ -53,6 +53,15 @@ never needs to run it.
 - `inputs.toml`: the real packages, each pinned by exact tarball URL, the
   tarball's `sha512` integrity and `sha256`, with format, licence and origin.
   `analysed` selects the files polint analyses and the recorder instruments.
+  **The analysed set of a package is its shipped source, not its test files**:
+  one rule for every package, tune set and held-out set alike. Paths under a
+  `test`, `tests`, `__tests__`, `benchmark` or `benchmarks` folder and files
+  named `*.test.*` or `*.spec.*` are left out even when the tarball carries
+  them (zod's does). The library never imports them and no driver runs them,
+  so the rule changes what analysis costs, not what the run observed: zod's
+  recording has no edge in those paths. One report, the first written with the
+  rule, also scores zod on its globs alone (`compare_previous_set`), apart from
+  every other table, so it reads against earlier reports.
   The set covers ESM source (axios, chalk), TypeScript source (zod), CommonJS
   only (commander), CommonJS transpiled from ESM (async), minified UMD (dayjs)
   and a bundled UMD (underscore).
@@ -115,6 +124,51 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   upper bound on the recall it could add. Gap conditions are read from syntax
   alone, so the attribution says where a miss sits, not that fixing that gap
   alone would find it.
+- **Tiers**: what each edge claims, from its precision
+  (`research/package-graphs/TIERS.md`). `Exact` and `SetupAware` are
+  **exact**; `Conservative` and `Ambiguous` are **conservative**; `Heuristic`
+  is **apart**; `Unknown` and `Unsupported` claim nothing. One reading is the
+  bench's own: a typed-hierarchy edge whose evidence says it dispatches to an
+  `implementation` or a `union_member` names a candidate, not the target, and
+  counts as conservative although its precision is `SetupAware`. A refined row
+  claims only when its status is `Resolved` or `Ambiguous`, and an `Ambiguous`
+  row is never exact. The dump carries the engine's tier for every edge
+  (`claim_tier`) and the report stops when its own list disagrees, so a new
+  precision cannot be scored without a decision on both sides.
+  Recall per tier is over the same observed edges as recall: **exact-complete**
+  (an exact edge found the callee and the site is complete: at least one exact
+  or conservative target and no unresolved row), **exact**, **exact plus
+  conservative**, and **apart only** (found by a heuristic edge alone, which
+  no other view credits). The older recall column counts every edge with a
+  target, heuristic ones included, and is kept for comparison with earlier
+  reports.
+- **Precision by tier**: at executed sites, as for wrong targets, the share of
+  each tier's claimed targets the run called there. It is a lower bound: a run
+  takes some paths only. A single exact target the run never called there is
+  a **wrong exact target**; the target is 0 on every plan, and every case is
+  listed.
+- **Targets per site**: mean, nearest-rank p95 and maximum over the sites that
+  claim any target in the tier; how wide a tier's answers are.
+- **Open sites by reason**: every site that is not complete, counted under each
+  reason its answer gives (the refined row's reason or status, else the
+  unresolved row's). `none recorded` is an open site whose answer gives no
+  reason.
+- **Budget events**: the solver's budget status per dump and every budget it
+  reported as reached, such as `points_to.max_dynamic_vars`.
+- **Refined edges**: refined rows counted by bench tier, algorithm, status,
+  precision and whether they name a function.
+- **Sites gained by the refined plan**: sites where a refined plan claims an
+  exact or conservative target and the base plan claims none, by file, with
+  whether the file is a test or benchmark path and how many of the gained sites
+  the run executed.
+- `bench.py selftest` checks these measures on a synthetic package without
+  fetching, building or sandboxing anything: a site only a heuristic edge
+  answers counts as apart only, a typed candidate counts as conservative, a
+  single exact target the run did not call is a wrong exact target, a budget
+  reason is reported, and every tier section is rendered. It also checks the
+  outside-tool scorer: position conversion on a line with non-ASCII and astral
+  characters before a call, and that it matches an observed edge to the same
+  site and callee as polint's scorer.
 - **Cost**: `polint check` with the census rule pack in `rule-pack/` (asks for
   `Functions`, `CallGraph`, `Symbols`, `References`), cold and warm, wall time
   and peak RSS from the in-process cost record (`POLINT_GOLDEN_COST_PATH`) and
@@ -133,13 +187,43 @@ Two columns are reported throughout:
   produces. Rules have no public view of these facts. The benchmark reads them
   through an internal hook and adds no public view.
 
+## Outside tools
+
+`## Outside tools` puts [Jelly](https://github.com/cs-au-dk/jelly) beside
+polint, scored on the same observed calls with the same site and callee
+matching (`report.Spans`, `report.unobserved_targets`; the scorer imports them
+rather than copying them). Jelly runs twice per tune-set package, static and
+with `--approx`, on the same shipped source files polint analyses. Held-out
+packages are not run.
+
+```sh
+python3 tests/js-analysis-bench/bench.py outside [--only <package>]  # needs docker and network for the build
+```
+
+`bench.py outside` builds Jelly at a pinned commit from a hash-checked archive
+into an image on the pinned `node` base (`outside/Dockerfile.jelly`; the network
+is used only while building the image), then runs it in the same sandbox as the
+recorder, with `--network none`. Its raw call graphs are committed gzip-compressed
+under `baseline/outside/<run>/<package>.json.gz`, with a `<package>.meta.json`
+recording the image, arguments, exit code and wall time, so `bench.py report`
+scores them without docker. `outside/score_outside.py` converts Jelly's
+positions (1-based lines, 1-based end-exclusive UTF-16 columns) to the byte
+offsets every bench key uses.
+
+Jelly has no tiers, so every Jelly edge counts as claimed and its wrong-target
+counts are an upper bound; the report lists this and the other deviations from
+polint's scoring under the table. ACG (js-callgraph) is not run: its parser
+rejects ES2020 and drops such files silently.
+
 ## The internal hook
 
 `crates/polint-eval/src/harness/js_bench.rs` (compiled into the `polint`
 library as `crate::eval::js_bench`, test-only) holds one ignored test,
 `dump_js_bench_facts`. It analyses each tree listed in
 `POLINT_JS_BENCH_MANIFEST` with the capabilities in `POLINT_JS_BENCH_CAPS` and
-writes the facts as JSON (`polint-js-bench-facts-2`). It only reads facts and is
+writes the facts as JSON (`polint-js-bench-facts-3`: every edge row carries
+its `claim_tier`, refined rows their `reason` and `dispatch` evidence, and the
+document the solver's `solver_budget`). It only reads facts and is
 not part of any public surface. `report.py` runs it through the test binary.
 
 With `POLINT_JS_BENCH_CENSUS=1` the dump also carries a syntax census: every

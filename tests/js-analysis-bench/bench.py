@@ -12,6 +12,11 @@ Subcommands:
                    calls and exports under observed/. This executes third-party
                    code; it is a separate, explicit command and never part of
                    `cargo test`. The recorded files are committed.
+  outside          build Jelly at its pinned commit and run it on every
+                   tune-set package inside the same sandbox, writing its call
+                   graphs gzipped under baseline/outside/. Explicit, needs
+                   docker, never part of `cargo test`; the outputs are
+                   committed and `report` scores them without docker.
   report           analyse every construct case and package with polint,
                    score the facts against hand labels and observed calls,
                    measure cost, and write baseline/report.json and
@@ -49,6 +54,9 @@ BASELINE = BENCH_DIR / "baseline"
 PACKAGES_DIR = REPO_ROOT / "research" / "evaluation-harness" / "repos" / "js-analysis-bench"
 SOURCE_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".mts", ".cts")
 FETCH_MARKER = ".polint-js-bench-fetched"
+SANDBOX_MEMORY = "4g"
+JELLY_IMAGE = "polint-js-bench-jelly"
+JELLY_TIMEOUT_S = 900
 
 
 def load_inputs() -> dict:
@@ -102,10 +110,27 @@ def matching_files(root: Path, patterns: list[str]) -> list[str]:
     return sorted(found)
 
 
-def package_files(package: dict) -> tuple[list[str], list[str]]:
-    """Return (analysed files, files whose exports are recorded)."""
+# Paths that are a package's tests or benchmarks rather than its shipped source.
+# Some packages publish them (zod's tarball carries `src/**/tests/`), but the
+# library never imports them and no driver runs them.
+NOT_SHIPPED_RE = re.compile(r"(^|/)(tests?|__tests__|benchmarks?)/|\.(test|spec)\.[cm]?[jt]sx?$")
+
+
+def is_not_shipped(rel: str) -> bool:
+    return bool(NOT_SHIPPED_RE.search(rel))
+
+
+def package_files(package: dict, shipped_only: bool = True) -> tuple[list[str], list[str]]:
+    """Return (analysed files, files whose exports are recorded).
+
+    The analysed set of every package is its shipped source: the `analysed`
+    globs, without test and benchmark paths. `shipped_only=False` gives the
+    set the globs alone select, which the report keeps for one comparison
+    with reports written before the rule."""
     root = package_dir(package)
     analysed = matching_files(root, package["analysed"])
+    if shipped_only:
+        analysed = [rel for rel in analysed if not is_not_shipped(rel)]
     skipped = set(matching_files(root, package.get("exports_skip", [])))
     return analysed, [rel for rel in analysed if rel not in skipped]
 
@@ -190,6 +215,22 @@ def require_fetched(package: dict) -> Path:
 # record-observed
 
 
+def sandbox_flags(*, tmp_size: str) -> list[str]:
+    """The `docker run` flags every container of the bench runs third-party code with."""
+    return [
+        "docker", "run", "--rm",
+        "--user", f"{os.getuid()}:{os.getgid()}",
+        "--network", "none",
+        "--read-only",
+        "--tmpfs", f"/tmp:rw,size={tmp_size}",
+        "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges",
+        "--pids-limit", "256",
+        "--memory", SANDBOX_MEMORY,
+        "-e", "HOME=/tmp",
+    ]
+
+
 def sandbox_run(
     inputs: dict,
     *,
@@ -205,16 +246,7 @@ def sandbox_run(
     with tempfile.TemporaryDirectory(prefix="polint-js-bench-out-") as scratch:
         os.chmod(scratch, 0o777)
         argv = [
-            "docker", "run", "--rm",
-            "--user", f"{os.getuid()}:{os.getgid()}",
-            "--network", "none",
-            "--read-only",
-            "--tmpfs", "/tmp:rw,size=64m",
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
-            "--pids-limit", "256",
-            "--memory", "4g",
-            "-e", "HOME=/tmp",
+            *sandbox_flags(tmp_size="64m"),
             "-e", "BENCH_ROOT=/bench/pkg",
             "-e", f"BENCH_MODE={mode}",
             "-e", "BENCH_OUT=/out/result.json",
@@ -295,6 +327,77 @@ def record_observed(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# outside
+
+
+def outside(args: argparse.Namespace) -> int:
+    """Build the pinned Jelly image and run it on the tune set in the sandbox."""
+    sys.path.insert(0, str(BENCH_DIR / "outside"))
+    import score_outside
+
+    inputs = load_inputs()
+    subprocess.run(
+        [
+            "docker", "build", "--quiet",
+            "--build-arg", f"NODE_IMAGE={inputs['sandbox']['image']}",
+            "--build-arg", f"JELLY_COMMIT={score_outside.JELLY_COMMIT}",
+            "-t", JELLY_IMAGE,
+            "-f", str(BENCH_DIR / "outside" / "Dockerfile.jelly"),
+            str(BENCH_DIR / "outside"),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    for package in select_packages(inputs, args.only):
+        if package.get("held_out"):
+            continue
+        tree = require_fetched(package)
+        files, _ = package_files(package)
+        for run, flags in score_outside.JELLY_RUNS.items():
+            meta = run_jelly(tree, files, flags, score_outside.raw_path(run, package["name"]))
+            score_outside.meta_path(run, package["name"]).write_text(json.dumps(meta, indent=2) + "\n")
+            print(f"{run} {package['name']}: exit {meta['exit_code']}, {meta['wall_s']} s", file=sys.stderr)
+    return 0
+
+
+def run_jelly(tree: Path, files: list[str], flags: list[str], out: Path) -> dict:
+    """One Jelly run on one package tree; its call graph is written gzipped to `out`."""
+    import time
+
+    # Jelly's own analysis timeout comes first, so a slow run still writes the
+    # graph it has.
+    tool_argv = ["-j", "/out/cg.json", "-b", "/bench/pkg", "-i", str(JELLY_TIMEOUT_S - 60), "--ignore-unresolved",
+                 "--no-print-progress", "--no-tty", *flags]
+    heap_mb = int(SANDBOX_MEMORY.rstrip("g")) * 1024 - 512
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="polint-js-bench-outside-") as scratch:
+        os.chmod(scratch, 0o777)
+        argv = [
+            *sandbox_flags(tmp_size="256m"),
+            "-e", f"NODE_OPTIONS=--max-old-space-size={heap_mb}",
+            "-v", f"{tree}:/bench/pkg:ro",
+            "-v", f"{scratch}:/out",
+            "-w", "/bench/pkg",
+            JELLY_IMAGE, *tool_argv, *files,
+        ]
+        started = time.monotonic()
+        completed = subprocess.run(argv, capture_output=True, text=True, timeout=JELLY_TIMEOUT_S)
+        wall_s = round(time.monotonic() - started, 1)
+        result = Path(scratch) / "cg.json"
+        if completed.returncode != 0 or not result.exists():
+            raise SystemExit(f"jelly exited {completed.returncode} for {tree}:\n{completed.stderr[-4000:]}")
+        out.write_bytes(gzip.compress(result.read_bytes(), mtime=0))
+    return {
+        "tool": "jelly",
+        "image": JELLY_IMAGE,
+        "arguments": tool_argv,
+        "files": len(files),
+        "exit_code": completed.returncode,
+        "wall_s": wall_s,
+    }
+
+
 def make_readable(root: Path) -> None:
     for path in [root, *root.rglob("*")]:
         if path.is_symlink():
@@ -348,8 +451,21 @@ def main() -> int:
     report_parser.add_argument("--no-types", action="store_true", help="skip the typed plan even with a compiler")
     report_parser.set_defaults(run=run_report)
 
+    outside_parser = commands.add_parser("outside", help="run the pinned outside tools in the sandbox")
+    outside_parser.add_argument("--only", default="", help="comma-separated package names")
+    outside_parser.set_defaults(run=outside)
+
+    selftest_parser = commands.add_parser("selftest", help="check the report's tier measures on a synthetic package")
+    selftest_parser.set_defaults(run=run_selftest)
+
     args = parser.parse_args()
     return args.run(args)
+
+
+def run_selftest(_args: argparse.Namespace) -> int:
+    import selftest
+
+    return selftest.main()
 
 
 def run_report(args: argparse.Namespace) -> int:
