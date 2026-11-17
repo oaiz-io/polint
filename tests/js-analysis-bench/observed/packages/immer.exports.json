@@ -1,0 +1,245 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [
+    "src/types/types-internal.ts"
+  ],
+  "files": {
+    "src/core/current.ts": {
+      "system": "esm",
+      "names": [
+        "current"
+      ]
+    },
+    "src/core/finalize.ts": {
+      "system": "esm",
+      "names": [
+        "handleCrossReference",
+        "handleValue",
+        "processResult",
+        "registerChildFinalizationCallback",
+        "updateDraftInParent"
+      ]
+    },
+    "src/core/immerClass.ts": {
+      "system": "esm",
+      "names": [
+        "Immer",
+        "createProxy"
+      ]
+    },
+    "src/core/proxy.ts": {
+      "system": "esm",
+      "names": [
+        "createProxyProxy",
+        "markChanged",
+        "objectTraps",
+        "prepareCopy"
+      ]
+    },
+    "src/core/scope.ts": {
+      "system": "esm",
+      "names": [
+        "enterScope",
+        "getCurrentScope",
+        "leaveScope",
+        "revokeScope",
+        "usePatchesInScope"
+      ]
+    },
+    "src/immer.ts": {
+      "system": "esm",
+      "names": [
+        "Immer",
+        "applyPatches",
+        "castDraft",
+        "castImmutable",
+        "createDraft",
+        "current",
+        "enableArrayMethods",
+        "enableMapSet",
+        "enablePatches",
+        "finishDraft",
+        "freeze",
+        "immerable",
+        "isDraft",
+        "isDraftable",
+        "isModified",
+        "nothing",
+        "original",
+        "produce",
+        "produceWithPatches",
+        "setAutoFreeze",
+        "setUseStrictIteration",
+        "setUseStrictShallowCopy"
+      ]
+    },
+    "src/internal.ts": {
+      "system": "esm",
+      "names": [
+        "ArchType",
+        "CONFIGURABLE",
+        "CONSTRUCTOR",
+        "DRAFTABLE",
+        "DRAFT_STATE",
+        "ENUMERABLE",
+        "Immer",
+        "NOTHING",
+        "PROTOTYPE",
+        "PluginArrayMethods",
+        "PluginMapSet",
+        "PluginPatches",
+        "VALUE",
+        "WRITABLE",
+        "clearPlugin",
+        "createProxy",
+        "createProxyProxy",
+        "current",
+        "die",
+        "each",
+        "enterScope",
+        "errors",
+        "freeze",
+        "get",
+        "getArchtype",
+        "getCurrentScope",
+        "getFinalValue",
+        "getPlugin",
+        "getPrototypeOf",
+        "getProxyDraft",
+        "getValue",
+        "handleCrossReference",
+        "handleValue",
+        "has",
+        "is",
+        "isArray",
+        "isArrayIndex",
+        "isBoolean",
+        "isDraft",
+        "isDraftable",
+        "isFrozen",
+        "isFunction",
+        "isMap",
+        "isModified",
+        "isObjectish",
+        "isPlainObject",
+        "isPluginLoaded",
+        "isSet",
+        "latest",
+        "leaveScope",
+        "loadPlugin",
+        "markChanged",
+        "never_used",
+        "objectTraps",
+        "original",
+        "prepareCopy",
+        "processResult",
+        "registerChildFinalizationCallback",
+        "revokeScope",
+        "set",
+        "shallowCopy",
+        "updateDraftInParent",
+        "usePatchesInScope"
+      ]
+    },
+    "src/plugins/arrayMethods.ts": {
+      "system": "esm",
+      "names": [
+        "enableArrayMethods"
+      ]
+    },
+    "src/plugins/mapset.ts": {
+      "system": "esm",
+      "names": [
+        "enableMapSet"
+      ]
+    },
+    "src/plugins/patches.ts": {
+      "system": "esm",
+      "names": [
+        "enablePatches"
+      ]
+    },
+    "src/types/globals.d.ts": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "object"
+    },
+    "src/types/types-external.ts": {
+      "system": "esm",
+      "names": [
+        "never_used"
+      ]
+    },
+    "src/types/types-internal.ts": {
+      "system": "esm",
+      "names": [
+        "ArchType"
+      ]
+    },
+    "src/utils/common.ts": {
+      "system": "esm",
+      "names": [
+        "CONFIGURABLE",
+        "CONSTRUCTOR",
+        "ENUMERABLE",
+        "PROTOTYPE",
+        "VALUE",
+        "WRITABLE",
+        "each",
+        "freeze",
+        "get",
+        "getArchtype",
+        "getFinalValue",
+        "getPrototypeOf",
+        "getProxyDraft",
+        "getValue",
+        "has",
+        "is",
+        "isArray",
+        "isArrayIndex",
+        "isBoolean",
+        "isDraft",
+        "isDraftable",
+        "isFrozen",
+        "isFunction",
+        "isMap",
+        "isModified",
+        "isObjectish",
+        "isPlainObject",
+        "isSet",
+        "latest",
+        "original",
+        "set",
+        "shallowCopy"
+      ]
+    },
+    "src/utils/env.ts": {
+      "system": "esm",
+      "names": [
+        "DRAFTABLE",
+        "DRAFT_STATE",
+        "NOTHING"
+      ]
+    },
+    "src/utils/errors.ts": {
+      "system": "esm",
+      "names": [
+        "die",
+        "errors"
+      ]
+    },
+    "src/utils/plugins.ts": {
+      "system": "esm",
+      "names": [
+        "PluginArrayMethods",
+        "PluginMapSet",
+        "PluginPatches",
+        "clearPlugin",
+        "getPlugin",
+        "isPluginLoaded",
+        "loadPlugin"
+      ]
+    }
+  }
+}

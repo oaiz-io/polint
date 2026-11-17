@@ -34,6 +34,8 @@ research/*/repos/
 
 # TypeScript installed for the type sidecar's tests; a tool dependency, not source.
 node_modules/
+# Placeholder modules the JS analysis bench mounts for a package's imports; source.
+!tests/js-analysis-bench/observed/stubs/node_modules/
 
 # Benchmark reports written by `make eval-gate`; generated artifacts, not source.
 .context/

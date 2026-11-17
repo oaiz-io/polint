@@ -1,0 +1,1112 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "atom/index.js",
+    "clean-stores/index.js",
+    "computed/index.js",
+    "deep-map/index.js",
+    "deep-map/path.js",
+    "effect/index.js",
+    "index.js",
+    "keep-mount/index.js",
+    "lifecycle/index.js",
+    "listen-keys/index.js",
+    "map-creator/index.js",
+    "map/index.js",
+    "task/index.js",
+    "warn/index.js"
+  ],
+  "instrumented_functions": 97,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "atom/index.js@1449..1686",
+      "name": "batch"
+    },
+    {
+      "function": "atom/index.js@1735..4070",
+      "name": "atom"
+    },
+    {
+      "function": "atom/index.js@2063..2165",
+      "name": "get"
+    },
+    {
+      "function": "atom/index.js@2206..2792",
+      "name": "listen"
+    },
+    {
+      "function": "atom/index.js@2281..2786",
+      "name": ""
+    },
+    {
+      "function": "atom/index.js@2798..3460",
+      "name": "notify"
+    },
+    {
+      "function": "atom/index.js@3576..3584",
+      "name": "off"
+    },
+    {
+      "function": "atom/index.js@3590..3757",
+      "name": "set"
+    },
+    {
+      "function": "atom/index.js@3763..3880",
+      "name": "subscribe"
+    },
+    {
+      "function": "atom/index.js@3977..4048",
+      "name": ""
+    },
+    {
+      "function": "atom/index.js@4100..4114",
+      "name": "readonlyType"
+    },
+    {
+      "function": "atom/index.js@690..1426",
+      "name": "drainQueue"
+    },
+    {
+      "function": "clean-stores/index.js@112..436",
+      "name": "cleanStores"
+    },
+    {
+      "function": "computed/index.js@1228..1266",
+      "name": "get"
+    },
+    {
+      "function": "computed/index.js@1554..1629",
+      "name": ""
+    },
+    {
+      "function": "computed/index.js@1662..1810",
+      "name": ""
+    },
+    {
+      "function": "computed/index.js@1699..1727",
+      "name": ""
+    },
+    {
+      "function": "computed/index.js@1750..1806",
+      "name": ""
+    },
+    {
+      "function": "computed/index.js@1886..1927",
+      "name": "computed"
+    },
+    {
+      "function": "computed/index.js@1979..2026",
+      "name": "batched"
+    },
+    {
+      "function": "computed/index.js@216..1833",
+      "name": "computedStore"
+    },
+    {
+      "function": "computed/index.js@342..1158",
+      "name": "set"
+    },
+    {
+      "function": "computed/index.js@474..496",
+      "name": ""
+    },
+    {
+      "function": "computed/index.js@527..565",
+      "name": ""
+    },
+    {
+      "function": "deep-map/index.js@232..699",
+      "name": "deepMap"
+    },
+    {
+      "function": "deep-map/index.js@470..679",
+      "name": "setKey"
+    },
+    {
+      "function": "deep-map/index.js@708..794",
+      "name": "getKey"
+    },
+    {
+      "function": "deep-map/path.js@1205..1417",
+      "name": "ensureKey"
+    },
+    {
+      "function": "deep-map/path.js@221..334",
+      "name": "setPath"
+    },
+    {
+      "function": "deep-map/path.js@343..830",
+      "name": "setByKey"
+    },
+    {
+      "function": "deep-map/path.js@7..212",
+      "name": "getPath"
+    },
+    {
+      "function": "deep-map/path.js@869..976",
+      "name": "getAllKeysFromPath"
+    },
+    {
+      "function": "deep-map/path.js@938..973",
+      "name": ""
+    },
+    {
+      "function": "deep-map/path.js@978..1177",
+      "name": "getKeyAndIndicesFromKey"
+    },
+    {
+      "function": "effect/index.js@147..286",
+      "name": "run"
+    },
+    {
+      "function": "effect/index.js@22..548",
+      "name": "effect"
+    },
+    {
+      "function": "effect/index.js@221..241",
+      "name": ""
+    },
+    {
+      "function": "effect/index.js@458..546",
+      "name": ""
+    },
+    {
+      "function": "effect/index.js@486..504",
+      "name": ""
+    },
+    {
+      "function": "keep-mount/index.js@25..64",
+      "name": "keepMount"
+    },
+    {
+      "function": "lifecycle/index.js@1126..1500",
+      "name": "onStart"
+    },
+    {
+      "function": "lifecycle/index.js@1178..1499",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@1253..1435",
+      "name": "listen"
+    },
+    {
+      "function": "lifecycle/index.js@1447..1495",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@1522..1750",
+      "name": "onStop"
+    },
+    {
+      "function": "lifecycle/index.js@1573..1749",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@1639..1691",
+      "name": "off"
+    },
+    {
+      "function": "lifecycle/index.js@1703..1745",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@1771..2586",
+      "name": "onSet"
+    },
+    {
+      "function": "lifecycle/index.js@1821..2585",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@190..1103",
+      "name": "on"
+    },
+    {
+      "function": "lifecycle/index.js@1954..2280",
+      "name": "setKey"
+    },
+    {
+      "function": "lifecycle/index.js@2025..2069",
+      "name": "abort"
+    },
+    {
+      "function": "lifecycle/index.js@2304..2492",
+      "name": "set"
+    },
+    {
+      "function": "lifecycle/index.js@2356..2396",
+      "name": "abort"
+    },
+    {
+      "function": "lifecycle/index.js@2504..2581",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@2610..3023",
+      "name": "onNotify"
+    },
+    {
+      "function": "lifecycle/index.js@2663..3022",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@2738..2958",
+      "name": "notify"
+    },
+    {
+      "function": "lifecycle/index.js@2801..2841",
+      "name": "abort"
+    },
+    {
+      "function": "lifecycle/index.js@2970..3018",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@3087..4242",
+      "name": "onMount"
+    },
+    {
+      "function": "lifecycle/index.js@3130..3238",
+      "name": "listener"
+    },
+    {
+      "function": "lifecycle/index.js@3276..4239",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@3351..3508",
+      "name": "listen"
+    },
+    {
+      "function": "lifecycle/index.js@3590..3863",
+      "name": "off"
+    },
+    {
+      "function": "lifecycle/index.js@3633..3835",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@387..583",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@3974..4139",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@4158..4235",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@492..523",
+      "name": ""
+    },
+    {
+      "function": "lifecycle/index.js@769..1101",
+      "name": ""
+    },
+    {
+      "function": "listen-keys/index.js@153..974",
+      "name": ""
+    },
+    {
+      "function": "listen-keys/index.js@346..520",
+      "name": ""
+    },
+    {
+      "function": "listen-keys/index.js@54..977",
+      "name": "listenKeys"
+    },
+    {
+      "function": "listen-keys/index.js@986..1127",
+      "name": "subscribeKeys"
+    },
+    {
+      "function": "map-creator/index.js@143..893",
+      "name": "mapCreator"
+    },
+    {
+      "function": "map-creator/index.js@187..375",
+      "name": "Creator"
+    },
+    {
+      "function": "map-creator/index.js@395..658",
+      "name": "build"
+    },
+    {
+      "function": "map-creator/index.js@461..636",
+      "name": ""
+    },
+    {
+      "function": "map-creator/index.js@551..630",
+      "name": ""
+    },
+    {
+      "function": "map-creator/index.js@750..869",
+      "name": ""
+    },
+    {
+      "function": "map/index.js@176..558",
+      "name": "setKey"
+    },
+    {
+      "function": "map/index.js@87..575",
+      "name": "map"
+    },
+    {
+      "function": "task/index.js@118..295",
+      "name": ""
+    },
+    {
+      "function": "task/index.js@306..520",
+      "name": "task"
+    },
+    {
+      "function": "task/index.js@529..689",
+      "name": "allTasks"
+    },
+    {
+      "function": "task/index.js@55..297",
+      "name": "startTask"
+    },
+    {
+      "function": "task/index.js@635..682",
+      "name": ""
+    },
+    {
+      "function": "task/index.js@698..829",
+      "name": "cleanTasks"
+    },
+    {
+      "function": "warn/index.js@24..289",
+      "name": "warn"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "atom/index.js@1195..1315",
+      "syntax": "computed-member",
+      "callee": "computed/index.js@1554..1629",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@1195..1315",
+      "syntax": "computed-member",
+      "callee": "computed/index.js@342..1158",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@1195..1315",
+      "syntax": "computed-member",
+      "callee": "effect/index.js@147..286",
+      "callee_name": "run"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@1195..1315",
+      "syntax": "computed-member",
+      "callee": "listen-keys/index.js@153..974",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@1611..1623",
+      "syntax": "identifier",
+      "callee": "atom/index.js@690..1426",
+      "callee_name": "drainQueue"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@2102..2124",
+      "syntax": "member",
+      "callee": "atom/index.js@2206..2792",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@2102..2124",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@3351..3508",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@2102..2126",
+      "syntax": "expression",
+      "callee": "atom/index.js@2281..2786",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@2757..2768",
+      "syntax": "member",
+      "callee": "atom/index.js@3576..3584",
+      "callee_name": "off"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@2757..2768",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@1639..1691",
+      "callee_name": "off"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@2757..2768",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@3590..3863",
+      "callee_name": "off"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@3434..3446",
+      "syntax": "identifier",
+      "callee": "atom/index.js@690..1426",
+      "callee_name": "drainQueue"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@3721..3743",
+      "syntax": "member",
+      "callee": "atom/index.js@2798..3460",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@3721..3743",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@2738..2958",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@3804..3826",
+      "syntax": "member",
+      "callee": "atom/index.js@2206..2792",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@3804..3826",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@3351..3508",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "atom/index.js@4031..4042",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@3590..3863",
+      "callee_name": "off"
+    },
+    {
+      "kind": "call",
+      "site": "clean-stores/index.js@276..288",
+      "syntax": "identifier",
+      "callee": "task/index.js@698..829",
+      "callee_name": "cleanTasks"
+    },
+    {
+      "kind": "call",
+      "site": "clean-stores/index.js@409..424",
+      "syntax": "computed-member",
+      "callee": "lifecycle/index.js@3974..4139",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "clean-stores/index.js@409..424",
+      "syntax": "computed-member",
+      "callee": "map-creator/index.js@750..869",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1074..1094",
+      "syntax": "member",
+      "callee": "atom/index.js@3590..3757",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1177..1183",
+      "syntax": "identifier",
+      "callee": "atom/index.js@1735..4070",
+      "callee_name": "atom"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1240..1245",
+      "syntax": "identifier",
+      "callee": "computed/index.js@342..1158",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1257..1262",
+      "syntax": "identifier",
+      "callee": "atom/index.js@2063..2165",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1643..1811",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@3087..4242",
+      "callee_name": "onMount"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1709..1727",
+      "syntax": "member",
+      "callee": "atom/index.js@2206..2792",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1733..1738",
+      "syntax": "identifier",
+      "callee": "computed/index.js@342..1158",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1792..1800",
+      "syntax": "identifier",
+      "callee": "atom/index.js@2281..2786",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1902..1927",
+      "syntax": "identifier",
+      "callee": "computed/index.js@216..1833",
+      "callee_name": "computedStore"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@1995..2026",
+      "syntax": "identifier",
+      "callee": "computed/index.js@216..1833",
+      "callee_name": "computedStore"
+    },
+    {
+      "kind": "call",
+      "site": "computed/index.js@484..496",
+      "syntax": "member",
+      "callee": "atom/index.js@2063..2165",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/index.js@303..413",
+      "syntax": "identifier",
+      "callee": "warn/index.js@24..289",
+      "callee_name": "warn"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/index.js@436..449",
+      "syntax": "identifier",
+      "callee": "atom/index.js@1735..4070",
+      "callee_name": "atom"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/index.js@496..524",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@7..212",
+      "callee_name": "getPath"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/index.js@597..632",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@221..334",
+      "callee_name": "setPath"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/index.js@639..669",
+      "syntax": "member",
+      "callee": "atom/index.js@2798..3460",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/index.js@752..763",
+      "syntax": "member",
+      "callee": "atom/index.js@2063..2165",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/index.js@773..792",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@7..212",
+      "callee_name": "getPath"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/path.js@1116..1148",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@978..1177",
+      "callee_name": "getKeyAndIndicesFromKey"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/path.js@267..332",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@343..830",
+      "callee_name": "setByKey"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/path.js@300..324",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@869..976",
+      "callee_name": "getAllKeysFromPath"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/path.js@53..77",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@869..976",
+      "callee_name": "getAllKeysFromPath"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/path.js@713..750",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@1205..1417",
+      "callee_name": "ensureKey"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/path.js@765..814",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@343..830",
+      "callee_name": "setByKey"
+    },
+    {
+      "kind": "call",
+      "site": "deep-map/path.js@945..973",
+      "syntax": "identifier",
+      "callee": "deep-map/path.js@978..1177",
+      "callee_name": "getKeyAndIndicesFromKey"
+    },
+    {
+      "kind": "call",
+      "site": "effect/index.js@230..241",
+      "syntax": "member",
+      "callee": "atom/index.js@2063..2165",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "effect/index.js@339..356",
+      "syntax": "member",
+      "callee": "atom/index.js@2206..2792",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "effect/index.js@362..367",
+      "syntax": "identifier",
+      "callee": "effect/index.js@147..286",
+      "callee_name": "run"
+    },
+    {
+      "kind": "call",
+      "site": "effect/index.js@496..504",
+      "syntax": "identifier",
+      "callee": "atom/index.js@2281..2786",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "keep-mount/index.js@39..62",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@3351..3508",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@1150..1500",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@190..1103",
+      "callee_name": "on"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@1345..1359",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@387..583",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@1412..1429",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@3351..3508",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@1546..1750",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@190..1103",
+      "callee_name": "on"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@1653..1667",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@387..583",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@1674..1685",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@3590..3863",
+      "callee_name": "off"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@1795..2586",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@190..1103",
+      "callee_name": "on"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@2079..2205",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@387..583",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@2237..2272",
+      "syntax": "identifier",
+      "callee": "map/index.js@176..558",
+      "callee_name": "setKey"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@2404..2437",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@387..583",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@2467..2486",
+      "syntax": "identifier",
+      "callee": "atom/index.js@3590..3757",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@2634..3023",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@190..1103",
+      "callee_name": "on"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@2849..2891",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@387..583",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@2921..2952",
+      "syntax": "identifier",
+      "callee": "atom/index.js@2798..3460",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@3161..3180",
+      "syntax": "identifier",
+      "callee": "computed/index.js@1662..1810",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@3161..3180",
+      "syntax": "identifier",
+      "callee": "map-creator/index.js@461..636",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@3248..4240",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@190..1103",
+      "callee_name": "on"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@3445..3459",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@387..583",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@3481..3502",
+      "syntax": "identifier",
+      "callee": "atom/index.js@2206..2792",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@3604..3615",
+      "syntax": "identifier",
+      "callee": "atom/index.js@3576..3584",
+      "callee_name": "off"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@375..584",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@1178..1499",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@375..584",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@1573..1749",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@375..584",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@1821..2585",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@375..584",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@2663..3022",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@375..584",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@3276..4239",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@3770..3779",
+      "syntax": "identifier",
+      "callee": "computed/index.js@1750..1806",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@4034..4043",
+      "syntax": "identifier",
+      "callee": "map-creator/index.js@551..630",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@4118..4131",
+      "syntax": "identifier",
+      "callee": "atom/index.js@3977..4048",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@507..515",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@3130..3238",
+      "callee_name": "listener"
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@983..1026",
+      "syntax": "computed-member",
+      "callee": "lifecycle/index.js@1447..1495",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@983..1026",
+      "syntax": "computed-member",
+      "callee": "lifecycle/index.js@1703..1745",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@983..1026",
+      "syntax": "computed-member",
+      "callee": "lifecycle/index.js@2504..2581",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@983..1026",
+      "syntax": "computed-member",
+      "callee": "lifecycle/index.js@2970..3018",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "lifecycle/index.js@983..1026",
+      "syntax": "computed-member",
+      "callee": "lifecycle/index.js@4158..4235",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "listen-keys/index.js@1050..1084",
+      "syntax": "identifier",
+      "callee": "listen-keys/index.js@54..977",
+      "callee_name": "listenKeys"
+    },
+    {
+      "kind": "call",
+      "site": "listen-keys/index.js@139..975",
+      "syntax": "member",
+      "callee": "atom/index.js@2206..2792",
+      "callee_name": "listen"
+    },
+    {
+      "kind": "call",
+      "site": "map-creator/index.js@310..336",
+      "syntax": "member",
+      "callee": "map-creator/index.js@395..658",
+      "callee_name": "build"
+    },
+    {
+      "kind": "call",
+      "site": "map-creator/index.js@430..441",
+      "syntax": "identifier",
+      "callee": "map/index.js@87..575",
+      "callee_name": "map"
+    },
+    {
+      "kind": "call",
+      "site": "map-creator/index.js@446..637",
+      "syntax": "identifier",
+      "callee": "lifecycle/index.js@3087..4242",
+      "callee_name": "onMount"
+    },
+    {
+      "kind": "call",
+      "site": "map-creator/index.js@804..830",
+      "syntax": "computed-member",
+      "callee": "lifecycle/index.js@3974..4139",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "map/index.js@120..133",
+      "syntax": "identifier",
+      "callee": "atom/index.js@1735..4070",
+      "callee_name": "atom"
+    },
+    {
+      "kind": "call",
+      "site": "map/index.js@361..385",
+      "syntax": "member",
+      "callee": "atom/index.js@2798..3460",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "map/index.js@524..548",
+      "syntax": "member",
+      "callee": "atom/index.js@2798..3460",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "task/index.js@342..353",
+      "syntax": "identifier",
+      "callee": "task/index.js@55..297",
+      "callee_name": "startTask"
+    },
+    {
+      "kind": "callback",
+      "site": "computed/index.js@1688..1728",
+      "syntax": "member",
+      "callee": "computed/index.js@1699..1727",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "computed/index.js@463..497",
+      "syntax": "member",
+      "callee": "computed/index.js@474..496",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "computed/index.js@507..566",
+      "syntax": "member",
+      "callee": "computed/index.js@527..565",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "deep-map/path.js@914..974",
+      "syntax": "member",
+      "callee": "deep-map/path.js@938..973",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "effect/index.js@210..242",
+      "syntax": "member",
+      "callee": "effect/index.js@221..241",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "effect/index.js@470..505",
+      "syntax": "member",
+      "callee": "effect/index.js@486..504",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "lifecycle/index.js@456..577",
+      "syntax": "member",
+      "callee": "lifecycle/index.js@492..523",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "listen-keys/index.js@323..532",
+      "syntax": "member",
+      "callee": "listen-keys/index.js@346..520",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "task/index.js@623..683",
+      "syntax": "new",
+      "callee": "task/index.js@635..682",
+      "callee_name": ""
+    }
+  ]
+}

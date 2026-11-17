@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "index.js",
@@ -13,6 +13,880 @@
   "instrumented_functions": 296,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "lib/argument.js@1194..1229",
+      "name": "name"
+    },
+    {
+      "function": "lib/argument.js@1640..1769",
+      "name": "default"
+    },
+    {
+      "function": "lib/argument.js@2725..2788",
+      "name": "argOptional"
+    },
+    {
+      "function": "lib/argument.js@2940..3124",
+      "name": "humanReadableArgName"
+    },
+    {
+      "function": "lib/argument.js@398..1123",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/command.js@10339..10841",
+      "name": "addCommand"
+    },
+    {
+      "function": "lib/command.js@11194..11277",
+      "name": "createArgument"
+    },
+    {
+      "function": "lib/command.js@11845..12165",
+      "name": "argument"
+    },
+    {
+      "function": "lib/command.js@12444..12596",
+      "name": "arguments"
+    },
+    {
+      "function": "lib/command.js@12521..12573",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@12769..13333",
+      "name": "addArgument"
+    },
+    {
+      "function": "lib/command.js@13988..14978",
+      "name": "helpCommand"
+    },
+    {
+      "function": "lib/command.js@15901..16324",
+      "name": "_getHelpCommand"
+    },
+    {
+      "function": "lib/command.js@16492..16943",
+      "name": "hook"
+    },
+    {
+      "function": "lib/command.js@17193..17522",
+      "name": "exitOverride"
+    },
+    {
+      "function": "lib/command.js@17297..17494",
+      "name": "_exitCallback"
+    },
+    {
+      "function": "lib/command.js@17830..18046",
+      "name": "_exit"
+    },
+    {
+      "function": "lib/command.js@18349..18941",
+      "name": "action"
+    },
+    {
+      "function": "lib/command.js@18383..18883",
+      "name": "listener"
+    },
+    {
+      "function": "lib/command.js@19279..19360",
+      "name": "createOption"
+    },
+    {
+      "function": "lib/command.js@19591..19962",
+      "name": "_callParseArg"
+    },
+    {
+      "function": "lib/command.js@20130..20729",
+      "name": "_registerOption"
+    },
+    {
+      "function": "lib/command.js@20934..21488",
+      "name": "_registerCommand"
+    },
+    {
+      "function": "lib/command.js@20982..21047",
+      "name": "knownBy"
+    },
+    {
+      "function": "lib/command.js@21096..21135",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@21608..23913",
+      "name": "addOption"
+    },
+    {
+      "function": "lib/command.js@22383..23407",
+      "name": "handleOptionValue"
+    },
+    {
+      "function": "lib/command.js@23441..23614",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@2392..2463",
+      "name": "getOutHelpWidth"
+    },
+    {
+      "function": "lib/command.js@24070..24836",
+      "name": "_optionEx"
+    },
+    {
+      "function": "lib/command.js@2488..2559",
+      "name": "getErrHelpWidth"
+    },
+    {
+      "function": "lib/command.js@2584..2666",
+      "name": "getOutHasColors"
+    },
+    {
+      "function": "lib/command.js@25885..26016",
+      "name": "option"
+    },
+    {
+      "function": "lib/command.js@2691..2773",
+      "name": "getErrHasColors"
+    },
+    {
+      "function": "lib/command.js@2793..2817",
+      "name": "stripColor"
+    },
+    {
+      "function": "lib/command.js@28520..28635",
+      "name": "enablePositionalOptions"
+    },
+    {
+      "function": "lib/command.js@29330..29648",
+      "name": "_checkForBrokenPassThrough"
+    },
+    {
+      "function": "lib/command.js@30455..30588",
+      "name": "getOptionValue"
+    },
+    {
+      "function": "lib/command.js@31096..31332",
+      "name": "setOptionValueWithSource"
+    },
+    {
+      "function": "lib/command.js@31498..31571",
+      "name": "getOptionValueSource"
+    },
+    {
+      "function": "lib/command.js@32283..34221",
+      "name": "_prepareUserArgs"
+    },
+    {
+      "function": "lib/command.js@35585..35765",
+      "name": "parse"
+    },
+    {
+      "function": "lib/command.js@37144..37297",
+      "name": "_prepareForParse"
+    },
+    {
+      "function": "lib/command.js@37614..38039",
+      "name": "saveStateBeforeParse"
+    },
+    {
+      "function": "lib/command.js@3818..4624",
+      "name": "copyInheritedSettings"
+    },
+    {
+      "function": "lib/command.js@38307..39011",
+      "name": "restoreStateBeforeParse"
+    },
+    {
+      "function": "lib/command.js@44991..45619",
+      "name": "_dispatchSubcommand"
+    },
+    {
+      "function": "lib/command.js@45378..45588",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@46297..46785",
+      "name": "_checkNumberOfArguments"
+    },
+    {
+      "function": "lib/command.js@46377..46496",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@4681..4919",
+      "name": "_getCommandAndAncestors"
+    },
+    {
+      "function": "lib/command.js@46907..48390",
+      "name": "_processArguments"
+    },
+    {
+      "function": "lib/command.js@47547..48344",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@48602..48861",
+      "name": "_chainOrCall"
+    },
+    {
+      "function": "lib/command.js@49001..49637",
+      "name": "_chainOrCallHooks"
+    },
+    {
+      "function": "lib/command.js@49151..49200",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@49217..49377",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@49291..49367",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@49462..49612",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@49521..49604",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@49810..50142",
+      "name": "_chainOrCallSubCommandHook"
+    },
+    {
+      "function": "lib/command.js@50282..53535",
+      "name": "_parseCommand"
+    },
+    {
+      "function": "lib/command.js@51724..51831",
+      "name": "checkForUnknownOptions"
+    },
+    {
+      "function": "lib/command.js@52130..52183",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@52274..52362",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@53633..53794",
+      "name": "_findCommand"
+    },
+    {
+      "function": "lib/command.js@53724..53782",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@53922..54002",
+      "name": "_findOption"
+    },
+    {
+      "function": "lib/command.js@53970..53996",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@54175..54605",
+      "name": "_checkForMissingMandatoryOptions"
+    },
+    {
+      "function": "lib/command.js@54342..54599",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@54379..54591",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@54720..55484",
+      "name": "_checkForConflictingLocalOptions"
+    },
+    {
+      "function": "lib/command.js@54814..55034",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@55112..55155",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@55653..55883",
+      "name": "_checkForConflictingOptions"
+    },
+    {
+      "function": "lib/command.js@55815..55877",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@56460..61373",
+      "name": "parseOptions"
+    },
+    {
+      "function": "lib/command.js@56646..56726",
+      "name": "maybeOption"
+    },
+    {
+      "function": "lib/command.js@56758..57144",
+      "name": "negativeNumberArg"
+    },
+    {
+      "function": "lib/command.js@6104..6997",
+      "name": "command"
+    },
+    {
+      "function": "lib/command.js@61489..61948",
+      "name": "opts"
+    },
+    {
+      "function": "lib/command.js@619..3511",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/command.js@62082..62280",
+      "name": "optsWithGlobals"
+    },
+    {
+      "function": "lib/command.js@62190..62258",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@62575..63210",
+      "name": "error"
+    },
+    {
+      "function": "lib/command.js@63360..64267",
+      "name": "_parseOptionsEnv"
+    },
+    {
+      "function": "lib/command.js@63406..64261",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@64381..65313",
+      "name": "_parseOptionsImplied"
+    },
+    {
+      "function": "lib/command.js@64716..64954",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@67881..68753",
+      "name": "unknownOption"
+    },
+    {
+      "function": "lib/command.js@68335..68358",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@68375..68398",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@69368..69986",
+      "name": "unknownCommand"
+    },
+    {
+      "function": "lib/command.js@69598..69770",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@70431..70991",
+      "name": "version"
+    },
+    {
+      "function": "lib/command.js@70854..70968",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@71136..71393",
+      "name": "description"
+    },
+    {
+      "function": "lib/command.js@71537..71646",
+      "name": "summary"
+    },
+    {
+      "function": "lib/command.js@71885..72925",
+      "name": "alias"
+    },
+    {
+      "function": "lib/command.js@7310..7365",
+      "name": "createCommand"
+    },
+    {
+      "function": "lib/command.js@73116..73363",
+      "name": "aliases"
+    },
+    {
+      "function": "lib/command.js@73484..73979",
+      "name": "usage"
+    },
+    {
+      "function": "lib/command.js@73618..73678",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@74101..74201",
+      "name": "name"
+    },
+    {
+      "function": "lib/command.js@74368..74515",
+      "name": "helpGroup"
+    },
+    {
+      "function": "lib/command.js@7550..7628",
+      "name": "createHelp"
+    },
+    {
+      "function": "lib/command.js@75732..75874",
+      "name": "_initOptionGroup"
+    },
+    {
+      "function": "lib/command.js@75930..76061",
+      "name": "_initCommandGroup"
+    },
+    {
+      "function": "lib/command.js@77133..77555",
+      "name": "helpInformation"
+    },
+    {
+      "function": "lib/command.js@77829..78621",
+      "name": "_getOutputContext"
+    },
+    {
+      "function": "lib/command.js@78042..78090",
+      "name": "baseWrite"
+    },
+    {
+      "function": "lib/command.js@78249..78297",
+      "name": "baseWrite"
+    },
+    {
+      "function": "lib/command.js@78449..78565",
+      "name": "write"
+    },
+    {
+      "function": "lib/command.js@78887..80157",
+      "name": "outputHelp"
+    },
+    {
+      "function": "lib/command.js@79373..79429",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@7943..8109",
+      "name": "configureHelp"
+    },
+    {
+      "function": "lib/command.js@80084..80145",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@80570..81340",
+      "name": "helpOption"
+    },
+    {
+      "function": "lib/command.js@81517..81703",
+      "name": "_getHelpOption"
+    },
+    {
+      "function": "lib/command.js@82319..82825",
+      "name": "help"
+    },
+    {
+      "function": "lib/command.js@83517..84237",
+      "name": "addHelpText"
+    },
+    {
+      "function": "lib/command.js@84395..84756",
+      "name": "_outputHelpIfRequested"
+    },
+    {
+      "function": "lib/command.js@84522..84549",
+      "name": ""
+    },
+    {
+      "function": "lib/command.js@86212..87128",
+      "name": "useColor"
+    },
+    {
+      "function": "lib/command.js@9111..9337",
+      "name": "configureOutput"
+    },
+    {
+      "function": "lib/command.js@9519..9694",
+      "name": "showHelpAfterError"
+    },
+    {
+      "function": "lib/command.js@9906..10037",
+      "name": "showSuggestionAfterError"
+    },
+    {
+      "function": "lib/error.js@343..630",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/error.js@855..1072",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/help.js@10201..10938",
+      "name": "argumentDescription"
+    },
+    {
+      "function": "lib/help.js@1113..1220",
+      "name": "prepareContext"
+    },
+    {
+      "function": "lib/help.js@11144..11283",
+      "name": "formatItemList"
+    },
+    {
+      "function": "lib/help.js@11529..12072",
+      "name": "groupItems"
+    },
+    {
+      "function": "lib/help.js@11696..11802",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@11887..12047",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@12207..14906",
+      "name": "formatHelp"
+    },
+    {
+      "function": "lib/help.js@12379..12499",
+      "name": "callFormatItem"
+    },
+    {
+      "function": "lib/help.js@13014..13217",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@13435..13484",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@13518..13862",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@13577..13776",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@1411..1868",
+      "name": "visibleCommands"
+    },
+    {
+      "function": "lib/help.js@14440..14479",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@14514..14869",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@14576..14782",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@1482..1503",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@15087..15145",
+      "name": "displayWidth"
+    },
+    {
+      "function": "lib/help.js@15302..15339",
+      "name": "styleTitle"
+    },
+    {
+      "function": "lib/help.js@15343..15941",
+      "name": "styleUsage"
+    },
+    {
+      "function": "lib/help.js@15588..15918",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@15944..16021",
+      "name": "styleCommandDescription"
+    },
+    {
+      "function": "lib/help.js@16024..16100",
+      "name": "styleOptionDescription"
+    },
+    {
+      "function": "lib/help.js@16103..16183",
+      "name": "styleSubcommandDescription"
+    },
+    {
+      "function": "lib/help.js@16186..16264",
+      "name": "styleArgumentDescription"
+    },
+    {
+      "function": "lib/help.js@16267..16314",
+      "name": "styleDescriptionText"
+    },
+    {
+      "function": "lib/help.js@16317..16381",
+      "name": "styleOptionTerm"
+    },
+    {
+      "function": "lib/help.js@16384..16876",
+      "name": "styleSubcommandTerm"
+    },
+    {
+      "function": "lib/help.js@16593..16853",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@16879..16947",
+      "name": "styleArgumentTerm"
+    },
+    {
+      "function": "lib/help.js@16950..16992",
+      "name": "styleOptionText"
+    },
+    {
+      "function": "lib/help.js@16995..17039",
+      "name": "styleArgumentText"
+    },
+    {
+      "function": "lib/help.js@17042..17088",
+      "name": "styleSubcommandText"
+    },
+    {
+      "function": "lib/help.js@1706..1828",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@17091..17134",
+      "name": "styleCommandText"
+    },
+    {
+      "function": "lib/help.js@17290..17561",
+      "name": "padWidth"
+    },
+    {
+      "function": "lib/help.js@17732..17791",
+      "name": "preformatted"
+    },
+    {
+      "function": "lib/help.js@18218..19432",
+      "name": "formatItem"
+    },
+    {
+      "function": "lib/help.js@19664..20739",
+      "name": "boxWrap"
+    },
+    {
+      "function": "lib/help.js@1989..2340",
+      "name": "compareOptions"
+    },
+    {
+      "function": "lib/help.js@19905..20696",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@20164..20643",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@2035..2280",
+      "name": "getSortKey"
+    },
+    {
+      "function": "lib/help.js@20918..21074",
+      "name": "stripColor"
+    },
+    {
+      "function": "lib/help.js@2525..3585",
+      "name": "visibleOptions"
+    },
+    {
+      "function": "lib/help.js@2593..2619",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@3729..4207",
+      "name": "visibleGlobalOptions"
+    },
+    {
+      "function": "lib/help.js@4344..4889",
+      "name": "visibleArguments"
+    },
+    {
+      "function": "lib/help.js@4788..4822",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@5022..5431",
+      "name": "subcommandTerm"
+    },
+    {
+      "function": "lib/help.js@5161..5195",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@5561..5610",
+      "name": "optionTerm"
+    },
+    {
+      "function": "lib/help.js@557..738",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/help.js@5748..5804",
+      "name": "argumentTerm"
+    },
+    {
+      "function": "lib/help.js@5943..6219",
+      "name": "longestSubcommandTermLength"
+    },
+    {
+      "function": "lib/help.js@6032..6210",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@6357..6597",
+      "name": "longestOptionTermLength"
+    },
+    {
+      "function": "lib/help.js@6441..6588",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@6742..6994",
+      "name": "longestGlobalOptionTermLength"
+    },
+    {
+      "function": "lib/help.js@7134..7407",
+      "name": "longestArgumentTermLength"
+    },
+    {
+      "function": "lib/help.js@7222..7398",
+      "name": ""
+    },
+    {
+      "function": "lib/help.js@7554..7979",
+      "name": "commandUsage"
+    },
+    {
+      "function": "lib/help.js@8092..8201",
+      "name": "commandDescription"
+    },
+    {
+      "function": "lib/help.js@8400..8529",
+      "name": "subcommandDescription"
+    },
+    {
+      "function": "lib/help.js@8665..10057",
+      "name": "optionDescription"
+    },
+    {
+      "function": "lib/help.js@8880..8914",
+      "name": ""
+    },
+    {
+      "function": "lib/option.js@1753..1882",
+      "name": "default"
+    },
+    {
+      "function": "lib/option.js@227..1557",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/option.js@3883..3939",
+      "name": "env"
+    },
+    {
+      "function": "lib/option.js@4095..4155",
+      "name": "argParser"
+    },
+    {
+      "function": "lib/option.js@4312..4406",
+      "name": "makeOptionMandatory"
+    },
+    {
+      "function": "lib/option.js@4510..4580",
+      "name": "hideHelp"
+    },
+    {
+      "function": "lib/option.js@4611..4793",
+      "name": "_collectValue"
+    },
+    {
+      "function": "lib/option.js@4918..5312",
+      "name": "choices"
+    },
+    {
+      "function": "lib/option.js@4994..5290",
+      "name": "parseArg"
+    },
+    {
+      "function": "lib/option.js@5381..5504",
+      "name": "name"
+    },
+    {
+      "function": "lib/option.js@5645..5787",
+      "name": "attributeName"
+    },
+    {
+      "function": "lib/option.js@6106..6171",
+      "name": "is"
+    },
+    {
+      "function": "lib/option.js@6356..6434",
+      "name": "isBoolean"
+    },
+    {
+      "function": "lib/option.js@6913..7418",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/option.js@7066..7267",
+      "name": ""
+    },
+    {
+      "function": "lib/option.js@7303..7412",
+      "name": ""
+    },
+    {
+      "function": "lib/option.js@8109..8246",
+      "name": "camelcase"
+    },
+    {
+      "function": "lib/option.js@8348..10227",
+      "name": "splitOptionFlags"
+    },
+    {
+      "function": "lib/suggestSimilar.js@1390..2731",
+      "name": "suggestSimilar"
+    },
+    {
+      "function": "lib/suggestSimilar.js@1706..1739",
+      "name": ""
+    },
+    {
+      "function": "lib/suggestSimilar.js@1851..2403",
+      "name": ""
+    },
+    {
+      "function": "lib/suggestSimilar.js@24..1240",
+      "name": "editDistance"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

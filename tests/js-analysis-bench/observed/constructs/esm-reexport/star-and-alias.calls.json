@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js",
@@ -10,6 +10,16 @@
   "instrumented_functions": 2,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "shapes/circle.js@24..97",
+      "name": "area"
+    },
+    {
+      "function": "shapes/square.js@24..87",
+      "name": "area"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js"
@@ -7,6 +7,28 @@
   "instrumented_functions": 5,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..95",
+      "name": "twice"
+    },
+    {
+      "function": "main.js@151..257",
+      "name": "compose"
+    },
+    {
+      "function": "main.js@200..214",
+      "name": ""
+    },
+    {
+      "function": "main.js@259..317",
+      "name": "increment"
+    },
+    {
+      "function": "main.js@97..149",
+      "name": "double"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

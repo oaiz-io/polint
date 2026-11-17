@@ -232,6 +232,8 @@ class RunResult:
     stdout_bytes: int
     stderr_tail: str
     cache_bytes_after: int
+    # The whole of stderr, for callers that parse log lines from it.
+    stderr: str = ""
 
 
 def measure(
@@ -315,6 +317,7 @@ def measure(
         stdout_bytes=stdout_bytes,
         stderr_tail="\n".join(stderr_text.splitlines()[-8:]),
         cache_bytes_after=0,
+        stderr=stderr_text,
     )
 
 

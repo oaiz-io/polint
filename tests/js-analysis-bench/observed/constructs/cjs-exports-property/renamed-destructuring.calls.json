@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "ids.js",
@@ -8,6 +8,16 @@
   "instrumented_functions": 2,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "ids.js@108..156",
+      "name": "reset"
+    },
+    {
+      "function": "ids.js@41..106",
+      "name": "next"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

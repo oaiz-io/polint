@@ -1,0 +1,939 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "lib/aes.js": {
+      "system": "cjs",
+      "names": [
+        "Algorithm",
+        "_expandKey",
+        "_updateBlock",
+        "createDecryptionCipher",
+        "createEncryptionCipher",
+        "startDecrypting",
+        "startEncrypting"
+      ],
+      "whole_value": "object"
+    },
+    "lib/aesCipherSuites.js": {
+      "system": "cjs",
+      "names": [
+        "Alert",
+        "BulkCipherAlgorithm",
+        "CipherSuites",
+        "CipherType",
+        "CompressionMethod",
+        "ConnectionEnd",
+        "ContentType",
+        "HandshakeType",
+        "HeartbeatMessageType",
+        "MACAlgorithm",
+        "MaxFragment",
+        "PRFAlgorithm",
+        "SupportedVersions",
+        "Version",
+        "Versions",
+        "createConnection",
+        "createSessionCache",
+        "hmac_sha1",
+        "prf_tls1"
+      ],
+      "whole_value": "object"
+    },
+    "lib/asn1-validator.js": {
+      "system": "cjs",
+      "names": [
+        "privateKeyValidator",
+        "publicKeyValidator"
+      ],
+      "whole_value": "object"
+    },
+    "lib/asn1.js": {
+      "system": "cjs",
+      "names": [
+        "Class",
+        "Type",
+        "copy",
+        "create",
+        "dateToGeneralizedTime",
+        "dateToUtcTime",
+        "derToInteger",
+        "derToOid",
+        "equals",
+        "fromDer",
+        "generalizedTimeToDate",
+        "getBerValueLength",
+        "integerToDer",
+        "maxDepth",
+        "oidToDer",
+        "prettyPrint",
+        "toDer",
+        "utcTimeToDate",
+        "validate"
+      ],
+      "whole_value": "object"
+    },
+    "lib/baseN.js": {
+      "system": "cjs",
+      "names": [
+        "decode",
+        "encode"
+      ],
+      "whole_value": "object"
+    },
+    "lib/cipher.js": {
+      "system": "cjs",
+      "names": [
+        "BlockCipher",
+        "algorithms",
+        "createCipher",
+        "createDecipher",
+        "getAlgorithm",
+        "modes",
+        "registerAlgorithm"
+      ],
+      "whole_value": "object"
+    },
+    "lib/cipherModes.js": {
+      "system": "cjs",
+      "names": [
+        "cbc",
+        "cfb",
+        "ctr",
+        "ecb",
+        "gcm",
+        "ofb"
+      ],
+      "whole_value": "object"
+    },
+    "lib/des.js": {
+      "system": "cjs",
+      "names": [
+        "Algorithm",
+        "createDecryptionCipher",
+        "createEncryptionCipher",
+        "startDecrypting",
+        "startEncrypting"
+      ],
+      "whole_value": "object"
+    },
+    "lib/ed25519.js": {
+      "system": "cjs",
+      "names": [
+        "constants",
+        "generateKeyPair",
+        "privateKeyFromAsn1",
+        "publicKeyFromAsn1",
+        "publicKeyFromPrivateKey",
+        "sign",
+        "verify"
+      ],
+      "whole_value": "object"
+    },
+    "lib/forge.js": {
+      "system": "cjs",
+      "names": [
+        "aes",
+        "asn1",
+        "cipher",
+        "des",
+        "ed25519",
+        "hmac",
+        "jsbn",
+        "md",
+        "md5",
+        "mgf",
+        "mgf1",
+        "oids",
+        "options",
+        "pbe",
+        "pbkdf2",
+        "pem",
+        "pkcs1",
+        "pkcs12",
+        "pkcs5",
+        "pkcs7",
+        "pkcs7asn1",
+        "pki",
+        "prime",
+        "prng",
+        "pss",
+        "random",
+        "rc2",
+        "rsa",
+        "sha1",
+        "sha256",
+        "sha384",
+        "sha512",
+        "tls",
+        "util"
+      ],
+      "whole_value": "object"
+    },
+    "lib/form.js": {
+      "error": "jQuery is not defined"
+    },
+    "lib/hmac.js": {
+      "system": "cjs",
+      "names": [
+        "create"
+      ],
+      "whole_value": "object"
+    },
+    "lib/http.js": {
+      "system": "cjs",
+      "names": [
+        "createClient",
+        "createRequest",
+        "createResponse",
+        "withinCookieDomain"
+      ],
+      "whole_value": "object"
+    },
+    "lib/index.all.js": {
+      "error": "jQuery is not defined"
+    },
+    "lib/index.js": {
+      "system": "cjs",
+      "names": [
+        "aes",
+        "asn1",
+        "cipher",
+        "des",
+        "ed25519",
+        "form",
+        "hmac",
+        "http",
+        "jsbn",
+        "kem",
+        "log",
+        "md",
+        "md5",
+        "mgf",
+        "mgf1",
+        "oids",
+        "options",
+        "pbe",
+        "pbkdf2",
+        "pem",
+        "pkcs1",
+        "pkcs12",
+        "pkcs5",
+        "pkcs7",
+        "pkcs7asn1",
+        "pki",
+        "prime",
+        "prng",
+        "pss",
+        "random",
+        "rc2",
+        "rsa",
+        "sha1",
+        "sha256",
+        "sha384",
+        "sha512",
+        "ssh",
+        "tls",
+        "util"
+      ],
+      "whole_value": "object"
+    },
+    "lib/jsbn.js": {
+      "system": "cjs",
+      "names": [
+        "BigInteger"
+      ],
+      "whole_value": "object"
+    },
+    "lib/kem.js": {
+      "system": "cjs",
+      "names": [
+        "kdf1",
+        "kdf2",
+        "rsa"
+      ],
+      "whole_value": "object"
+    },
+    "lib/log.js": {
+      "system": "cjs",
+      "names": [
+        "INTERPOLATE",
+        "LEVEL_LOCKED",
+        "NO_LEVEL_CHECK",
+        "addLogger",
+        "consoleLogger",
+        "debug",
+        "error",
+        "info",
+        "levels",
+        "lock",
+        "logMessage",
+        "makeLogger",
+        "prepareFull",
+        "prepareStandard",
+        "prepareStandardFull",
+        "setLevel",
+        "verbose",
+        "warning"
+      ],
+      "whole_value": "object"
+    },
+    "lib/md.all.js": {
+      "system": "cjs",
+      "names": [
+        "algorithms",
+        "md5",
+        "sha1",
+        "sha256",
+        "sha384",
+        "sha512",
+        "sha512/224",
+        "sha512/256"
+      ],
+      "whole_value": "object"
+    },
+    "lib/md.js": {
+      "system": "cjs",
+      "names": [
+        "algorithms",
+        "md5",
+        "sha1",
+        "sha256",
+        "sha384",
+        "sha512",
+        "sha512/224",
+        "sha512/256"
+      ],
+      "whole_value": "object"
+    },
+    "lib/md5.js": {
+      "system": "cjs",
+      "names": [
+        "create"
+      ],
+      "whole_value": "object"
+    },
+    "lib/mgf.js": {
+      "system": "cjs",
+      "names": [
+        "mgf1"
+      ],
+      "whole_value": "object"
+    },
+    "lib/mgf1.js": {
+      "system": "cjs",
+      "names": [
+        "create"
+      ],
+      "whole_value": "object"
+    },
+    "lib/oids.js": {
+      "system": "cjs",
+      "names": [
+        "1.2.840.10040.4.3",
+        "1.2.840.113549.1.1.1",
+        "1.2.840.113549.1.1.10",
+        "1.2.840.113549.1.1.11",
+        "1.2.840.113549.1.1.12",
+        "1.2.840.113549.1.1.13",
+        "1.2.840.113549.1.1.4",
+        "1.2.840.113549.1.1.5",
+        "1.2.840.113549.1.1.7",
+        "1.2.840.113549.1.1.8",
+        "1.2.840.113549.1.1.9",
+        "1.2.840.113549.1.12.1.1",
+        "1.2.840.113549.1.12.1.2",
+        "1.2.840.113549.1.12.1.3",
+        "1.2.840.113549.1.12.1.4",
+        "1.2.840.113549.1.12.1.5",
+        "1.2.840.113549.1.12.1.6",
+        "1.2.840.113549.1.12.10.1.1",
+        "1.2.840.113549.1.12.10.1.2",
+        "1.2.840.113549.1.12.10.1.3",
+        "1.2.840.113549.1.12.10.1.4",
+        "1.2.840.113549.1.12.10.1.5",
+        "1.2.840.113549.1.12.10.1.6",
+        "1.2.840.113549.1.5.12",
+        "1.2.840.113549.1.5.13",
+        "1.2.840.113549.1.7.1",
+        "1.2.840.113549.1.7.2",
+        "1.2.840.113549.1.7.3",
+        "1.2.840.113549.1.7.4",
+        "1.2.840.113549.1.7.5",
+        "1.2.840.113549.1.7.6",
+        "1.2.840.113549.1.9.1",
+        "1.2.840.113549.1.9.14",
+        "1.2.840.113549.1.9.2",
+        "1.2.840.113549.1.9.20",
+        "1.2.840.113549.1.9.21",
+        "1.2.840.113549.1.9.22.1",
+        "1.2.840.113549.1.9.3",
+        "1.2.840.113549.1.9.4",
+        "1.2.840.113549.1.9.5",
+        "1.2.840.113549.1.9.6",
+        "1.2.840.113549.1.9.7",
+        "1.2.840.113549.1.9.8",
+        "1.2.840.113549.2.10",
+        "1.2.840.113549.2.11",
+        "1.2.840.113549.2.2",
+        "1.2.840.113549.2.5",
+        "1.2.840.113549.2.7",
+        "1.2.840.113549.2.8",
+        "1.2.840.113549.2.9",
+        "1.2.840.113549.3.7",
+        "1.3.101.112",
+        "1.3.14.3.2.26",
+        "1.3.14.3.2.29",
+        "1.3.14.3.2.7",
+        "1.3.6.1.4.1.11129.2.4.2",
+        "1.3.6.1.4.1.311.60.2.1.2",
+        "1.3.6.1.4.1.311.60.2.1.3",
+        "1.3.6.1.5.5.7.1.1",
+        "1.3.6.1.5.5.7.3.1",
+        "1.3.6.1.5.5.7.3.2",
+        "1.3.6.1.5.5.7.3.3",
+        "1.3.6.1.5.5.7.3.4",
+        "1.3.6.1.5.5.7.3.8",
+        "2.16.840.1.101.3.4.1.2",
+        "2.16.840.1.101.3.4.1.22",
+        "2.16.840.1.101.3.4.1.42",
+        "2.16.840.1.101.3.4.2.1",
+        "2.16.840.1.101.3.4.2.2",
+        "2.16.840.1.101.3.4.2.3",
+        "2.16.840.1.101.3.4.2.4",
+        "2.16.840.1.101.3.4.2.5",
+        "2.16.840.1.101.3.4.2.6",
+        "2.16.840.1.113730.1.1",
+        "2.16.840.1.113730.1.13",
+        "2.5.29.1",
+        "2.5.29.10",
+        "2.5.29.11",
+        "2.5.29.12",
+        "2.5.29.13",
+        "2.5.29.14",
+        "2.5.29.15",
+        "2.5.29.16",
+        "2.5.29.17",
+        "2.5.29.18",
+        "2.5.29.19",
+        "2.5.29.2",
+        "2.5.29.20",
+        "2.5.29.21",
+        "2.5.29.22",
+        "2.5.29.23",
+        "2.5.29.24",
+        "2.5.29.25",
+        "2.5.29.26",
+        "2.5.29.27",
+        "2.5.29.28",
+        "2.5.29.29",
+        "2.5.29.3",
+        "2.5.29.30",
+        "2.5.29.31",
+        "2.5.29.32",
+        "2.5.29.33",
+        "2.5.29.34",
+        "2.5.29.35",
+        "2.5.29.36",
+        "2.5.29.37",
+        "2.5.29.4",
+        "2.5.29.46",
+        "2.5.29.5",
+        "2.5.29.54",
+        "2.5.29.6",
+        "2.5.29.7",
+        "2.5.29.8",
+        "2.5.29.9",
+        "2.5.4.10",
+        "2.5.4.11",
+        "2.5.4.12",
+        "2.5.4.13",
+        "2.5.4.15",
+        "2.5.4.17",
+        "2.5.4.3",
+        "2.5.4.4",
+        "2.5.4.42",
+        "2.5.4.5",
+        "2.5.4.6",
+        "2.5.4.65",
+        "2.5.4.7",
+        "2.5.4.8",
+        "2.5.4.9",
+        "EdDSA25519",
+        "RSAES-OAEP",
+        "RSASSA-PSS",
+        "aes128-CBC",
+        "aes192-CBC",
+        "aes256-CBC",
+        "authorityInfoAccess",
+        "authorityKeyIdentifier",
+        "basicConstraints",
+        "businessCategory",
+        "cRLDistributionPoints",
+        "certBag",
+        "certificatePolicies",
+        "challengePassword",
+        "clientAuth",
+        "codeSigning",
+        "commonName",
+        "contentType",
+        "counterSignature",
+        "countryName",
+        "crlBag",
+        "data",
+        "des-EDE3-CBC",
+        "desCBC",
+        "description",
+        "digestedData",
+        "dsa-with-sha1",
+        "emailAddress",
+        "emailProtection",
+        "encryptedData",
+        "envelopedData",
+        "extKeyUsage",
+        "extensionRequest",
+        "friendlyName",
+        "givenName",
+        "hmacWithSHA1",
+        "hmacWithSHA224",
+        "hmacWithSHA256",
+        "hmacWithSHA384",
+        "hmacWithSHA512",
+        "issuerAltName",
+        "jurisdictionOfIncorporationCountryName",
+        "jurisdictionOfIncorporationStateOrProvinceName",
+        "keyBag",
+        "keyUsage",
+        "localKeyId",
+        "localityName",
+        "md2",
+        "md5",
+        "md5WithRSAEncryption",
+        "messageDigest",
+        "mgf1",
+        "nsCertType",
+        "nsComment",
+        "organizationName",
+        "organizationalUnitName",
+        "pSpecified",
+        "pbeWithSHAAnd128BitRC2-CBC",
+        "pbeWithSHAAnd128BitRC4",
+        "pbeWithSHAAnd2-KeyTripleDES-CBC",
+        "pbeWithSHAAnd3-KeyTripleDES-CBC",
+        "pbeWithSHAAnd40BitRC4",
+        "pbewithSHAAnd40BitRC2-CBC",
+        "pkcs5PBES2",
+        "pkcs5PBKDF2",
+        "pkcs8ShroudedKeyBag",
+        "postalCode",
+        "pseudonym",
+        "rsaEncryption",
+        "safeContentsBag",
+        "secretBag",
+        "serialNumber",
+        "serverAuth",
+        "sha1",
+        "sha1WithRSAEncryption",
+        "sha1WithRSASignature",
+        "sha224",
+        "sha256",
+        "sha256WithRSAEncryption",
+        "sha384",
+        "sha384WithRSAEncryption",
+        "sha512",
+        "sha512-224",
+        "sha512-256",
+        "sha512WithRSAEncryption",
+        "signedAndEnvelopedData",
+        "signedData",
+        "signingTime",
+        "stateOrProvinceName",
+        "streetAddress",
+        "subjectAltName",
+        "subjectKeyIdentifier",
+        "surname",
+        "timeStamping",
+        "timestampList",
+        "title",
+        "unstructuredAddress",
+        "unstructuredName",
+        "x509Certificate"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pbe.js": {
+      "system": "cjs",
+      "names": [
+        "generatePkcs12Key",
+        "getCipher",
+        "getCipherForPBES2",
+        "getCipherForPKCS12PBE",
+        "opensslDeriveBytes"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pbkdf2.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "lib/pem.js": {
+      "system": "cjs",
+      "names": [
+        "decode",
+        "encode"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pkcs1.js": {
+      "system": "cjs",
+      "names": [
+        "decode_rsa_oaep",
+        "encode_rsa_oaep"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pkcs12.js": {
+      "system": "cjs",
+      "names": [
+        "generateKey",
+        "pkcs12FromAsn1",
+        "toPkcs12Asn1"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pkcs7.js": {
+      "system": "cjs",
+      "names": [
+        "asn1",
+        "createEncryptedData",
+        "createEnvelopedData",
+        "createSignedData",
+        "messageFromAsn1",
+        "messageFromPem",
+        "messageToPem"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pkcs7asn1.js": {
+      "system": "cjs",
+      "names": [
+        "contentInfoValidator",
+        "encryptedDataValidator",
+        "envelopedDataValidator",
+        "recipientInfoValidator",
+        "signedDataValidator"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pki.js": {
+      "system": "cjs",
+      "names": [
+        "CRIAttributesAsArray",
+        "RDNAttributesAsArray",
+        "certificateError",
+        "certificateExtensionFromAsn1",
+        "certificateExtensionToAsn1",
+        "certificateExtensionsFromAsn1",
+        "certificateExtensionsToAsn1",
+        "certificateFromAsn1",
+        "certificateFromPem",
+        "certificateToAsn1",
+        "certificateToPem",
+        "certificationRequestFromAsn1",
+        "certificationRequestFromPem",
+        "certificationRequestToAsn1",
+        "certificationRequestToPem",
+        "createCaStore",
+        "createCertificate",
+        "createCertificationRequest",
+        "decryptPrivateKeyInfo",
+        "decryptRsaPrivateKey",
+        "distinguishedNameToAsn1",
+        "ed25519",
+        "encryptPrivateKeyInfo",
+        "encryptRsaPrivateKey",
+        "encryptedPrivateKeyFromPem",
+        "encryptedPrivateKeyToPem",
+        "getCertificationRequestInfo",
+        "getPublicKeyFingerprint",
+        "getTBSCertificate",
+        "oids",
+        "pbe",
+        "pemToDer",
+        "privateKeyFromAsn1",
+        "privateKeyFromPem",
+        "privateKeyInfoToPem",
+        "privateKeyToAsn1",
+        "privateKeyToPem",
+        "privateKeyToRSAPrivateKey",
+        "publicKeyFromAsn1",
+        "publicKeyFromPem",
+        "publicKeyToAsn1",
+        "publicKeyToPem",
+        "publicKeyToRSAPublicKey",
+        "publicKeyToRSAPublicKeyPem",
+        "publicKeyToSubjectPublicKeyInfo",
+        "rsa",
+        "setRsaPrivateKey",
+        "setRsaPublicKey",
+        "verifyCertificateChain",
+        "wrapRsaPrivateKey"
+      ],
+      "whole_value": "object"
+    },
+    "lib/prime.js": {
+      "system": "cjs",
+      "names": [
+        "generateProbablePrime"
+      ],
+      "whole_value": "object"
+    },
+    "lib/prime.worker.js": {
+      "error": "self is not defined"
+    },
+    "lib/prng.js": {
+      "system": "cjs",
+      "names": [
+        "create"
+      ],
+      "whole_value": "object"
+    },
+    "lib/pss.js": {
+      "system": "cjs",
+      "names": [
+        "create"
+      ],
+      "whole_value": "object"
+    },
+    "lib/random.js": {
+      "system": "cjs",
+      "names": [
+        "collect",
+        "collectInt",
+        "createInstance",
+        "generate",
+        "generateSync",
+        "generated",
+        "getBytes",
+        "getBytesSync",
+        "key",
+        "keyBytes",
+        "plugin",
+        "pool",
+        "pools",
+        "registerWorker",
+        "reseeds",
+        "seed",
+        "seedFile",
+        "seedFileSync",
+        "time"
+      ],
+      "whole_value": "object"
+    },
+    "lib/rc2.js": {
+      "system": "cjs",
+      "names": [
+        "createDecryptionCipher",
+        "createEncryptionCipher",
+        "expandKey",
+        "startDecrypting",
+        "startEncrypting"
+      ],
+      "whole_value": "object"
+    },
+    "lib/rsa.js": {
+      "system": "cjs",
+      "names": [
+        "createKeyPairGenerationState",
+        "decrypt",
+        "encrypt",
+        "generateKeyPair",
+        "publicKeyValidator",
+        "setPrivateKey",
+        "setPublicKey",
+        "stepKeyPairGenerationState"
+      ],
+      "whole_value": "object"
+    },
+    "lib/sha1.js": {
+      "system": "cjs",
+      "names": [
+        "create"
+      ],
+      "whole_value": "object"
+    },
+    "lib/sha256.js": {
+      "system": "cjs",
+      "names": [
+        "create"
+      ],
+      "whole_value": "object"
+    },
+    "lib/sha512.js": {
+      "system": "cjs",
+      "names": [
+        "create",
+        "sha224",
+        "sha256",
+        "sha384"
+      ],
+      "whole_value": "object"
+    },
+    "lib/socket.js": {
+      "system": "cjs",
+      "names": [
+        "createSocket",
+        "createSocketPool",
+        "destroySocketPool",
+        "socketPools"
+      ],
+      "whole_value": "object"
+    },
+    "lib/ssh.js": {
+      "system": "cjs",
+      "names": [
+        "getPublicKeyFingerprint",
+        "privateKeyToOpenSSH",
+        "privateKeyToPutty",
+        "publicKeyToOpenSSH"
+      ],
+      "whole_value": "object"
+    },
+    "lib/tls.js": {
+      "system": "cjs",
+      "names": [
+        "Alert",
+        "BulkCipherAlgorithm",
+        "CipherSuites",
+        "CipherType",
+        "CompressionMethod",
+        "ConnectionEnd",
+        "ContentType",
+        "HandshakeType",
+        "HeartbeatMessageType",
+        "MACAlgorithm",
+        "MaxFragment",
+        "PRFAlgorithm",
+        "SupportedVersions",
+        "Version",
+        "Versions",
+        "createConnection",
+        "createSessionCache",
+        "hmac_sha1",
+        "prf_tls1"
+      ],
+      "whole_value": "object"
+    },
+    "lib/tlssocket.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "object"
+    },
+    "lib/util.js": {
+      "system": "cjs",
+      "names": [
+        "ByteBuffer",
+        "ByteStringBuffer",
+        "DataBuffer",
+        "binary",
+        "bytesFromIP",
+        "bytesFromIPv4",
+        "bytesFromIPv6",
+        "bytesToHex",
+        "bytesToIP",
+        "bytesToIPv4",
+        "bytesToIPv6",
+        "clearItems",
+        "createBuffer",
+        "decode64",
+        "decodeUtf8",
+        "deflate",
+        "encode64",
+        "encodeUtf8",
+        "estimateCores",
+        "fillString",
+        "format",
+        "formatNumber",
+        "formatSize",
+        "getItem",
+        "globalScope",
+        "hexToBytes",
+        "inflate",
+        "int32ToBytes",
+        "isArray",
+        "isArrayBuffer",
+        "isArrayBufferView",
+        "isEmpty",
+        "isNodejs",
+        "nextTick",
+        "removeItem",
+        "setImmediate",
+        "setItem",
+        "text",
+        "xorBytes"
+      ],
+      "whole_value": "object"
+    },
+    "lib/x509.js": {
+      "system": "cjs",
+      "names": [
+        "CRIAttributesAsArray",
+        "RDNAttributesAsArray",
+        "certificateError",
+        "certificateExtensionFromAsn1",
+        "certificateExtensionToAsn1",
+        "certificateExtensionsFromAsn1",
+        "certificateExtensionsToAsn1",
+        "certificateFromAsn1",
+        "certificateFromPem",
+        "certificateToAsn1",
+        "certificateToPem",
+        "certificationRequestFromAsn1",
+        "certificationRequestFromPem",
+        "certificationRequestToAsn1",
+        "certificationRequestToPem",
+        "createCaStore",
+        "createCertificate",
+        "createCertificationRequest",
+        "decryptPrivateKeyInfo",
+        "decryptRsaPrivateKey",
+        "distinguishedNameToAsn1",
+        "ed25519",
+        "encryptPrivateKeyInfo",
+        "encryptRsaPrivateKey",
+        "encryptedPrivateKeyFromPem",
+        "encryptedPrivateKeyToPem",
+        "getCertificationRequestInfo",
+        "getPublicKeyFingerprint",
+        "getTBSCertificate",
+        "oids",
+        "pbe",
+        "pemToDer",
+        "privateKeyFromAsn1",
+        "privateKeyFromPem",
+        "privateKeyInfoToPem",
+        "privateKeyToAsn1",
+        "privateKeyToPem",
+        "privateKeyToRSAPrivateKey",
+        "publicKeyFromAsn1",
+        "publicKeyFromPem",
+        "publicKeyToAsn1",
+        "publicKeyToPem",
+        "publicKeyToRSAPublicKey",
+        "publicKeyToRSAPublicKeyPem",
+        "publicKeyToSubjectPublicKeyInfo",
+        "rsa",
+        "setRsaPrivateKey",
+        "setRsaPublicKey",
+        "verifyCertificateChain",
+        "wrapRsaPrivateKey"
+      ],
+      "whole_value": "object"
+    },
+    "lib/xhr.js": {
+      "error": "jQuery is not defined"
+    }
+  }
+}

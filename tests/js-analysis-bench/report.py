@@ -42,7 +42,7 @@ import bench
 sys.path.insert(0, str(bench.REPO_ROOT / "scripts" / "bench-runner"))
 import bench_matrix  # noqa: E402  (the existing cost machinery: measure, directory_bytes)
 
-REPORT_SCHEMA = "polint-js-analysis-bench-report-1"
+REPORT_SCHEMA = "polint-js-analysis-bench-report-2"
 DUMP_SCHEMA = "polint-js-bench-facts-3"
 DUMP_FILTER = "eval::js_bench::tests::dump_js_bench_facts"
 PLANS = {
@@ -78,6 +78,11 @@ CENSUS_CAPS = "syntax"
 EXAMPLES_PER_OUTCOME = 5
 EXAMPLES_PER_GAP = 3
 FALSE_COMPLETE = "other targets, no unresolved marker"
+# A held-out package whose recording entered fewer of its functions than this
+# is reported and flagged, and left out of the held-out averages.
+COVERAGE_FLOOR = 0.40
+# The held-out gate: recall per tier within this many points of the tune set.
+HELD_OUT_MARGIN_POINTS = 5
 RULES_TARGET_SUBDIR = "js-analysis-bench-rules"
 MB = 1_000_000
 OBSERVED_KINDS = ("call", "callback", "implicit")
@@ -286,18 +291,50 @@ def run_dump(
     else:
         # A compiler in the caller's environment must not reach the other plans.
         env.pop(TYPESCRIPT_ENV, None)
+    env["RUST_LOG"] = STAGE_LOG
+    env["NO_COLOR"] = "1"
     result = bench_matrix.measure(
         [str(test_binary), DUMP_FILTER, "--exact", "--ignored", "--test-threads", "1"],
         bench.REPO_ROOT,
         env,
         timeout,
     )
-    cost = {"wall_ms": round(result.wall_ms), "peak_rss_bytes": result.peak_rss_bytes}
+    cost = {
+        "wall_ms": round(result.wall_ms),
+        "peak_rss_bytes": result.peak_rss_bytes,
+        "stages": stage_times(result.stderr),
+    }
     if result.timed_out:
         return {"dump": None, "cost": cost, "error": f"timed out after {timeout} s"}
     if result.exit_code != 0 or not out.exists():
-        return {"dump": None, "cost": cost, "error": f"dump failed: {result.stderr_tail}"}
+        tail = [line for line in result.stderr.splitlines() if "stage done" not in line][-8:]
+        return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
     return {"dump": out, "cost": cost, "error": None}
+
+
+# The kernel's per-provider stage log: one `stage done` line per provider run.
+STAGE_LOG = "polint::kernel::stage=info"
+STAGE_FIELD = re.compile(r'\b(provider|elapsed_ms|peak_rss_mb)=("[^"]*"|\S+)')
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def stage_times(stderr: str) -> dict:
+    """Each provider's summed stage wall time and the process peak RSS when it ended.
+
+    A provider that runs more than once in a dump has its times added; the
+    peak is the largest seen at the end of any of its runs."""
+    stages: dict = {}
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if "stage done" not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in STAGE_FIELD.findall(line)}
+        if "provider" not in fields or "elapsed_ms" not in fields:
+            continue
+        row = stages.setdefault(fields["provider"], {"elapsed_ms": 0, "peak_rss_mb": 0})
+        row["elapsed_ms"] += int(fields["elapsed_ms"])
+        row["peak_rss_mb"] = max(row["peak_rss_mb"], int(fields.get("peak_rss_mb", 0)))
+    return stages
 
 
 def load_dump(run: dict) -> None:
@@ -593,8 +630,13 @@ def export_answers(dump: dict) -> dict:
 def score_exports(observed: dict, dump: dict, files: list[str] | None = None) -> dict:
     answers = export_answers(dump)
     result = {"export_fact_rows": answers["fact_status"]}
-    observed_files = observed["files"]
-    candidates = files if files is not None else observed_files
+    candidates = files if files is not None else observed["files"]
+    # A file that fails to load on its own has no observed names to compare
+    # with; it is left out and counted, never scored as exporting nothing.
+    failed = {path for path, entry in observed["files"].items() if "error" in entry}
+    result["load_errors"] = len(failed & set(candidates))
+    candidates = [path for path in candidates if path not in failed]
+    observed_files = {path: entry for path, entry in observed["files"].items() if path not in failed}
     for source in ("symbols", "facts"):
         # Files where neither side has a name say nothing about accuracy.
         names = sorted(
@@ -1565,10 +1607,56 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
     return result
 
 
+def driver_coverage(observed: dict, census_dump: dict | None) -> dict:
+    """The functions a recording entered, over the functions in the analysed files.
+
+    The denominator is the syntax census's functions other than classes and
+    static blocks, which no call enters. An entered function counts once, as the
+    innermost census function ending at the same byte, the rule
+    `Census.function_at` and `Spans.function_for` match callees by."""
+    row = {
+        "entered_functions": len(observed["entered_functions"]),
+        "instrumented_functions": observed["instrumented_functions"],
+        "census_functions": None,
+        "entered_census_functions": None,
+        "coverage": None,
+        "flagged": False,
+    }
+    if census_dump is None:
+        return row
+    by_end = defaultdict(list)
+    total = 0
+    for path, rows in census_dump["syntax_census"].items():
+        for function in rows["functions"]:
+            if function["kind"] in ("class", "static_block"):
+                continue
+            total += 1
+            by_end[(path, function["end"])].append(function)
+    entered = set()
+    for function in observed["entered_functions"]:
+        path, _, end = parse_key(function["function"])
+        candidates = by_end.get((path, end), [])
+        if candidates:
+            innermost = min(candidates, key=lambda f: f["end"] - f["start"])
+            entered.add((path, innermost["start"], innermost["end"]))
+    row["census_functions"] = total
+    row["entered_census_functions"] = len(entered)
+    row["coverage"] = ratio(len(entered), total)
+    row["flagged"] = row["coverage"] is not None and row["coverage"] < COVERAGE_FLOOR
+    return row
+
+
 def score_packages(inputs: dict, dumps: dict) -> dict:
+    """Every package scored against its recording, the held-out ones included.
+
+    A held-out package gets the same measures with no miss attribution: no gap,
+    no cause and no example of a missed edge, so nothing in the report ranks
+    work on it. Its wrong exact targets and false-complete answers keep their
+    examples, because either is a defect to fix wherever it shows."""
     results = {}
     for package in inputs["package"]:
         name = package["name"]
+        held_out = bool(package.get("held_out"))
         observed_calls = json.loads((bench.OBSERVED / "packages" / f"{name}.calls.json").read_text())
         observed_exports = json.loads((bench.OBSERVED / "packages" / f"{name}.exports.json").read_text())
         analysed, exported = bench.package_files(package)
@@ -1597,6 +1685,8 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
         census_run = dumps.get(("package", name, "census"), {"dump": None, "error": "not run"})
         if census_run["dump"] is None:
             entry["census_error"] = census_run["error"]
+        entry["held_out"] = held_out
+        entry["coverage"] = driver_coverage(observed_calls, census_run["dump"])
         plan_facts = {}
         executed = {}
         for plan in PLANS:
@@ -1605,13 +1695,15 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                 entry[plan] = {"error": run["error"]}
                 continue
             facts = Facts(run["dump"], plan)
-            census = Census(census_run["dump"], facts) if census_run["dump"] is not None else None
+            census = Census(census_run["dump"], facts) if census_run["dump"] is not None and not held_out else None
             entry[plan] = {
                 **score_package_calls(observed_calls, facts, census, sources),
                 "unresolved_calls": facts.unresolved_call_share(),
                 "references": facts.reference_share(),
                 "solver_budget": run["dump"]["solver_budget"],
             }
+            if held_out:
+                withhold_miss_attribution(entry[plan])
             executed[plan] = set(entry[plan].pop("executed_sites"))
             plan_facts[plan] = facts
             if plan != "base":
@@ -1626,6 +1718,67 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                     entry[plan]["sites_gained"] = sites_gained(plan_facts["base"], facts, executed[plan])
         results[name] = entry
     return results
+
+
+def withhold_miss_attribution(scored: dict) -> None:
+    """Drop what ranks missed edges from a held-out package's score: causes and examples.
+
+    The outcome counts stay, and so do the false-complete examples."""
+    scored.pop("causes", None)
+    scored["outcome_examples"] = {
+        outcome: examples for outcome, examples in scored["outcome_examples"].items() if outcome == FALSE_COMPLETE
+    }
+
+
+def pooled_tier_recall(packages: dict, plan: str) -> dict:
+    """Recall per tier view over every observed edge of `packages`, pooled as the Tiers totals are."""
+    observed = 0
+    found = Counter()
+    for entry in packages.values():
+        scored = entry.get(plan, {})
+        if "tiers" not in scored:
+            continue
+        observed += scored["observed_edges"]
+        found.update(scored["tiers"]["found"])
+    return {
+        "observed_edges": observed,
+        **{view: ratio(found[view], observed) for view, _ in TIER_VIEWS},
+    }
+
+
+def held_out_gate(packages: dict, held_out: dict, plans: list[str]) -> dict:
+    """The held-out gate per plan: recall per tier against the tune set, and the wrong answers.
+
+    Flagged packages are left out of the recall comparison and kept in the wrong
+    answers: a wrong exact target or a false-complete answer counts wherever it is."""
+    counted = {name: entry for name, entry in held_out.items() if not entry["coverage"]["flagged"]}
+    result = {
+        "counted": sorted(counted),
+        "flagged": sorted(name for name in held_out if name not in counted),
+        "margin_points": HELD_OUT_MARGIN_POINTS,
+        "plans": {},
+    }
+    for plan in plans:
+        tune, held = pooled_tier_recall(packages, plan), pooled_tier_recall(counted, plan)
+        views = {}
+        for view, _ in TIER_VIEWS:
+            if view == "apart_only":
+                continue
+            gap = None if tune[view] is None or held[view] is None else round((tune[view] - held[view]) * 100, 1)
+            views[view] = {
+                "tune": tune[view],
+                "held_out": held[view],
+                "points_below_tune": gap,
+                "within": gap is not None and gap <= HELD_OUT_MARGIN_POINTS,
+            }
+        scored = [entry[plan] for entry in held_out.values() if "tiers" in entry.get(plan, {})]
+        result["plans"][plan] = {
+            "observed_edges": {"tune": tune["observed_edges"], "held_out": held["observed_edges"]},
+            "tiers": views,
+            "wrong_exact_targets": sum(s["tiers"]["precision"]["exact"]["single_target"] for s in scored),
+            "false_complete": sum(s["outcomes"].get(FALSE_COMPLETE, 0) for s in scored),
+        }
+    return result
 
 
 PREVIOUS_SET = "previous_set"
@@ -1885,7 +2038,7 @@ def add_per_mb(row: dict, source_bytes: int) -> None:
         row[tier]["analysis_wall_ms_per_mb"] = round(row[tier]["analysis_wall_ms"] / megabytes)
 
 
-def machine(launcher_peak_rss_bytes: int) -> dict:
+def machine(launcher_peak_rss_bytes: int, load_at_start: tuple[float, float, float]) -> dict:
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=bench.REPO_ROOT, capture_output=True, text=True
     ).stdout.strip()
@@ -1895,6 +2048,9 @@ def machine(launcher_peak_rss_bytes: int) -> dict:
         "python": platform.python_version(),
         "git_head": head,
         "launcher_peak_rss_bytes": launcher_peak_rss_bytes,
+        # One-, five- and fifteen-minute load averages when measuring started and ended.
+        "load_average_start": [round(value, 2) for value in load_at_start],
+        "load_average_end": [round(value, 2) for value in os.getloadavg()],
     }
 
 
@@ -2317,6 +2473,70 @@ def outside_tools():
     return score_outside
 
 
+def coverage_cell(entry: dict) -> str:
+    coverage = entry.get("coverage") or {}
+    if coverage.get("coverage") is None:
+        return "n/a"
+    cell = f"{frac(coverage['entered_census_functions'], coverage['census_functions'])}"
+    return f"{cell} (flagged)" if coverage["flagged"] else cell
+
+
+def render_held_out(report: dict, add) -> None:
+    """The held-out packages: the tune set's measures, apart, with no miss attribution."""
+    held_out = report["held_out"]
+    plans = list(report["plans"])
+    gate = report["held_out_gate"]
+    add("## Held-out packages")
+    add("")
+    add("Packages no analysis change may be tuned on (`research/package-graphs/HELD-OUT.md`). They get the tune")
+    add("set's measures with no gap ranking, no cause and no example of a missed edge. Wrong exact targets and")
+    add("answers with other targets and no unresolved marker keep their examples: either is a defect to fix.")
+    add(f"A package whose recording entered under {COVERAGE_FLOOR:.0%} of its functions is flagged and left out")
+    add("of the held-out recall.")
+    add("")
+    add("| package | format | files analysed / selected | source KB | census functions | entered | coverage | observed edges | " + " | ".join(f"recall {plan}" for plan in plans) + " |")
+    add("|---|---|---|---|---|---|---|---|" + "---|" * len(plans))
+    for name, entry in held_out.items():
+        coverage = entry["coverage"]
+        recalls = []
+        for plan in plans:
+            scored = entry.get(plan, {})
+            recalls.append(scored["error"] if "error" in scored else frac(scored["found"], scored["observed_edges"]))
+        add(
+            f"| {name} {entry['version']} | {entry['format']} | {entry.get('files', 'n/a')} / {entry['files_selected']} "
+            f"| {entry.get('source_bytes', 0) / 1000:.0f} | {coverage['census_functions'] if coverage['census_functions'] is not None else 'n/a'} "
+            f"| {coverage['entered_census_functions'] if coverage['entered_census_functions'] is not None else 'n/a'} "
+            f"| {coverage_cell(entry)} | {entry.get('base', {}).get('observed_edges', 'n/a')} | " + " | ".join(recalls) + " |"
+        )
+    add("")
+    add("### Held-out gate")
+    add("")
+    add(f"Recall per tier pooled over the tune set and over the unflagged held-out packages "
+        f"({', '.join(gate['counted']) or 'none'}; flagged: {', '.join(gate['flagged']) or 'none'}). "
+        f"The gate holds when held-out recall is at most {gate['margin_points']} points below the tune set's in every tier,")
+    add("and no held-out package, flagged or not, has a wrong exact target or an answer with other targets and no")
+    add("unresolved marker.")
+    add("")
+    add("| plan | tier | tune | held-out | points below tune | within |")
+    add("|---|---|---|---|---|---|")
+    labels = dict(TIER_VIEWS)
+    for plan in plans:
+        for view, row in gate["plans"][plan]["tiers"].items():
+            gap = "n/a" if row["points_below_tune"] is None else f"{row['points_below_tune']:.1f}"
+            add(f"| {plan} | {labels[view]} | {pct1(row['tune'])} | {pct1(row['held_out'])} | {gap} | {'yes' if row['within'] else 'no'} |")
+    add("")
+    add("| plan | wrong exact targets | other targets, no unresolved marker |")
+    add("|---|---|---|")
+    for plan in plans:
+        row = gate["plans"][plan]
+        add(f"| {plan} | {row['wrong_exact_targets']} | {row['false_complete']} |")
+    add("")
+    held_report = {**report, "packages": held_out}
+    render_wrong_targets(held_report, add)
+    render_false_complete(held_report, add)
+    render_tier_sections(held_out, plans, add, " (held-out)")
+
+
 def render_markdown(report: dict) -> str:
     out = []
     add = out.append
@@ -2421,8 +2641,11 @@ def render_markdown(report: dict) -> str:
     add("Recall is over observed edges at call expressions (`call` and `callback`); `implicit` calls (getters,")
     add("coercions, iterator and thenable protocol) have no call expression and are listed by kind only.")
     add("")
-    add("| package | format | files analysed / selected | source KB | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |")
-    add("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    add("Coverage is the share of the analysed files' functions (syntax census, classes and static blocks left out)")
+    add("that the recording entered.")
+    add("")
+    add("| package | format | files analysed / selected | source KB | coverage | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for name, entry in report["packages"].items():
         base, refined = entry.get("base", {}), entry.get("refined", {})
 
@@ -2447,7 +2670,7 @@ def render_markdown(report: dict) -> str:
         )
         add(
             f"| {name} {entry['version']} | {entry['format']} | {entry.get('files', 'n/a')} / {entry['files_selected']} "
-            f"| {entry.get('source_bytes', 0) / 1000:.0f} | {base.get('observed_edges', 'n/a')} "
+            f"| {entry.get('source_bytes', 0) / 1000:.0f} | {coverage_cell(entry)} | {base.get('observed_edges', 'n/a')} "
             f"| {recall(base)} | {recall(refined)} "
             f"| {base.get('outcomes', {}).get('stops at import binding', 0)} | {unmappable} "
             f"| {pct(base.get('unresolved_calls', {}).get('marked_unresolved_share'))} | {without} "
@@ -2501,14 +2724,19 @@ def render_markdown(report: dict) -> str:
     if report.get("outside") is not None:
         outside_tools().render(report["outside"], report["packages"], list(report["plans"]), add)
 
+    if report.get("held_out"):
+        render_held_out(report, add)
+
     add("## Exports (against the loaded module's export keys)")
     add("")
     add("`Symbols` is the exported-symbol answer a rule can read; export facts are the module export rows.")
-    add("Both are compared with the export keys the loaded module actually has.")
+    add("Both are compared with the export keys the loaded module actually has. A file that fails to load")
+    add("on its own is left out of both and counted under `load errors`.")
     add("")
-    add("| tree | files exact (Symbols) | name recall (Symbols) | name precision (Symbols) | files exact (export facts) | name recall (export facts) | name precision (export facts) | export fact rows by kind/status |")
-    add("|---|---|---|---|---|---|---|---|")
+    add("| tree | files exact (Symbols) | name recall (Symbols) | name precision (Symbols) | files exact (export facts) | name recall (export facts) | name precision (export facts) | export fact rows by kind/status | load errors |")
+    add("|---|---|---|---|---|---|---|---|---|")
     rows = [(f"package {n}", e.get("exports")) for n, e in report["packages"].items()]
+    rows += [(f"held-out package {n}", e.get("exports")) for n, e in report.get("held_out", {}).items()]
     rows += [(f"case {n}", e.get("exports")) for n, e in sorted(report["constructs"]["cases"].items())]
     for name, exports in rows:
         if not exports or not exports["symbols"]["files"] + exports["facts"]["files"]:
@@ -2518,7 +2746,8 @@ def render_markdown(report: dict) -> str:
         add(
             f"| {name} | {s['files_exact']}/{s['files']} | {frac(s['matched_names'], s['observed_names'])} "
             f"| {frac(s['matched_names'], s['predicted_names'])} | {f['files_exact']}/{f['files']} "
-            f"| {frac(f['matched_names'], f['observed_names'])} | {frac(f['matched_names'], f['predicted_names'])} | {statuses} |"
+            f"| {frac(f['matched_names'], f['observed_names'])} | {frac(f['matched_names'], f['predicted_names'])} | {statuses} "
+            f"| {exports.get('load_errors', 0)} |"
         )
     add("")
 
@@ -2529,7 +2758,9 @@ def render_markdown(report: dict) -> str:
         add("Not measured in this run (`--no-cost`).")
     else:
         add("The only part of this report that changes between runs. Machine: "
-            f"{cost['machine']['platform']}, {cost['machine']['cpus']} CPUs, commit {cost['machine']['git_head'][:12]}.")
+            f"{cost['machine']['platform']}, {cost['machine']['cpus']} CPUs, commit {cost['machine']['git_head'][:12]}, "
+            f"load average {load_line(cost['machine'].get('load_average_start'))} at the start and "
+            f"{load_line(cost['machine'].get('load_average_end'))} at the end (1, 5, 15 minutes).")
         add("")
         add(f"`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, "
             f"`References`; median of {cost['runs']} runs. `analysis` is the in-process cost record "
@@ -2565,12 +2796,47 @@ def render_markdown(report: dict) -> str:
                 f"| {row['refined']['peak_rss_bytes'] / MB:.0f} | {report['dump_budgets_s'].get(name, 'none')} |"
             )
     add("")
+    render_stage_times(report, add)
     add("## Decisions recorded by this run")
     add("")
     for decision in report["decisions"]:
         add(f"- {decision}")
     add("")
     return "\n".join(out)
+
+
+def load_line(load: list[float] | None) -> str:
+    return "not recorded" if not load else " / ".join(f"{value:.2f}" for value in load)
+
+
+SEMANTIC_GRAPH_STAGE = "polint.semantic_graph"
+
+
+def render_stage_times(report: dict, add) -> None:
+    """The three largest provider stages of every fact dump, from the kernel's stage log."""
+    add("### Stage times")
+    add("")
+    add(f"Every fact dump runs with `RUST_LOG={STAGE_LOG}`; each provider's `stage done` lines are summed. "
+        "Stage times are as noisy as the dump times above. `semantic_graph share` is the "
+        f"`{SEMANTIC_GRAPH_STAGE}` stage's part of the refined plan's summed stage time. Peak MB is the process "
+        "peak when the stage ended.")
+    add("")
+    add("| tree | plan | stage total s | largest stages: s (peak MB) | semantic_graph share |")
+    add("|---|---|---|---|---|")
+    for name, plans in report["dump_cost"].items():
+        for plan, row in plans.items():
+            stages = row.get("stages") or {}
+            total = sum(stage["elapsed_ms"] for stage in stages.values())
+            largest = sorted(stages.items(), key=lambda item: (-item[1]["elapsed_ms"], item[0]))[:3]
+            listed = ", ".join(
+                f"`{provider.removeprefix('polint.')}` {stage['elapsed_ms'] / 1000:.1f} ({stage['peak_rss_mb']})"
+                for provider, stage in largest
+            ) or "no stage log"
+            share = "n/a"
+            if plan == "refined" and total:
+                share = pct(stages.get(SEMANTIC_GRAPH_STAGE, {}).get("elapsed_ms", 0) / total)
+            add(f"| {name} | {plan} | {total / 1000:.1f} | {listed} | {share} |")
+    add("")
 
 
 DECISIONS = [
@@ -2637,6 +2903,8 @@ def run(args) -> int:
     if typescript is not None:
         PLANS[TYPED_PLAN] = PLANS["refined"]
     polint, test_binary = build(args)
+    # The machine's load once the build is done, before anything is measured.
+    load_at_start = os.getloadavg()
     version = subprocess.run([str(polint), "--version"], capture_output=True, text=True, check=True).stdout.split()[-1]
 
     budgets = {package["name"]: package["dump_budget_s"] for package in inputs["package"] if "dump_budget_s" in package}
@@ -2690,12 +2958,14 @@ def run(args) -> int:
         # Every measured process is started before any dump is loaded. A child's
         # peak RSS from wait4 starts at this process's own resident size when it
         # forks, so this process must stay small while it measures.
+        tune_names = [package["name"] for package in inputs["package"] if not package.get("held_out")]
         check_cost = None
         if not args.no_cost:
             constructs_tree = scratch / "cost-constructs"
             for case_id, tree in case_trees.items():
                 shutil.copytree(tree, constructs_tree / case_id)
-            cost_trees = {"constructs (all cases)": constructs_tree, **package_trees}
+            # The cost runs measure the tune set, the set the cost targets are stated on.
+            cost_trees = {"constructs (all cases)": constructs_tree, **{name: package_trees[name] for name in tune_names}}
             check_cost = measure_cost(polint, cost_trees, scratch, args.cost_runs, args.dump_timeout)
         launcher_peak_rss_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
         if args.keep_dumps:
@@ -2705,7 +2975,9 @@ def run(args) -> int:
 
         case_results = score_constructs(cases, dumps)
         hidden_lines = sum(len(e["base"].get("unknown_lines", [])) for e in case_results.values())
-        packages = score_packages(inputs, dumps)
+        scored_packages = score_packages(inputs, dumps)
+        packages = {name: entry for name, entry in scored_packages.items() if not entry["held_out"]}
+        held_out = {name: entry for name, entry in scored_packages.items() if entry["held_out"]}
         comparisons = score_previous_sets(inputs, dumps, packages)
         report = {
             "schema": REPORT_SCHEMA,
@@ -2736,6 +3008,8 @@ def run(args) -> int:
                 "cases": case_results,
             },
             "packages": packages,
+            "held_out": held_out,
+            "held_out_gate": held_out_gate(packages, held_out, list(PLANS)),
             "dump_budgets_s": budgets,
             # One fact dump per package and plan, kept even without the cost runs.
             "dump_cost": {
@@ -2761,15 +3035,15 @@ def run(args) -> int:
                     if dumps[("case", case_id, "base")]["dump"] is not None
                 ),
             )
-            for name in package_trees:
+            for name in tune_names:
                 add_per_mb(check_cost[name], report["packages"][name].get("source_bytes", 0))
             report["cost"] = {
-                "machine": machine(launcher_peak_rss_bytes),
+                "machine": machine(launcher_peak_rss_bytes, load_at_start),
                 "runs": args.cost_runs,
                 "check": check_cost,
                 "dump": {
                     name: {plan: {**dumps[("package", name, plan)]["cost"], "error": dumps[("package", name, plan)]["error"]} for plan in PLANS}
-                    for name in package_trees
+                    for name in tune_names
                 },
             }
 

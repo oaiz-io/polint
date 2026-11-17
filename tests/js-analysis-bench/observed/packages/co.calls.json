@@ -1,0 +1,248 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "index.js"
+  ],
+  "instrumented_functions": 20,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "index.js@1252..1412",
+      "name": "onFulfilled"
+    },
+    {
+      "function": "index.js@1506..1666",
+      "name": "onRejected"
+    },
+    {
+      "function": "index.js@1837..2231",
+      "name": "next"
+    },
+    {
+      "function": "index.js@2357..2732",
+      "name": "toPromise"
+    },
+    {
+      "function": "index.js@2837..3108",
+      "name": "thunkToPromise"
+    },
+    {
+      "function": "index.js@2906..3104",
+      "name": ""
+    },
+    {
+      "function": "index.js@2952..3098",
+      "name": ""
+    },
+    {
+      "function": "index.js@3267..3347",
+      "name": "arrayToPromise"
+    },
+    {
+      "function": "index.js@3508..4110",
+      "name": "objectToPromise"
+    },
+    {
+      "function": "index.js@3879..3916",
+      "name": ""
+    },
+    {
+      "function": "index.js@3922..4108",
+      "name": "defer"
+    },
+    {
+      "function": "index.js@4053..4101",
+      "name": ""
+    },
+    {
+      "function": "index.js@413..584",
+      "name": "wrap"
+    },
+    {
+      "function": "index.js@4216..4283",
+      "name": "isPromise"
+    },
+    {
+      "function": "index.js@4390..4493",
+      "name": "isGenerator"
+    },
+    {
+      "function": "index.js@4608..4873",
+      "name": "isGeneratorFunction"
+    },
+    {
+      "function": "index.js@4973..5035",
+      "name": "isObject"
+    },
+    {
+      "function": "index.js@499..582",
+      "name": "createPromise"
+    },
+    {
+      "function": "index.js@733..2239",
+      "name": "co"
+    },
+    {
+      "function": "index.js@979..2235",
+      "name": ""
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "index.js@1144..1157",
+      "syntax": "identifier",
+      "callee": "index.js@1252..1412",
+      "callee_name": "onFulfilled"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@1396..1405",
+      "syntax": "identifier",
+      "callee": "index.js@1837..2231",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@1650..1659",
+      "syntax": "identifier",
+      "callee": "index.js@1837..2231",
+      "callee_name": "next"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@1923..1953",
+      "syntax": "member",
+      "callee": "index.js@2357..2732",
+      "callee_name": "toPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@1974..1990",
+      "syntax": "identifier",
+      "callee": "index.js@4216..4283",
+      "callee_name": "isPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2049..2224",
+      "syntax": "identifier",
+      "callee": "index.js@1506..1666",
+      "callee_name": "onRejected"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2413..2427",
+      "syntax": "identifier",
+      "callee": "index.js@4216..4283",
+      "callee_name": "isPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2447..2471",
+      "syntax": "identifier",
+      "callee": "index.js@4608..4873",
+      "callee_name": "isGeneratorFunction"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2475..2491",
+      "syntax": "identifier",
+      "callee": "index.js@4390..4493",
+      "callee_name": "isGenerator"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2500..2518",
+      "syntax": "member",
+      "callee": "index.js@733..2239",
+      "callee_name": "co"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2559..2589",
+      "syntax": "member",
+      "callee": "index.js@2837..3108",
+      "callee_name": "thunkToPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2624..2654",
+      "syntax": "member",
+      "callee": "index.js@3267..3347",
+      "callee_name": "arrayToPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2662..2675",
+      "syntax": "identifier",
+      "callee": "index.js@4973..5035",
+      "callee_name": "isObject"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@2684..2715",
+      "syntax": "member",
+      "callee": "index.js@3508..4110",
+      "callee_name": "objectToPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3713..3743",
+      "syntax": "member",
+      "callee": "index.js@2357..2732",
+      "callee_name": "toPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3764..3782",
+      "syntax": "identifier",
+      "callee": "index.js@4216..4283",
+      "callee_name": "isPromise"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@3784..3803",
+      "syntax": "identifier",
+      "callee": "index.js@3922..4108",
+      "callee_name": "defer"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@4836..4870",
+      "syntax": "identifier",
+      "callee": "index.js@4390..4493",
+      "callee_name": "isGenerator"
+    },
+    {
+      "kind": "call",
+      "site": "index.js@537..577",
+      "syntax": "member",
+      "callee": "index.js@733..2239",
+      "callee_name": "co"
+    },
+    {
+      "kind": "callback",
+      "site": "index.js@2894..3105",
+      "syntax": "new",
+      "callee": "index.js@2906..3104",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "index.js@3319..3343",
+      "syntax": "member",
+      "callee": "index.js@2357..2732",
+      "callee_name": "toPromise"
+    },
+    {
+      "kind": "callback",
+      "site": "index.js@967..2236",
+      "syntax": "new",
+      "callee": "index.js@979..2235",
+      "callee_name": ""
+    }
+  ]
+}

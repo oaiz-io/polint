@@ -1,0 +1,352 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "index.js": {
+      "system": "cjs",
+      "names": [
+        "CORE_SCHEMA",
+        "DEFAULT_SCHEMA",
+        "FAILSAFE_SCHEMA",
+        "JSON_SCHEMA",
+        "Schema",
+        "Type",
+        "YAMLException",
+        "dump",
+        "load",
+        "loadAll",
+        "safeDump",
+        "safeLoad",
+        "safeLoadAll",
+        "types"
+      ],
+      "whole_value": "object"
+    },
+    "lib/common.js": {
+      "system": "cjs",
+      "names": [
+        "extend",
+        "isNegativeZero",
+        "isNothing",
+        "isObject",
+        "repeat",
+        "toArray"
+      ],
+      "whole_value": "object"
+    },
+    "lib/dumper.js": {
+      "system": "cjs",
+      "names": [
+        "dump"
+      ],
+      "whole_value": "object"
+    },
+    "lib/exception.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "lib/loader.js": {
+      "system": "cjs",
+      "names": [
+        "load",
+        "loadAll"
+      ],
+      "whole_value": "object"
+    },
+    "lib/schema.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "lib/schema/core.js": {
+      "system": "cjs",
+      "names": [
+        "compiledExplicit",
+        "compiledImplicit",
+        "compiledTypeMap",
+        "explicit",
+        "implicit"
+      ],
+      "whole_value": "object"
+    },
+    "lib/schema/default.js": {
+      "system": "cjs",
+      "names": [
+        "compiledExplicit",
+        "compiledImplicit",
+        "compiledTypeMap",
+        "explicit",
+        "implicit"
+      ],
+      "whole_value": "object"
+    },
+    "lib/schema/failsafe.js": {
+      "system": "cjs",
+      "names": [
+        "compiledExplicit",
+        "compiledImplicit",
+        "compiledTypeMap",
+        "explicit",
+        "implicit"
+      ],
+      "whole_value": "object"
+    },
+    "lib/schema/json.js": {
+      "system": "cjs",
+      "names": [
+        "compiledExplicit",
+        "compiledImplicit",
+        "compiledTypeMap",
+        "explicit",
+        "implicit"
+      ],
+      "whole_value": "object"
+    },
+    "lib/snippet.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "lib/type.js": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "function"
+    },
+    "lib/type/binary.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/bool.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/float.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/int.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/map.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/merge.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/null.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/omap.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/pairs.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/seq.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/set.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/str.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    },
+    "lib/type/timestamp.js": {
+      "system": "cjs",
+      "names": [
+        "construct",
+        "defaultStyle",
+        "instanceOf",
+        "kind",
+        "multi",
+        "options",
+        "predicate",
+        "represent",
+        "representName",
+        "resolve",
+        "styleAliases",
+        "tag"
+      ],
+      "whole_value": "object"
+    }
+  }
+}
