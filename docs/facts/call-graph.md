@@ -137,6 +137,15 @@ limits:
 `ctx.completeness().status_for("call_graph")` reports whether the run
 finished, hit a budget, or left unknown call sites.
 
+## TypeScript and JavaScript call sites
+
+Every call written in a TS/JS function is a call site of that function,
+including calls in parameter defaults (`function f(x = g())`), destructuring
+defaults and computed keys (`const { a = g() } = o`), and the operands of
+unary and binary expressions (`!function () { ... }()`). A call through a
+comma sequence, `(0, m.f)(x)` as compilers emit for imports, is a call of its
+last operand, `m.f`, run with `this` undefined.
+
 ## Optional use
 
 A rule that can do without the graph requests `Option<CallGraph<'_>>`. When the
