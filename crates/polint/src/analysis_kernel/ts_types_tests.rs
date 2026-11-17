@@ -335,6 +335,168 @@ fn an_any_receiver_never_produces_a_confident_typed_edge() {
     );
 }
 
+/// A JavaScript repository whose calls the checker types without choosing
+/// what runs.
+///
+/// Each binding below holds a value the checker cannot vouch for at the call:
+/// `reb` is reassigned elsewhere, `isFn` is whatever a factory returned,
+/// `target.parse` is assigned in two places, and `this.missing()` names no
+/// member at all. The remaining calls are ones the checker does answer: a
+/// parenthesised function called where it is written, a constructor, `super`,
+/// and methods declared once.
+fn write_binding_repo(root: &Path) {
+    std::fs::write(
+        root.join("tsconfig.json"),
+        "{\"compilerOptions\":{\"allowJs\":true,\"checkJs\":false,\"target\":\"ES2022\",\
+         \"module\":\"commonjs\",\"noEmit\":true},\"include\":[\"src/**/*\"]}",
+    )
+    .expect("write tsconfig");
+    std::fs::create_dir_all(root.join("src")).expect("create src");
+    std::fs::write(
+        root.join("src/cases.js"),
+        "class Base {\n  constructor(n) { this.n = n; }\n  hello() { return this.n; }\n}\n\
+         class Kid extends Base {\n  constructor() { super(1); }\n  \
+         run() { return this.missing(); }\n}\n\
+         function makeCheck(tag) { return function (v) { return typeof v === tag; }; }\n\
+         const isFn = makeCheck('function');\n\
+         let reb = function first() { return 1; };\n\
+         function swap() { reb = function second() { return 2; }; }\n\
+         const target = {};\n\
+         target.parse = function parseA(v) { return v; };\n\
+         function rebind() { target.parse = function parseB(v) { return -v; }; }\n\
+         function run() {\n  const kid = new Kid();\n  kid.run();\n  isFn(1);\n  reb();\n  \
+         target.parse(1);\n  (function iife() { return 3; })();\n  return kid.hello();\n}\n\
+         module.exports = { run, swap, rebind };\n",
+    )
+    .expect("write cases");
+}
+
+/// The names of the targets typed edges claim at the native call whose span
+/// is exactly `needle` in `file`, split into exact and weaker claims.
+fn typed_claims_at(
+    output: &crate::analysis_kernel::KernelOutput,
+    root: &Path,
+    file: &str,
+    needle: &str,
+) -> (
+    std::collections::BTreeSet<String>,
+    std::collections::BTreeSet<String>,
+) {
+    use crate::analysis_neutral::calls::facts::CallPrecision;
+    let source = std::fs::read_to_string(root.join(file)).expect("read source");
+    let start = source.find(needle).unwrap_or_else(|| panic!("{needle} is in {file}")) as u32;
+    let end = start + needle.len() as u32;
+    let site = output
+        .db
+        .call_sites()
+        .iter()
+        .find(|site| site.span.start_byte == start && site.span.end_byte == end)
+        .unwrap_or_else(|| panic!("the syntax frontend records `{needle}` as a call"));
+    let functions = output
+        .db
+        .functions()
+        .iter()
+        .map(|function| (function.id, function.name.clone()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut exact = std::collections::BTreeSet::new();
+    let mut weaker = std::collections::BTreeSet::new();
+    for edge in output.db.refined_call_edges() {
+        if edge.tier != RefinedCallTier::TypeDirected || edge.site != site.id {
+            continue;
+        }
+        let Some(name) = edge
+            .target_function
+            .and_then(|id| functions.get(&id).cloned())
+        else {
+            continue;
+        };
+        if matches!(
+            edge.precision,
+            CallPrecision::Exact | CallPrecision::SetupAware
+        ) {
+            exact.insert(name);
+        } else {
+            weaker.insert(name);
+        }
+    }
+    (exact, weaker)
+}
+
+#[test]
+fn a_binding_that_can_hold_another_value_is_never_an_exact_answer() {
+    let Some(typescript) =
+        skip_without_typescript("a_binding_that_can_hold_another_value_is_never_an_exact_answer")
+    else {
+        return;
+    };
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_binding_repo(temp.path());
+
+    let output = run_dispatch_repo(temp.path(), &typescript);
+    let claims = |needle: &str| typed_claims_at(&output, temp.path(), "src/cases.js", needle);
+
+    for needle in ["reb()", "isFn(1)", "target.parse(1)"] {
+        let (exact, _) = claims(needle);
+        assert!(
+            exact.is_empty(),
+            "`{needle}` reads a binding that can hold another value, so no target is exact: \
+             {exact:?}"
+        );
+    }
+    let (exact, weaker) = claims("this.missing()");
+    assert!(
+        exact.is_empty() && weaker.is_empty(),
+        "a call to a member nobody declares has no typed target, least of all the class: \
+         exact {exact:?}, weaker {weaker:?}"
+    );
+}
+
+#[test]
+fn a_call_the_checker_answers_keeps_its_exact_target() {
+    let Some(typescript) = skip_without_typescript("a_call_the_checker_answers_keeps_its_exact_target")
+    else {
+        return;
+    };
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_binding_repo(temp.path());
+
+    let output = run_dispatch_repo(temp.path(), &typescript);
+    let claims = |needle: &str| typed_claims_at(&output, temp.path(), "src/cases.js", needle);
+
+    for (needle, target) in [
+        ("new Kid()", "Kid"),
+        ("super(1)", "Base"),
+        ("kid.run()", "Kid.run"),
+        ("kid.hello()", "Base.hello"),
+    ] {
+        let (exact, _) = claims(needle);
+        assert_eq!(
+            exact,
+            std::collections::BTreeSet::from([target.to_string()]),
+            "`{needle}` is answered by the checker"
+        );
+    }
+    let (exact, _) = typed_claims_at(
+        &output,
+        temp.path(),
+        "src/cases.js",
+        "function iife() { return 3; })()",
+    );
+    // Native extraction names a function expression no binding holds by its
+    // span, whatever name the expression gives itself.
+    let source = std::fs::read_to_string(temp.path().join("src/cases.js")).expect("read cases");
+    let body = "function iife() { return 3; }";
+    let start = source.find(body).expect("iife is in cases.js");
+    assert_eq!(
+        exact,
+        std::collections::BTreeSet::from([format!(
+            "<polint:anonymous:{start}:{}>",
+            start + body.len()
+        )]),
+        "a function called where it is written runs exactly that function"
+    );
+}
+
 /// Whether `edge` hangs off the native call site the sidecar span describes.
 ///
 /// Both ends are compared: `new Loud().louder().greet('x')` is three calls that
