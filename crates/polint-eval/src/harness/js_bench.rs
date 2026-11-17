@@ -648,6 +648,100 @@ mod tests {
         assert_eq!(at("calls", "g()")["this_receiver"], false);
     }
 
+    const FUNCTION_KEYS_UPDATE_ENV: &str = "POLINT_UPDATE_JS_BENCH_FUNCTION_KEYS";
+
+    fn bench_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/js-analysis-bench")
+            .canonicalize()
+            .expect("benchmark directory")
+    }
+
+    fn copy_case(source: &Path, destination: &Path) {
+        std::fs::create_dir_all(destination).expect("create case copy");
+        for entry in std::fs::read_dir(source).expect("read case directory") {
+            let entry = entry.expect("case entry");
+            let target = destination.join(entry.file_name());
+            if entry.file_type().expect("entry type").is_dir() {
+                copy_case(&entry.path(), &target);
+            } else {
+                std::fs::copy(entry.path(), &target).expect("copy case file");
+            }
+        }
+    }
+
+    /// `<family>/<case>\t<function key>` for every function polint extracts
+    /// from every construct case, analysed as the benchmark stages it: a copy
+    /// outside the checkout, with an `.ignore` that hides nothing.
+    fn construct_function_keys() -> Vec<String> {
+        let constructs = bench_root().join("constructs");
+        let scratch = tempfile::tempdir().expect("scratch directory");
+        std::fs::write(scratch.path().join(".ignore"), "!*\n").expect("write .ignore");
+        let mut keys = Vec::new();
+        let mut families: Vec<_> = std::fs::read_dir(&constructs)
+            .expect("read constructs")
+            .map(|entry| entry.expect("family entry").path())
+            .filter(|path| path.is_dir())
+            .collect();
+        families.sort();
+        for family in families {
+            let mut cases: Vec<_> = std::fs::read_dir(&family)
+                .expect("read family")
+                .map(|entry| entry.expect("case entry").path())
+                .filter(|path| path.join("case.toml").is_file())
+                .collect();
+            cases.sort();
+            for case in cases {
+                let id = case
+                    .strip_prefix(&constructs)
+                    .expect("case under constructs")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let tree = scratch.path().join(&id);
+                copy_case(&case, &tree);
+                let document = dump_tree(&tree, &["syntax"], false)
+                    .unwrap_or_else(|error| panic!("analyse {id}: {error:#}"));
+                for function in document["functions"].as_array().expect("functions") {
+                    let key = function["key"].as_str().expect("function key");
+                    keys.push(format!("{id}\t{key}"));
+                }
+            }
+        }
+        keys.sort();
+        keys
+    }
+
+    /// A function's key is its path, span and name, the same parts as its
+    /// stable key, so a key that disappears from a construct case is a
+    /// renamed or lost function: identities that recorded edges, stored
+    /// graphs and corrections hold would no longer match. Extraction may
+    /// add functions; it may not change the ones it already reports. With
+    /// `POLINT_UPDATE_JS_BENCH_FUNCTION_KEYS=1` the committed list is
+    /// rewritten from this run instead.
+    #[test]
+    fn construct_function_keys_keep_every_committed_key() {
+        let committed_path = bench_root().join("function-keys.txt");
+        let current = construct_function_keys();
+        if std::env::var_os(FUNCTION_KEYS_UPDATE_ENV).is_some_and(|value| value == "1") {
+            let mut text = current.join("\n");
+            text.push('\n');
+            std::fs::write(&committed_path, text).expect("write function keys");
+            return;
+        }
+        let committed = std::fs::read_to_string(&committed_path).expect("read function keys");
+        let current: std::collections::BTreeSet<&str> =
+            current.iter().map(String::as_str).collect();
+        let missing: Vec<&str> = committed
+            .lines()
+            .filter(|line| !line.is_empty() && !current.contains(line))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "construct functions lost or renamed (set {FUNCTION_KEYS_UPDATE_ENV}=1 only when the change is intended):\n{}",
+            missing.join("\n")
+        );
+    }
+
     #[test]
     fn sorted_rows_do_not_depend_on_input_order() {
         let forward = sorted([json!({"a": 1}), json!({"a": 2})].into_iter());
