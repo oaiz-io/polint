@@ -6,6 +6,7 @@ use crate::internal_core::{StableKeyId, StableKeyInterner};
 
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::store::AdaptationModelStore;
+use crate::analysis_neutral::calls::facts::{CallCallee, CallSiteFact};
 use crate::analysis_neutral::ids::{PlaceId, ScopeId, SemanticNodeId};
 use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
 use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
@@ -259,6 +260,11 @@ impl SemanticGraphBuilder {
                     .map(|node| (function.id, node))
             })
             .collect();
+        let place_key_by_id: BTreeMap<PlaceId, Arc<str>> = db
+            .mir_places()
+            .iter()
+            .map(|place| (place.id, interner.resolve(place.stable_key)))
+            .collect();
 
         for site in db.call_sites() {
             if !self.projects(site.language) {
@@ -274,13 +280,42 @@ impl SemanticGraphBuilder {
                 self.push_edge(interner, EdgeKind::Call, caller_node, callsite_node);
             }
             // CallConstraint anchored at the callsite node — one per call site.
-            self.push_constraint(
-                interner,
-                ConstraintKind::CallConstraint {
-                    callsite: callsite_node,
-                },
-                &interner.resolve(site.stable_key),
-            );
+            let constraint = if site.language.is_ts_family() {
+                self.ts_call_constraint(interner, &place_key_by_id, site, callsite_node)
+            } else {
+                ConstraintKind::call_at(callsite_node)
+            };
+            self.push_constraint(interner, constraint, &interner.resolve(site.stable_key));
+        }
+    }
+
+    /// The call shape of a TS call site: its callee value, receiver and result,
+    /// each where the site names a place with a stable identity. Arguments
+    /// stay empty: the MIR argument list leaves out arguments that lower to no
+    /// place and does not mark a spread, so its indexes are not positions.
+    fn ts_call_constraint(
+        &mut self,
+        interner: &StableKeyInterner,
+        place_key_by_id: &BTreeMap<PlaceId, Arc<str>>,
+        site: &CallSiteFact,
+        callsite: SemanticNodeId,
+    ) -> ConstraintKind {
+        let mut place_node = |place: PlaceId| {
+            place_key_by_id.get(&place).map(|stable| {
+                self.intern_node(interner, NodeKind::Place(place), place_node_key(stable))
+            })
+        };
+        let callee = match site.callee {
+            CallCallee::FunctionValue { place } => place_node(place),
+            _ => None,
+        };
+        ConstraintKind::CallConstraint {
+            callsite,
+            callee,
+            receiver: site.receiver.and_then(&mut place_node),
+            arguments: Vec::new(),
+            spread_from: None,
+            result: site.result.and_then(&mut place_node),
         }
     }
 

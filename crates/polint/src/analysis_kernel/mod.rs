@@ -3232,6 +3232,88 @@ function cleanup(value: string) {{ return value.trim(); }}
         );
     }
 
+    #[cfg(feature = "lang-typescript")]
+    #[test]
+    fn ts_function_returns_copy_into_their_return_place_below_the_exact_tier() {
+        use crate::analysis_neutral::calls::facts::CallPrecision;
+        use crate::analysis_neutral::points_to::facts::PointsToPrecision;
+        use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
+        use crate::analysis_neutral::semantic_graph::facts::NodeKind;
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("app.ts"),
+            "export function make() { const made = function () {}; return made; }\n\
+             export function run() { const got = make(); got(); }\n",
+        )
+        .expect("write ts");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let output = AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel should run");
+
+        let make = output
+            .db
+            .functions()
+            .iter()
+            .find(|function| function.name == "make")
+            .expect("make is a function")
+            .id;
+        let nodes = output.db.semantic_nodes();
+        let ret = nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::FunctionReturn(make))
+            .expect("make has a return place")
+            .id;
+        assert!(
+            nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::FunctionThis(make)),
+            "make has a this place"
+        );
+        let returns = output
+            .db
+            .semantic_constraints()
+            .iter()
+            .filter(|constraint| {
+                matches!(constraint.kind, ConstraintKind::CopyEdge { dst, .. } if dst == ret)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            returns.len(),
+            1,
+            "one return copies into make's return place"
+        );
+        assert_eq!(returns[0].precision, PointsToPrecision::SummaryProjected);
+        let run = output
+            .db
+            .functions()
+            .iter()
+            .find(|function| function.name == "run")
+            .expect("run is a function")
+            .id;
+        for edge in output
+            .db
+            .refined_call_edges()
+            .iter()
+            .filter(|edge| edge.caller == run && edge.target_function != Some(make))
+        {
+            assert_ne!(
+                edge.precision,
+                CallPrecision::Exact,
+                "a call through a returned value is never exact: {edge:?}"
+            );
+        }
+    }
+
     #[test]
     fn kernel_run_report_synthetic_manifest_consumption_helpers_are_removed_from_kernel() {
         let source = std::fs::read_to_string(

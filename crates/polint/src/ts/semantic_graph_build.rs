@@ -188,6 +188,7 @@ fn build_semantic_graph_with_inputs<H: AnalysisHost>(
     builder.project_adaptation_models(interner, adaptation_models);
     builder.project_member_of_edges(db);
     builder.project_value_constraints(db);
+    builder.project_ts_function_places(db);
     // TypeConstraint intentionally emits zero rows in this pass (see module docs).
     // The base places for access-path projections are already projected as nodes
     // above.
@@ -533,9 +534,7 @@ impl GraphBuilder {
             };
             self.inner.push_constraint_with_origin(
                 interner,
-                ConstraintKind::CallConstraint {
-                    callsite: callsite_node,
-                },
+                ConstraintKind::call_at(callsite_node),
                 &interner.resolve(binding.stable_key),
                 TS_DIRECT_BINDING_ORIGIN,
             );
@@ -664,7 +663,7 @@ impl GraphBuilder {
             );
             self.inner.push_constraint_with_precision(
                 &interner,
-                ConstraintKind::CallConstraint { callsite },
+                ConstraintKind::call_at(callsite),
                 &identity,
                 PointsToPrecision::Heuristic,
             );
@@ -759,7 +758,7 @@ impl GraphBuilder {
             ) {
                 self.push_constraint(
                     interner,
-                    ConstraintKind::CallConstraint { callsite },
+                    ConstraintKind::call_at(callsite),
                     &interner.resolve(read.stable_key),
                 );
                 // The loaded property value is the callee. Keep that flow in
@@ -799,7 +798,7 @@ impl GraphBuilder {
             ) {
                 self.push_constraint(
                     interner,
-                    ConstraintKind::CallConstraint { callsite },
+                    ConstraintKind::call_at(callsite),
                     &interner.resolve(binding.stable_key),
                 );
             }
@@ -841,6 +840,89 @@ impl GraphBuilder {
 
     fn project_value_constraints(&mut self, db: &impl AnalysisHost) {
         self.inner.project_value_constraints(db);
+    }
+
+    // -- per-function places ------------------------------------------------
+
+    /// Gives every TS function its `this` and return places, and copies what
+    /// each `return` hands back into the return place. The return copy is
+    /// `SummaryProjected`: it merges every path of the function and leaves out
+    /// returned values that lower to no place, so a call result read through
+    /// it is never an exact claim.
+    fn project_ts_function_places(&mut self, db: &impl AnalysisHost) {
+        use crate::analysis_neutral::mir_op::{MirOperationKind, MirValue};
+        use crate::analysis_neutral::points_to::facts::PointsToPrecision;
+        let interner_handle = db.stable_key_interner();
+        let interner = &interner_handle;
+        let mut returns = BTreeMap::new();
+        for function in db.functions() {
+            if !function.language.is_ts_family() {
+                continue;
+            }
+            let key = function_node_key(db, function);
+            if self.node_for_key(interner, &key).is_none() {
+                continue;
+            }
+            self.inner.intern_node(
+                interner,
+                NodeKind::FunctionThis(function.id),
+                node_key_from_identity("function_this", &key),
+            );
+            let ret = self.inner.intern_node(
+                interner,
+                NodeKind::FunctionReturn(function.id),
+                node_key_from_identity("function_return", &key),
+            );
+            returns.insert(function.id, ret);
+        }
+        if returns.is_empty() {
+            return;
+        }
+        let function_by_body = db
+            .mir_bodies()
+            .iter()
+            .map(|body| (body.id, body.function))
+            .collect::<BTreeMap<_, _>>();
+        let place_key_by_id = db
+            .mir_places()
+            .iter()
+            .map(|place| (place.id, interner.resolve(place.stable_key)))
+            .collect::<BTreeMap<_, _>>();
+        let result_by_site = db
+            .call_sites()
+            .iter()
+            .filter_map(|site| site.result.map(|result| (site.id, result)))
+            .collect::<BTreeMap<_, _>>();
+        for operation in db.mir_operations() {
+            let MirOperationKind::Return { value: Some(value) } = &operation.kind else {
+                continue;
+            };
+            let place = match value {
+                MirValue::Place(place) => *place,
+                MirValue::CallReturn(site) => match result_by_site.get(site) {
+                    Some(result) => *result,
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let (Some(&ret), Some(stable)) = (
+                function_by_body
+                    .get(&operation.body)
+                    .and_then(|function| returns.get(function)),
+                place_key_by_id.get(&place),
+            ) else {
+                continue;
+            };
+            let src =
+                self.inner
+                    .intern_node(interner, NodeKind::Place(place), place_node_key(stable));
+            self.inner.push_constraint_with_precision(
+                interner,
+                ConstraintKind::CopyEdge { dst: ret, src },
+                &interner.resolve(operation.stable_key),
+                PointsToPrecision::SummaryProjected,
+            );
+        }
     }
 
     fn into_output(self) -> SemanticGraphOutput {
