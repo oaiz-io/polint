@@ -137,4 +137,6 @@ Each fix was reverted alone, and the named tests were run:
 - The typed rules are also conservative in two places. A destructured
   binding gives `inferred`, and an override anywhere taints the base member.
   Both cost exact recall, not correctness.
-- The cost baseline is still taken from a loaded server, as in 72-01.
+- The cost baseline is committed, taken at a 1-minute load average of 6.5 to
+  14.7 (5-minute average 12 to 15). Its figures are upper bounds; a
+  quiet-machine rerun is open.

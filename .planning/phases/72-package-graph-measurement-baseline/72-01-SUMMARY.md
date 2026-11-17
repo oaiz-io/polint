@@ -140,10 +140,13 @@ file was removed by path, and the remaining mutation runs set
 
 ## Still open
 
-The cost baseline (`make js-bench` with cost) is not committed. The server is
-shared and stayed loaded, with a load average of 100 to 190, through every run.
-The baseline is taken when the load allows, with the load average recorded
-beside it. The `--no-cost` reproducibility diff is recorded in the 72-02 pull request.
+The cost baseline (`make js-bench` with cost) is committed on the 72-02
+branch. The server stayed shared and loaded during the run: the 1-minute load
+average ranged from 6.5 to 14.7 and the 5-minute average from 12 to 15. The
+report's `## Cost` section records the readings at the start and the end. Read
+the absolute figures as upper bounds for a quiet machine. A quiet-machine
+rerun is still open. The `--no-cost` reproducibility diff is recorded in the
+72-02 pull request.
 
 A static check of the bench's own drivers for unseeded randomness and clock
 reads is not written. It needs a rule for the drivers that already seed
