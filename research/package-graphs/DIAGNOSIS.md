@@ -63,6 +63,8 @@ solver. In order of weight:
    caused by #139's wider import resolution turning on the walker's
    cross-module passes on axios; WP0 must re-measure on a quiet machine
    before anything else ([5](#5-the-walkers-cost-on-axios)).
+   **Re-measured: it does not reproduce.** Axios refined is 2.0 to 2.6 s over
+   five runs on the same walker code, see §5.
 
 What stays true from ITERATION-1: more type information does not find the
 misses; the four groups of causes are the right groups; the solver's
@@ -265,6 +267,28 @@ run over far more resolved imports on axios (72 files, ESM barrels). WP0 must
 re-measure on a quiet machine and bisect if it holds. If it holds, the refined
 plan at v0.5.3 is 50× the base plan on axios, which makes the cost targets in
 ITERATION-1 unreachable by tuning and reachable only by retiring the walker.
+
+**Re-measured: it does not hold.** Five `bench.py report --no-cost` runs on the
+measurement-baseline branches (release build, the same `lib/**/*.js` set of 72
+files, and no change to `semantic_graph/` or `ts/` lowering since `7aa3b3cf`).
+The host was loaded throughout, with a load average of 100 to 190:
+
+| run | axios base dump | axios refined dump | `semantic_graph` |
+|---|---|---|---|
+| 1 | 0.64 s | 2.03 s | 0.21 s |
+| 2 | 0.67 s | 2.32 s | 0.28 s |
+| 3 | 0.74 s | 2.60 s | 0.25 s |
+| 4 | 0.63 s | 2.19 s | 0.21 s |
+| 5 | 0.70 s | 2.41 s | 0.24 s |
+
+The refined dump is 2.0 to 2.6 s against the committed 2.1 s, and the walker's
+share is about 10%. The refined plan is 3.2 to 3.5 times the base plan. That
+ratio comes from the providers the refined plan adds (`evidence`,
+`type_value_alias`, `abstract_domains`), not from the walker. The 105 s figure
+did not reappear on the same code, so there is no commit to bisect, and the
+walker's retirement is justified by what it misses, not by its cost. The cost targets are
+judged on the cost baseline, taken separately with the load average recorded
+beside it.
 
 ## Measurements
 
