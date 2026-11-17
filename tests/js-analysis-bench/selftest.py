@@ -316,6 +316,28 @@ def check_stage_times(failures: list[str]) -> None:
     check(stages == expected, f"stage times: {stages}", failures)
 
 
+def check_sequence_callee(failures: list[str]) -> None:
+    """A comma-sequence callee reads as its last operand, nested ones too; other
+    parenthesised text is left alone."""
+    cases = {"(0,f)": "f", "(0,(0,f))": "f", "(0,_m.default)": "_m.default", "(a)(b)": "(a)(b)", "f": "f"}
+    for text, expected in cases.items():
+        got = report.sequence_last_operand(text)
+        check(got == expected, f"sequence operand of {text}: {got}", failures)
+
+
+def check_stripped_span(failures: list[str]) -> None:
+    """An observed TypeScript function that ends before polint's, as a stripped
+    type assertion does, maps to the function with its start; a JavaScript one
+    does not."""
+    def row(file: str, start: int, end: int) -> dict:
+        return {"key": f"{file}@{start}..{end}", "file": file, "start": start, "end": end, "module": False}
+    spans = report.Spans([], [row("a.ts", 10, 40), row("a.ts", 10, 60), row("a.ts", 0, 90), row("a.js", 10, 40)])
+    got = spans.function_for("a.ts@10..32", "f")
+    check(got is not None and got["end"] == 40, f"stripped ts span: {got}", failures)
+    got = spans.function_for("a.js@10..32", "f")
+    check(got is None, f"js span with no end match: {got}", failures)
+
+
 def check(condition: bool, message: str, failures: list[str]) -> None:
     if not condition:
         failures.append(message)
@@ -380,6 +402,8 @@ def main() -> int:
     check_guard(failures)
     check_exports(failures)
     check_stage_times(failures)
+    check_sequence_callee(failures)
+    check_stripped_span(failures)
 
     for failure in failures:
         print(f"selftest: {failure}", file=sys.stderr)

@@ -68,6 +68,8 @@ TYPED_TSCONFIG = {
     "include": ["**/*"],
 }
 TYPED_SOURCE_SUFFIXES = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"}
+# Files the run records after their types are stripped.
+TYPESCRIPT_SUFFIXES = {".ts", ".mts", ".cts", ".tsx"}
 TYPED_CONFIG = "[languages.ts]\ntype_sidecar = true\n"
 TYPESCRIPT_ENV = "POLINT_TS_TYPESCRIPT"
 # The syntax census rides on the cheapest plan in its own run, so it never
@@ -471,6 +473,12 @@ class Spans:
         the arrow it returns, not the one that was called.
         Polint represents a class constructor by the class, so an observed
         `constructor` maps to the innermost function enclosing it.
+        The run records TypeScript after its types are stripped, so a concise
+        arrow whose body ends in a type assertion, `(a) => a.b as any`, is
+        observed ending before ` as any` while polint's span includes it. With
+        no function ending at the observed byte, a function in a TypeScript
+        file that starts at the observed start and ends nearest after the
+        observed end is the one that was called.
         """
         path, start, end = parse_key(key)
         candidates = [f for f in self.functions_by_end.get((path, end), []) if not f["module"]]
@@ -480,6 +488,14 @@ class Spans:
         enclosing = [f for f in candidates if f["start"] <= start]
         if enclosing:
             return max(enclosing, key=lambda f: f["start"])
+        if not candidates and Path(path).suffix in TYPESCRIPT_SUFFIXES:
+            stripped = [
+                f
+                for f in self.function_rows
+                if f["file"] == path and not f["module"] and f["start"] == start and f["end"] > end
+            ]
+            if stripped:
+                return min(stripped, key=lambda f: f["end"])
         if not candidates and name == "constructor":
             candidates = [
                 f
@@ -1186,6 +1202,8 @@ MODULE_BINDING_RES = (
     r"import\s*\{{[^}}]*\b{name}\b[^}}]*\}}",
     r"\b{name}\s*=\s*(?:__importStar\(|__importDefault\(|_interopRequire\w*\()?require\(",
     r"\b{name}\s*=\s*__webpack_require__\(",
+    # Babel's two-step form: `var _m = require(...); var _m2 = _interopRequireDefault(_m);`.
+    r"\b{name}\s*=\s*(?:__importStar|__importDefault|_interopRequire\w*)\(\s*[A-Za-z_$][\w$]*\s*\)",
 )
 KEYWORD_RECEIVERS = {"this", "super", "new", "typeof", "await", "void", "return"}
 
@@ -1233,8 +1251,33 @@ def parameter_names(text: str) -> set[str]:
     return names
 
 
+def sequence_last_operand(compact: str) -> str:
+    """The last operand of a parenthesised comma sequence, unwrapped while the
+    result is itself one: `(0,(0,f))` reads as `f`. Other text is returned as is."""
+    while compact.startswith("(") and compact.endswith(")"):
+        depth, last_comma = 0, None
+        for index, char in enumerate(compact):
+            if char in "([{":
+                depth += 1
+            elif char in ")]}":
+                depth -= 1
+                if depth == 0 and index != len(compact) - 1:
+                    return compact
+            elif char == "," and depth == 1:
+                last_comma = index
+        if last_comma is None:
+            return compact
+        compact = compact[last_comma + 1 : -1]
+    return compact
+
+
 def classify_cause(
-    edge: dict, outcome: str, import_stop: bool, sources: Sources, census: "Census | None"
+    edge: dict,
+    outcome: str,
+    import_stop: bool,
+    sources: Sources,
+    census: "Census | None",
+    site_kind: str | None = None,
 ) -> str:
     if outcome == "site or callee in a file polint does not analyse":
         return "not_analysed"
@@ -1258,7 +1301,12 @@ def classify_cause(
     if compact.startswith(("function", "(function", "!function", "(()=>", "(async", "async(", "(()")):
         return "iife"
     if compact.startswith("(0,"):
-        return "sequence_interop"
+        # A sequence callee polint reads through (its site has a callee kind)
+        # is the gap of its last operand; only a site polint could not read is
+        # a sequence gap.
+        if site_kind in (None, "Unknown"):
+            return "sequence_interop"
+        compact = sequence_last_operand(compact)
     if compact.startswith("this."):
         return "this_member"
     if compact.startswith("super."):
@@ -1563,7 +1611,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             examples[outcome].append(describe_edge(edge, outcome, facts, sources))
         if outcome != "found":
             import_stop = site is not None and site["key"] in facts.import_stops
-            cause = classify_cause(edge, outcome, import_stop, sources, census)
+            cause = classify_cause(edge, outcome, import_stop, sources, census, site and site.get("kind"))
             causes[cause] += 1
             if len(cause_examples[cause]) < EXAMPLES_PER_GAP:
                 cause_examples[cause].append(describe_edge(edge, outcome, facts, sources))
