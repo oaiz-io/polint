@@ -1,0 +1,43 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@30..84",
+      "name": "make"
+    },
+    {
+      "function": "main.js@86..157",
+      "name": "freeze"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@178..194",
+      "syntax": "identifier",
+      "callee": "main.js@30..84",
+      "callee_name": "make"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@237..261",
+      "syntax": "identifier",
+      "callee": "main.js@86..157",
+      "callee_name": "freeze"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@244..260",
+      "syntax": "identifier",
+      "callee": "main.js@30..84",
+      "callee_name": "make"
+    }
+  ]
+}

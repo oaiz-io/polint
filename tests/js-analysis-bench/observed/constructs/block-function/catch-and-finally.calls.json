@@ -1,0 +1,58 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@17..457",
+      "name": "load"
+    },
+    {
+      "function": "main.js@207..286",
+      "name": "fallback"
+    },
+    {
+      "function": "main.js@305..367",
+      "name": "close"
+    },
+    {
+      "function": "main.js@81..154",
+      "name": "remember"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@381..420",
+      "syntax": "identifier",
+      "callee": "main.js@305..367",
+      "callee_name": "close"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@388..402",
+      "syntax": "identifier",
+      "callee": "main.js@81..154",
+      "callee_name": "remember"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@404..418",
+      "syntax": "identifier",
+      "callee": "main.js@207..286",
+      "callee_name": "fallback"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@487..503",
+      "syntax": "identifier",
+      "callee": "main.js@17..457",
+      "callee_name": "load"
+    }
+  ]
+}

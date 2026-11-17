@@ -1,0 +1,3 @@
+construct = "unary-iife"
+held_out = false
+description = "A minified UMD prologue: a function under `!` is called with the module factory, which declares three inner functions; one function per line so each carries a label."

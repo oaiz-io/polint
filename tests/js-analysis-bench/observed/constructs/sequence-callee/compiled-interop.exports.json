@@ -1,0 +1,28 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "double.js": {
+      "system": "cjs",
+      "names": [
+        "default"
+      ],
+      "whole_value": "object"
+    },
+    "main.js": {
+      "system": "cjs",
+      "names": [
+        "run"
+      ],
+      "whole_value": "object"
+    },
+    "math.js": {
+      "system": "cjs",
+      "names": [
+        "increment"
+      ],
+      "whole_value": "object"
+    }
+  }
+}

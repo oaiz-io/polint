@@ -308,25 +308,28 @@ unchanged.
   jobs, and the small trees' cold times about doubled from one full run to
   the next. Compare times only between runs on the same quiet machine; peak
   RSS, stored bytes and every score are stable.
-- Packages use polint's default discovery, so default excludes apply (chalk's
-  `source/vendor/` is not analysed).
+- A package is analysed as the package it is: the report writes a
+  `.polint.toml` into each staged tree whose `[workspace] include` is the
+  package's `analysed` globs and whose `exclude` keeps only
+  `**/node_modules/**` and `**/.git/**`, so a package's own `vendor/` (chalk's
+  `source/vendor/`) is analysed. A repository keeps polint's default excludes.
 
 ## Findings in the baseline
 
 These are found by the benchmark and are not changed by it:
 
-- Functions under a unary operator (`!function(){}()`, `void function(){}()`)
-  are not extracted, so minified UMD bundles such as dayjs yield almost no
-  facts.
-- Functions declared inside `try`, `catch` or `if` blocks are not
-  extracted, nor are the calls in their bodies. Calls written directly in try,
-  finally and if blocks, and functions in bare blocks and loop bodies, are.
+- Every function and call site Oxc parses in the tune set is extracted:
+  the report's extraction gaps (unary IIFEs, functions in try / catch / if
+  blocks, calls in exported initialisers, files not analysed, other
+  extraction) are 0 on every tune package.
 - Member calls on object-literal functions and namespace imports are not
-  resolved. This is the largest single gap on the real packages: 1053 of 2582
-  missed base edges, 724 of them on zod.
-- Of the base misses that are not extraction or named resolution gaps, most
-  are identifier calls to an arrow function (435) and `(0, f)(x)` calls to
-  a declaration (134, async's compiled CommonJS interop).
+  resolved. This is the largest single gap on the real packages: 730 of 1814
+  missed base edges, 306 of them on zod.
+- Of the base misses that are not named resolution gaps, most are identifier
+  calls to an arrow function (247) and `(0, f)(x)` calls to a declaration
+  (134). All but at most one of the latter are async's compiled CommonJS
+  interop: the sites are extracted with the last operand as callee and miss
+  for the reason the operand's own call would.
 - A class is one function spanning the class; there is no constructor function.
 - On underscore both plans mark `iteratee(...)` inside `map` unresolved:
   `iteratee = cb(iteratee, context)` can return closures the refined walk does
@@ -336,9 +339,9 @@ These are found by the benchmark and are not changed by it:
   equals base recall there.
 - `.polint/cache` holds tens to hundreds of MB per MB of source after a
   cold run, mostly layer blobs.
-- The refined plan's dump on zod takes about 80 s and 3.6 GB, against 11 s
-  and 1.3 GB for the base plan, within its 180 s budget. Most of it is the
-  refined-call solver, not the callable-flow walk. Refined recall on zod
-  equals base recall (217 of 1308 observed edges).
-- Sites the base plan stops at an import binding (57 on axios, 25 on zod)
+- On the shipped set the refined plan's dump on zod takes about 11 s and
+  1.0 GB, against about 4 s and 0.5 GB for the base plan, within its 180 s
+  budget; `semantic_graph` is about 30% of its summed stage time. Refined
+  recall on zod equals base recall (721 of 1308 observed edges).
+- Sites the base plan stops at an import binding (1 on axios, 1 on zod)
   have no target and no unresolved marker on the refined plan.
