@@ -14,7 +14,9 @@ use crate::analysis_api::{
 use crate::internal_core::{Language, StableKeyId, StableKeyInterner};
 
 use crate::analysis_neutral::summaries::facts::SummaryDomainKind;
-use crate::analysis_neutral::symbol_graph::semantic::ScopeFact;
+use crate::analysis_neutral::symbol_graph::semantic::{
+    NamespaceMemberCallFact, ScopeFact, ValueFunctionFact,
+};
 use crate::analysis_neutral::{
     CALLS_PROVIDER_ID, POLINT_ABSTRACT_DOMAINS_PROVIDER_ID, POLINT_DIRECT_SUMMARIES_PROVIDER_ID,
 };
@@ -292,6 +294,16 @@ pub trait AnalysisHost: FactDatabase {
 
     /// Language-neutral semantic scopes installed by the composition root.
     fn semantic_scopes(&self) -> &[ScopeFact] {
+        &[]
+    }
+
+    /// Functions a binding may hold, keyed by the binding symbol's span.
+    fn value_functions(&self) -> &[ValueFunctionFact] {
+        &[]
+    }
+
+    /// `ns.name(...)` call sites whose `ns` is a namespace import binding.
+    fn namespace_member_calls(&self) -> &[NamespaceMemberCallFact] {
         &[]
     }
 
@@ -682,7 +694,15 @@ pub trait AnalysisHost: FactDatabase {
     }
 }
 
-impl AnalysisHost for LocalAnalysisDb {}
+impl AnalysisHost for LocalAnalysisDb {
+    fn value_functions(&self) -> &[ValueFunctionFact] {
+        LocalAnalysisDb::value_functions(self)
+    }
+
+    fn namespace_member_calls(&self) -> &[NamespaceMemberCallFact] {
+        LocalAnalysisDb::namespace_member_calls(self)
+    }
+}
 
 fn host_fact_meta(
     producer_id: &'static str,

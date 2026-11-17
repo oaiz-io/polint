@@ -72,6 +72,19 @@ fn dump_tree(tree: &Path, capabilities: &[&str], with_census: bool) -> anyhow::R
             parallel: true,
         })?;
     let mut document = Dump::new(&output.db).document(capabilities);
+    // Whether the TypeScript type tier ran is part of the result: a typed run
+    // whose sidecar could not start must read as that, not as a typed answer.
+    document["ts_types"] = json!({
+        "callsites": output.db.ts_type_callsites().len(),
+        "callees": output.db.ts_type_callees().len(),
+        "diagnostics": sorted(
+            output
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.rule_id == "polint/ts-types")
+                .map(|diagnostic| json!(diagnostic.message)),
+        ),
+    });
     if with_census {
         document["syntax_census"] = syntax_census(&output.db);
     }

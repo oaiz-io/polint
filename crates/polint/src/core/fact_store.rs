@@ -20,8 +20,8 @@ use crate::module_graph::topology::{
 };
 use crate::symbol_graph::semantic::{
     AliasFact, AliasId, ExportFact, ExportId, GeneratedSymbolFact, GeneratedSymbolId,
-    ResolutionFact, ResolutionId, ScopeFact, ScopeId, SemanticImportFact, SemanticImportId,
-    StableExportId, StableExportIdentity,
+    NamespaceMemberCallFact, ResolutionFact, ResolutionId, ScopeFact, ScopeId, SemanticImportFact,
+    SemanticImportId, StableExportId, StableExportIdentity, ValueFunctionFact,
 };
 pub(crate) use crate::ts::object_model::store::TS_OBJECT_MODEL_STORE_FAMILY;
 pub(crate) use crate::ts::{TS_SYNTAX_STORE_FAMILY, TsSyntaxStore};
@@ -279,6 +279,8 @@ pub(crate) struct SemanticIndexStore {
     pub(crate) resolution_facts: Vec<ResolutionFact>,
     pub(crate) generated_symbols: Vec<GeneratedSymbolFact>,
     pub(crate) stable_exports: Vec<StableExportIdentity>,
+    pub(crate) value_functions: Vec<ValueFunctionFact>,
+    pub(crate) namespace_member_calls: Vec<NamespaceMemberCallFact>,
     pub(crate) scopes_by_id: BTreeMap<ScopeId, usize>,
     pub(crate) semantic_imports_by_id: BTreeMap<SemanticImportId, usize>,
     pub(crate) exports_by_id: BTreeMap<ExportId, usize>,
@@ -338,7 +340,28 @@ impl SemanticIndexStore {
         self.resolution_facts = resolution_facts;
         self.generated_symbols = generated_symbols;
         self.stable_exports = stable_exports;
+        // Callee-identity rows describe the same derivation; a fresh semantic
+        // index drops them until the producer supplies its own.
+        self.value_functions.clear();
+        self.namespace_member_calls.clear();
         self.rebuild_indexes();
+    }
+
+    pub(crate) fn value_functions(&self) -> &[ValueFunctionFact] {
+        &self.value_functions
+    }
+
+    pub(crate) fn namespace_member_calls(&self) -> &[NamespaceMemberCallFact] {
+        &self.namespace_member_calls
+    }
+
+    pub(crate) fn replace_callee_identities(
+        &mut self,
+        value_functions: Vec<ValueFunctionFact>,
+        namespace_member_calls: Vec<NamespaceMemberCallFact>,
+    ) {
+        self.value_functions = value_functions;
+        self.namespace_member_calls = namespace_member_calls;
     }
 
     fn rebuild_indexes(&mut self) {

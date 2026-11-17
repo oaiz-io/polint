@@ -7,7 +7,7 @@ use crate::diagnostics::Diagnostic;
 use crate::symbol_graph::semantic::CachedSemanticIndexOutput;
 use serde::{Deserialize, Serialize};
 
-pub(crate) const SYMBOL_GRAPH_LAYER_SCHEMA: &str = "symbol-graph-facts-2";
+pub(crate) const SYMBOL_GRAPH_LAYER_SCHEMA: &str = "symbol-graph-facts-3";
 
 pub(crate) use crate::analysis_neutral::symbol_graph::model::SymbolGraphBuilder;
 

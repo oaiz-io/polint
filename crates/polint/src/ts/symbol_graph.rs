@@ -7,10 +7,11 @@ use crate::analysis_neutral::symbol_graph::{
     LanguageCapabilitySupport, LanguageSymbolOutput, SymbolCapabilityStatus, SymbolGraphRequest,
     model::{DefinitionDraft, ReferenceDraft, SymbolDraft, SymbolGraphBuilder},
     semantic::{
-        AliasFact, AliasId, AliasKind, ExportFact, ExportId, ExportKind, ResolutionFact,
-        ResolutionId, ResolutionStepKind, ScopeFact, ScopeId, ScopeKind, SemanticImportFact,
-        SemanticImportId, SemanticImportKind, SemanticIndexBuilder, SemanticIndexOutput,
-        SemanticStatus, StableExportId, StableExportIdentity,
+        AliasFact, AliasId, AliasKind, ExportFact, ExportId, ExportKind, NamespaceMemberCallFact,
+        ResolutionFact, ResolutionId, ResolutionStepKind, ScopeFact, ScopeId, ScopeKind,
+        SemanticImportFact, SemanticImportId, SemanticImportKind, SemanticIndexBuilder,
+        SemanticIndexOutput, SemanticStatus, StableExportId, StableExportIdentity,
+        ValueFunctionFact, ValueFunctionKind,
     },
     stable_id::{StableReferenceKey, StableSymbolKey},
 };
@@ -24,7 +25,7 @@ use oxc_ast::AstKind;
 use oxc_ast::ast::{
     Argument, AssignmentTarget, BindingIdentifier, BindingPattern, Declaration,
     ExportDefaultDeclarationKind, Expression, ImportDeclarationSpecifier, ImportOrExportKind,
-    ModuleExportName, Program, Statement,
+    ModuleExportName, Program, Statement, VariableDeclarationKind,
 };
 use oxc_semantic::{
     AstNodes, Reference, ReferenceFlags, ReferenceId as OxcReferenceId, Scoping, SemanticBuilder,
@@ -47,6 +48,8 @@ struct TsFileSymbolSummary {
     file: FileId,
     import_aliases: Vec<ImportAlias>,
     exports: BTreeMap<String, Vec<PolintSymbolId>>,
+    re_exports: Vec<ReExport>,
+    namespace_member_calls: Vec<NamespaceMemberCall>,
 }
 
 impl TsFileSymbolSummary {
@@ -55,9 +58,49 @@ impl TsFileSymbolSummary {
             file,
             import_aliases: Vec::new(),
             exports: BTreeMap::new(),
+            re_exports: Vec::new(),
+            namespace_member_calls: Vec::new(),
         }
     }
 }
+
+/// A call `ns.name(...)` whose callee is a member of a namespace import
+/// binding. A module namespace object is immutable, so the member is the
+/// binding `name` exported by the imported module.
+#[derive(Debug, Clone)]
+struct NamespaceMemberCall {
+    /// Index of the namespace import in the file's import aliases.
+    alias: usize,
+    property: String,
+    property_span: Span,
+    /// The call site's span, as call-site facts record it.
+    call_span: Span,
+}
+
+/// An `export ... from "m"` statement: the names it forwards are bindings of
+/// another module, so they never appear in the declaring file's local exports.
+#[derive(Debug, Clone)]
+struct ReExport {
+    import_path: String,
+    import_source_span: Span,
+    kind: ReExportKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReExportKind {
+    /// `export { imported as exported } from "m"`.
+    Named { exported: String, imported: String },
+    /// `export * from "m"`: every non-default name of `m`.
+    Star,
+    /// `export * as exported from "m"`: a namespace object, not a declaration.
+    StarAs { exported: String },
+}
+
+/// Bound on re-export hops followed while linking an import alias.
+const MAX_RE_EXPORT_HOPS: usize = 8;
+/// Bound on (module, name) lookups spent linking one import alias. Exceeding
+/// it leaves the alias unresolved rather than linked on a partial search.
+const MAX_RE_EXPORT_LOOKUPS: usize = 512;
 
 #[derive(Debug, Clone)]
 struct ImportAlias {
@@ -183,6 +226,7 @@ fn derive_ts_file_symbols(
     };
 
     let import_aliases = collect_import_aliases(file, source, parsed.program());
+    let re_exports = collect_re_exports(file, parsed.program());
     let semantic_return = SemanticBuilder::new()
         .with_check_syntax_error(true)
         .build(parsed.program());
@@ -206,10 +250,28 @@ fn derive_ts_file_symbols(
     ));
     let export_names = collect_export_names(parsed.program(), scoping);
     let parameter_symbols = collect_parameter_symbols(nodes);
+    let namespace_member_calls = if requests_references {
+        collect_namespace_member_calls(file, source, scoping, nodes, &import_aliases)
+    } else {
+        Vec::new()
+    };
+    output
+        .semantic
+        .namespace_member_calls
+        .extend(
+            namespace_member_calls
+                .iter()
+                .map(|call| NamespaceMemberCallFact {
+                    call: call.call_span.clone(),
+                    property: call.property_span.clone(),
+                }),
+        );
     let mut summary = TsFileSymbolSummary {
         file: file.id,
         import_aliases,
         exports: BTreeMap::new(),
+        re_exports,
+        namespace_member_calls,
     };
     let mut symbol_ids = BTreeMap::<OxcSymbolId, PolintSymbolId>::new();
     let mut oxc_symbols = scoping.symbol_ids().collect::<Vec<_>>();
@@ -399,8 +461,172 @@ fn derive_ts_semantic_index(
     if requests_references {
         add_ts_semantic_resolution_rows(interner, &mut builder, file, source, scoping, nodes);
     }
+    add_ts_value_function_rows(&mut builder, file, program, scoping, nodes);
 
     builder.finish(interner)
+}
+
+/// Records the functions a binding can hold, keyed by the binding symbol.
+///
+/// A variable gets a [`ValueFunctionKind::Literal`] row when its initializer is
+/// the function or arrow expression itself; calls, conditionals, wrappers and
+/// type assertions around it are not followed. `const` bindings always
+/// qualify. `let`/`var` bindings qualify only when they are declared once and
+/// never written. A top-level `let`/`var` also needs import or export syntax in
+/// the file: without it the file may run as a classic script, whose global
+/// bindings other scripts can reassign.
+///
+/// Each function declaration or named function expression gets an
+/// [`ValueFunctionKind::Implementation`] or [`ValueFunctionKind::Signature`]
+/// row from its own body, provided its symbol is never written and every
+/// declaration of the symbol is a function, interface or namespace.
+///
+/// A `let`, `var` or function binding that a block-level function declaration
+/// overwrites gets no row: see [`bindings_written_by_block_functions`].
+///
+/// A file that mentions `eval` or has a `with` statement gets no rows at all:
+/// a direct eval can write a binding or declare a `var` that shadows one, and
+/// a `with` body can see an object property instead of the binding, neither
+/// through a reference Oxc sees. Any call through an identifier named `eval`
+/// counts, since a parameter or local of that name may hold the global.
+fn add_ts_value_function_rows(
+    builder: &mut SemanticIndexBuilder,
+    file: &SourceFile,
+    program: &Program<'_>,
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) {
+    let bindings_are_sealed = !nodes.iter().any(|node| match node.kind() {
+        AstKind::IdentifierReference(identifier) => identifier.name == "eval",
+        AstKind::WithStatement(_) => true,
+        _ => false,
+    });
+    if !bindings_are_sealed {
+        return;
+    }
+    let root_is_module_scope = program.body.iter().any(Statement::is_module_declaration);
+    let written_by_block_functions = bindings_written_by_block_functions(scoping, nodes);
+    for node in nodes.iter() {
+        let (symbol, function_span, kind) = match node.kind() {
+            AstKind::VariableDeclarator(declarator) => {
+                let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+                    continue;
+                };
+                let Some(symbol) = binding.symbol_id.get() else {
+                    continue;
+                };
+                let function_span = match &declarator.init {
+                    Some(Expression::ArrowFunctionExpression(function)) => function.span,
+                    Some(Expression::FunctionExpression(function)) => function.span,
+                    _ => continue,
+                };
+                let single_value = match declarator.kind {
+                    VariableDeclarationKind::Const => true,
+                    VariableDeclarationKind::Let | VariableDeclarationKind::Var => {
+                        scoping.symbol_redeclarations(symbol).is_empty()
+                            && !scoping.symbol_is_mutated(symbol)
+                            && !written_by_block_functions.contains(&symbol)
+                            && (root_is_module_scope
+                                || scoping.symbol_scope_id(symbol) != scoping.root_scope_id())
+                    }
+                    VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing => false,
+                };
+                if !single_value {
+                    continue;
+                }
+                (symbol, function_span, ValueFunctionKind::Literal)
+            }
+            AstKind::Function(function) => {
+                let Some(symbol) = function.id.as_ref().and_then(|id| id.symbol_id.get()) else {
+                    continue;
+                };
+                if scoping.symbol_is_mutated(symbol)
+                    || written_by_block_functions.contains(&symbol)
+                    || !only_function_declarations(scoping, nodes, symbol)
+                {
+                    continue;
+                }
+                let kind = if function.body.is_some() {
+                    ValueFunctionKind::Implementation
+                } else {
+                    ValueFunctionKind::Signature
+                };
+                (symbol, function.span, kind)
+            }
+            _ => continue,
+        };
+        builder.add_value_function(ValueFunctionFact {
+            binding: span_from_oxc(file, scoping.symbol_span(symbol)),
+            function: span_from_oxc(file, function_span),
+            kind,
+        });
+    }
+}
+
+/// Bindings whose value a function declaration in a nested block of non-strict
+/// code decides in a way no Oxc reference shows.
+///
+/// When such a block runs, its function is also assigned to the same-named
+/// binding of the enclosing function scope. Oxc keeps the block's function a
+/// separate symbol when that scope already binds the name, so the outer symbol
+/// is written without a write reference. Otherwise Oxc moves the block's
+/// function into the function scope, which is wrong when a scope between the
+/// two binds the name: the function then stays in its block.
+fn bindings_written_by_block_functions(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> BTreeSet<OxcSymbolId> {
+    let mut written = BTreeSet::new();
+    for node in nodes.iter() {
+        let AstKind::Function(function) = node.kind() else {
+            continue;
+        };
+        let Some(id) = &function.id else {
+            continue;
+        };
+        let Some(symbol) = id.symbol_id.get() else {
+            continue;
+        };
+        let scope = scoping.symbol_scope_id(symbol);
+        if scoping.scope_flags(scope).is_strict_mode() {
+            continue;
+        }
+        let outer = scoping
+            .scope_ancestors(scope)
+            .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
+            .and_then(|function_scope| scoping.get_binding(function_scope, id.name));
+        if let Some(outer) = outer.filter(|outer| *outer != symbol) {
+            written.insert(outer);
+        }
+        let declared_in = node.scope_id();
+        if function.is_declaration()
+            && scoping
+                .scope_ancestors(declared_in)
+                .take_while(|ancestor| *ancestor != scope)
+                .any(|between| scoping.get_binding(between, id.name).is_some())
+        {
+            written.insert(symbol);
+        }
+    }
+    written
+}
+
+/// Whether every declaration of `symbol` is a function, or a type-side
+/// interface or namespace merged with one, so no variable, parameter, class
+/// or import shares the binding.
+fn only_function_declarations(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    symbol: OxcSymbolId,
+) -> bool {
+    scoping.symbol_declarations(symbol).all(|declaration| {
+        matches!(
+            nodes.kind(declaration),
+            AstKind::Function(_)
+                | AstKind::TSInterfaceDeclaration(_)
+                | AstKind::TSModuleDeclaration(_)
+        )
+    })
 }
 
 fn export_symbol_stable_keys(
@@ -1563,10 +1789,6 @@ fn add_import_alias_references(
     module_nodes: &[ModuleNode],
     summaries: &[TsFileSymbolSummary],
 ) {
-    let exports_by_file = summaries
-        .iter()
-        .map(|summary| (summary.file, summary.exports.clone()))
-        .collect::<BTreeMap<_, _>>();
     let imports_by_key = db
         .imports()
         .iter()
@@ -1585,11 +1807,23 @@ fn add_import_alias_references(
         .iter()
         .filter_map(|node| node.file.map(|file| (node.id, file)))
         .collect::<BTreeMap<ModuleNodeId, FileId>>();
+    let modules = ModuleExports {
+        summaries: summaries
+            .iter()
+            .map(|summary| (summary.file, summary))
+            .collect(),
+        imports_by_key: &imports_by_key,
+        resolved_by_import: &resolved_by_import,
+        file_by_node: &file_by_node,
+    };
 
-    for alias in summaries
-        .iter()
-        .flat_map(|summary| summary.import_aliases.iter())
-    {
+    for (summary, index, alias) in summaries.iter().flat_map(|summary| {
+        summary
+            .import_aliases
+            .iter()
+            .enumerate()
+            .map(move |(index, alias)| (summary, index, alias))
+    }) {
         let key = (
             alias.file,
             alias.import_path.clone(),
@@ -1606,28 +1840,201 @@ fn add_import_alias_references(
             continue;
         };
 
-        add_import_alias_reference(builder, alias, resolved, &file_by_node, &exports_by_file);
+        add_import_alias_reference(builder, alias, resolved, &modules);
+        if alias.target == ImportAliasTarget::Namespace {
+            add_namespace_member_call_references(builder, summary, index, resolved, &modules);
+        }
     }
+}
+
+/// Links each `ns.name(...)` call to the one declaration `name` is exported
+/// as. A member the module exports ambiguously or not at all gets no
+/// reference, so the call keeps no target.
+fn add_namespace_member_call_references(
+    builder: &mut SymbolGraphBuilder,
+    summary: &TsFileSymbolSummary,
+    alias_index: usize,
+    resolved: &ResolvedImportFact,
+    modules: &ModuleExports<'_>,
+) {
+    if resolved.status != ResolutionStatus::Resolved {
+        return;
+    }
+    let Some(target_file) = resolved
+        .target_node
+        .and_then(|target_node| modules.file_by_node.get(&target_node).copied())
+    else {
+        return;
+    };
+    let alias = &summary.import_aliases[alias_index];
+    for call in summary
+        .namespace_member_calls
+        .iter()
+        .filter(|call| call.alias == alias_index)
+    {
+        let [target] = modules.exported(target_file, &call.property)[..] else {
+            continue;
+        };
+        builder.add_reference(
+            target,
+            ReferenceDraft {
+                language: alias.language,
+                name: call.property.clone(),
+                qualified_name: format!(
+                    "{}::{}.{}",
+                    alias.file_key, alias.local_name, call.property
+                ),
+                kind: ReferenceKind::Call,
+                namespace: SymbolNamespace::Value,
+                file: Some(alias.file),
+                package: None,
+                module: None,
+                owner: None,
+                file_key: alias.file_key.clone(),
+                primary_span: Some(call.property_span.clone()),
+                precision: SymbolPrecision::ModuleLinked,
+            },
+        );
+    }
+}
+
+/// Export lookup across the module graph: local exports, then `export ... from`
+/// forwarding, resolved only through imports the module graph resolved to a
+/// file.
+struct ModuleExports<'a> {
+    summaries: BTreeMap<FileId, &'a TsFileSymbolSummary>,
+    imports_by_key: &'a BTreeMap<(FileId, String, u32), &'a crate::analysis_api::ImportFact>,
+    resolved_by_import: &'a BTreeMap<crate::internal_core::ImportId, &'a ResolvedImportFact>,
+    file_by_node: &'a BTreeMap<ModuleNodeId, FileId>,
+}
+
+impl ModuleExports<'_> {
+    fn re_export_target(&self, file: FileId, re_export: &ReExport) -> Option<FileId> {
+        let key = (
+            file,
+            re_export.import_path.clone(),
+            re_export.import_source_span.start_byte,
+        );
+        let import = self.imports_by_key.get(&key)?;
+        let resolved = self.resolved_by_import.get(&import.id)?;
+        if resolved.status != ResolutionStatus::Resolved {
+            return None;
+        }
+        self.file_by_node.get(&resolved.target_node?).copied()
+    }
+
+    /// Declaring symbols that `name` exported from `file` binds to. An empty
+    /// result means the binding could not be proven; several results mean the
+    /// name is ambiguous.
+    fn exported(&self, file: FileId, name: &str) -> Vec<PolintSymbolId> {
+        let mut search = ReExportSearch {
+            path: Vec::new(),
+            lookups: 0,
+        };
+        let mut candidates = self
+            .exported_within(file, name, &mut search)
+            .unwrap_or_default();
+        candidates.sort_unstable();
+        candidates.dedup();
+        candidates
+    }
+
+    /// `None` when the search could not finish, so no candidate set from it
+    /// may be trusted.
+    fn exported_within(
+        &self,
+        file: FileId,
+        name: &str,
+        search: &mut ReExportSearch,
+    ) -> Option<Vec<PolintSymbolId>> {
+        search.lookups += 1;
+        if search.path.len() > MAX_RE_EXPORT_HOPS || search.lookups > MAX_RE_EXPORT_LOOKUPS {
+            return None;
+        }
+        if search
+            .path
+            .iter()
+            .any(|(seen_file, seen_name)| *seen_file == file && seen_name == name)
+        {
+            // A star cycle contributes no binding; a named cycle never
+            // resolves, and the caller treats an empty named result as unknown.
+            return Some(Vec::new());
+        }
+        let summary = self.summaries.get(&file)?;
+        if let Some(local) = summary.exports.get(name).filter(|local| !local.is_empty()) {
+            return Some(local.clone());
+        }
+
+        search.path.push((file, name.to_string()));
+        let result = self.forwarded_export(summary, name, search);
+        search.path.pop();
+        result
+    }
+
+    fn forwarded_export(
+        &self,
+        summary: &TsFileSymbolSummary,
+        name: &str,
+        search: &mut ReExportSearch,
+    ) -> Option<Vec<PolintSymbolId>> {
+        let mut forwarded = false;
+        let mut candidates = Vec::new();
+        for re_export in &summary.re_exports {
+            match &re_export.kind {
+                ReExportKind::Named { exported, imported } if exported == name => {
+                    forwarded = true;
+                    let target = self.re_export_target(summary.file, re_export)?;
+                    let found = self.exported_within(target, imported, search)?;
+                    if found.is_empty() {
+                        return None;
+                    }
+                    candidates.extend(found);
+                }
+                ReExportKind::StarAs { exported } if exported == name => return None,
+                _ => {}
+            }
+        }
+        if forwarded || name == "default" {
+            return Some(candidates);
+        }
+
+        for re_export in &summary.re_exports {
+            if re_export.kind != ReExportKind::Star {
+                continue;
+            }
+            // An unresolved star source cannot supply a second binding to a
+            // name that resolves elsewhere: duplicate star bindings make the
+            // name ambiguous, and importing an ambiguous name is an error.
+            if let Some(target) = self.re_export_target(summary.file, re_export) {
+                candidates.extend(self.exported_within(target, name, search)?);
+            }
+        }
+        Some(candidates)
+    }
+}
+
+struct ReExportSearch {
+    path: Vec<(FileId, String)>,
+    lookups: usize,
 }
 
 fn add_import_alias_reference(
     builder: &mut SymbolGraphBuilder,
     alias: &ImportAlias,
     resolved: &ResolvedImportFact,
-    file_by_node: &BTreeMap<ModuleNodeId, FileId>,
-    exports_by_file: &BTreeMap<FileId, BTreeMap<String, Vec<PolintSymbolId>>>,
+    modules: &ModuleExports<'_>,
 ) {
     match resolved.status {
         ResolutionStatus::Resolved => {
             let Some(target_file) = resolved
                 .target_node
-                .and_then(|target_node| file_by_node.get(&target_node).copied())
+                .and_then(|target_node| modules.file_by_node.get(&target_node).copied())
             else {
                 let draft = import_alias_reference_draft(alias, SymbolPrecision::Unresolved);
                 builder.add_unresolved_reference(draft);
                 return;
             };
-            let candidates = import_alias_candidates(alias, target_file, exports_by_file);
+            let candidates = import_alias_candidates(alias, target_file, modules);
             match candidates.as_slice() {
                 [target] => {
                     let draft = import_alias_reference_draft(alias, SymbolPrecision::ModuleLinked);
@@ -1665,22 +2072,25 @@ fn add_import_alias_reference(
 fn import_alias_candidates(
     alias: &ImportAlias,
     target_file: FileId,
-    exports_by_file: &BTreeMap<FileId, BTreeMap<String, Vec<PolintSymbolId>>>,
+    modules: &ModuleExports<'_>,
 ) -> Vec<PolintSymbolId> {
-    let Some(exports) = exports_by_file.get(&target_file) else {
-        return Vec::new();
-    };
-    let mut candidates = match &alias.target {
-        ImportAliasTarget::Named(name) => exports.get(name).cloned().unwrap_or_default(),
-        ImportAliasTarget::Default => exports.get("default").cloned().unwrap_or_default(),
-        ImportAliasTarget::Namespace => exports
-            .values()
-            .flat_map(|symbols| symbols.iter().copied())
-            .collect::<Vec<_>>(),
-    };
-    candidates.sort_unstable();
-    candidates.dedup();
-    candidates
+    match &alias.target {
+        ImportAliasTarget::Named(name) => modules.exported(target_file, name),
+        ImportAliasTarget::Default => modules.exported(target_file, "default"),
+        ImportAliasTarget::Namespace => {
+            let Some(summary) = modules.summaries.get(&target_file) else {
+                return Vec::new();
+            };
+            let mut candidates = summary
+                .exports
+                .values()
+                .flat_map(|symbols| symbols.iter().copied())
+                .collect::<Vec<_>>();
+            candidates.sort_unstable();
+            candidates.dedup();
+            candidates
+        }
+    }
 }
 
 fn import_alias_reference_draft(alias: &ImportAlias, precision: SymbolPrecision) -> ReferenceDraft {
@@ -2067,6 +2477,103 @@ fn collect_import_aliases(
     }
 
     aliases
+}
+
+/// Calls whose callee is exactly `ns.name`, with `ns` bound to one of the
+/// file's namespace imports (a shadowing local of the same name is not).
+fn collect_namespace_member_calls(
+    file: &SourceFile,
+    source: &str,
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    import_aliases: &[ImportAlias],
+) -> Vec<NamespaceMemberCall> {
+    let namespace_by_binding = import_aliases
+        .iter()
+        .enumerate()
+        .filter(|(_, alias)| alias.target == ImportAliasTarget::Namespace)
+        .map(|(index, alias)| {
+            (
+                (alias.local_span.start_byte, alias.local_span.end_byte),
+                index,
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    if namespace_by_binding.is_empty() {
+        return Vec::new();
+    }
+
+    let mut calls = Vec::new();
+    for node in nodes.iter() {
+        let AstKind::CallExpression(call) = node.kind() else {
+            continue;
+        };
+        let Expression::StaticMemberExpression(member) = &call.callee else {
+            continue;
+        };
+        let Expression::Identifier(object) = &member.object else {
+            continue;
+        };
+        let Some(binding) = object
+            .reference_id
+            .get()
+            .and_then(|reference| scoping.get_reference(reference).symbol_id())
+        else {
+            continue;
+        };
+        let binding_span = scoping.symbol_span(binding);
+        let Some(alias) = namespace_by_binding.get(&(binding_span.start, binding_span.end)) else {
+            continue;
+        };
+        calls.push(NamespaceMemberCall {
+            alias: *alias,
+            property: member.property.name.to_string(),
+            property_span: span_from_oxc(file, member.property.span),
+            call_span: span_from_oxc(
+                file,
+                crate::ts::spans::normalized_call_expression_span(source, call),
+            ),
+        });
+    }
+    calls.sort_by_key(|call| (call.property_span.start_byte, call.property_span.end_byte));
+    calls
+}
+
+fn collect_re_exports(file: &SourceFile, program: &Program<'_>) -> Vec<ReExport> {
+    let mut re_exports = Vec::new();
+    for statement in &program.body {
+        match statement {
+            Statement::ExportNamedDeclaration(export) => {
+                let Some(module_source) = &export.source else {
+                    continue;
+                };
+                for specifier in &export.specifiers {
+                    re_exports.push(ReExport {
+                        import_path: module_source.value.to_string(),
+                        import_source_span: span_from_oxc(file, module_source.span),
+                        kind: ReExportKind::Named {
+                            exported: module_export_name_text(&specifier.exported),
+                            imported: module_export_name_text(&specifier.local),
+                        },
+                    });
+                }
+            }
+            Statement::ExportAllDeclaration(export) => {
+                re_exports.push(ReExport {
+                    import_path: export.source.value.to_string(),
+                    import_source_span: span_from_oxc(file, export.source.span),
+                    kind: match &export.exported {
+                        Some(exported) => ReExportKind::StarAs {
+                            exported: module_export_name_text(exported),
+                        },
+                        None => ReExportKind::Star,
+                    },
+                });
+            }
+            _ => {}
+        }
+    }
+    re_exports
 }
 
 fn collect_export_names(
