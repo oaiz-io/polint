@@ -2,7 +2,7 @@
 # Regenerate: POLINT_UPDATE_DENSE_ID_BASELINE=1 cargo test -p polint --test internal_architecture dense_id_sweep --locked
 # Entry: <sha256 of (repo-relative path, enclosing fn/impl item, whitespace-collapsed line)>  <command>  <scope>  <count>
 # dot0: 152 hits, 41 test-only, 111 non-test
-# debug: 588 hits, 247 test-only, 341 non-test
+# debug: 589 hits, 248 test-only, 341 non-test
 # raw: 0 hits, 0 test-only, 0 non-test
 # other-debug: 132 hits, 132 test-only, 0 non-test
 0038500d6decf3dbeb069116d00d773912c3b88e191bbf9f87efeb9a70451dd1  debug  non-test  1
@@ -183,6 +183,7 @@
 34887849a58ab364b57fed65bc9e3bc449780c15d5019a730a28dc46e1ecd3bc  debug  test  1
 34887849a58ab364b57fed65bc9e3bc449780c15d5019a730a28dc46e1ecd3bc  dot0  test  1
 350335e166f630585f4ec15ec78e607f35ca5d2960938f79830d8baf681576a2  dot0  non-test  1
+352d1cbe18f26077f107ba181f8592f567d7c94341b981d18f0763f0eb0c72e5  debug  test  1
 35a16b8bb0e5315d9fe17ed30b12b53e9fc22763733eaa8e35afc01341a2b334  debug  non-test  1
 35da0c00a02b8880bfce69af24e51273d4468decf842720528fba5029f11fa9f  debug  test  1
 36ed4221984e8856751971c63f09bb6c09c4568ab1eeba173f53797d2f6b6038  debug  test  1

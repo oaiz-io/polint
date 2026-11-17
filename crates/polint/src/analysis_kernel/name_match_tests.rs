@@ -98,3 +98,31 @@ fn a_member_call_matched_only_by_property_name_stays_unresolved() {
         );
     }
 }
+
+#[test]
+fn the_refined_answer_for_a_name_matched_call_keeps_its_unresolved_row() {
+    let output = run(MEMBER_MATCHED_BY_NAME, REFINED);
+    let site = member_site(&output, "parse");
+    let refined = output
+        .db
+        .refined_call_edges()
+        .iter()
+        .filter(|edge| edge.site == site.id)
+        .collect::<Vec<_>>();
+
+    assert!(!refined.is_empty(), "the refined layer answers the site");
+    for edge in &refined {
+        assert!(
+            !(edge.status == CallTargetStatus::Resolved && claims(edge.precision.tier())),
+            "refined {:?} edge claims {:?}",
+            edge.tier,
+            edge.precision
+        );
+    }
+    assert!(
+        refined
+            .iter()
+            .any(|edge| edge.status != CallTargetStatus::Resolved),
+        "the refined answer has no unresolved row"
+    );
+}
