@@ -130,7 +130,7 @@ Zero or more per call site. A site the checker resolved to several signatures
 | `callsite_stable_key` | string | joins to the `callsite` row |
 | `callable` | string | in-scope `callable` identity, or empty when external |
 | `external` | string | moniker for a declaration outside scope: `node_modules:<package>/<subpath>#<name>` or `lib:<lib-file>#<name>` |
-| `dispatch` | string | why this declaration is a candidate: `declared`, `declared_signature`, `implementation`, `union_member` |
+| `dispatch` | string | why this declaration is a candidate: `declared`, `inferred`, `declared_signature`, `implementation`, `union_member` |
 | `file` | string | repo-relative path of the declaration, empty when external |
 | `span` | span | declaration span, absent when external |
 | `stable_key` | string | length-prefixed from callsite key + callee identity |
@@ -141,7 +141,15 @@ external target, and no `callable` row is emitted for it.
 
 `dispatch` is the tier's honesty contract in one field:
 
-- `declared` — what `getResolvedSignature` answered, and it has a body. Exact.
+- `declared` — what `getResolvedSignature` answered, it has a body, and the
+  callee can hold nothing else: the callee is the function itself, or names a
+  binding with one value declaration that holds it and that the scan never
+  sees written or overridden. Exact.
+- `inferred` — what `getResolvedSignature` answered, and it has a body, but
+  the callee's binding may hold another value when the call runs: a
+  reassigned variable, a property assigned in more than one place, a factory's
+  result, a parameter or destructured element, a member a subclass overrides.
+  A candidate, never the answer.
 - `declared_signature` — what `getResolvedSignature` answered, and it cannot
   run: an interface member, an overload signature, an abstract method, a
   function type. It crosses the wire so a call site with no runnable target
