@@ -391,7 +391,9 @@ fn typed_claims_at(
 ) {
     use crate::analysis_neutral::calls::facts::CallPrecision;
     let source = std::fs::read_to_string(root.join(file)).expect("read source");
-    let start = source.find(needle).unwrap_or_else(|| panic!("{needle} is in {file}")) as u32;
+    let start = source
+        .find(needle)
+        .unwrap_or_else(|| panic!("{needle} is in {file}")) as u32;
     let end = start + needle.len() as u32;
     let site = output
         .db
@@ -468,7 +470,8 @@ fn a_binding_that_can_hold_another_value_is_never_an_exact_answer() {
 
 #[test]
 fn a_call_the_checker_answers_keeps_its_exact_target() {
-    let Some(typescript) = skip_without_typescript("a_call_the_checker_answers_keeps_its_exact_target")
+    let Some(typescript) =
+        skip_without_typescript("a_call_the_checker_answers_keeps_its_exact_target")
     else {
         return;
     };
