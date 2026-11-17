@@ -834,6 +834,112 @@ fn heuristic_callee_binds_heuristically() {
     );
 }
 
+/// Places whose value the constraints do not describe, each beside a
+/// function: `w` has no input at all, `p` is a parameter of `g`, which nothing
+/// calls, and `r` is the result of calling `w`.
+///
+/// - `o.f = h; o.f = w; o.f()`
+/// - `v = h; v = w; v()`
+/// - `function g(p) { q = h; q = p; q() }`
+/// - `r = w(); s = h; s = r; s()`
+/// - `u = h; u()`
+fn open_input_fixture() -> Fixture {
+    let mut fixture = Fixture::new();
+    fixture.function("main");
+    fixture.function("g");
+    fixture.function("h");
+    fixture.alloc("o", "o:object");
+    fixture.store("o", "f", "h");
+    fixture.store("o", "f", "w");
+    fixture.load("o.f", "o", "f");
+    fixture.call(
+        "main",
+        "o.f()",
+        Call {
+            callee: "o.f",
+            receiver: Some("o"),
+            ..Call::default()
+        },
+    );
+    fixture.copy("v", "h");
+    fixture.copy("v", "w");
+    fixture.call(
+        "main",
+        "v()",
+        Call {
+            callee: "v",
+            ..Call::default()
+        },
+    );
+    let p = fixture.param("g", 0);
+    fixture.copy("q", "h");
+    fixture.copy("q", &p);
+    fixture.call(
+        "g",
+        "q()",
+        Call {
+            callee: "q",
+            ..Call::default()
+        },
+    );
+    fixture.call(
+        "main",
+        "w()",
+        Call {
+            callee: "w",
+            result: Some("r"),
+            ..Call::default()
+        },
+    );
+    fixture.copy("s", "h");
+    fixture.copy("s", "r");
+    fixture.call(
+        "main",
+        "s()",
+        Call {
+            callee: "s",
+            ..Call::default()
+        },
+    );
+    fixture.copy("u", "h");
+    fixture.call(
+        "main",
+        "u()",
+        Call {
+            callee: "u",
+            ..Call::default()
+        },
+    );
+    fixture
+}
+
+/// A set that also receives a value the constraints do not describe may hold
+/// more than the solve found, so an edge read from it is never exact. The
+/// target stays, below the exact tier.
+#[test]
+fn input_the_solve_cannot_see_keeps_edges_out_of_the_exact_tier() {
+    let fixture = open_input_fixture();
+    let result = fixture.solve(&SolverBudget::default());
+    let heuristic = (PointsToStatus::Present, PointsToPrecision::Heuristic);
+    for site in ["o.f()", "v()", "q()", "s()"] {
+        assert_eq!(
+            fixture.targets(&result, site),
+            BTreeMap::from([("h".to_string(), heuristic)]),
+            "`{site}` reads a set with an input the solve cannot see"
+        );
+    }
+    assert_eq!(
+        fixture.targets(&result, "w()"),
+        BTreeMap::new(),
+        "an unresolved callee has no target"
+    );
+    assert_eq!(
+        fixture.targets(&result, "u()"),
+        BTreeMap::from([("h".to_string(), EXACT)]),
+        "a set whose every input is described stays exact"
+    );
+}
+
 /// Copies and calls only: no field slot, no budget event.
 fn copy_only_fixture() -> Fixture {
     let mut fixture = Fixture::new();
