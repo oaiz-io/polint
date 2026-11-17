@@ -492,8 +492,11 @@ impl<'a> Dump<'a> {
         }
 
         // A `BTreeSet`, so the reasons are already in a fixed order.
-        let budget_reasons: Vec<&str> =
-            db.solver_budget_reasons().iter().map(String::as_str).collect();
+        let budget_reasons: Vec<&str> = db
+            .solver_budget_reasons()
+            .iter()
+            .map(String::as_str)
+            .collect();
 
         json!({
             "schema": SCHEMA,
