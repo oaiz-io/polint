@@ -1,7 +1,10 @@
 use crate::analysis_api::{Digest, DigestKind};
 
 /// Schema label for the `polint.semantic_graph` provider manifest.
-pub const SEMANTIC_GRAPH_SCHEMA_LABEL: &str = "semantic-graph-facts-1";
+/// The schema grows with the stored rows: the second version adds the call
+/// shape of `CallConstraint` and the per-function parameter, rest, `this` and
+/// return nodes.
+pub const SEMANTIC_GRAPH_SCHEMA_LABEL: &str = "semantic-graph-facts-2";
 
 /// Provider parameter digest for `polint.semantic_graph`.
 ///
@@ -56,9 +59,9 @@ pub fn semantic_graph_provider_parameter_digest() -> Digest {
             "semantic_nodes",
             "semantic_edges",
             "semantic_constraints",
-            "node_projection_v1",
+            "node_projection_v2",
             "edge_projection_v1",
-            "constraint_projection_v1",
+            "constraint_projection_v2",
             "ts_direct_binding_output",
             "ts_direct_binding_projection_v1",
             "ts_token_source_flow_projection_v1",
@@ -83,13 +86,13 @@ mod tests {
                 DigestKind::ProviderParameters,
                 "semantic_graph_provider_parameters",
                 &[
-                    "semantic-graph-facts-1",
+                    "semantic-graph-facts-2",
                     "semantic_nodes",
                     "semantic_edges",
                     "semantic_constraints",
-                    "node_projection_v1",
+                    "node_projection_v2",
                     "edge_projection_v1",
-                    "constraint_projection_v1",
+                    "constraint_projection_v2",
                     "ts_direct_binding_output",
                     "ts_direct_binding_projection_v1",
                     "ts_token_source_flow_projection_v1",
@@ -171,7 +174,40 @@ mod tests {
     }
 
     #[test]
-    fn semantic_graph_schema_label_is_semantic_graph_facts_1() {
-        assert_eq!(super::SEMANTIC_GRAPH_SCHEMA_LABEL, "semantic-graph-facts-1");
+    fn call_shape_invalidates_the_digest_without_it() {
+        // A graph stored before call constraints carried their callee, receiver,
+        // arguments and result, and before functions had `this` and return
+        // nodes, has none of those rows: it must not be reused.
+        let without_call_shape = Digest::from_parts(
+            DigestKind::ProviderParameters,
+            "semantic_graph_provider_parameters",
+            &[
+                "semantic-graph-facts-1",
+                "semantic_nodes",
+                "semantic_edges",
+                "semantic_constraints",
+                "node_projection_v1",
+                "edge_projection_v1",
+                "constraint_projection_v1",
+                "ts_direct_binding_output",
+                "ts_direct_binding_projection_v1",
+                "ts_token_source_flow_projection_v1",
+                "ts_callable_flow_projection_v1",
+                "go_semantic_output_digest",
+                "go_semantic_projection_v1",
+                "ts_object_model_projection_v4",
+                "adaptation_model_v1",
+            ],
+        );
+
+        assert_ne!(
+            super::semantic_graph_provider_parameter_digest(),
+            without_call_shape
+        );
+    }
+
+    #[test]
+    fn semantic_graph_schema_label_is_semantic_graph_facts_2() {
+        assert_eq!(super::SEMANTIC_GRAPH_SCHEMA_LABEL, "semantic-graph-facts-2");
     }
 }

@@ -65,7 +65,21 @@ pub enum ConstraintKind {
     },
     /// A call obligation anchored at a callsite node, consumed by the
     /// unified solver to resolve dynamic dispatch / refine targets.
-    CallConstraint { callsite: SemanticNodeId },
+    ///
+    /// The callsite node's points-to set is the site's callees. `callee` is the
+    /// place whose value is called, `receiver` the value bound to the callee's
+    /// `this`, `arguments` the argument places in order and `result` the place
+    /// that receives the return value; each is `None` (or empty) when the
+    /// frontend has no place for it. Arguments from `spread_from` on come from
+    /// a spread and are not bound to parameters by position.
+    CallConstraint {
+        callsite: SemanticNodeId,
+        callee: Option<SemanticNodeId>,
+        receiver: Option<SemanticNodeId>,
+        arguments: Vec<SemanticNodeId>,
+        spread_from: Option<usize>,
+        result: Option<SemanticNodeId>,
+    },
     /// Accepted repo-local adaptation model edge. Only validated model facts produce
     /// this variant; rejected facts remain report-only and never lower to a
     /// constraint.
@@ -86,6 +100,18 @@ pub enum ConstraintKind {
 }
 
 impl ConstraintKind {
+    /// A call constraint that names only its callsite.
+    pub fn call_at(callsite: SemanticNodeId) -> Self {
+        Self::CallConstraint {
+            callsite,
+            callee: None,
+            receiver: None,
+            arguments: Vec::new(),
+            spread_from: None,
+            result: None,
+        }
+    }
+
     /// Stable lowercase tag label used in stable keys and digest payloads.
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -121,7 +147,19 @@ impl ConstraintKind {
                 field: _,
                 src,
             } => vec![*base, *src],
-            Self::CallConstraint { callsite } => vec![*callsite],
+            Self::CallConstraint {
+                callsite,
+                callee,
+                receiver,
+                arguments,
+                spread_from: _,
+                result,
+            } => std::iter::once(*callsite)
+                .chain(*callee)
+                .chain(*receiver)
+                .chain(arguments.iter().copied())
+                .chain(*result)
+                .collect(),
             Self::ModelEdge {
                 source,
                 target,
@@ -163,8 +201,23 @@ impl ConstraintKind {
                 *base = map(*base);
                 *src = map(*src);
             }
-            Self::CallConstraint { callsite } => {
+            Self::CallConstraint {
+                callsite,
+                callee,
+                receiver,
+                arguments,
+                spread_from: _,
+                result,
+            } => {
                 *callsite = map(*callsite);
+                for node in callee
+                    .iter_mut()
+                    .chain(receiver.iter_mut())
+                    .chain(arguments.iter_mut())
+                    .chain(result.iter_mut())
+                {
+                    *node = map(*node);
+                }
             }
             Self::ModelEdge {
                 source,
@@ -214,6 +267,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn call_constraint_references_and_remaps_every_place() {
+        let mut kind = ConstraintKind::CallConstraint {
+            callsite: SemanticNodeId(1),
+            callee: Some(SemanticNodeId(2)),
+            receiver: Some(SemanticNodeId(3)),
+            arguments: vec![SemanticNodeId(4), SemanticNodeId(5)],
+            spread_from: Some(1),
+            result: Some(SemanticNodeId(6)),
+        };
+
+        assert_eq!(
+            kind.referenced_nodes(),
+            (1..=6).map(SemanticNodeId).collect::<Vec<_>>()
+        );
+        kind.remap_nodes(|node| SemanticNodeId(node.0 + 10));
+        assert_eq!(
+            kind.referenced_nodes(),
+            (11..=16).map(SemanticNodeId).collect::<Vec<_>>()
+        );
+        assert!(matches!(
+            kind,
+            ConstraintKind::CallConstraint {
+                spread_from: Some(1),
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn constraint_kind_has_exactly_7_variants() {
         // Compile-time exhaustive match over every arm; the array length lock fails
         // to compile if a variant is added without updating this test.
@@ -247,9 +329,7 @@ mod tests {
                 field: "f".to_string(),
                 src: SemanticNodeId(1),
             }),
-            assert_all(&ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(0),
-            }),
+            assert_all(&ConstraintKind::call_at(SemanticNodeId(0))),
             assert_all(&model_edge()),
             assert_all(&ConstraintKind::TypeConstraint {
                 node: SemanticNodeId(0),
@@ -270,9 +350,7 @@ mod tests {
                 type_fact: TypeFactId(0),
             },
             model_edge(),
-            ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(0),
-            },
+            ConstraintKind::call_at(SemanticNodeId(0)),
             ConstraintKind::FieldStore {
                 base: SemanticNodeId(0),
                 field: "f".to_string(),
@@ -355,9 +433,7 @@ mod tests {
         let db = crate::analysis_neutral::LocalAnalysisDb::new();
         let fact = ConstraintFact {
             id: SemanticConstraintId(7),
-            kind: ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(3),
-            },
+            kind: ConstraintKind::call_at(SemanticNodeId(3)),
             status: PointsToStatus::Present,
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: db

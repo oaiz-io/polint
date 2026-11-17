@@ -26,6 +26,7 @@ struct Call<'a> {
     callee: &'a str,
     receiver: Option<&'a str>,
     arguments: Vec<&'a str>,
+    spread_from: Option<usize>,
     result: Option<&'a str>,
 }
 
@@ -49,6 +50,7 @@ struct Fixture {
     functions: BTreeSet<SemanticNodeId>,
     constraints: Vec<FixtureConstraint>,
     sites: BTreeMap<String, Site>,
+    signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
 }
 
 impl Fixture {
@@ -60,6 +62,7 @@ impl Fixture {
             functions: BTreeSet::new(),
             constraints: Vec::new(),
             sites: BTreeMap::new(),
+            signatures: BTreeMap::new(),
         }
     }
 
@@ -86,20 +89,36 @@ impl Fixture {
 
     fn param(&mut self, function: &str, index: usize) -> String {
         let name = format!("{function}#param{index}");
-        self.node(&name);
+        let place = self.signature_place(&name);
+        self.signature(function).params.insert(index, place);
         name
     }
 
     fn this_of(&mut self, function: &str) -> String {
         let name = format!("{function}#this");
-        self.node(&name);
+        let place = self.signature_place(&name);
+        self.signature(function).this = Some(place);
         name
     }
 
     fn return_of(&mut self, function: &str) -> String {
         let name = format!("{function}#return");
-        self.node(&name);
+        let place = self.signature_place(&name);
+        self.signature(function).ret = Some(place);
         name
+    }
+
+    fn signature_place(&mut self, name: &str) -> SignaturePlace {
+        let node = self.node(name);
+        SignaturePlace {
+            var: var_for_node(node),
+            stable_key: self.node_key(node),
+        }
+    }
+
+    fn signature(&mut self, function: &str) -> &mut PointsToSignature {
+        let object = object_for_node(self.node(function));
+        self.signatures.entry(object).or_default()
     }
 
     fn push(&mut self, key: String, kind: ConstraintKind, precision: PointsToPrecision) {
@@ -164,27 +183,28 @@ impl Fixture {
         );
     }
 
-    /// Adds a call site. Today's `CallConstraint` names only the site, so the
-    /// callee reaches the site through a copy into the site's node; the
-    /// receiver, arguments and result have no form the solver reads.
+    /// Adds a call site: its callee, receiver, arguments and result.
     fn call(&mut self, caller: &str, site: &str, call: Call<'_>) {
         let caller = self.node(caller);
         let node = self.node(site);
         let constraint_key = format!("call:{site}");
+        let kind = ConstraintKind::CallConstraint {
+            callsite: node,
+            callee: Some(self.node(call.callee)),
+            receiver: call.receiver.map(|place| self.node(place)),
+            arguments: call
+                .arguments
+                .iter()
+                .map(|place| self.node(place))
+                .collect(),
+            spread_from: call.spread_from,
+            result: call.result.map(|place| self.node(place)),
+        };
         self.push(
             constraint_key.clone(),
-            ConstraintKind::CallConstraint { callsite: node },
+            kind,
             PointsToPrecision::FlowInsensitive,
         );
-        self.copy(site, call.callee);
-        for place in call
-            .receiver
-            .into_iter()
-            .chain(call.arguments.iter().copied())
-            .chain(call.result)
-        {
-            self.node(place);
-        }
         let constraint_key = self.interner.intern(constraint_key);
         self.sites.insert(
             site.to_string(),
@@ -234,6 +254,7 @@ impl Fixture {
                     precision: PointsToPrecision::FlowInsensitive,
                 })
                 .collect(),
+            signatures: self.signatures.clone(),
         }
     }
 
@@ -391,6 +412,43 @@ fn budget_event_keeps_sets_and_edges_derived_before_it() {
     );
 }
 
+/// A call through a set the budget left incomplete may reach a function the
+/// solve never saw in it, so every parameter it could fill is incomplete, the
+/// one it did bind included.
+#[test]
+fn call_through_an_incomplete_callee_leaves_parameters_incomplete() {
+    let mut fixture = budget_fixture();
+    fixture.function("h");
+    for function in ["f", "g"] {
+        let param = fixture.param(function, 0);
+        fixture.call(
+            function,
+            &format!("{param}()"),
+            Call {
+                callee: &param,
+                ..Call::default()
+            },
+        );
+    }
+    fixture.call(
+        "main",
+        "x(h)",
+        Call {
+            callee: "x",
+            arguments: vec!["h"],
+            ..Call::default()
+        },
+    );
+    let result = fixture.solve(&budget(|budget| budget.points_to.max_objects_per_var = 1));
+    for place in ["f#param0", "g#param0"] {
+        assert_eq!(
+            fixture.set(&result, place).status,
+            PointsToStatus::BudgetExceeded,
+            "`{place}` may receive `h` through the incomplete callee set"
+        );
+    }
+}
+
 /// A call through a set the budget left incomplete keeps the edges it has,
 /// marked incomplete, and is counted as a site left incomplete.
 #[test]
@@ -498,6 +556,27 @@ fn call_binds_each_argument_to_its_parameter() {
         fixture.targets(&result, "q()"),
         BTreeMap::from([("h2".to_string(), EXACT)]),
         "the second argument reaches the second parameter and only it"
+    );
+    let site_key = fixture.node_key(fixture.sites["q()"].node);
+    let edge = result
+        .derived_edges
+        .iter()
+        .find(|edge| {
+            edge.provenance
+                .contributing_facts
+                .iter()
+                .any(|fact| fact.stable_key == site_key)
+        })
+        .expect("q() has an edge");
+    let facts = edge
+        .provenance
+        .contributing_facts
+        .iter()
+        .map(|fact| fixture.interner.resolve(fact.stable_key).to_string())
+        .collect::<BTreeSet<_>>();
+    assert!(
+        facts.contains("call:g(h1, h2)") && facts.contains("fixture:node:g#param1"),
+        "the edge names the call and the parameter it bound: {facts:?}"
     );
 }
 
@@ -654,6 +733,107 @@ fn heuristic_input_makes_every_edge_it_reaches_heuristic() {
     );
 }
 
+/// `function g(p) { p() }`, called as `g(h1)` and as `g(...xs)`.
+fn spread_fixture() -> Fixture {
+    let mut fixture = Fixture::new();
+    fixture.function("main");
+    fixture.function("g");
+    fixture.function("h1");
+    fixture.function("h2");
+    let p = fixture.param("g", 0);
+    fixture.call(
+        "g",
+        "p()",
+        Call {
+            callee: &p,
+            ..Call::default()
+        },
+    );
+    fixture.call(
+        "main",
+        "g(h1)",
+        Call {
+            callee: "g",
+            arguments: vec!["h1"],
+            ..Call::default()
+        },
+    );
+    fixture.alloc("xs", "xs:array");
+    fixture.store("xs", "0", "h2");
+    fixture.call(
+        "main",
+        "g(...xs)",
+        Call {
+            callee: "g",
+            arguments: vec!["xs"],
+            spread_from: Some(0),
+            ..Call::default()
+        },
+    );
+    fixture
+}
+
+/// A spread argument fills parameters the solve does not bind, so those
+/// parameters may hold values it never saw: what they do hold is heuristic.
+#[test]
+fn spread_argument_makes_the_parameters_it_fills_heuristic() {
+    let fixture = spread_fixture();
+    let result = fixture.solve(&SolverBudget::default());
+    assert_eq!(
+        fixture.targets(&result, "p()"),
+        BTreeMap::from([(
+            "h1".to_string(),
+            (PointsToStatus::Present, PointsToPrecision::Heuristic)
+        )]),
+        "the spread array is not bound to `p`, and `p` is not exact"
+    );
+}
+
+/// `function g(p) { p() }` reached only through a heuristic callee set.
+fn heuristic_callee_fixture() -> Fixture {
+    let mut fixture = Fixture::new();
+    fixture.function("main");
+    fixture.function("g");
+    fixture.function("h");
+    let p = fixture.param("g", 0);
+    fixture.call(
+        "g",
+        "p()",
+        Call {
+            callee: &p,
+            ..Call::default()
+        },
+    );
+    fixture.heuristic_copy("f", "g");
+    fixture.call(
+        "main",
+        "f(h)",
+        Call {
+            callee: "f",
+            arguments: vec!["h"],
+            ..Call::default()
+        },
+    );
+    fixture
+}
+
+/// A call whose callee set is heuristic binds heuristically: the parameter
+/// it fills, and every edge read from it, are heuristic.
+#[test]
+fn heuristic_callee_binds_heuristically() {
+    let fixture = heuristic_callee_fixture();
+    let result = fixture.solve(&SolverBudget::default());
+    let heuristic = (PointsToStatus::Present, PointsToPrecision::Heuristic);
+    assert_eq!(
+        fixture.targets(&result, "f(h)"),
+        BTreeMap::from([("g".to_string(), heuristic)])
+    );
+    assert_eq!(
+        fixture.targets(&result, "p()"),
+        BTreeMap::from([("h".to_string(), heuristic)])
+    );
+}
+
 /// Copies and calls only: no field slot, no budget event.
 fn copy_only_fixture() -> Fixture {
     let mut fixture = Fixture::new();
@@ -684,13 +864,24 @@ fn copy_only_fixture() -> Fixture {
 fn assert_order_independent(fixture: &Fixture, budget: &SolverBudget) {
     let inputs = fixture.inputs();
     let constraints = project_constraints(&fixture.interner, &inputs);
-    let expected = solve_points_to(&fixture.interner, &constraints, budget.points_to_budget());
+    let calls = project_calls(&inputs);
+    let solve = |constraints: &[PointsToConstraintFact], calls: &PointsToCallInputs| {
+        solve_points_to_with_calls(
+            &fixture.interner,
+            constraints,
+            calls,
+            budget.points_to_budget(),
+        )
+    };
+    let expected = solve(&constraints, &calls);
     let expected_edges = fixture.solve(budget).derived_edges;
     let mut shuffle = Shuffle(0x9e37_79b9_7f4a_7c15);
     for round in 0..50 {
         let mut permuted = constraints.clone();
         shuffle.permute(&mut permuted);
-        let solved = solve_points_to(&fixture.interner, &permuted, budget.points_to_budget());
+        let mut permuted_calls = calls.clone();
+        shuffle.permute(&mut permuted_calls.calls);
+        let solved = solve(&permuted, &permuted_calls);
         assert_eq!(solved, expected, "permutation {round} changed the solve");
 
         let mut source = fixture.constraints.clone();
@@ -718,6 +909,8 @@ fn order_independence_with_fields_calls_and_budget() {
     assert_order_independent(&return_fixture(), &SolverBudget::default());
     assert_order_independent(&receiver_fixture(), &SolverBudget::default());
     assert_order_independent(&heuristic_fixture(), &SolverBudget::default());
+    assert_order_independent(&spread_fixture(), &SolverBudget::default());
+    assert_order_independent(&heuristic_callee_fixture(), &SolverBudget::default());
     let mut fields = Fixture::new();
     synthetic_package(&mut fields, 0, 4);
     assert_order_independent(&fields, &SolverBudget::default());

@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use crate::analysis_api::FactPrecision;
 use crate::analysis_neutral::ids::SemanticNodeId;
-use crate::analysis_neutral::semantic_graph::constraints::ConstraintFact;
+use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
 use crate::analysis_neutral::semantic_graph::facts::{
     SemanticEdgeFact, SemanticNodeFact, SemanticPrecision,
 };
@@ -22,6 +22,10 @@ use crate::internal_core::{Diagnostic, DiagnosticRange as TextRange};
 ///
 /// Failures surface as structured [`Diagnostic`]s carrying `family`/`stable_key`/
 /// `field`/`reason` evidence, mirroring `reachability::validate`.
+/// The most arguments a stored call constraint may carry: more than any call
+/// a frontend lowers, so a longer list is a corrupt row.
+const MAX_CALL_ARGUMENTS: usize = 255;
+
 pub fn validate_semantic_graph(db: &impl AnalysisHost, diagnostics: &mut Vec<Diagnostic>) {
     validate_semantic_graph_rows(
         &db.stable_key_interner(),
@@ -126,6 +130,17 @@ fn validate_semantic_graph_rows(
     // checked against the node set here.
     for constraint in constraints {
         let stable_key = interner.resolve(constraint.stable_key);
+        if let ConstraintKind::CallConstraint { arguments, .. } = &constraint.kind
+            && arguments.len() > MAX_CALL_ARGUMENTS
+        {
+            push_diagnostic(
+                diagnostics,
+                "SemanticConstraint",
+                &stable_key,
+                "arguments",
+                "call constraint has more arguments than a call can pass",
+            );
+        }
         for node in constraint.kind.referenced_nodes() {
             if !node_ids.contains(&node) {
                 push_diagnostic(
@@ -267,7 +282,7 @@ mod tests {
     use crate::analysis_neutral::LocalAnalysisDb;
     use crate::analysis_neutral::ids::{CallSiteId, SemanticNodeId};
     use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
-    use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
+
     use crate::analysis_neutral::semantic_graph::facts::{
         EdgeKind, NodeKind, SemanticEdgeFact, SemanticNodeFact,
     };
@@ -326,9 +341,7 @@ mod tests {
             }],
             constraints: vec![ConstraintFact {
                 id: Default::default(),
-                kind: ConstraintKind::CallConstraint {
-                    callsite: SemanticNodeId(1),
-                },
+                kind: ConstraintKind::call_at(SemanticNodeId(1)),
                 status: PointsToStatus::Present,
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: stable_key_for_test("constraint|call_constraint|b"),
@@ -403,6 +416,96 @@ mod tests {
                 format!("{diagnostic:?}").contains("dangling semantic constraint node reference")
             }),
             "{diagnostics:?}"
+        );
+    }
+
+    fn call_constraint(kind: ConstraintKind, stable_key: &str) -> ConstraintFact {
+        ConstraintFact {
+            id: Default::default(),
+            kind,
+            status: PointsToStatus::Present,
+            precision: PointsToPrecision::FlowInsensitive,
+            stable_key: stable_key_for_test(stable_key),
+        }
+    }
+
+    fn rejections(
+        constraints: &[ConstraintFact],
+        nodes: &[SemanticNodeFact],
+        reason: &str,
+    ) -> usize {
+        let mut diagnostics = Vec::new();
+        validate_semantic_graph_rows(
+            &test_stable_key_interner(),
+            nodes,
+            &[],
+            constraints,
+            &mut diagnostics,
+        );
+        diagnostics
+            .iter()
+            .filter(|diagnostic| format!("{diagnostic:?}").contains(reason))
+            .count()
+    }
+
+    #[test]
+    fn validation_rejects_a_call_constraint_with_more_than_255_arguments() {
+        let nodes = vec![node(
+            NodeKind::Callsite(CallSiteId(1)),
+            SemanticPrecision::Conservative,
+            "node|callsite|call",
+        )];
+        let call = |count: usize, key: &str| {
+            call_constraint(
+                ConstraintKind::CallConstraint {
+                    callsite: SemanticNodeId(0),
+                    callee: None,
+                    receiver: None,
+                    arguments: vec![SemanticNodeId(0); count],
+                    spread_from: None,
+                    result: None,
+                },
+                key,
+            )
+        };
+        let reason = "call constraint has more arguments than a call can pass";
+
+        assert_eq!(
+            rejections(&[call(255, "constraint|call|255")], &nodes, reason),
+            0
+        );
+        assert_eq!(
+            rejections(&[call(256, "constraint|call|256")], &nodes, reason),
+            1
+        );
+    }
+
+    #[test]
+    fn validation_rejects_dangling_call_constraint_places() {
+        let nodes = vec![node(
+            NodeKind::Callsite(CallSiteId(1)),
+            SemanticPrecision::Conservative,
+            "node|callsite|call",
+        )];
+        let constraints = vec![call_constraint(
+            ConstraintKind::CallConstraint {
+                callsite: SemanticNodeId(0),
+                callee: Some(SemanticNodeId(91)),
+                receiver: Some(SemanticNodeId(92)),
+                arguments: vec![SemanticNodeId(0), SemanticNodeId(93)],
+                spread_from: None,
+                result: Some(SemanticNodeId(94)),
+            },
+            "constraint|call|dangling",
+        )];
+
+        assert_eq!(
+            rejections(
+                &constraints,
+                &nodes,
+                "dangling semantic constraint node reference"
+            ),
+            4
         );
     }
 

@@ -462,7 +462,7 @@ impl<'a> SolverProjectionIndex<'a> {
             .map(|site| (db.resolve_stable_key(site.stable_key).to_string(), site))
             .collect::<BTreeMap<_, _>>();
         for constraint in db.semantic_constraints() {
-            let ConstraintKind::CallConstraint { callsite } = &constraint.kind else {
+            let ConstraintKind::CallConstraint { callsite, .. } = &constraint.kind else {
                 continue;
             };
             let Some(site) = callsite_id_by_node

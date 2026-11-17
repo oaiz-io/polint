@@ -10,6 +10,12 @@
 //! a call; every other set finished and is `Present`. Each set carries the
 //! weakest precision of the inputs that reached it, so a heuristic input
 //! never yields an exact set.
+//!
+//! Calls are a second input beside the constraints. When a call's callee set
+//! gains a function with a signature, the call rule copies each argument into
+//! the parameter at its position, the receiver into `this` and the return into
+//! the call's result. Those copies enter the same worklist, so the solve stays
+//! the least fixed point of constraints and calls together.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -22,6 +28,7 @@ use super::vars;
 use crate::analysis_api::{FactFamily, stable_key_from_parts, stable_key_text_from_parts};
 use crate::analysis_neutral::ids::{ObjectTokenId, PointsToSetId, PtVarId};
 use crate::analysis_neutral::solver::budget::BudgetReason;
+use crate::internal_core::StableKeyId;
 
 /// Ceilings against runaway input, not precision knobs: a solve that reaches
 /// one stops, keeps what it derived and names the sets it left incomplete.
@@ -49,6 +56,62 @@ pub struct PointsToSolveResult {
     pub sets: Vec<PointsToSetFact>,
     pub budget_status: PointsToBudgetStatus,
     pub budget_reasons: BTreeSet<String>,
+    /// For each variable a call-rule copy reached, the bindings that brought
+    /// values to it: the call's stable key and the signature place it bound.
+    /// At most [`MAX_BINDINGS_PER_VAR`] per variable, the first by key text.
+    pub call_bindings: BTreeMap<PtVarId, Vec<CallBinding>>,
+}
+
+/// One call-rule copy: the call that made it and the signature place it
+/// bound (a parameter, `this`, or the return the result reads).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CallBinding {
+    pub call: StableKeyId,
+    pub place: StableKeyId,
+}
+
+/// Bindings named per variable; the bound keeps provenance small on long
+/// copy chains.
+pub const MAX_BINDINGS_PER_VAR: usize = 4;
+
+/// A call the solve connects to its callees. `callee` is the variable whose
+/// set is the site's callees.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PointsToCall {
+    pub stable_key: StableKeyId,
+    pub callee: PtVarId,
+    pub receiver: Option<PtVarId>,
+    pub arguments: Vec<PtVarId>,
+    /// Arguments from this position on are spread from an array and are not
+    /// bound by position.
+    pub spread_from: Option<usize>,
+    pub result: Option<PtVarId>,
+    pub precision: PointsToPrecision,
+}
+
+/// One place of a function's signature.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SignaturePlace {
+    pub var: PtVarId,
+    pub stable_key: StableKeyId,
+}
+
+/// The places of one function the call rule binds. A place the frontend does
+/// not model is absent and receives nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PointsToSignature {
+    pub params: BTreeMap<usize, SignaturePlace>,
+    pub rest: Option<SignaturePlace>,
+    pub this: Option<SignaturePlace>,
+    pub ret: Option<SignaturePlace>,
+}
+
+/// The calls of a solve and the signatures of the function objects they may
+/// reach, keyed by the function's object.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PointsToCallInputs {
+    pub calls: Vec<PointsToCall>,
+    pub signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
 }
 
 pub fn solve_points_to(
@@ -56,8 +119,23 @@ pub fn solve_points_to(
     constraints: &[PointsToConstraintFact],
     budget: PointsToBudget,
 ) -> PointsToSolveResult {
+    solve_points_to_with_calls(
+        interner,
+        constraints,
+        &PointsToCallInputs::default(),
+        budget,
+    )
+}
+
+pub fn solve_points_to_with_calls(
+    interner: &crate::internal_core::StableKeyInterner,
+    constraints: &[PointsToConstraintFact],
+    calls: &PointsToCallInputs,
+    budget: PointsToBudget,
+) -> PointsToSolveResult {
     let mut solver = Solver::new(interner, budget);
     solver.initialize(constraints);
+    solver.initialize_calls(calls);
     solver.run();
     solver.into_result()
 }
@@ -97,6 +175,12 @@ struct Solver<'a> {
     slots_by_field: BTreeMap<String, BTreeSet<PtVarId>>,
     variable_identities: BTreeMap<PtVarId, BTreeSet<String>>,
     object_identities: BTreeMap<ObjectTokenId, BTreeSet<String>>,
+    /// Calls sorted by stable key text, and the calls of each callee variable.
+    calls: Vec<PointsToCall>,
+    calls_by_callee: BTreeMap<PtVarId, Vec<usize>>,
+    signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
+    /// The call-rule copies into each variable.
+    bindings: BTreeMap<PtVarId, BTreeSet<CallBinding>>,
     steps: usize,
     halted: bool,
     /// Variables whose propagation a budget event cut short.
@@ -122,6 +206,10 @@ impl<'a> Solver<'a> {
             slots_by_field: BTreeMap::new(),
             variable_identities: BTreeMap::new(),
             object_identities: BTreeMap::new(),
+            calls: Vec::new(),
+            calls_by_callee: BTreeMap::new(),
+            signatures: BTreeMap::new(),
+            bindings: BTreeMap::new(),
             steps: 0,
             halted: false,
             interrupted: BTreeSet::new(),
@@ -174,6 +262,57 @@ impl<'a> Solver<'a> {
                 }
             }
         }
+    }
+
+    fn initialize_calls(&mut self, inputs: &PointsToCallInputs) {
+        let mut calls = inputs
+            .calls
+            .iter()
+            .map(|call| (self.interner.resolve(call.stable_key), call))
+            .collect::<Vec<_>>();
+        calls.sort_by(|(left_key, left), (right_key, right)| {
+            left_key.cmp(right_key).then_with(|| left.cmp(right))
+        });
+        calls.dedup_by(|(_, left), (_, right)| left == right);
+        for (index, (key, call)) in calls.into_iter().enumerate() {
+            self.record_variable_identity(call.callee, &key, "call_callee");
+            if let Some(receiver) = call.receiver {
+                self.record_variable_identity(receiver, &key, "call_receiver");
+            }
+            for argument in &call.arguments {
+                self.record_variable_identity(*argument, &key, "call_argument");
+            }
+            if let Some(result) = call.result {
+                self.record_variable_identity(result, &key, "call_result");
+                // The result holds only what the callees return, so it is as
+                // weak and as incomplete as the callee set.
+                add_edge(
+                    &mut self.dependency_edges,
+                    call.callee,
+                    result,
+                    call.precision,
+                );
+            }
+            self.calls_by_callee
+                .entry(call.callee)
+                .or_default()
+                .push(index);
+            self.calls.push(call.clone());
+        }
+        for signature in inputs.signatures.values() {
+            let places = signature
+                .params
+                .values()
+                .map(|place| (place, "function_parameter"))
+                .chain(signature.rest.iter().map(|place| (place, "function_rest")))
+                .chain(signature.this.iter().map(|place| (place, "function_this")))
+                .chain(signature.ret.iter().map(|place| (place, "function_return")));
+            for (place, role) in places {
+                let key = self.interner.resolve(place.stable_key);
+                self.record_variable_identity(place.var, &key, role);
+            }
+        }
+        self.signatures = inputs.signatures.clone();
     }
 
     fn seed(&mut self, dst: PtVarId, object: ObjectTokenId, precision: PointsToPrecision) {
@@ -286,6 +425,89 @@ impl<'a> Solver<'a> {
                 self.add_copy_edge(store.var, slot, store.precision);
             }
         }
+        self.apply_call_rule(var, &new);
+    }
+
+    /// Connects every call whose callee is `callee` to the functions among
+    /// `new` that have a signature: argument to parameter by position,
+    /// receiver to `this`, return to result. A parameter the call fills from
+    /// a spread, and the rest parameter, receive values the solve does not
+    /// model, so they are made heuristic instead of bound.
+    fn apply_call_rule(&mut self, callee: PtVarId, new: &BTreeSet<ObjectTokenId>) {
+        let Some(indices) = self.calls_by_callee.get(&callee).cloned() else {
+            return;
+        };
+        for index in indices {
+            let call = self.calls[index].clone();
+            for object in new {
+                let Some(signature) = self.signatures.get(object).cloned() else {
+                    continue;
+                };
+                let bound = call.spread_from.map_or(call.arguments.len(), |spread| {
+                    spread.min(call.arguments.len())
+                });
+                for (position, argument) in call.arguments[..bound].iter().enumerate() {
+                    if let Some(param) = signature.params.get(&position) {
+                        self.bind(index, *argument, *param, call.precision);
+                    }
+                }
+                if call.spread_from.is_some() {
+                    for param in signature.params.range(bound..).map(|(_, param)| param) {
+                        add_edge(
+                            &mut self.dependency_edges,
+                            callee,
+                            param.var,
+                            PointsToPrecision::Heuristic,
+                        );
+                    }
+                }
+                if let Some(rest) = signature.rest
+                    && !call.arguments.is_empty()
+                {
+                    add_edge(
+                        &mut self.dependency_edges,
+                        callee,
+                        rest.var,
+                        PointsToPrecision::Heuristic,
+                    );
+                }
+                if let (Some(receiver), Some(this)) = (call.receiver, signature.this) {
+                    self.bind(index, receiver, this, call.precision);
+                }
+                if let (Some(result), Some(ret)) = (call.result, signature.ret) {
+                    self.add_copy_edge(ret.var, result, call.precision);
+                    self.bindings
+                        .entry(result)
+                        .or_default()
+                        .insert(CallBinding {
+                            call: call.stable_key,
+                            place: ret.stable_key,
+                        });
+                }
+            }
+        }
+    }
+
+    /// Copies `src` into a signature place for a call, and makes the place as
+    /// weak and as incomplete as the callee set it was reached through.
+    fn bind(
+        &mut self,
+        index: usize,
+        src: PtVarId,
+        place: SignaturePlace,
+        precision: PointsToPrecision,
+    ) {
+        let call = &self.calls[index];
+        let (callee, key) = (call.callee, call.stable_key);
+        add_edge(&mut self.dependency_edges, callee, place.var, precision);
+        self.add_copy_edge(src, place.var, precision);
+        self.bindings
+            .entry(place.var)
+            .or_default()
+            .insert(CallBinding {
+                call: key,
+                place: place.stable_key,
+            });
     }
 
     fn add_copy_edge(&mut self, src: PtVarId, dst: PtVarId, precision: PointsToPrecision) {
@@ -352,7 +574,9 @@ impl<'a> Solver<'a> {
     /// Variables whose sets may still be missing objects: the ones left on
     /// the queue or cut short, and everything they can reach. A store through
     /// an incomplete base may write a field of any object, so every slot of
-    /// that field is incomplete too.
+    /// that field is incomplete too; likewise a call through an incomplete
+    /// callee that passes values may reach any function, so every parameter
+    /// and `this` is incomplete.
     fn incomplete_variables(&self) -> BTreeSet<PtVarId> {
         let mut incomplete = BTreeSet::new();
         let mut work = self
@@ -361,6 +585,7 @@ impl<'a> Solver<'a> {
             .chain(self.interrupted.iter())
             .copied()
             .collect::<Vec<_>>();
+        let mut passed_values = false;
         while let Some(var) = work.pop() {
             if !incomplete.insert(var) {
                 continue;
@@ -375,8 +600,75 @@ impl<'a> Solver<'a> {
                     work.extend(slots.iter().copied());
                 }
             }
+            if !passed_values {
+                let passes = self.calls_by_callee.get(&var).is_some_and(|indices| {
+                    indices.iter().any(|index| {
+                        let call = &self.calls[*index];
+                        call.receiver.is_some() || !call.arguments.is_empty()
+                    })
+                });
+                if passes {
+                    passed_values = true;
+                    for signature in self.signatures.values() {
+                        work.extend(
+                            signature
+                                .params
+                                .values()
+                                .chain(signature.rest.iter())
+                                .chain(signature.this.iter())
+                                .map(|place| place.var),
+                        );
+                    }
+                }
+            }
         }
         incomplete
+    }
+
+    /// The bindings that reached each variable along copy edges, the first
+    /// [`MAX_BINDINGS_PER_VAR`] by key text. Keeping the first few of a union
+    /// is a join, so the result does not depend on the order of the walk.
+    fn reached_bindings(&self) -> BTreeMap<PtVarId, Vec<CallBinding>> {
+        let text = |binding: &CallBinding| {
+            (
+                self.interner.resolve(binding.call),
+                self.interner.resolve(binding.place),
+            )
+        };
+        let merge = |held: &mut Vec<CallBinding>, incoming: &[CallBinding]| -> bool {
+            let before = held.clone();
+            held.extend(incoming.iter().copied());
+            held.sort_by_cached_key(text);
+            held.dedup();
+            held.truncate(MAX_BINDINGS_PER_VAR);
+            *held != before
+        };
+        let mut reached = BTreeMap::<PtVarId, Vec<CallBinding>>::new();
+        let mut work = VecDeque::new();
+        for (var, bindings) in &self.bindings {
+            let bindings = bindings.iter().copied().collect::<Vec<_>>();
+            if merge(reached.entry(*var).or_default(), &bindings) {
+                work.push_back(*var);
+            }
+        }
+        while let Some(var) = work.pop_front() {
+            let from = reached.get(&var).cloned().unwrap_or_default();
+            for dst in self
+                .copy_edges
+                .get(&var)
+                .into_iter()
+                .flat_map(BTreeMap::keys)
+            {
+                if !self.sets.contains_key(dst) {
+                    continue;
+                }
+                if merge(reached.entry(*dst).or_default(), &from) {
+                    work.push_back(*dst);
+                }
+            }
+        }
+        reached.retain(|var, _| self.sets.contains_key(var));
+        reached
     }
 
     /// The weakest precision of the inputs that reached each set, carried
@@ -501,6 +793,7 @@ impl<'a> Solver<'a> {
         };
         let incomplete = self.incomplete_variables();
         let precisions = self.precisions();
+        let call_bindings = self.reached_bindings();
         let empty = BTreeSet::new();
         let variables = self
             .sets
@@ -547,6 +840,7 @@ impl<'a> Solver<'a> {
             sets,
             budget_status,
             budget_reasons: self.budget_reasons,
+            call_bindings,
         }
     }
 }

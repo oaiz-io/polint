@@ -88,7 +88,7 @@ fn solver_resolved_sites(db: &impl AnalysisHost) -> HashSet<CallSiteId> {
         .semantic_constraints()
         .iter()
         .filter_map(|constraint| match constraint.kind {
-            ConstraintKind::CallConstraint { callsite }
+            ConstraintKind::CallConstraint { callsite, .. }
                 if contributing.contains(db.resolve_stable_key(constraint.stable_key).as_ref()) =>
             {
                 Some(callsite)

@@ -1201,9 +1201,7 @@ mod tests {
                     vec![ContributingFact {
                         stable_key: interner.intern("constraint:call"),
                     }],
-                    &ConstraintKind::CallConstraint {
-                        callsite: SemanticNodeId(2),
-                    },
+                    &ConstraintKind::call_at(SemanticNodeId(2)),
                     1,
                 ),
             }],

@@ -461,9 +461,7 @@ mod solver_projection_tests {
                     stable_key: interner.intern("constraint:call"),
                 },
             ],
-            &ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(99),
-            },
+            &ConstraintKind::call_at(SemanticNodeId(99)),
             1,
         );
         db.replace_solver_facts(SolverOutput {
@@ -553,9 +551,7 @@ mod solver_projection_tests {
             edges: Vec::new(),
             constraints: vec![ConstraintFact {
                 id: SemanticConstraintId(0),
-                kind: ConstraintKind::CallConstraint {
-                    callsite: SemanticNodeId(2),
-                },
+                kind: ConstraintKind::call_at(SemanticNodeId(2)),
                 status: PointsToStatus::Present,
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: db
@@ -574,9 +570,7 @@ mod solver_projection_tests {
             vec![ContributingFact {
                 stable_key: interner.intern("constraint:go-semantic-callsite"),
             }],
-            &ConstraintKind::CallConstraint {
-                callsite: callsite_node,
-            },
+            &ConstraintKind::call_at(callsite_node),
             1,
         );
         db.replace_solver_facts(SolverOutput {
@@ -651,9 +645,7 @@ mod solver_projection_tests {
             vec![ContributingFact {
                 stable_key: interner.intern("go-semantic-callsite:caller-callee"),
             }],
-            &ConstraintKind::CallConstraint {
-                callsite: callsite_node,
-            },
+            &ConstraintKind::call_at(callsite_node),
             1,
         );
         db.replace_solver_facts(SolverOutput {
@@ -825,9 +817,7 @@ mod solver_projection_tests {
             vec![ContributingFact {
                 stable_key: interner.intern("go-semantic-callsite:method-dispatch"),
             }],
-            &ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(99),
-            },
+            &ConstraintKind::call_at(SemanticNodeId(99)),
             1,
         );
         db.replace_solver_facts(SolverOutput {

@@ -310,9 +310,7 @@ mod tests {
             edges: vec![edge(0, 0, 1, EdgeKind::Call, "edge|call|a|b")],
             constraints: vec![constraint(
                 0,
-                ConstraintKind::CallConstraint {
-                    callsite: SemanticNodeId(1),
-                },
+                ConstraintKind::call_at(SemanticNodeId(1)),
                 "constraint|call_constraint|b",
             )],
         }
@@ -463,9 +461,7 @@ mod tests {
         // The CallConstraint is indexed by its snake_case tag.
         assert_eq!(
             store
-                .constraints_for_kind(&ConstraintKind::CallConstraint {
-                    callsite: SemanticNodeId(0),
-                })
+                .constraints_for_kind(&ConstraintKind::call_at(SemanticNodeId(0)))
                 .len(),
             1
         );
@@ -492,7 +488,7 @@ mod tests {
             .expect("callsite node")
             .id;
         match &store.constraints()[0].kind {
-            ConstraintKind::CallConstraint { callsite } => {
+            ConstraintKind::CallConstraint { callsite, .. } => {
                 assert_eq!(*callsite, callsite_node);
             }
             other => panic!("expected call_constraint, got {other:?}"),
@@ -516,9 +512,7 @@ mod tests {
             constraints: vec![
                 constraint(
                     5,
-                    ConstraintKind::CallConstraint {
-                        callsite: SemanticNodeId(1),
-                    },
+                    ConstraintKind::call_at(SemanticNodeId(1)),
                     "constraint|call_constraint|b",
                 ),
                 constraint(
