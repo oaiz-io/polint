@@ -9,7 +9,10 @@
 //! be reached from such a variable through a copy, a field load or store, or
 //! a call; every other set finished and is `Present`. Each set carries the
 //! weakest precision of the inputs that reached it, so a heuristic input
-//! never yields an exact set.
+//! never yields an exact set. A set that may also hold a value the
+//! constraints do not describe, such as a parameter nothing binds, a place
+//! nothing defines or the result of a call the solve could not resolve, is at
+//! most `Heuristic`: it keeps its objects, but they are not all it may hold.
 //!
 //! Calls are a second input beside the constraints. When a call's callee set
 //! gains a function with a signature, the call rule copies each argument into
@@ -600,29 +603,99 @@ impl<'a> Solver<'a> {
                     work.extend(slots.iter().copied());
                 }
             }
-            if !passed_values {
-                let passes = self.calls_by_callee.get(&var).is_some_and(|indices| {
-                    indices.iter().any(|index| {
-                        let call = &self.calls[*index];
-                        call.receiver.is_some() || !call.arguments.is_empty()
-                    })
-                });
-                if passes {
-                    passed_values = true;
-                    for signature in self.signatures.values() {
-                        work.extend(
-                            signature
-                                .params
-                                .values()
-                                .chain(signature.rest.iter())
-                                .chain(signature.this.iter())
-                                .map(|place| place.var),
-                        );
-                    }
-                }
+            if !passed_values && self.passes_values(var) {
+                passed_values = true;
+                work.extend(self.signature_inputs());
             }
         }
         incomplete
+    }
+
+    /// Variables whose sets may hold values the constraints do not describe.
+    /// The roots are the variables read as a source that nothing defines (no
+    /// seed, no copy into them, no slot, no call binding), and the results of
+    /// calls whose callee set is empty or holds an object without a
+    /// signature. Openness then spreads like incompleteness: along copies and
+    /// dependencies, from a store through an open base to every slot of its
+    /// field, and from a call through an open callee that passes values to
+    /// every parameter, rest parameter and `this`.
+    fn open_variables(&self) -> BTreeSet<PtVarId> {
+        let defined = |var: &PtVarId| {
+            self.seed_precision.contains_key(var)
+                || self.slot_keys.contains_key(var)
+                || self.bindings.contains_key(var)
+        };
+        let mut targets = BTreeSet::new();
+        for edges in [&self.copy_edges, &self.dependency_edges] {
+            for dsts in edges.values() {
+                targets.extend(dsts.keys().copied());
+            }
+        }
+        let read = self
+            .copy_edges
+            .keys()
+            .chain(self.dependency_edges.keys())
+            .chain(self.loads.keys())
+            .chain(self.stores.keys())
+            .chain(self.stores.values().flatten().map(|store| &store.var))
+            .chain(self.calls.iter().map(|call| &call.callee))
+            .copied()
+            .filter(|var| !defined(var) && !targets.contains(var));
+        let unresolved_results = self.calls.iter().filter_map(|call| {
+            let result = call.result?;
+            let callees = self.sets.get(&call.callee);
+            let unresolved = callees.is_none_or(|objects| {
+                objects
+                    .iter()
+                    .any(|object| !self.signatures.contains_key(object))
+            });
+            unresolved.then_some(result)
+        });
+        let mut work = read.chain(unresolved_results).collect::<Vec<_>>();
+        let mut open = BTreeSet::new();
+        let mut passed_values = false;
+        while let Some(var) = work.pop() {
+            if !open.insert(var) {
+                continue;
+            }
+            for edges in [&self.copy_edges, &self.dependency_edges] {
+                if let Some(dsts) = edges.get(&var) {
+                    work.extend(dsts.keys().copied());
+                }
+            }
+            for store in self.stores.get(&var).into_iter().flatten() {
+                if let Some(slots) = self.slots_by_field.get(&store.field) {
+                    work.extend(slots.iter().copied());
+                }
+            }
+            if !passed_values && self.passes_values(var) {
+                passed_values = true;
+                work.extend(self.signature_inputs());
+            }
+        }
+        open
+    }
+
+    /// True when a call through `callee` passes a receiver or an argument.
+    fn passes_values(&self, callee: PtVarId) -> bool {
+        self.calls_by_callee.get(&callee).is_some_and(|indices| {
+            indices.iter().any(|index| {
+                let call = &self.calls[*index];
+                call.receiver.is_some() || !call.arguments.is_empty()
+            })
+        })
+    }
+
+    /// Every place a call fills: parameters, rest parameters and `this`.
+    fn signature_inputs(&self) -> impl Iterator<Item = PtVarId> + '_ {
+        self.signatures.values().flat_map(|signature| {
+            signature
+                .params
+                .values()
+                .chain(signature.rest.iter())
+                .chain(signature.this.iter())
+                .map(|place| place.var)
+        })
     }
 
     /// The bindings that reached each variable along copy edges, the first
@@ -792,7 +865,17 @@ impl<'a> Solver<'a> {
             PointsToBudgetStatus::WithinBudget
         };
         let incomplete = self.incomplete_variables();
-        let precisions = self.precisions();
+        let mut precisions = self.precisions();
+        for variable in self.open_variables() {
+            if self.sets.contains_key(&variable) {
+                raise(
+                    precisions
+                        .entry(variable)
+                        .or_insert(PointsToPrecision::Heuristic),
+                    PointsToPrecision::Heuristic,
+                );
+            }
+        }
         let call_bindings = self.reached_bindings();
         let empty = BTreeSet::new();
         let variables = self
