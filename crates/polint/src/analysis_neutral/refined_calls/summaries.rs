@@ -93,7 +93,7 @@ fn edge_from_summary(
         status: target.status,
         reason: target.reason,
         provenance: CallProvenance::Native,
-        precision: summary_precision(summary.precision),
+        precision: claim_no_more_than(summary_precision(summary.precision), target.precision),
         validation: RefinedCallValidation::ReferentiallyValidated,
         confidence: summary_confidence(summary.precision, target.status)
             .weaker(super::provider::target_confidence_ceiling(target)),
@@ -119,6 +119,17 @@ fn summary_precision(precision: SummaryPrecision) -> CallPrecision {
         SummaryPrecision::Local | SummaryPrecision::SetupAware => CallPrecision::SetupAware,
         SummaryPrecision::Heuristic => CallPrecision::Heuristic,
         SummaryPrecision::UnknownTop => CallPrecision::Unknown,
+    }
+}
+
+/// The weaker of a summary's precision and the base target's: a summary says
+/// what the caller's calls do, not which function a call reaches, so it never
+/// claims more about the target than the base target does.
+fn claim_no_more_than(summary: CallPrecision, base: CallPrecision) -> CallPrecision {
+    if base.tier() > summary.tier() {
+        base
+    } else {
+        summary
     }
 }
 
@@ -222,11 +233,51 @@ mod tests {
         }
     }
 
+    /// A summary says what the caller's calls do; it does not say which
+    /// function a call reaches, so it never claims more than the base target.
+    #[test]
+    fn a_summary_assisted_edge_claims_no_more_than_its_base_target() {
+        for base in [
+            CallPrecision::Exact,
+            CallPrecision::SetupAware,
+            CallPrecision::Conservative,
+            CallPrecision::Ambiguous,
+            CallPrecision::Heuristic,
+            CallPrecision::Unknown,
+            CallPrecision::Unsupported,
+        ] {
+            let mut db = db_with_call_target_at(CallAlgorithm::SyntaxOnly, base);
+            db.replace_summary_facts(SummaryOutput {
+                summaries: vec![summary(
+                    SummaryStatus::Present,
+                    SummaryDomainKind::CallEffects,
+                )],
+                events: Vec::new(),
+            });
+
+            let output = derive_summary_assisted_refinements(&db);
+
+            assert_eq!(output.edges.len(), 1);
+            let derived = output.edges[0].precision;
+            assert!(
+                derived.tier() >= base.tier(),
+                "a {base:?} base target became a {derived:?} summary edge"
+            );
+        }
+    }
+
     fn db_with_call_target() -> LocalAnalysisDb {
         db_with_call_target_found_by(CallAlgorithm::DirectReference)
     }
 
     fn db_with_call_target_found_by(algorithm: CallAlgorithm) -> LocalAnalysisDb {
+        db_with_call_target_at(algorithm, CallPrecision::SetupAware)
+    }
+
+    fn db_with_call_target_at(
+        algorithm: CallAlgorithm,
+        precision: CallPrecision,
+    ) -> LocalAnalysisDb {
         let mut db = LocalAnalysisDb::new();
         let file = db.add_file(
             "src/app.ts".into(),
@@ -276,7 +327,7 @@ mod tests {
                 result: None,
                 status: CallTargetStatus::Resolved,
                 precision: CallPrecision::SetupAware,
-                stable_key: crate::internal_core::StableKeyId(0),
+                stable_key: crate::internal_core::stable_key_for_test("call-site:caller:callee"),
             }],
             targets: vec![CallTargetFact {
                 id: CallTargetId(0),
@@ -290,8 +341,8 @@ mod tests {
                 status: CallTargetStatus::Resolved,
                 reason: None,
                 provenance: CallProvenance::NativeDirect,
-                precision: CallPrecision::SetupAware,
-                stable_key: crate::internal_core::StableKeyId(1),
+                precision,
+                stable_key: crate::internal_core::stable_key_for_test("call-target:caller:callee"),
             }],
             unresolved: Vec::new(),
         })

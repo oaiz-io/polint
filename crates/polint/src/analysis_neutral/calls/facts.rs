@@ -195,8 +195,9 @@ pub enum CallPrecision {
 ///
 /// `Exact` says the call reaches the target; `Conservative` says it may;
 /// `Apart` marks an edge that is reported but never counted as either, and
-/// `NoClaim` an edge that states no target at all.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `NoClaim` an edge that states no target at all. The variants are ordered
+/// from the strongest claim to none, so a greater tier claims less.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ClaimTier {
     Exact,
     Conservative,
@@ -219,7 +220,6 @@ impl ClaimTier {
 impl CallPrecision {
     /// The tier this precision claims. Every variant is listed, so a new
     /// precision cannot reach a tier without a decision.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn tier(self) -> ClaimTier {
         match self {
             Self::Exact | Self::SetupAware => ClaimTier::Exact,
