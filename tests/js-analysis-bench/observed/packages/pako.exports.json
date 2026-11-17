@@ -1,0 +1,23 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "dist/pako.min.js": {
+      "system": "cjs",
+      "names": [
+        "Deflate",
+        "Inflate",
+        "constants",
+        "default",
+        "deflate",
+        "deflateRaw",
+        "gzip",
+        "inflate",
+        "inflateRaw",
+        "ungzip"
+      ],
+      "whole_value": "object"
+    }
+  }
+}

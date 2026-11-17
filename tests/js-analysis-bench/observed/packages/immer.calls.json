@@ -1,0 +1,2878 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "src/core/current.ts",
+    "src/core/finalize.ts",
+    "src/core/immerClass.ts",
+    "src/core/proxy.ts",
+    "src/core/scope.ts",
+    "src/immer.ts",
+    "src/internal.ts",
+    "src/plugins/arrayMethods.ts",
+    "src/plugins/mapset.ts",
+    "src/plugins/patches.ts",
+    "src/types/types-external.ts",
+    "src/utils/common.ts",
+    "src/utils/env.ts",
+    "src/utils/errors.ts",
+    "src/utils/plugins.ts"
+  ],
+  "instrumented_functions": 176,
+  "transformed_not_instrumented": [
+    "src/types/types-internal.ts"
+  ],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "src/core/current.ts@1279..1348",
+      "name": ""
+    },
+    {
+      "function": "src/core/current.ts@455..563",
+      "name": "current"
+    },
+    {
+      "function": "src/core/current.ts@565..1420",
+      "name": "currentImpl"
+    },
+    {
+      "function": "src/core/finalize.ts@1185..2074",
+      "name": "finalize"
+    },
+    {
+      "function": "src/core/finalize.ts@2076..2350",
+      "name": "maybeFreeze"
+    },
+    {
+      "function": "src/core/finalize.ts@2352..2462",
+      "name": "markStateFinalized"
+    },
+    {
+      "function": "src/core/finalize.ts@2482..2555",
+      "name": "isSameScope"
+    },
+    {
+      "function": "src/core/finalize.ts@2858..4181",
+      "name": "updateDraftInParent"
+    },
+    {
+      "function": "src/core/finalize.ts@292..1183",
+      "name": "processResult"
+    },
+    {
+      "function": "src/core/finalize.ts@3760..3915",
+      "name": ""
+    },
+    {
+      "function": "src/core/finalize.ts@4411..5094",
+      "name": "registerChildFinalizationCallback"
+    },
+    {
+      "function": "src/core/finalize.ts@4555..5091",
+      "name": "childCleanup"
+    },
+    {
+      "function": "src/core/finalize.ts@5096..5666",
+      "name": "generatePatchesAndFinalize"
+    },
+    {
+      "function": "src/core/finalize.ts@5675..7224",
+      "name": "handleCrossReference"
+    },
+    {
+      "function": "src/core/finalize.ts@6400..7218",
+      "name": "nestedDraftCleanup"
+    },
+    {
+      "function": "src/core/finalize.ts@7233..8485",
+      "name": "handleValue"
+    },
+    {
+      "function": "src/core/finalize.ts@8036..8466",
+      "name": ""
+    },
+    {
+      "function": "src/core/immerClass.ts@2255..3792",
+      "name": "produce"
+    },
+    {
+      "function": "src/core/immerClass.ts@2459..2657",
+      "name": "curriedProduce"
+    },
+    {
+      "function": "src/core/immerClass.ts@2579..2632",
+      "name": ""
+    },
+    {
+      "function": "src/core/immerClass.ts@3837..4256",
+      "name": "produceWithPatches"
+    },
+    {
+      "function": "src/core/immerClass.ts@4135..4207",
+      "name": ""
+    },
+    {
+      "function": "src/core/immerClass.ts@4259..4567",
+      "name": "createDraft"
+    },
+    {
+      "function": "src/core/immerClass.ts@4570..4915",
+      "name": "finishDraft"
+    },
+    {
+      "function": "src/core/immerClass.ts@5041..5102",
+      "name": "setAutoFreeze"
+    },
+    {
+      "function": "src/core/immerClass.ts@5276..5360",
+      "name": "setUseStrictShallowCopy"
+    },
+    {
+      "function": "src/core/immerClass.ts@5577..5654",
+      "name": "setUseStrictIteration"
+    },
+    {
+      "function": "src/core/immerClass.ts@5657..5731",
+      "name": "shouldUseStrictIteration"
+    },
+    {
+      "function": "src/core/immerClass.ts@5734..6605",
+      "name": "applyPatches"
+    },
+    {
+      "function": "src/core/immerClass.ts@6543..6598",
+      "name": ""
+    },
+    {
+      "function": "src/core/immerClass.ts@6616..7844",
+      "name": "createProxy"
+    },
+    {
+      "function": "src/core/immerClass.ts@7583..7816",
+      "name": "rootDraftCleanup"
+    },
+    {
+      "function": "src/core/immerClass.ts@801..1283",
+      "name": "constructor"
+    },
+    {
+      "function": "src/core/proxy.ts@1011..2801",
+      "name": "createProxyProxy"
+    },
+    {
+      "function": "src/core/proxy.ts@10354..10507",
+      "name": "markChanged"
+    },
+    {
+      "function": "src/core/proxy.ts@10516..10796",
+      "name": "prepareCopy"
+    },
+    {
+      "function": "src/core/proxy.ts@2884..4587",
+      "name": "get"
+    },
+    {
+      "function": "src/core/proxy.ts@4590..4642",
+      "name": "has"
+    },
+    {
+      "function": "src/core/proxy.ts@4645..4704",
+      "name": "ownKeys"
+    },
+    {
+      "function": "src/core/proxy.ts@4707..6372",
+      "name": "set"
+    },
+    {
+      "function": "src/core/proxy.ts@6375..6802",
+      "name": "deleteProperty"
+    },
+    {
+      "function": "src/core/proxy.ts@6923..7248",
+      "name": "getOwnPropertyDescriptor"
+    },
+    {
+      "function": "src/core/proxy.ts@7285..7348",
+      "name": "getPrototypeOf"
+    },
+    {
+      "function": "src/core/proxy.ts@7681..7775",
+      "name": ""
+    },
+    {
+      "function": "src/core/proxy.ts@7806..7992",
+      "name": "deleteProperty"
+    },
+    {
+      "function": "src/core/proxy.ts@8010..8228",
+      "name": "set"
+    },
+    {
+      "function": "src/core/proxy.ts@8284..8437",
+      "name": "peek"
+    },
+    {
+      "function": "src/core/proxy.ts@9312..9616",
+      "name": "isRelocatedBaseRef"
+    },
+    {
+      "function": "src/core/proxy.ts@9618..9986",
+      "name": "readPropFromProto"
+    },
+    {
+      "function": "src/core/proxy.ts@9988..10345",
+      "name": "getDescriptorFromProto"
+    },
+    {
+      "function": "src/core/scope.ts@1335..1611",
+      "name": "usePatchesInScope"
+    },
+    {
+      "function": "src/core/scope.ts@1620..1755",
+      "name": "revokeScope"
+    },
+    {
+      "function": "src/core/scope.ts@1764..1871",
+      "name": "leaveScope"
+    },
+    {
+      "function": "src/core/scope.ts@1897..1965",
+      "name": "enterScope"
+    },
+    {
+      "function": "src/core/scope.ts@1967..2171",
+      "name": "revokeDraft"
+    },
+    {
+      "function": "src/core/scope.ts@737..755",
+      "name": "getCurrentScope"
+    },
+    {
+      "function": "src/core/scope.ts@776..1326",
+      "name": "createScope"
+    },
+    {
+      "function": "src/immer.ts@3458..3487",
+      "name": "castDraft"
+    },
+    {
+      "function": "src/immer.ts@3677..3710",
+      "name": "castImmutable"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@10629..13406",
+      "name": "createMethodInterceptor"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@10728..13403",
+      "name": "interceptedMethod"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@14602..16566",
+      "name": "handleNonMutatingOperation"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@3084..16684",
+      "name": "enableArrayMethods"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@4029..4161",
+      "name": "isMutatingArrayMethod"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@4164..4306",
+      "name": "isNonMutatingArrayMethod"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@4309..4473",
+      "name": "isArrayOperationMethod"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@4476..4598",
+      "name": "enterOperation"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@4601..4688",
+      "name": "exitOperation"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@4746..4960",
+      "name": "executeArrayMethod"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@5378..5527",
+      "name": "markArrayChanged"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@5530..5670",
+      "name": "markAllIndicesReassigned"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@5673..5839",
+      "name": "normalizeSliceIndex"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@7353..8979",
+      "name": "handleSimpleOperation"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@9320..9880",
+      "name": "handleReorderingOperation"
+    },
+    {
+      "function": "src/plugins/arrayMethods.ts@9715..9831",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/mapset.ts@1464..1596",
+      "name": "has"
+    },
+    {
+      "function": "src/plugins/mapset.ts@1600..1990",
+      "name": "set"
+    },
+    {
+      "function": "src/plugins/mapset.ts@1994..2352",
+      "name": "delete"
+    },
+    {
+      "function": "src/plugins/mapset.ts@2356..2656",
+      "name": "clear"
+    },
+    {
+      "function": "src/plugins/mapset.ts@2569..2621",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/mapset.ts@2953..3479",
+      "name": "get"
+    },
+    {
+      "function": "src/plugins/mapset.ts@3483..3645",
+      "name": "keys"
+    },
+    {
+      "function": "src/plugins/mapset.ts@3955..4283",
+      "name": "entries"
+    },
+    {
+      "function": "src/plugins/mapset.ts@4064..4273",
+      "name": "next"
+    },
+    {
+      "function": "src/plugins/mapset.ts@4287..4337",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/mapset.ts@4343..4629",
+      "name": "iteratorFrom"
+    },
+    {
+      "function": "src/plugins/mapset.ts@4632..4826",
+      "name": "proxyMap_"
+    },
+    {
+      "function": "src/plugins/mapset.ts@4829..4969",
+      "name": "prepareMapCopy"
+    },
+    {
+      "function": "src/plugins/mapset.ts@5029..5443",
+      "name": "constructor"
+    },
+    {
+      "function": "src/plugins/mapset.ts@5575..5986",
+      "name": "has"
+    },
+    {
+      "function": "src/plugins/mapset.ts@5990..6257",
+      "name": "add"
+    },
+    {
+      "function": "src/plugins/mapset.ts@6261..6633",
+      "name": "delete"
+    },
+    {
+      "function": "src/plugins/mapset.ts@6833..6998",
+      "name": "values"
+    },
+    {
+      "function": "src/plugins/mapset.ts@7519..7713",
+      "name": "proxySet_"
+    },
+    {
+      "function": "src/plugins/mapset.ts@7716..8128",
+      "name": "prepareSetCopy"
+    },
+    {
+      "function": "src/plugins/mapset.ts@7895..8120",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/mapset.ts@8131..8267",
+      "name": "assertUnrevoked"
+    },
+    {
+      "function": "src/plugins/mapset.ts@8270..8701",
+      "name": "fixSetContents"
+    },
+    {
+      "function": "src/plugins/mapset.ts@850..8770",
+      "name": "enableMapSet"
+    },
+    {
+      "function": "src/plugins/mapset.ts@8639..8693",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/mapset.ts@935..1332",
+      "name": "constructor"
+    },
+    {
+      "function": "src/plugins/patches.ts@10486..11012",
+      "name": "deepClonePatchValue"
+    },
+    {
+      "function": "src/plugins/patches.ts@11015..11143",
+      "name": "clonePatchValueIfNeeded"
+    },
+    {
+      "function": "src/plugins/patches.ts@3255..3578",
+      "name": "resolvePath"
+    },
+    {
+      "function": "src/plugins/patches.ts@3653..4377",
+      "name": "generatePatches_"
+    },
+    {
+      "function": "src/plugins/patches.ts@425..11257",
+      "name": "enablePatches"
+    },
+    {
+      "function": "src/plugins/patches.ts@4380..6178",
+      "name": "generateArrayPatches"
+    },
+    {
+      "function": "src/plugins/patches.ts@6239..7083",
+      "name": "generatePatchesFromAssigned"
+    },
+    {
+      "function": "src/plugins/patches.ts@6452..7079",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/patches.ts@7086..7770",
+      "name": "generateSetPatches"
+    },
+    {
+      "function": "src/plugins/patches.ts@7266..7503",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/patches.ts@7530..7766",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/patches.ts@7773..8119",
+      "name": "generateReplacementPatches_"
+    },
+    {
+      "function": "src/plugins/patches.ts@8122..10213",
+      "name": "applyPatches_"
+    },
+    {
+      "function": "src/plugins/patches.ts@8208..10193",
+      "name": ""
+    },
+    {
+      "function": "src/plugins/patches.ts@858..3211",
+      "name": "getPath"
+    },
+    {
+      "function": "src/utils/common.ts@1180..1406",
+      "name": "isDraftable"
+    },
+    {
+      "function": "src/utils/common.ts@1531..2084",
+      "name": "isPlainObject"
+    },
+    {
+      "function": "src/utils/common.ts@2227..2342",
+      "name": "original"
+    },
+    {
+      "function": "src/utils/common.ts@2856..3323",
+      "name": "each"
+    },
+    {
+      "function": "src/utils/common.ts@3200..3240",
+      "name": ""
+    },
+    {
+      "function": "src/utils/common.ts@3266..3317",
+      "name": ""
+    },
+    {
+      "function": "src/utils/common.ts@3346..3606",
+      "name": "getArchtype"
+    },
+    {
+      "function": "src/utils/common.ts@3639..3807",
+      "name": "has"
+    },
+    {
+      "function": "src/utils/common.ts@3840..3996",
+      "name": "get"
+    },
+    {
+      "function": "src/utils/common.ts@4029..4275",
+      "name": "set"
+    },
+    {
+      "function": "src/utils/common.ts@4298..4559",
+      "name": "is"
+    },
+    {
+      "function": "src/utils/common.ts@4630..4686",
+      "name": "isMap"
+    },
+    {
+      "function": "src/utils/common.ts@4721..4777",
+      "name": "isSet"
+    },
+    {
+      "function": "src/utils/common.ts@4804..4847",
+      "name": "isObjectish"
+    },
+    {
+      "function": "src/utils/common.ts@4873..4939",
+      "name": "isFunction"
+    },
+    {
+      "function": "src/utils/common.ts@4964..5028",
+      "name": "isBoolean"
+    },
+    {
+      "function": "src/utils/common.ts@5225..5354",
+      "name": "getProxyDraft"
+    },
+    {
+      "function": "src/utils/common.ts@533..589",
+      "name": "isDraft"
+    },
+    {
+      "function": "src/utils/common.ts@5390..5444",
+      "name": "latest"
+    },
+    {
+      "function": "src/utils/common.ts@5486..5869",
+      "name": "getValue"
+    },
+    {
+      "function": "src/utils/common.ts@5898..5970",
+      "name": "getFinalValue"
+    },
+    {
+      "function": "src/utils/common.ts@5993..7422",
+      "name": "shallowCopy"
+    },
+    {
+      "function": "src/utils/common.ts@7681..8307",
+      "name": "freeze"
+    },
+    {
+      "function": "src/utils/common.ts@8232..8279",
+      "name": ""
+    },
+    {
+      "function": "src/utils/common.ts@8444..8625",
+      "name": "isFrozen"
+    },
+    {
+      "function": "src/utils/common.ts@978..1094",
+      "name": "isModified"
+    },
+    {
+      "function": "src/utils/plugins.ts@1228..1428",
+      "name": "getPlugin"
+    },
+    {
+      "function": "src/utils/plugins.ts@1483..1531",
+      "name": "isPluginLoaded"
+    },
+    {
+      "function": "src/utils/plugins.ts@1646..1808",
+      "name": "loadPlugin"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@1021..1067",
+      "syntax": "member",
+      "callee": "src/core/immerClass.ts@5657..5731",
+      "callee_name": "shouldUseStrictIteration"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@1218..1229",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4721..4777",
+      "callee_name": "isSet"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@1261..1361",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@2856..3323",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@1305..1344",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4029..4275",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@1320..1343",
+      "syntax": "identifier",
+      "callee": "src/core/current.ts@565..1420",
+      "callee_name": "currentImpl"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@504..518",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@543..561",
+      "syntax": "identifier",
+      "callee": "src/core/current.ts@565..1420",
+      "callee_name": "currentImpl"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@611..629",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@633..648",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@8444..8625",
+      "callee_name": "isFrozen"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/current.ts@948..1009",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5993..7422",
+      "callee_name": "shallowCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1025..1043",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1620..1755",
+      "callee_name": "revokeScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1069..1130",
+      "syntax": "member",
+      "callee": "src/core/immerClass.ts@4135..4207",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1296..1311",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@8444..8625",
+      "callee_name": "isFrozen"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1409..1461",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@7233..8485",
+      "callee_name": "handleValue"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1541..1570",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@2482..2555",
+      "callee_name": "isSameScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1904..1923",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@4555..5091",
+      "callee_name": "childCleanup"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1904..1923",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@6400..7218",
+      "callee_name": "nestedDraftCleanup"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1904..1923",
+      "syntax": "identifier",
+      "callee": "src/core/immerClass.ts@7583..7816",
+      "callee_name": "rootDraftCleanup"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@1936..1980",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@5096..5666",
+      "callee_name": "generatePatchesAndFinalize"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@2326..2345",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@7681..8307",
+      "callee_name": "freeze"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@3019..3033",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@3180..3220",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@3310..3366",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4029..4275",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@3743..3916",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@2856..3323",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@3785..3799",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@4123..4176",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4029..4275",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@4704..4733",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@2482..2555",
+      "callee_name": "isSameScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@4805..4851",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@8270..8701",
+      "callee_name": "fixSetContents"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@4878..4898",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5898..5970",
+      "callee_name": "getFinalValue"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@4969..5040",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@2858..4181",
+      "callee_name": "updateDraftInParent"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@5044..5088",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@5096..5666",
+      "callee_name": "generatePatchesAndFinalize"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@5512..5540",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@858..3211",
+      "callee_name": "getPath"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@5565..5623",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@3653..4377",
+      "callee_name": "generatePatches_"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@5636..5661",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@2352..2462",
+      "callee_name": "markStateFinalized"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@5851..5865",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@604..623",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@6297..6315",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@6454..6468",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@6747..6781",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@7090..7196",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@7233..8485",
+      "callee_name": "handleValue"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@7110..7146",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@716..739",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@1185..2074",
+      "callee_name": "finalize"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@7845..7860",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@7895..7914",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@7920..7936",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@8444..8625",
+      "callee_name": "isFrozen"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@800..902",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@7773..8119",
+      "callee_name": "generateReplacementPatches_"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@8023..8467",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@2856..3323",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@8060..8074",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@8354..8372",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@958..984",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@1185..2074",
+      "callee_name": "finalize"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/finalize.ts@990..1022",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@2076..2350",
+      "callee_name": "maybeFreeze"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@1059..1087",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4964..5028",
+      "callee_name": "isBoolean"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@1130..1177",
+      "syntax": "member",
+      "callee": "src/core/immerClass.ts@5276..5360",
+      "callee_name": "setUseStrictShallowCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@1184..1221",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4964..5028",
+      "callee_name": "isBoolean"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2337..2353",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4873..4939",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2358..2376",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4873..4939",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2560..2633",
+      "syntax": "member",
+      "callee": "src/core/immerClass.ts@2255..3792",
+      "callee_name": "produce"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2670..2688",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4873..4939",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2735..2760",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4873..4939",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2860..2877",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2898..2914",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1897..1965",
+      "callee_name": "enterScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@2932..2967",
+      "syntax": "identifier",
+      "callee": "src/core/immerClass.ts@6616..7844",
+      "callee_name": "createProxy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@3013..3026",
+      "syntax": "identifier",
+      "callee": "src/core/immerClass.ts@2579..2632",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@3013..3026",
+      "syntax": "identifier",
+      "callee": "src/core/immerClass.ts@6543..6598",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@3183..3200",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1764..1871",
+      "callee_name": "leaveScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@3209..3248",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1335..1611",
+      "callee_name": "usePatchesInScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@3259..3287",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@292..1183",
+      "callee_name": "processResult"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@3903..3919",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4873..4939",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4108..4208",
+      "syntax": "member",
+      "callee": "src/core/immerClass.ts@2255..3792",
+      "callee_name": "produce"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4320..4337",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4352..4365",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4416..4432",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1897..1965",
+      "callee_name": "enterScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4449..4484",
+      "syntax": "identifier",
+      "callee": "src/core/immerClass.ts@6616..7844",
+      "callee_name": "createProxy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4525..4542",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1764..1871",
+      "callee_name": "leaveScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4832..4871",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1335..1611",
+      "callee_name": "usePatchesInScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@4881..4912",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@292..1183",
+      "callee_name": "processResult"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@6281..6305",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1228..1428",
+      "callee_name": "getPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@6326..6339",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@6524..6602",
+      "syntax": "member",
+      "callee": "src/core/immerClass.ts@2255..3792",
+      "callee_name": "produce"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@6566..6598",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@8122..10213",
+      "callee_name": "applyPatches_"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@6975..6987",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4630..4686",
+      "callee_name": "isMap"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@6992..7015",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1228..1428",
+      "callee_name": "getPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@6992..7040",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@4632..4826",
+      "callee_name": "proxyMap_"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7045..7057",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4721..4777",
+      "callee_name": "isSet"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7063..7086",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1228..1428",
+      "callee_name": "getPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7063..7111",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@7519..7713",
+      "callee_name": "proxySet_"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7117..7148",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@1011..2801",
+      "callee_name": "createProxyProxy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7183..7200",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@737..755",
+      "callee_name": "getCurrentScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7444..7497",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@4411..5094",
+      "callee_name": "registerChildFinalizationCallback"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7625..7671",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@8270..8701",
+      "callee_name": "fixSetContents"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@7756..7807",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@3653..4377",
+      "callee_name": "generatePatches_"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@926..955",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4964..5028",
+      "callee_name": "isBoolean"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/immerClass.ts@957..995",
+      "syntax": "member",
+      "callee": "src/core/immerClass.ts@5041..5102",
+      "callee_name": "setAutoFreeze"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@10472..10498",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@10714..10791",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5993..7422",
+      "callee_name": "shallowCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@1352..1369",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@737..755",
+      "callee_name": "getCurrentScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@3230..3271",
+      "syntax": "member",
+      "callee": "src/plugins/arrayMethods.ts@4309..4473",
+      "callee_name": "isArrayOperationMethod"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@3286..3334",
+      "syntax": "member",
+      "callee": "src/plugins/arrayMethods.ts@10629..13406",
+      "callee_name": "createMethodInterceptor"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@3362..3375",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@3383..3413",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3639..3807",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@3469..3507",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@9618..9986",
+      "callee_name": "readPropFromProto"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@3568..3586",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@3856..3944",
+      "syntax": "member",
+      "callee": "src/plugins/arrayMethods.ts@4029..4161",
+      "callee_name": "isMutatingArrayMethod"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4227..4250",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@8284..8437",
+      "callee_name": "peek"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4257..4295",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@9312..9616",
+      "callee_name": "isRelocatedBaseRef"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4305..4323",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10516..10796",
+      "callee_name": "prepareCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4467..4516",
+      "syntax": "identifier",
+      "callee": "src/core/immerClass.ts@6616..7844",
+      "callee_name": "createProxy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4626..4639",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4687..4700",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4816..4859",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@9988..10345",
+      "callee_name": "getDescriptorFromProto"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@4839..4852",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@5313..5338",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@8284..8437",
+      "callee_name": "peek"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@5318..5331",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@5797..5815",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4298..4559",
+      "callee_name": "is"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@5908..5926",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10516..10796",
+      "callee_name": "prepareCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@5930..5948",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@6315..6355",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@5675..7224",
+      "callee_name": "handleCrossReference"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@6415..6433",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10516..10796",
+      "callee_name": "prepareCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@6505..6528",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@8284..8437",
+      "callee_name": "peek"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@6609..6627",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@6979..6992",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@7752..7772",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@7752..7772",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@4590..4642",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@7752..7772",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@7285..7348",
+      "callee_name": "getPrototypeOf"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@7940..7990",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@8010..8228",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@8166..8226",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@4707..6372",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/proxy.ts@9712..9748",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@9988..10345",
+      "callee_name": "getDescriptorFromProto"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/scope.ts@1147..1175",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1483..1531",
+      "callee_name": "isPluginLoaded"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/scope.ts@1180..1203",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1228..1428",
+      "callee_name": "getPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/scope.ts@1241..1275",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1483..1531",
+      "callee_name": "isPluginLoaded"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/scope.ts@1280..1309",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1228..1428",
+      "callee_name": "getPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/scope.ts@1463..1487",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1228..1428",
+      "callee_name": "getPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/scope.ts@1663..1680",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@1764..1871",
+      "callee_name": "leaveScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/core/scope.ts@1932..1964",
+      "syntax": "identifier",
+      "callee": "src/core/scope.ts@776..1326",
+      "callee_name": "createScope"
+    },
+    {
+      "kind": "call",
+      "site": "src/immer.ts@366..377",
+      "syntax": "new",
+      "callee": "src/core/immerClass.ts@801..1283",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@10979..11008",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@4476..4598",
+      "callee_name": "enterOperation"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@11069..11098",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@4029..4161",
+      "callee_name": "isMutatingArrayMethod"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@11228..11270",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@7353..8979",
+      "callee_name": "handleSimpleOperation"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@11334..11380",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@9320..9880",
+      "callee_name": "handleReorderingOperation"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@13225..13272",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@14602..16566",
+      "callee_name": "handleNonMutatingOperation"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@13374..13394",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@4601..4688",
+      "callee_name": "exitOperation"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@14735..14748",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@15850..15894",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@5673..5839",
+      "callee_name": "normalizeSliceIndex"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@15910..15952",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@5673..5839",
+      "callee_name": "normalizeSliceIndex"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@16569..16682",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1646..1808",
+      "callee_name": "loadPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@4405..4434",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@4029..4161",
+      "callee_name": "isMutatingArrayMethod"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@4438..4470",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@4164..4306",
+      "callee_name": "isNonMutatingArrayMethod"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@4856..4874",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10516..10796",
+      "callee_name": "prepareCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@4892..4903",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@9715..9831",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@4906..4941",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@5378..5527",
+      "callee_name": "markArrayChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@5451..5469",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@7898..7911",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@8122..8140",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10516..10796",
+      "callee_name": "prepareCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@8374..8397",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@5378..5527",
+      "callee_name": "markArrayChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@8515..8546",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@5530..5670",
+      "callee_name": "markAllIndicesReassigned"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@9625..9638",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@9682..9845",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@4746..4960",
+      "callee_name": "executeArrayMethod"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/arrayMethods.ts@9771..9802",
+      "syntax": "identifier",
+      "callee": "src/plugins/arrayMethods.ts@5530..5670",
+      "callee_name": "markAllIndicesReassigned"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1537..1559",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1570..1583",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1676..1698",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1707..1720",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1733..1746",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1773..1794",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@4829..4969",
+      "callee_name": "prepareMapCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1799..1817",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@1927..1966",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@5675..7224",
+      "callee_name": "handleCrossReference"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2030..2043",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@1464..1596",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2118..2140",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2144..2165",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@4829..4969",
+      "callee_name": "prepareMapCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2169..2187",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2414..2436",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2444..2457",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2470..2491",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@4829..4969",
+      "callee_name": "prepareMapCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2496..2514",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@2551..2622",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@2856..3323",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3022..3044",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3062..3075",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3113..3131",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3358..3402",
+      "syntax": "identifier",
+      "callee": "src/core/immerClass.ts@6616..7844",
+      "callee_name": "createProxy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3406..3427",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@4829..4969",
+      "callee_name": "prepareMapCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3563..3585",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3589..3610",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@4829..4969",
+      "callee_name": "prepareMapCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@3621..3634",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5390..5444",
+      "callee_name": "latest"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@4017..4028",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@3483..3645",
+      "callee_name": "keys"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@4039..4279",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@4343..4629",
+      "callee_name": "iteratorFrom"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@4180..4197",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@2953..3479",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@4319..4333",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@3955..4283",
+      "callee_name": "entries"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@4755..4783",
+      "syntax": "new",
+      "callee": "src/plugins/mapset.ts@935..1332",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@5650..5672",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6061..6083",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6092..6107",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@5575..5986",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6115..6136",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@7716..8128",
+      "callee_name": "prepareSetCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6141..6159",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6192..6233",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@5675..7224",
+      "callee_name": "handleCrossReference"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6295..6310",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@5575..5986",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6385..6407",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6411..6432",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@7716..8128",
+      "callee_name": "prepareSetCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6436..6454",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@10354..10507",
+      "callee_name": "markChanged"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6915..6937",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@8131..8267",
+      "callee_name": "assertUnrevoked"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@6941..6962",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@7716..8128",
+      "callee_name": "prepareSetCopy"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@7642..7670",
+      "syntax": "new",
+      "callee": "src/plugins/mapset.ts@5029..5443",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@7914..7932",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@8672..8687",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5486..5869",
+      "callee_name": "getValue"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/mapset.ts@8704..8768",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1646..1808",
+      "callee_name": "loadPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@10008..10024",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@1994..2352",
+      "callee_name": "delete"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@10064..10088",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@6261..6633",
+      "callee_name": "delete"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@10534..10550",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@10625..10635",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4630..4686",
+      "callee_name": "isMap"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@10742..10752",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4721..4777",
+      "callee_name": "isSet"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@10902..10931",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@10486..11012",
+      "callee_name": "deepClonePatchValue"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@10938..10957",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3639..3807",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@11070..11082",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@11146..11255",
+      "syntax": "identifier",
+      "callee": "src/utils/plugins.ts@1646..1808",
+      "callee_name": "loadPlugin"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@1161..1204",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5225..5354",
+      "callee_name": "getProxyDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@1175..1203",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@1227..1255",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@2227..2247",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3639..3807",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@2954..2982",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@858..3211",
+      "callee_name": "getPath"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@3112..3142",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@3255..3578",
+      "callee_name": "resolvePath"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@4000..4099",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@6239..7083",
+      "callee_name": "generatePatchesFromAssigned"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@4135..4227",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@4380..6178",
+      "callee_name": "generateArrayPatches"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@4261..4370",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@7086..7770",
+      "callee_name": "generateSetPatches"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@5505..5540",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@11015..11143",
+      "callee_name": "clonePatchValueIfNeeded"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@5615..5648",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@11015..11143",
+      "callee_name": "clonePatchValueIfNeeded"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@5976..6009",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@11015..11143",
+      "callee_name": "clonePatchValueIfNeeded"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@6429..7080",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@2856..3323",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@6499..6521",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@6539..6562",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@6603..6618",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3639..3807",
+      "callee_name": "has"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@6810..6840",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@11015..11143",
+      "callee_name": "clonePatchValueIfNeeded"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@6964..6998",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@11015..11143",
+      "callee_name": "clonePatchValueIfNeeded"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@7035..7069",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@11015..11143",
+      "callee_name": "clonePatchValueIfNeeded"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@8343..8360",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3346..3606",
+      "callee_name": "getArchtype"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@8674..8690",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4873..4939",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@8743..8755",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3840..3996",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@8782..8799",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4804..4847",
+      "callee_name": "isObjectish"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@8865..8882",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3346..3606",
+      "callee_name": "getArchtype"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@8900..8932",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@10486..11012",
+      "callee_name": "deepClonePatchValue"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@9658..9691",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@9731..9751",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@1600..1990",
+      "callee_name": "set"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@9791..9806",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@5990..6257",
+      "callee_name": "add"
+    },
+    {
+      "kind": "call",
+      "site": "src/plugins/patches.ts@9942..9968",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@1027..1041",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@1262..1282",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1531..2084",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@1371..1383",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4630..4686",
+      "callee_name": "isMap"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@1389..1401",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4721..4777",
+      "callee_name": "isSet"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@1593..1611",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4804..4847",
+      "callee_name": "isObjectish"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@1842..1858",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4873..4939",
+      "callee_name": "isFunction"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@2277..2291",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@2922..2938",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3346..3606",
+      "callee_name": "getArchtype"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3212..3236",
+      "syntax": "identifier",
+      "callee": "src/core/current.ts@1279..1348",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3212..3236",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@3760..3915",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3212..3236",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@8036..8466",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3212..3236",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@8232..8279",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3294..3317",
+      "syntax": "identifier",
+      "callee": "src/core/current.ts@1279..1348",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3294..3317",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@3760..3915",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3294..3317",
+      "syntax": "identifier",
+      "callee": "src/core/finalize.ts@8036..8466",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3294..3317",
+      "syntax": "identifier",
+      "callee": "src/plugins/mapset.ts@2569..2621",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3294..3317",
+      "syntax": "identifier",
+      "callee": "src/plugins/patches.ts@6452..7079",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3294..3317",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@8232..8279",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3521..3533",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4630..4686",
+      "callee_name": "isMap"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3555..3567",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4721..4777",
+      "callee_name": "isSet"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3682..3700",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3346..3606",
+      "callee_name": "getArchtype"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@3898..3916",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3346..3606",
+      "callee_name": "getArchtype"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@4095..4113",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3346..3606",
+      "callee_name": "getArchtype"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@5266..5284",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4804..4847",
+      "callee_name": "isObjectish"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@5525..5545",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@5225..5354",
+      "callee_name": "getProxyDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@6052..6063",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4630..4686",
+      "callee_name": "isMap"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@6098..6109",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4721..4777",
+      "callee_name": "isSet"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@6218..6237",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1531..2084",
+      "callee_name": "isPlainObject"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@7743..7756",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@8444..8625",
+      "callee_name": "isFrozen"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@7760..7772",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@533..589",
+      "callee_name": "isDraft"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@7777..7793",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@1180..1406",
+      "callee_name": "isDraftable"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@7811..7827",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@3346..3606",
+      "callee_name": "getArchtype"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@8215..8293",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@2856..3323",
+      "callee_name": "each"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@8255..8274",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@7681..8307",
+      "callee_name": "freeze"
+    },
+    {
+      "kind": "call",
+      "site": "src/utils/common.ts@8570..8586",
+      "syntax": "identifier",
+      "callee": "src/utils/common.ts@4804..4847",
+      "callee_name": "isObjectish"
+    },
+    {
+      "kind": "callback",
+      "site": "src/core/scope.ts@1682..1716",
+      "syntax": "member",
+      "callee": "src/core/scope.ts@1967..2171",
+      "callee_name": "revokeDraft"
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/mapset.ts@7875..8121",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@7895..8120",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/mapset.ts@8626..8694",
+      "syntax": "member",
+      "callee": "src/plugins/mapset.ts@8639..8693",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@10590..10618",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@10486..11012",
+      "callee_name": "deepClonePatchValue"
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@7252..7504",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@7266..7503",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@7515..7767",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@7530..7766",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@8192..10194",
+      "syntax": "member",
+      "callee": "src/plugins/patches.ts@8208..10193",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@9658..9691",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@9658..9691",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@8010..8228",
+      "callee_name": "set"
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@9942..9968",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@9942..9968",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@7806..7992",
+      "callee_name": "deleteProperty"
+    },
+    {
+      "kind": "callback",
+      "site": "src/plugins/patches.ts@9942..9968",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@8010..8228",
+      "callee_name": "set"
+    },
+    {
+      "kind": "callback",
+      "site": "src/utils/common.ts@1641..1662",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@7285..7348",
+      "callee_name": "getPrototypeOf"
+    },
+    {
+      "kind": "callback",
+      "site": "src/utils/common.ts@1641..1662",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/utils/common.ts@3187..3241",
+      "syntax": "member",
+      "callee": "src/utils/common.ts@3200..3240",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/utils/common.ts@3254..3318",
+      "syntax": "member",
+      "callee": "src/utils/common.ts@3266..3317",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/utils/common.ts@6166..6199",
+      "syntax": "member",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "callback",
+      "site": "src/utils/common.ts@7210..7230",
+      "syntax": "identifier",
+      "callee": "src/core/proxy.ts@7285..7348",
+      "callee_name": "getPrototypeOf"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/current.ts@707",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/current.ts@707",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/finalize.ts@1359",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/finalize.ts@1359",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/finalize.ts@535",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/finalize.ts@535",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/finalize.ts@855",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/immerClass.ts@4492",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/immerClass.ts@4743",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/scope.ts@2038",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/core/scope.ts@2038",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/plugins/arrayMethods.ts@15236",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/plugins/arrayMethods.ts@15655",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/plugins/arrayMethods.ts@16099",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/plugins/patches.ts@10130",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@6375..6802",
+      "callee_name": "deleteProperty"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/plugins/patches.ts@9517",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@4707..6372",
+      "callee_name": "set"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/plugins/patches.ts@9517",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@8010..8228",
+      "callee_name": "set"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/plugins/patches.ts@9847",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@4707..6372",
+      "callee_name": "set"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@1069",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@1069",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@2321",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@3435",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@3435",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@3990",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@576",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@576",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@7681..7775",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@7269",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@2884..4587",
+      "callee_name": "get"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@7269",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@4645..4704",
+      "callee_name": "ownKeys"
+    },
+    {
+      "kind": "implicit",
+      "site": "src/utils/common.ts@7269",
+      "syntax": "implicit",
+      "callee": "src/core/proxy.ts@6923..7248",
+      "callee_name": "getOwnPropertyDescriptor"
+    }
+  ]
+}

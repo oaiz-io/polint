@@ -1,0 +1,139 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "atom/index.js": {
+      "system": "esm",
+      "names": [
+        "atom",
+        "batch",
+        "nanostoresGlobal",
+        "readonlyType"
+      ]
+    },
+    "clean-stores/index.js": {
+      "system": "esm",
+      "names": [
+        "clean",
+        "cleanStores"
+      ]
+    },
+    "computed/index.js": {
+      "system": "esm",
+      "names": [
+        "batched",
+        "computed"
+      ]
+    },
+    "deep-map/index.js": {
+      "system": "esm",
+      "names": [
+        "deepMap",
+        "getKey",
+        "getPath",
+        "setByKey",
+        "setPath"
+      ]
+    },
+    "deep-map/path.js": {
+      "system": "esm",
+      "names": [
+        "getPath",
+        "setByKey",
+        "setPath"
+      ]
+    },
+    "effect/index.js": {
+      "system": "esm",
+      "names": [
+        "effect"
+      ]
+    },
+    "index.js": {
+      "system": "esm",
+      "names": [
+        "STORE_UNMOUNT_DELAY",
+        "allTasks",
+        "atom",
+        "batch",
+        "batched",
+        "clean",
+        "cleanStores",
+        "cleanTasks",
+        "computed",
+        "deepMap",
+        "effect",
+        "getKey",
+        "getPath",
+        "keepMount",
+        "listenKeys",
+        "map",
+        "mapCreator",
+        "onMount",
+        "onNotify",
+        "onSet",
+        "onStart",
+        "onStop",
+        "readonlyType",
+        "setByKey",
+        "setPath",
+        "startTask",
+        "subscribeKeys",
+        "task"
+      ]
+    },
+    "keep-mount/index.js": {
+      "system": "esm",
+      "names": [
+        "keepMount"
+      ]
+    },
+    "lifecycle/index.js": {
+      "system": "esm",
+      "names": [
+        "STORE_UNMOUNT_DELAY",
+        "on",
+        "onMount",
+        "onNotify",
+        "onSet",
+        "onStart",
+        "onStop"
+      ]
+    },
+    "listen-keys/index.js": {
+      "system": "esm",
+      "names": [
+        "listenKeys",
+        "subscribeKeys"
+      ]
+    },
+    "map-creator/index.js": {
+      "system": "esm",
+      "names": [
+        "mapCreator"
+      ]
+    },
+    "map/index.js": {
+      "system": "esm",
+      "names": [
+        "map"
+      ]
+    },
+    "task/index.js": {
+      "system": "esm",
+      "names": [
+        "allTasks",
+        "cleanTasks",
+        "startTask",
+        "task"
+      ]
+    },
+    "warn/index.js": {
+      "system": "esm",
+      "names": [
+        "warn"
+      ]
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [
+    "src/types/types-internal.ts"
+  ],
+  "files": {
+    "src/core/current.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/core/finalize.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/core/immerClass.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/core/proxy.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/core/scope.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/immer.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/internal.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/plugins/arrayMethods.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/plugins/mapset.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/plugins/patches.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/types/globals.d.ts": {
+      "system": "cjs",
+      "names": [],
+      "whole_value": "object"
+    },
+    "src/types/types-external.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/types/types-internal.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/utils/common.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/utils/env.ts": {
+      "system": "esm",
+      "names": [
+        "DRAFTABLE",
+        "DRAFT_STATE",
+        "NOTHING"
+      ]
+    },
+    "src/utils/errors.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    },
+    "src/utils/plugins.ts": {
+      "error": "The requested module '../internal' does not provide an export named 'Draft'"
+    }
+  }
+}

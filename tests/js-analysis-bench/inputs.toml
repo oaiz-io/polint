@@ -102,3 +102,137 @@ integrity = "sha512-DXtD3ZtEQzc7M8m4cXotyHR+FAS18C64asBYY5vqZexfYryNNnDc02W4hKg3
 sha256 = "6547214df2878ae60cc552422ef14af38b8d4e3aa613be5bfe9c52b775d96f7a"
 analysed = ["underscore-umd.js"]
 driver = "drivers/underscore.mjs"
+
+# The held-out set (research/package-graphs/HELD-OUT.md). No analysis change is
+# tuned on these packages: their drivers come from each package's documentation,
+# their recordings are committed apart from analysis code, and CI refuses a pull
+# request that changes both. The report scores them in tables of their own.
+#
+# `tests_from` records a package through its own test suite: `paths` of the
+# repository archive at `commit` (the release `tag`, checked against `sha256`)
+# are placed in the package tree, and the modules the suite needs are installed
+# from the committed `modules` manifest and its lockfile without install
+# scripts, then mounted read-only.
+
+[[package]]
+name = "co"
+version = "4.6.0"
+format = "CommonJS, generator and promise control flow"
+licence = "MIT"
+held_out = true
+origin = "https://registry.npmjs.org/co/-/co-4.6.0.tgz"
+integrity = "sha512-QVb0dM5HvG+uaxitm8wONl7jltx8dqhfU33DcqtOZcLSVIKSDDLDi7+0LbAKiyI8hD9u42m2YxXSkMGWThaecQ=="
+sha256 = "21d4362a4a3822e68fe1852409381dd0be9851756eabfbf6d0723ef51e39cf98"
+analysed = ["index.js"]
+driver = "drivers/heldout/co.mjs"
+
+[[package]]
+name = "pako"
+version = "2.1.0"
+format = "minified UMD (Rollup and terser)"
+licence = "MIT AND Zlib"
+held_out = true
+origin = "https://registry.npmjs.org/pako/-/pako-2.1.0.tgz"
+integrity = "sha512-w+eufiZ1WuJYgPXbV/PO3NCMEc3xqylkKHzp8bxp1uW4qaSNQUkwmLLEc3kKsfz8lpV1F8Ht3U1Cm+9Srog2ug=="
+sha256 = "49fedc8866b4abfc8e71dc7fe75ad4ef1ff1ac9601b0642cff88ee5bf2338709"
+analysed = ["dist/pako.min.js"]
+driver = "drivers/heldout/pako.mjs"
+
+[[package]]
+name = "nanostores"
+version = "1.5.5"
+format = "ESM source"
+licence = "MIT"
+held_out = true
+origin = "https://registry.npmjs.org/nanostores/-/nanostores-1.5.5.tgz"
+integrity = "sha512-FixtE239Gl6Gz0ZGCK0WzvNwObNCIwVT+L7zQcf1QgcA6AzBxblzqe9OT88qiucNkhsjSOqiogSaF5jVbJiqSA=="
+sha256 = "de93c6d4cf9f90ee836b78e88387b9de78e9ad530d6592b2a96bd76b3f9e06df"
+analysed = ["index.js", "*/index.js", "deep-map/path.js"]
+driver = "drivers/heldout/nanostores.mjs"
+
+[[package]]
+name = "express"
+version = "5.3.0"
+format = "CommonJS framework with dependencies"
+licence = "MIT"
+held_out = true
+origin = "https://registry.npmjs.org/express/-/express-5.3.0.tgz"
+integrity = "sha512-qCqy1xSoaugxOD4IVHb1ZWdkvCF2W3aE2okKouWj8VwJ+ztskSiXoBnCSJqfKT+cVPJhuJqe9YLbY425+Zh00g=="
+sha256 = "62450d99e36dc393295f1ddd93cb9291e658c169f3b700b0110c1ae8fa799930"
+analysed = ["index.js", "lib/*.js"]
+driver = "drivers/heldout/express.mjs"
+
+[package.tests_from]
+repo = "expressjs/express"
+tag = "v5.3.0"
+commit = "cf6722bf89a86905281d9160b6482e08166b5ef0"
+sha256 = "9a5bd805f9045c1e724044e2d523ddbd1ce145fa4bec30cdbbb4067597ff18e6"
+paths = ["test", "examples"]
+modules = "drivers/heldout/express.package.json"
+
+[[package]]
+name = "immer"
+version = "11.2.10"
+format = "TypeScript source"
+licence = "MIT"
+held_out = true
+origin = "https://registry.npmjs.org/immer/-/immer-11.2.10.tgz"
+integrity = "sha512-pzANBj+0A9u+prdhBJ14DVi44vCvVUQzBa8DKt6I0AMCokPHtt722BK9IX5bFC70xUSU9TnzLRIJLTGqIzjEFw=="
+sha256 = "f8184e2750790534d2faf01137b39133586ef2c14fa504ee82409568dbb0b32d"
+analysed = ["src/**/*.ts"]
+driver = "drivers/heldout/immer.mjs"
+
+[[package]]
+name = "js-yaml"
+version = "4.1.0"
+format = "CommonJS source, table-driven schema compilation"
+licence = "MIT"
+held_out = true
+origin = "https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.0.tgz"
+integrity = "sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA=="
+sha256 = "0dae332559cf22b21c26ea70e732afd8303ff99412f9c3d9d209faa8882cf2ca"
+analysed = ["index.js", "lib/**/*.js"]
+driver = "drivers/heldout/js-yaml.mjs"
+
+[package.tests_from]
+repo = "nodeca/js-yaml"
+tag = "4.1.0"
+commit = "2cef47bebf60da141b78b085f3dea3b5733dcc12"
+sha256 = "88eb30459d6617dbf7ba76be35a6a210de1b94fbd8d8d4b41e20402971adde5a"
+paths = ["test"]
+modules = "drivers/heldout/js-yaml.package.json"
+
+[[package]]
+name = "acorn"
+version = "8.19.0"
+format = "bundled ESM output"
+licence = "MIT"
+held_out = true
+origin = "https://registry.npmjs.org/acorn/-/acorn-8.19.0.tgz"
+integrity = "sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw=="
+sha256 = "c6fad21ffa1f2ba20338bf1dde1de911c2093c1aaf7b3af17c477661bd3bfaaf"
+analysed = ["dist/acorn.mjs"]
+driver = "drivers/heldout/acorn.mjs"
+# The driver parses the shipped JavaScript of these held-out packages, copied
+# under `.polint-js-bench-corpus/<name>/`; immer ships TypeScript and is left out.
+corpus = ["co", "pako", "nanostores", "express", "js-yaml", "node-forge"]
+
+[[package]]
+name = "node-forge"
+version = "1.4.3"
+format = "CommonJS, large"
+licence = "BSD-3-Clause"
+held_out = true
+origin = "https://registry.npmjs.org/node-forge/-/node-forge-1.4.3.tgz"
+integrity = "sha512-P6wzfh6t70avmV8FrVEAd/36sOPJQ+hkaJVX1Laap9J/77m7M0eyozDvc8SwnDf4P7MP94gwbAAo0rg3YVXT+g=="
+sha256 = "0a872d932911012524495ab07dbf49351bd8ac23f12ea4766dc400f29ffc3356"
+analysed = ["lib/*.js"]
+driver = "drivers/heldout/node-forge.mjs"
+
+[package.tests_from]
+repo = "digitalbazaar/forge"
+tag = "v1.4.3"
+commit = "936b24d939dc7261ee37982576f9cf2b410084ee"
+sha256 = "3855180844c98645aa99a614cef92661dcffe1c117bb403614fc814e5ad88f5b"
+paths = ["tests/unit", "tests/security"]
+modules = "drivers/heldout/node-forge.package.json"
