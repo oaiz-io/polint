@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js"
@@ -7,6 +7,24 @@
   "instrumented_functions": 4,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..236",
+      "name": "createEmitter"
+    },
+    {
+      "function": "main.js@149..228",
+      "name": "emit"
+    },
+    {
+      "function": "main.js@238..296",
+      "name": "onEvent"
+    },
+    {
+      "function": "main.js@98..143",
+      "name": "on"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js"
@@ -7,6 +7,28 @@
   "instrumented_functions": 5,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@118..194",
+      "name": "ternary"
+    },
+    {
+      "function": "main.js@12..64",
+      "name": "fallback"
+    },
+    {
+      "function": "main.js@195..263",
+      "name": "orDefault"
+    },
+    {
+      "function": "main.js@264..342",
+      "name": "nullishDefault"
+    },
+    {
+      "function": "main.js@65..117",
+      "name": "custom"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

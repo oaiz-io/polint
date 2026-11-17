@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js"
@@ -7,6 +7,24 @@
   "instrumented_functions": 4,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..64",
+      "name": "double"
+    },
+    {
+      "function": "main.js@185..245",
+      "name": "wrapped"
+    },
+    {
+      "function": "main.js@272..321",
+      "name": "negate"
+    },
+    {
+      "function": "main.js@65..271",
+      "name": "pick"
+    }
+  ],
   "edges": [
     {
       "kind": "call",
