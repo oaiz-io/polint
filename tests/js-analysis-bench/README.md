@@ -165,7 +165,10 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   fetching, building or sandboxing anything: a site only a heuristic edge
   answers counts as apart only, a typed candidate counts as conservative, a
   single exact target the run did not call is a wrong exact target, a budget
-  reason is reported, and every tier section is rendered.
+  reason is reported, and every tier section is rendered. It also checks the
+  outside-tool scorer: position conversion on a line with non-ASCII and astral
+  characters before a call, and that it matches an observed edge to the same
+  site and callee as polint's scorer.
 - **Cost**: `polint check` with the census rule pack in `rule-pack/` (asks for
   `Functions`, `CallGraph`, `Symbols`, `References`), cold and warm, wall time
   and peak RSS from the in-process cost record (`POLINT_GOLDEN_COST_PATH`) and
@@ -183,6 +186,34 @@ Two columns are reported throughout:
   (`syntax,calls,control_flow,dataflow,call_graph,symbols,references`)
   produces. Rules have no public view of these facts. The benchmark reads them
   through an internal hook and adds no public view.
+
+## Outside tools
+
+`## Outside tools` puts [Jelly](https://github.com/cs-au-dk/jelly) beside
+polint, scored on the same observed calls with the same site and callee
+matching (`report.Spans`, `report.unobserved_targets`; the scorer imports them
+rather than copying them). Jelly runs twice per tune-set package, static and
+with `--approx`, on the same shipped source files polint analyses. Held-out
+packages are not run.
+
+```sh
+python3 tests/js-analysis-bench/bench.py outside [--only <package>]  # needs docker and network for the build
+```
+
+`bench.py outside` builds Jelly at a pinned commit from a hash-checked archive
+into an image on the pinned `node` base (`outside/Dockerfile.jelly`; the network
+is used only while building the image), then runs it in the same sandbox as the
+recorder, with `--network none`. Its raw call graphs are committed gzip-compressed
+under `baseline/outside/<run>/<package>.json.gz`, with a `<package>.meta.json`
+recording the image, arguments, exit code and wall time, so `bench.py report`
+scores them without docker. `outside/score_outside.py` converts Jelly's
+positions (1-based lines, 1-based end-exclusive UTF-16 columns) to the byte
+offsets every bench key uses.
+
+Jelly has no tiers, so every Jelly edge counts as claimed and its wrong-target
+counts are an upper bound; the report lists this and the other deviations from
+polint's scoring under the table. ACG (js-callgraph) is not run: its parser
+rejects ES2020 and drops such files silently.
 
 ## The internal hook
 

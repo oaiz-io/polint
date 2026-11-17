@@ -13,7 +13,11 @@ The cases are the ones the tier rules exist for:
   conservative, not exact, although its precision is `SetupAware`;
 - a single exact target the run never called there is a wrong exact target;
 - a budget event is reported with its reason;
-- every tier section is rendered, and removing one fails the test.
+- every tier section is rendered, and removing one fails the test;
+- an outside tool's positions (1-based UTF-16 columns) convert to the same
+  byte offsets on a line with non-ASCII and astral characters before a call;
+- the outside scorer matches an observed edge to the same site and callee
+  keys as polint's scorer, because both use `report.Spans`.
 """
 
 from __future__ import annotations
@@ -126,6 +130,66 @@ def observed() -> dict:
     }
 
 
+# Two- and four-byte UTF-8 characters, one of them two UTF-16 units, before a call.
+WIDE_SOURCE = "// caf\u00e9 \U0001d4b3\nfunction a() {}\nconst s = '\u00fc\U0001d4b3'; a();\n"
+
+
+def utf16_position(text: str, offset: int) -> tuple[int, int]:
+    """1-based line and 1-based UTF-16 column of character `offset`, as Jelly writes them."""
+    line = text.count("\n", 0, offset) + 1
+    line_start = text.rfind("\n", 0, offset) + 1
+    units = len(text[line_start:offset].encode("utf-16-le")) // 2
+    return line, units + 1
+
+
+def jelly_loc(text: str, start: int, end: int) -> str:
+    return "0:%d:%d:%d:%d" % (*utf16_position(text, start), *utf16_position(text, end))
+
+
+def check_outside(failures: list[str]) -> None:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "outside"))
+    import score_outside
+
+    data = WIDE_SOURCE.encode()
+    positions = score_outside.JellyPositions(data)
+    function_start = WIDE_SOURCE.index("function a() {}")
+    call_start = WIDE_SOURCE.rindex("a()")
+    for offset in (function_start, function_start + len("function a() {}"), call_start, call_start + len("a()")):
+        got = positions.byte_offset(*utf16_position(WIDE_SOURCE, offset))
+        want = len(WIDE_SOURCE[:offset].encode())
+        check(got == want, f"outside position of character {offset}: byte {got}, expected {want}", failures)
+
+    with tempfile.TemporaryDirectory(prefix="polint-js-bench-selftest-") as root:
+        (Path(root) / FILE).write_text(SOURCE)
+        base_dump, _ = dumps()
+        facts = report.Facts(base_dump, "base")
+        # The synthetic package as Jelly writes it: functions, then the module.
+        located = {"function a() {}": 0, "function b() {}": 1, "function run(f) { f(); }": 2}
+        document = {
+            "files": [FILE],
+            "functions": {
+                **{str(index): jelly_loc(SOURCE, *span(text)) for text, index in located.items()},
+                "3": jelly_loc(SOURCE, 0, len(SOURCE)),
+            },
+            "calls": {str(index): jelly_loc(SOURCE, *span(text)) for index, text in enumerate(("a()", "f()", "run(b)"))},
+            # The edge to the module entry is not a wrong target: modules are not callees.
+            "call2fun": [[0, 0], [0, 3], [1, 1], [2, 2]],
+        }
+        spans, targets, counts = score_outside.load_jelly(document, Path(root))
+    check(counts["functions"] == 3, f"outside function count leaves the module out: {counts}", failures)
+    for edge in observed()["edges"]:
+        polint_site, tool_site = facts.site_for(edge["site"]), spans.site_for(edge["site"])
+        polint_callee = facts.function_for(edge["callee"], edge["callee_name"])
+        tool_callee = spans.function_for(edge["callee"], edge["callee_name"])
+        check(polint_site is not None and tool_site is not None and polint_site["key"] == tool_site["key"],
+              f"outside site match differs at {edge['site']}", failures)
+        check(polint_callee is not None and tool_callee is not None and polint_callee["key"] == tool_callee["key"],
+              f"outside callee match differs for {edge['callee']}", failures)
+    scored = score_outside.score(observed(), spans, targets)
+    check(scored["found"] == 3 and scored["wrong_targets"] == {"multi_target": 0, "single_target": 0},
+          f"outside score of the synthetic package: {scored}", failures)
+
+
 def check(condition: bool, message: str, failures: list[str]) -> None:
     if not condition:
         failures.append(message)
@@ -176,6 +240,8 @@ def main() -> int:
     check("points_to.max_dynamic_vars" in text, "budget reason not rendered", failures)
     check(text.count("\n## ") + text.startswith("## ") == len(SECTIONS),
           "the tier sections and SECTIONS differ; update both together", failures)
+
+    check_outside(failures)
 
     for failure in failures:
         print(f"selftest: {failure}", file=sys.stderr)
