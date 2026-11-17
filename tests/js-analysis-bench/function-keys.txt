@@ -1,5 +1,8 @@
 block-function/catch-and-finally	main.js@0..520#<polint:module>
 block-function/catch-and-finally	main.js@17..457#load
+block-function/catch-and-finally	main.js@207..286#fallback
+block-function/catch-and-finally	main.js@305..367#close
+block-function/catch-and-finally	main.js@81..154#remember
 block-function/try-and-if	main.js@0..815#<polint:module>
 block-function/try-and-if	main.js@21..438#describe
 block-function/try-and-if	main.js@216..281#measure
@@ -7,6 +10,7 @@ block-function/try-and-if	main.js@297..367#shorten
 block-function/try-and-if	main.js@440..698#describeShort
 block-function/try-and-if	main.js@521..576#unused
 block-function/try-and-if	main.js@592..652#single
+block-function/try-and-if	main.js@75..143#decode
 callback/builtin-invoked	main.js@0..311#<polint:module>
 callback/builtin-invoked	main.js@12..64#square
 callback/builtin-invoked	main.js@242..258#<polint:anonymous:242:258>
@@ -187,5 +191,14 @@ sequence-callee/local-sequence	main.js@126..283#apply
 sequence-callee/local-sequence	main.js@18..60#f
 sequence-callee/local-sequence	main.js@76..113#<polint:anonymous:76:113>
 unary-iife/umd-prologue	main.js@0..581#<polint:module>
+unary-iife/umd-prologue	main.js@259..530#<polint:anonymous:259:530>
+unary-iife/umd-prologue	main.js@26..222#<polint:anonymous:26:222>
+unary-iife/umd-prologue	main.js@305..341#<polint:anonymous:305:341>
+unary-iife/umd-prologue	main.js@356..400#r
+unary-iife/umd-prologue	main.js@443..479#o
 unary-iife/unary-operators	main.js@0..438#<polint:module>
+unary-iife/unary-operators	main.js@179..260#<polint:anonymous:179:260>
+unary-iife/unary-operators	main.js@266..343#<polint:anonymous:266:343>
+unary-iife/unary-operators	main.js@355..434#<polint:anonymous:355:434>
 unary-iife/unary-operators	main.js@41..89#step
+unary-iife/unary-operators	main.js@92..169#<polint:anonymous:92:169>
