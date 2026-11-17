@@ -3,9 +3,12 @@
 # Real packages are benchmark inputs only: each is pinned to one exact tarball
 # by URL and two content hashes, fetched once by `bench.py fetch`, and read
 # offline afterwards. `analysed` lists the files polint analyses and the
-# recorder instruments, as globs relative to the package root; `exports_skip`
-# removes files whose module scope cannot load on its own (test suites and
-# benchmarks that import their runners).
+# recorder instruments, as globs relative to the package root; test and
+# benchmark paths are left out of every package's set, so what is analysed is
+# the package's shipped source (`bench.py`, `NOT_SHIPPED_RE`). `exports_skip`
+# removes files whose module scope cannot load on its own.
+# `compare_previous_set = true` also scores the package on its globs alone,
+# apart from every other table, for one comparison with earlier reports.
 schema_version = "polint-js-analysis-bench-inputs-1"
 
 # Every package tree and construct case runs only inside this image, with no
@@ -38,6 +41,7 @@ integrity = "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhU
 sha256 = "84efd155bed93270286e793fc951be270b536cbd5b0eeb111f0fa3967201d698"
 analysed = ["src/**/*.ts"]
 exports_skip = ["src/**/tests/**", "src/v3/benchmarks/**"]
+compare_previous_set = true
 driver = "drivers/zod.mjs"
 # The largest package, with schema helpers that call themselves at several
 # sites, so it is the scaling check of the refined layer: each of its fact

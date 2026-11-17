@@ -43,7 +43,7 @@ sys.path.insert(0, str(bench.REPO_ROOT / "scripts" / "bench-runner"))
 import bench_matrix  # noqa: E402  (the existing cost machinery: measure, directory_bytes)
 
 REPORT_SCHEMA = "polint-js-analysis-bench-report-1"
-DUMP_SCHEMA = "polint-js-bench-facts-2"
+DUMP_SCHEMA = "polint-js-bench-facts-3"
 DUMP_FILTER = "eval::js_bench::tests::dump_js_bench_facts"
 PLANS = {
     "base": "syntax,call_graph,symbols,references",
@@ -205,6 +205,25 @@ def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
     return case_trees, package_trees
 
 
+def stage_previous_sets(scratch: Path, inputs: dict) -> dict:
+    """Stage each `compare_previous_set` package with its globs alone; return {package: tree}.
+
+    Reports written before the shipped-source rule analysed these files; the
+    comparison keeps one report readable against them."""
+    trees = {}
+    for package in inputs["package"]:
+        if not package.get("compare_previous_set"):
+            continue
+        root = bench.require_fetched(package)
+        analysed, _ = bench.package_files(package, shipped_only=False)
+        dest = scratch / "previous-set" / package["name"]
+        for rel in [*analysed, "package.json"]:
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(root / rel, dest / rel)
+        trees[package["name"]] = dest
+    return trees
+
+
 def stage_typed(scratch: Path, trees: dict) -> dict:
     """Copy each tree for the typed plan; return {key: typed tree}.
 
@@ -303,6 +322,70 @@ def load_dump(run: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# tiers: what an edge claims
+
+
+# Every `CallPrecision` and the tier it claims (research/package-graphs/TIERS.md
+# (a)). The list is closed: a precision missing here stops the report, and the
+# dump's own `claim_tier`, written by the engine, must agree with it.
+PRECISION_TIERS = {
+    "Exact": "exact",
+    "SetupAware": "exact",
+    "Conservative": "conservative",
+    "Ambiguous": "conservative",
+    "Heuristic": "apart",
+    "Unknown": "none",
+    "Unsupported": "none",
+}
+CLAIM_TIERS = ("exact", "conservative", "apart")
+# Typed candidates narrowed by the checker but not chosen by it carry
+# `SetupAware`, the value the direct tier uses for exact answers; the bench
+# reads them as conservative until they carry a value of their own.
+TYPED_CANDIDATE_DISPATCH = {"implementation", "union_member"}
+# A refined row claims its target only with one of these statuses; an
+# `Ambiguous` row names one of several candidates, so it claims no more than
+# conservative.
+CLAIMING_STATUS = {"Resolved": None, "Ambiguous": "conservative"}
+
+
+def tier_of(precision: str) -> str:
+    """The tier a precision claims; an unknown precision is an error."""
+    try:
+        return PRECISION_TIERS[precision]
+    except KeyError:
+        raise SystemExit(f"precision {precision!r} has no tier; add it to PRECISION_TIERS") from None
+
+
+def edge_tier(edge: dict) -> str:
+    """The tier the bench counts an edge in: its precision's tier, checked
+    against the engine's, with typed candidates read as conservative."""
+    tier = tier_of(edge["precision"])
+    if edge.get("claim_tier") != tier:
+        raise SystemExit(
+            f"edge at {edge['site']}: the engine says {edge.get('claim_tier')!r} for {edge['precision']}, "
+            f"the bench says {tier!r}"
+        )
+    if tier == "exact" and edge["algorithm"] == "TypeHierarchy" and edge.get("dispatch") in TYPED_CANDIDATE_DISPATCH:
+        return "conservative"
+    return tier
+
+
+def claimed_tier(edge: dict, refined: bool) -> str:
+    """The tier an edge row claims for its target, `none` when it claims none."""
+    tier = edge_tier(edge)
+    if not refined or tier == "none":
+        return tier
+    if edge["status"] not in CLAIMING_STATUS:
+        return "none"
+    cap = CLAIMING_STATUS[edge["status"]]
+    return cap if cap is not None and tier == "exact" else tier
+
+
+def is_test_path(path: str) -> bool:
+    return bench.is_not_shipped(path)
+
+
+# ---------------------------------------------------------------------------
 # facts: one plan's dump turned into lookups
 
 
@@ -329,9 +412,33 @@ class Facts:
         self.import_stops: set[str] = set()
         # Sites this plan's answer itself marks as unresolved.
         self.marked_unresolved: set[str] = set()
+        # Per site and tier, the targets the answer claims in that tier.
+        self.tier_targets: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+        # Per site, the reasons its answer gives for being open.
+        self.open_reasons: dict[str, set[str]] = defaultdict(set)
         for edge in dump["base_edges"]:
             if edge["function"] is None and (edge["symbol"] or {}).get("kind") == "Import":
                 self.import_stops.add(edge["site"])
+        if plan == "base":
+            for edge in dump["base_edges"]:
+                tier = claimed_tier(edge, refined=False)
+                if edge["function"] is not None and tier != "none":
+                    self.tier_targets[edge["site"]][tier].add(edge["function"])
+            for row in dump["unresolved_calls"]:
+                self.open_reasons[row["site"]].add(row["reason"])
+        else:
+            refined_sites = {edge["site"] for edge in dump["refined_edges"] if edge["site"] is not None}
+            for edge in dump["refined_edges"]:
+                if edge["site"] is None:
+                    continue
+                tier = claimed_tier(edge, refined=True)
+                if edge["function"] is not None and tier != "none":
+                    self.tier_targets[edge["site"]][tier].add(edge["function"])
+                if edge["status"] != "Resolved":
+                    self.open_reasons[edge["site"]].add(edge["reason"] or f"status {edge['status']}")
+            for row in dump["unresolved_calls"]:
+                if row["site"] not in refined_sites:
+                    self.open_reasons[row["site"]].add(row["reason"])
         if plan == "base":
             for edge in dump["base_edges"]:
                 if edge["function"] is not None:
@@ -356,6 +463,19 @@ class Facts:
             # has no row for keep the base layer's unresolved marker.
             refined_sites = {edge["site"] for edge in dump["refined_edges"]}
             self.marked_unresolved |= self.unresolved_sites - refined_sites
+        # A site is complete when it claims at least one exact or conservative
+        # target and its answer has no unresolved row; every other site is open.
+        self.complete_sites = {
+            key
+            for key in self.sites
+            if self.claims(key, "exact") | self.claims(key, "conservative")
+            and key not in self.marked_unresolved
+        }
+
+    def claims(self, site: str, tier: str) -> set[str]:
+        """The targets the answer claims at `site` in `tier`."""
+        tiers = self.tier_targets.get(site)
+        return tiers.get(tier, set()) if tiers else set()
 
     def site_for(self, key: str) -> dict | None:
         """Exact span first, then the polint site in the same file ending at the same byte."""
@@ -1180,6 +1300,140 @@ def unobserved_claimed_targets(observed: dict, observed_at: dict, facts: Facts, 
     return {**dict(sorted(counts.items())), "examples": examples}
 
 
+def tier_hits(facts: Facts, site: dict, callee: dict) -> list[str]:
+    """The recall views an observed edge counts in, from the tier of its target."""
+    key, target = site["key"], callee["key"]
+    exact = target in facts.claims(key, "exact")
+    either = exact or target in facts.claims(key, "conservative")
+    hits = []
+    if exact and key in facts.complete_sites:
+        hits.append("exact_complete")
+    if exact:
+        hits.append("exact")
+    if either:
+        hits.append("exact_conservative")
+    if not either and target in facts.claims(key, "apart"):
+        hits.append("apart_only")
+    return hits
+
+
+def tier_precision(observed: dict, observed_at: dict, facts: Facts, sources: Sources) -> dict:
+    """Per tier, the claimed targets at executed sites the run did and did not call there.
+
+    The same rule as `unobserved_claimed_targets`, per tier: a target counts when
+    it is a function in an instrumented file, at a site the run was seen calling
+    a polint function from. `precision` is observed over claimed, a lower bound,
+    because the run may not have taken the path that reaches a target it did not
+    call. A target the run never called on a single-target answer in the exact
+    tier is a wrong exact claim; every one is kept as an example."""
+    instrumented = set(observed["instrumented_files"])
+    result = {}
+    for tier in CLAIM_TIERS:
+        counts = Counter({"sites": 0, "claimed": 0, "observed": 0, "single_target": 0, "multi_target": 0})
+        examples = []
+        for site_key, called in sorted(observed_at.items()):
+            claimed = facts.claims(site_key, tier)
+            countable = sorted(
+                target
+                for target in claimed
+                if (function := facts.functions.get(target)) is not None
+                and not function["module"]
+                and function["file"] in instrumented
+            )
+            if not countable:
+                continue
+            counts["sites"] += 1
+            counts["claimed"] += len(countable)
+            counts["observed"] += sum(target in called for target in countable)
+            shape = "single_target" if len(claimed) == 1 else "multi_target"
+            for target in countable:
+                if target in called:
+                    continue
+                counts[shape] += 1
+                if (tier == "exact" and shape == "single_target") or len(examples) < EXAMPLES_PER_OUTCOME:
+                    examples.append(
+                        {
+                            "answer": shape,
+                            "site": sources.at(site_key),
+                            "site_text": sources.excerpt(site_key),
+                            "target": describe_function(facts, target, sources),
+                            "observed_callees": [describe_function(facts, key, sources) for key in sorted(called)],
+                        }
+                    )
+        result[tier] = {
+            **dict(sorted(counts.items())),
+            "precision": ratio(counts["observed"], counts["claimed"]),
+            "examples": examples,
+        }
+    return result
+
+
+def nearest_rank(values: list[int], percent: int) -> int | None:
+    """The nearest-rank percentile: the smallest value at or above `percent`% of them."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, -(-len(ordered) * percent // 100) - 1)]
+
+
+def targets_per_site(facts: Facts) -> dict:
+    """Targets per site that claims any, per tier: the width of each tier's answers."""
+    result = {}
+    views = {tier: (tier,) for tier in CLAIM_TIERS}
+    views["exact_conservative"] = ("exact", "conservative")
+    for view, tiers in views.items():
+        widths = [
+            len(set().union(*(facts.claims(key, tier) for tier in tiers)))
+            for key in facts.sites
+        ]
+        widths = [width for width in widths if width]
+        result[view] = {
+            "sites": len(widths),
+            "mean": round(sum(widths) / len(widths), 2) if widths else None,
+            "p95": nearest_rank(widths, 95),
+            "max": max(widths) if widths else None,
+        }
+    return result
+
+
+def site_status(facts: Facts) -> dict:
+    """Complete and open sites, and the open ones by the reason their answer gives.
+
+    A site with several reasons counts under each; a site whose answer gives
+    none is counted as `none recorded`."""
+    open_sites = [key for key in facts.sites if key not in facts.complete_sites]
+    reasons = Counter()
+    for key in open_sites:
+        given = facts.open_reasons.get(key) or {"none recorded"}
+        reasons.update(given)
+    return {
+        "call_sites": len(facts.sites),
+        "complete": len(facts.complete_sites),
+        "open": len(open_sites),
+        "open_with_a_claimed_target": sum(
+            1 for key in open_sites if facts.claims(key, "exact") or facts.claims(key, "conservative")
+        ),
+        "open_by_reason": dict(sorted(reasons.items(), key=lambda item: (-item[1], item[0]))),
+    }
+
+
+def refined_edge_census(dump: dict) -> list[dict]:
+    """Refined rows by (tier, algorithm, status, precision, has a function target)."""
+    counts = Counter(
+        (claimed_tier(edge, refined=True), edge["algorithm"], edge["status"], edge["precision"], edge["function"] is not None)
+        for edge in dump["refined_edges"]
+    )
+    return [
+        {"tier": tier, "algorithm": algorithm, "status": status, "precision": precision, "has_function": has_function, "rows": rows}
+        for (tier, algorithm, status, precision, has_function), rows in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def apart_edges(dump: dict, plan: str) -> int:
+    rows = dump["base_edges"] if plan == "base" else dump["refined_edges"]
+    return sum(1 for edge in rows if edge["site"] is not None and edge_tier(edge) == "apart")
+
+
 def score_package_calls(observed: dict, facts: Facts, census: Census | None, sources: Sources) -> dict:
     by_kind = defaultdict(Counter)
     by_syntax = defaultdict(Counter)
@@ -1192,6 +1446,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
     gap_examples = defaultdict(list)
     inherited = 0
     other_shapes = Counter()
+    tier_found = Counter({view: 0 for view in ("exact_complete", "exact", "exact_conservative", "apart_only")})
     # Polint site -> the polint functions the run was seen calling from it.
     observed_at: dict[str, set[str]] = defaultdict(set)
     for edge in observed["edges"]:
@@ -1226,6 +1481,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             outcome = "no target, no unresolved marker"
         if site is not None and callee is not None:
             observed_at[site["key"]].add(callee["key"])
+            tier_found.update(tier_hits(facts, site, callee))
         outcomes[outcome] += 1
         for bucket in (by_kind[kind], by_syntax[syntax]):
             bucket["observed"] += 1
@@ -1255,6 +1511,15 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
         "observed_implicit_edges": by_kind.get("implicit", Counter())["observed"],
         "found": found,
         "recall": ratio(found, total),
+        "tiers": {
+            "found": dict(sorted(tier_found.items())),
+            "recall": {view: ratio(count, total) for view, count in sorted(tier_found.items())},
+            "precision": tier_precision(observed, observed_at, facts, sources),
+            "targets_per_site": targets_per_site(facts),
+            "sites": site_status(facts),
+            "apart_edges": apart_edges(facts.dump, facts.plan),
+        },
+        "executed_sites": sorted(observed_at),
         "outcomes": dict(sorted(outcomes.items())),
         "wrong_targets": wrong,
         "outcome_examples": dict(sorted(examples.items())),
@@ -1305,6 +1570,8 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
         census_run = dumps.get(("package", name, "census"), {"dump": None, "error": "not run"})
         if census_run["dump"] is None:
             entry["census_error"] = census_run["error"]
+        plan_facts = {}
+        executed = {}
         for plan in PLANS:
             run = dumps[("package", name, plan)]
             if run["dump"] is None:
@@ -1316,13 +1583,96 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                 **score_package_calls(observed_calls, facts, census, sources),
                 "unresolved_calls": facts.unresolved_call_share(),
                 "references": facts.reference_share(),
+                "solver_budget": run["dump"]["solver_budget"],
             }
+            executed[plan] = set(entry[plan].pop("executed_sites"))
+            plan_facts[plan] = facts
+            if plan != "base":
+                entry[plan]["refined_edge_census"] = refined_edge_census(run["dump"])
             if plan == TYPED_PLAN:
                 entry[plan]["ts_types"] = {
                     key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")
                 }
+        if "base" in plan_facts:
+            for plan, facts in plan_facts.items():
+                if plan != "base":
+                    entry[plan]["sites_gained"] = sites_gained(plan_facts["base"], facts, executed[plan])
         results[name] = entry
     return results
+
+
+PREVIOUS_SET = "previous_set"
+
+
+def set_summary(scored: dict) -> dict:
+    """The rows of one plan's score the analysed-set comparison shows."""
+    if "error" in scored:
+        return {"error": scored["error"]}
+    tiers = scored["tiers"]
+    return {
+        "observed_edges": scored["observed_edges"],
+        "found": scored["found"],
+        "recall": scored["recall"],
+        "tiers_found": tiers["found"],
+        "wrong_targets": {key: scored["wrong_targets"][key] for key in ("single_target", "multi_target")},
+        "wrong_exact_targets": tiers["precision"]["exact"]["single_target"],
+        "call_sites": tiers["sites"]["call_sites"],
+    }
+
+
+def score_previous_sets(inputs: dict, dumps: dict, packages: dict) -> dict:
+    """Each `compare_previous_set` package scored on its previous and its shipped set.
+
+    Kept apart from `packages`, so totals, the gap ranking and the cost runs
+    see the shipped set only."""
+    comparisons = {}
+    for package in inputs["package"]:
+        name = package["name"]
+        if not package.get("compare_previous_set"):
+            continue
+        observed_calls = json.loads((bench.OBSERVED / "packages" / f"{name}.calls.json").read_text())
+        sources = Sources(bench.require_fetched(package))
+        sets = {}
+        for label, kind in ((PREVIOUS_SET, PREVIOUS_SET), ("shipped", "package")):
+            base_dump = dumps[(kind, name, "base")]["dump"]
+            row = {
+                "files": len(base_dump["files"]) if base_dump else None,
+                "source_bytes": sum(file["bytes"] for file in base_dump["files"]) if base_dump else None,
+            }
+            for plan in PLANS:
+                run_entry = dumps[(kind, name, plan)]
+                if kind == "package":
+                    scored = packages[name][plan]
+                elif run_entry["dump"] is None:
+                    scored = {"error": run_entry["error"]}
+                else:
+                    scored = score_package_calls(observed_calls, Facts(run_entry["dump"], plan), None, sources)
+                row[plan] = {**set_summary(scored), "cost": run_entry["cost"]}
+            sets[label] = row
+        comparisons[name] = sets
+    return comparisons
+
+
+def sites_gained(base: Facts, refined: Facts, executed: set[str]) -> list[dict]:
+    """Sites the refined plan claims a target at and the base plan does not, by file.
+
+    `test_path` marks files under a test or benchmark folder, or named
+    `*.test.*` / `*.spec.*`: a gain there is analysis of code the package does
+    not ship. `executed` counts the gained sites the run was seen calling a
+    polint function from, the only ones recall can credit."""
+    def claims_any(facts: Facts, key: str) -> bool:
+        return bool(facts.claims(key, "exact") or facts.claims(key, "conservative"))
+
+    by_file = defaultdict(lambda: {"sites": 0, "executed": 0})
+    for key, site in refined.sites.items():
+        if claims_any(refined, key) and not claims_any(base, key):
+            row = by_file[site["file"]]
+            row["sites"] += 1
+            row["executed"] += key in executed
+    return [
+        {"file": path, "test_path": is_test_path(path), **row}
+        for path, row in sorted(by_file.items(), key=lambda item: (-item[1]["sites"], item[0]))
+    ]
 
 
 def rank_gaps(packages: dict) -> dict:
@@ -1691,6 +2041,238 @@ def render_types(report: dict, add) -> None:
     add("")
 
 
+TIER_VIEWS = (
+    ("exact_complete", "exact-complete"),
+    ("exact", "exact"),
+    ("exact_conservative", "exact + conservative"),
+    ("apart_only", "apart only"),
+)
+
+
+def scored_plans(packages: dict, plans: list[str]):
+    """(name, plan, scored entry) for every package and plan that has a dump."""
+    for name, entry in packages.items():
+        for plan in plans:
+            scored = entry.get(plan, {})
+            if "tiers" in scored:
+                yield name, plan, scored
+
+
+def render_tiers(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Tiers{title}")
+    add("")
+    add("Recall over the same observed edges as above, split by the tier of the edge that found the callee")
+    add("(`research/package-graphs/TIERS.md`): `Exact` and `SetupAware` are exact, except typed-hierarchy edges")
+    add("that dispatch to an `implementation` or `union_member`, which are candidates and count as conservative;")
+    add("`Conservative` and `Ambiguous` are conservative; `Heuristic` is apart and never counts in the first three")
+    add("columns. **exact-complete** also needs the site to be complete: at least one exact or conservative target and")
+    add("no unresolved row.")
+    add("")
+    add("| package | plan | observed edges | " + " | ".join(label for _, label in TIER_VIEWS) + " | apart edges |")
+    add("|---|---|---|" + "---|" * len(TIER_VIEWS) + "---|")
+    totals = defaultdict(Counter)
+    for name, plan, scored in scored_plans(packages, plans):
+        tiers = scored["tiers"]
+        totals[plan]["observed"] += scored["observed_edges"]
+        totals[plan].update(tiers["found"])
+        totals[plan]["apart_edges"] += tiers["apart_edges"]
+        add(
+            f"| {name} | {plan} | {scored['observed_edges']} | "
+            + " | ".join(frac(tiers["found"][view], scored["observed_edges"]) for view, _ in TIER_VIEWS)
+            + f" | {tiers['apart_edges']} |"
+        )
+    for plan in plans:
+        if plan in totals:
+            row = totals[plan]
+            add(
+                f"| **total** | {plan} | {row['observed']} | "
+                + " | ".join(frac(row[view], row["observed"]) for view, _ in TIER_VIEWS)
+                + f" | {row['apart_edges']} |"
+            )
+    add("")
+    add("Targets per site that claims any in the tier: mean / p95 (nearest rank) / max.")
+    add("")
+    widths = ("exact", "conservative", "exact_conservative", "apart")
+    add("| package | plan | " + " | ".join(view.replace("_", " + ") for view in widths) + " |")
+    add("|---|---|" + "---|" * len(widths))
+    for name, plan, scored in scored_plans(packages, plans):
+        cells = []
+        for view in widths:
+            row = scored["tiers"]["targets_per_site"][view]
+            cells.append("–" if not row["sites"] else f"{row['mean']} / {row['p95']} / {row['max']} ({row['sites']} sites)")
+        add(f"| {name} | {plan} | " + " | ".join(cells) + " |")
+    add("")
+
+
+def render_tier_precision(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Precision by tier{title}")
+    add("")
+    add("At executed sites only: a site counts once the run was seen calling a polint function from it, and a")
+    add("claimed target counts when it is a function in an instrumented file. **precision** is the share of those")
+    add("targets the run called there; it is a lower bound, since a run takes only some paths. A target the run never")
+    add("called on a single-target answer in the exact tier is a **wrong exact target**; the gate is 0.")
+    add("")
+    add("| package | plan | " + " | ".join(f"{tier}: precision, single / multi not called" for tier in CLAIM_TIERS) + " |")
+    add("|---|---|" + "---|" * len(CLAIM_TIERS))
+    totals = defaultdict(Counter)
+    for name, plan, scored in scored_plans(packages, plans):
+        cells = []
+        for tier in CLAIM_TIERS:
+            row = scored["tiers"]["precision"][tier]
+            totals[(plan, tier)].update({key: row[key] for key in ("claimed", "observed", "single_target", "multi_target")})
+            cells.append(
+                "–" if not row["claimed"]
+                else f"{frac(row['observed'], row['claimed'])}, {row['single_target']} / {row['multi_target']}"
+            )
+        add(f"| {name} | {plan} | " + " | ".join(cells) + " |")
+    for plan in plans:
+        cells = []
+        for tier in CLAIM_TIERS:
+            row = totals.get((plan, tier))
+            if row is None:
+                break
+            cells.append(
+                "–" if not row["claimed"]
+                else f"**{frac(row['observed'], row['claimed'])}, {row['single_target']} / {row['multi_target']}**"
+            )
+        if len(cells) == len(CLAIM_TIERS):
+            add(f"| **total** | {plan} | " + " | ".join(cells) + " |")
+    add("")
+    add("| package | plan | wrong exact target at | site text | target | the run called |")
+    add("|---|---|---|---|---|---|")
+    any_case = False
+    for name, plan, scored in scored_plans(packages, plans):
+        for example in scored["tiers"]["precision"]["exact"]["examples"]:
+            if example["answer"] != "single_target":
+                continue
+            any_case = True
+            add(
+                f"| {name} | {plan} | {example['site']} | `{cell(example['site_text'])}` "
+                f"| {cell(example['target'])} | {cell(', '.join(example['observed_callees']))} |"
+            )
+    if not any_case:
+        add("| none | | | | | |")
+    add("")
+
+
+def render_open_sites(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Open sites{title}")
+    add("")
+    add("A site is open when it has no exact or conservative target, or the answer marks it unresolved. Each open")
+    add("site counts under every reason its answer gives; `none recorded` is an open site whose answer gives none,")
+    add("which the engine must not produce.")
+    add("")
+    add("| package | plan | call sites | complete | open | open with a claimed target | open by reason |")
+    add("|---|---|---|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, plans):
+        row = scored["tiers"]["sites"]
+        reasons = ", ".join(f"{cell(reason)} {count}" for reason, count in row["open_by_reason"].items()) or "–"
+        add(
+            f"| {name} | {plan} | {row['call_sites']} | {frac(row['complete'], row['call_sites'])} | {row['open']} "
+            f"| {row['open_with_a_claimed_target']} | {reasons} |"
+        )
+    add("")
+
+
+def render_budget_events(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Budget events{title}")
+    add("")
+    add("The solver's budget status for each dump and every budget it reported as reached. The target is none on")
+    add("the tune set, and a budget event must never discard an edge already derived.")
+    add("")
+    add("| package | plan | status | reasons |")
+    add("|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, plans):
+        budget = scored["solver_budget"]
+        add(f"| {name} | {plan} | {budget['status']} | {', '.join(budget['reasons']) or '–'} |")
+    add("")
+
+
+def render_refined_edges(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Refined edges{title}")
+    add("")
+    add("Every refined row by the tier the bench gives it, its algorithm, status and precision, and whether it")
+    add("names a function. Rows with a status other than `Resolved` or `Ambiguous` claim nothing.")
+    add("")
+    add("| package | plan | tier | algorithm | status | precision | names a function | rows |")
+    add("|---|---|---|---|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, [plan for plan in plans if plan != "base"]):
+        for row in scored["refined_edge_census"]:
+            add(
+                f"| {name} | {plan} | {row['tier']} | {row['algorithm']} | {row['status']} | {row['precision']} "
+                f"| {'yes' if row['has_function'] else 'no'} | {row['rows']} |"
+            )
+    add("")
+
+
+def render_sites_gained(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Sites gained by the refined plan{title}")
+    add("")
+    add("Sites where a refined plan claims an exact or conservative target and the base plan claims none, by file.")
+    add("**test path** marks a file in a test or benchmark folder or named `*.test.*` / `*.spec.*`; **executed** counts")
+    add("the gained sites the run called a polint function from, the only ones recall can credit.")
+    add("")
+    add("| package | plan | sites gained | in test paths | executed | top files |")
+    add("|---|---|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, [plan for plan in plans if plan != "base"]):
+        rows = scored.get("sites_gained")
+        if rows is None:
+            continue
+        top = ", ".join(f"{row['file']} {row['sites']}" for row in rows[:3]) or "–"
+        add(
+            f"| {name} | {plan} | {sum(row['sites'] for row in rows)} "
+            f"| {sum(row['sites'] for row in rows if row['test_path'])} | {sum(row['executed'] for row in rows)} "
+            f"| {cell(top)} |"
+        )
+    add("")
+
+
+def render_analysed_set_comparisons(report: dict, add) -> None:
+    comparisons = report.get("analysed_set_comparisons") or {}
+    if not comparisons:
+        return
+    add("## Analysed set: globs alone against shipped source")
+    add("")
+    add("The analysed set of every package is its shipped source: the `analysed` globs without test and benchmark")
+    add("paths. Reports written before this rule analysed what the globs alone select; each package listed here is")
+    add("scored both ways once, so this report reads against them. Every other table uses the shipped set.")
+    add("")
+    add("| package | set | files | source KB | plan | recall | exact / exact + conservative | wrong targets single / multi | wrong exact targets | call sites | dump s | dump peak MB |")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    for name, sets in comparisons.items():
+        for label, row in sets.items():
+            for plan in report["plans"]:
+                scored = row.get(plan, {})
+                cost = scored.get("cost") or {}
+                prefix = (
+                    f"| {name} | {'globs alone' if label == PREVIOUS_SET else 'shipped'} | {row['files']} "
+                    f"| {(row['source_bytes'] or 0) / 1000:.0f} | {plan} "
+                )
+                if "error" in scored:
+                    add(prefix + f"| {scored['error']} | | | | | | |")
+                    continue
+                tiers = scored["tiers_found"]
+                add(
+                    prefix
+                    + f"| {frac(scored['found'], scored['observed_edges'])} "
+                    f"| {tiers['exact']} / {tiers['exact_conservative']} "
+                    f"| {scored['wrong_targets']['single_target']} / {scored['wrong_targets']['multi_target']} "
+                    f"| {scored['wrong_exact_targets']} | {scored['call_sites']} "
+                    f"| {cost.get('wall_ms', 0) / 1000:.1f} | {cost.get('peak_rss_bytes', 0) / MB:.0f} |"
+                )
+    add("")
+
+
+def render_tier_sections(packages: dict, plans: list[str], add, title: str = "") -> None:
+    """The per-tier measures, in the order the README describes them."""
+    render_tiers(packages, plans, add, title)
+    render_tier_precision(packages, plans, add, title)
+    render_open_sites(packages, plans, add, title)
+    render_budget_events(packages, plans, add, title)
+    render_refined_edges(packages, plans, add, title)
+    render_sites_gained(packages, plans, add, title)
+
+
 def render_markdown(report: dict) -> str:
     out = []
     add = out.append
@@ -1870,6 +2452,8 @@ def render_markdown(report: dict) -> str:
     render_gaps(report, add)
     render_false_complete(report, add)
     render_outcome_examples(report, add)
+    render_tier_sections(report["packages"], list(report["plans"]), add)
+    render_analysed_set_comparisons(report, add)
 
     add("## Exports (against the loaded module's export keys)")
     add("")
@@ -2014,6 +2598,7 @@ def run(args) -> int:
     with tempfile.TemporaryDirectory(prefix="polint-js-bench-report-") as scratch_name:
         scratch = Path(scratch_name)
         case_trees, package_trees = stage(scratch, inputs, cases)
+        previous_trees = stage_previous_sets(scratch, inputs)
         typed_trees = {}
         if typescript is not None:
             typed_trees = stage_typed(
@@ -2021,12 +2606,14 @@ def run(args) -> int:
                 {
                     **{("case", case_id): tree for case_id, tree in case_trees.items()},
                     **{("package", name): tree for name, tree in package_trees.items()},
+                    **{(PREVIOUS_SET, name): tree for name, tree in previous_trees.items()},
                 },
             )
         (scratch / "dumps").mkdir()
         dumps = {}
         trees = [("case", case_id, tree) for case_id, tree in case_trees.items()]
         trees += [("package", name, tree) for name, tree in package_trees.items()]
+        trees += [(PREVIOUS_SET, name, tree) for name, tree in previous_trees.items()]
         for kind, name, tree in trees:
             for plan in PLANS:
                 out = scratch / "dumps" / f"{kind}-{name.replace('/', '__')}-{plan}.json"
@@ -2073,6 +2660,7 @@ def run(args) -> int:
         case_results = score_constructs(cases, dumps)
         hidden_lines = sum(len(e["base"].get("unknown_lines", [])) for e in case_results.values())
         packages = score_packages(inputs, dumps)
+        comparisons = score_previous_sets(inputs, dumps, packages)
         report = {
             "schema": REPORT_SCHEMA,
             "polint_version": version,
@@ -2108,6 +2696,7 @@ def run(args) -> int:
                 name: {plan: dumps[("package", name, plan)]["cost"] for plan in PLANS} for name in package_trees
             },
             "gap_ranking": rank_gaps(packages),
+            "analysed_set_comparisons": comparisons,
             "decisions": DECISIONS,
             "cost": None,
         }
