@@ -266,6 +266,21 @@ jobs:
           eval::bench::gate::tests::semantic_store_boundary::real_store_enabled_measurement_passes_locked_boundary
           -- --exact --ignored --test-threads=1 --nocapture
 
+  held-out-authorship:
+    name: held-out authorship (HELD-OUT.md rule 2)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: refuse analysis code and held-out bench files in one pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git diff --name-only "$BASE_SHA...HEAD" | python3 tests/js-analysis-bench/held_out_guard.py
+      - name: bench report self-test
+        run: python3 tests/js-analysis-bench/selftest.py
+
   # ── Artifact / smoke tests ─────────────────────────────────────────────────
 
   install-smoke:
