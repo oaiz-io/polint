@@ -1604,6 +1604,14 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
 PREVIOUS_SET = "previous_set"
 
 
+def previous_set_cost_key(name: str) -> str:
+    """The `dump_cost` key of a package's dumps on its globs alone.
+
+    Costs stay under `dump_cost`, so every other key of the report is the same
+    from one run to the next."""
+    return f"{name}, globs alone"
+
+
 def set_summary(scored: dict) -> dict:
     """The rows of one plan's score the analysed-set comparison shows."""
     if "error" in scored:
@@ -1647,7 +1655,7 @@ def score_previous_sets(inputs: dict, dumps: dict, packages: dict) -> dict:
                     scored = {"error": run_entry["error"]}
                 else:
                     scored = score_package_calls(observed_calls, Facts(run_entry["dump"], plan), None, sources)
-                row[plan] = {**set_summary(scored), "cost": run_entry["cost"]}
+                row[plan] = set_summary(scored)
             sets[label] = row
         comparisons[name] = sets
     return comparisons
@@ -2241,9 +2249,10 @@ def render_analysed_set_comparisons(report: dict, add) -> None:
     add("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for name, sets in comparisons.items():
         for label, row in sets.items():
+            cost_key = previous_set_cost_key(name) if label == PREVIOUS_SET else name
             for plan in report["plans"]:
                 scored = row.get(plan, {})
-                cost = scored.get("cost") or {}
+                cost = report["dump_cost"].get(cost_key, {}).get(plan) or {}
                 prefix = (
                     f"| {name} | {'globs alone' if label == PREVIOUS_SET else 'shipped'} | {row['files']} "
                     f"| {(row['source_bytes'] or 0) / 1000:.0f} | {plan} "
@@ -2693,7 +2702,11 @@ def run(args) -> int:
             "dump_budgets_s": budgets,
             # One fact dump per package and plan, kept even without the cost runs.
             "dump_cost": {
-                name: {plan: dumps[("package", name, plan)]["cost"] for plan in PLANS} for name in package_trees
+                **{name: {plan: dumps[("package", name, plan)]["cost"] for plan in PLANS} for name in package_trees},
+                **{
+                    previous_set_cost_key(name): {plan: dumps[(PREVIOUS_SET, name, plan)]["cost"] for plan in PLANS}
+                    for name in previous_trees
+                },
             },
             "gap_ranking": rank_gaps(packages),
             "analysed_set_comparisons": comparisons,
