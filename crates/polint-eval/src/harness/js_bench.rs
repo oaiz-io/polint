@@ -53,7 +53,7 @@ use crate::internal_core::{FileId, FunctionId, Language, Span, SymbolId};
 const MANIFEST_ENV: &str = "POLINT_JS_BENCH_MANIFEST";
 const CAPS_ENV: &str = "POLINT_JS_BENCH_CAPS";
 const CENSUS_ENV: &str = "POLINT_JS_BENCH_CENSUS";
-const SCHEMA: &str = "polint-js-bench-facts-2";
+const SCHEMA: &str = "polint-js-bench-facts-3";
 
 /// Analyses `tree` with the named capabilities and returns its normalized dump.
 fn dump_tree(tree: &Path, capabilities: &[&str], with_census: bool) -> anyhow::Result<Value> {
@@ -417,6 +417,7 @@ impl<'a> Dump<'a> {
                 "symbol": edge.symbol.map_or(Value::Null, |id| self.symbol(id)),
                 "label": edge.label,
                 "precision": debug(&edge.precision),
+                "claim_tier": edge.precision.tier().as_str(),
                 "algorithm": debug(&edge.algorithm),
             })
         }));
@@ -442,7 +443,10 @@ impl<'a> Dump<'a> {
                 "has_base": edge.base_target.is_some(),
                 "tier": debug(&edge.tier),
                 "status": debug(&edge.status),
+                "reason": edge.reason.as_ref().map(debug),
                 "precision": debug(&edge.precision),
+                "claim_tier": edge.precision.tier().as_str(),
+                "dispatch": dispatch_evidence(&edge.evidence),
                 "validation": debug(&edge.validation),
                 "confidence": debug(&edge.confidence),
                 "algorithm": debug(&edge.algorithm),
@@ -487,10 +491,18 @@ impl<'a> Dump<'a> {
                 .or_default() += 1;
         }
 
+        // A `BTreeSet`, so the reasons are already in a fixed order.
+        let budget_reasons: Vec<&str> =
+            db.solver_budget_reasons().iter().map(String::as_str).collect();
+
         json!({
             "schema": SCHEMA,
             "capabilities": capabilities,
             "capability_available": available,
+            "solver_budget": {
+                "status": debug(&db.solver_budget_status()),
+                "reasons": budget_reasons,
+            },
             "files": files,
             "functions": functions,
             "call_sites": call_sites,
@@ -503,6 +515,14 @@ impl<'a> Dump<'a> {
             "references_by_file": references,
         })
     }
+}
+
+/// The dispatch kind a type-directed edge records in its evidence, such as
+/// `implementation` or `union_member`; `None` for edges that record none.
+fn dispatch_evidence(evidence: &[String]) -> Option<&str> {
+    evidence
+        .iter()
+        .find_map(|entry| entry.strip_prefix("dispatch="))
 }
 
 fn debug<T: std::fmt::Debug>(value: &T) -> String {
