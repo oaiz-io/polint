@@ -91,6 +91,63 @@ Use these entry points:
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
 <!-- GSD:workflow-end -->
 
+## Engine Direction: Package Graphs
+
+Read [`research/package-graphs/README.md`](research/package-graphs/README.md)
+before changing call-graph, points-to, summary, model or benchmark code. It is
+the source of truth for this section; the current iteration is
+[`research/package-graphs/ITERATION-1-CLASSICAL.md`](research/package-graphs/ITERATION-1-CLASSICAL.md).
+
+What the engine builds: one **package graph** per package version (the
+application's own code is a package too): its call graph plus an explicit
+boundary of exports, imports and the values that cross. A package graph is
+built once, stored, and **stitched** with others into the graph of the whole
+program. Accuracy is paid for ahead of time, cheapest method first:
+
+0. Extraction: every function and call site is in the graph.
+1. Classical analysis: symbols, types, points-to. Deterministic.
+2. Recorded execution: edges seen while the package's tests run.
+3. Confidence scoring: orders what gets reviewed. It never removes an edge.
+4. Agent review: corrections with evidence.
+5. Package models and engine changes: a pattern that keeps needing
+   corrections is modelled, so its edges are derived.
+
+How the parts of this repository fit:
+
+| Part | Role |
+|---|---|
+| Language frontends, MIR, symbol graph (`ts/`, `go/`) | Stage 0, and the constraints for stage 1 |
+| Constraints and solver (`analysis_neutral/semantic_graph`, `points_to`, `solver`) | Stage 1 |
+| Type sidecar (`ts/types`) | An input to stage 1, not a separate answer |
+| Summaries and the store (`analysis_neutral/summaries`, `analysis_kernel/store`) | Where package graphs are kept and stitched |
+| Model edges and extensions (`ConstraintKind::ModelEdge`, `analysis/extensions`) | Stage 5 |
+| Call recorder and bench (`tests/js-analysis-bench`) | Ground truth, and the source of stage 2 evidence |
+
+Rules for every change:
+
+- **Evidence on everything.** An edge states its stage, algorithm and tier. A
+  call site without a complete answer says so and says why.
+- **Two tiers, never mixed.** *Exact*: the call reaches this function, and no
+  other where the site is marked complete. *Conservative*: the call may reach
+  it. A wrong exact claim is the most serious defect the engine can have.
+- **Engine output is reproducible** from the package content, the engine
+  version and the model set. Recorded runs, models' corrections and agent
+  corrections live in a separate layer keyed by stable identity; analysis
+  never reads it.
+- **Graphs compose.** Stitching the graphs of A and B must give the edges of
+  analysing A and B together. Keep the composition test green.
+- **Cheapest first.** When a later stage keeps fixing the same thing, improve
+  the earlier stage, and keep the fixed cases as fixtures.
+- **Do not tune on the held-out set**, and do not add a recogniser for one
+  benchmark package where a general construct is missing.
+- **A model for one library, the engine for two.** A pattern of a single
+  library is a package model. Move it into the engine when a second library
+  needs it.
+
+polint is the engine and the formats. A service that scans packages at scale,
+stores their graphs or runs review agents is a consumer of polint and is not
+built in this repository.
+
 ## Rust Skill Usage
 
 Before writing, reviewing, or refactoring Rust code, consult and apply

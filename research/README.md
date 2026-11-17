@@ -13,6 +13,7 @@ Existing research:
 - [effects-summaries/](effects-summaries/): function effects and summaries as the scaling boundary for call graphs, data flow, alias queries, framework models, and agent-authored analysis extensions.
 - [semantic-index/](semantic-index/): native scopes, symbols, imports, references, aliases, resolution facts, xref indexes, and export identity.
 - [call-graphs/](call-graphs/): native call-site/call-edge facts, algorithm tiers, unresolved facts, and agent-extensible repo-local call models.
+- [package-graphs/](package-graphs/): the engine direction. One stored call graph per package version with an explicit boundary, stitched into the whole-program graph; the accuracy ladder from classical analysis to recorded execution, confidence scoring, agent review and package models; and the current iteration with its targets.
 - [data-flow/](data-flow/): native data-flow substrate, summaries, source/sink/sanitizer models, call-graph dependency, and agent-extensible repo-local data-flow models.
 - [agent-extension-surface/](agent-extension-surface/): Rust-code extension lifecycle, validation, provenance, capability planning, and default-vs-extended deltas.
 - [analysis-kernel/](analysis-kernel/): fact layers, scheduling, provenance, precision, validation, extension merges, cache keys, and invalidation.
