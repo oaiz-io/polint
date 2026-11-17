@@ -41,6 +41,21 @@ root, the inputs mounted read-only and every capability dropped. It is never
 part of `cargo test`; its output under `observed/` is committed so the report
 never needs to run it.
 
+Each package is recorded twice, and nothing is written unless the two
+recordings are byte-identical. The recorder lists as failures a driver that
+threw and a selected file it could not instrument; a recording with any
+failure is refused, not written, so a partial run cannot pass for a complete
+one. Drivers seed every source of randomness they use for the same reason.
+
+A package recorded through its own test suite (`tests_from`) needs the
+suite's archive and its modules. `bench.py fetch` downloads the archive, checks
+its `sha256`, unpacks the listed paths, and installs the modules with `npm ci
+--ignore-scripts` from the committed manifest and lockfile, in the pinned image
+with network: npm only downloads and unpacks there, and no package code runs
+until the recorder runs it without network. The lockfile is written with
+`python3 tests/js-analysis-bench/bench.py lock-test-modules --only <package>`
+when the manifest changes.
+
 ## Inputs
 
 - `constructs/<construct>/<case>/`: small hand-labelled programs, two per
@@ -65,10 +80,29 @@ never needs to run it.
   The set covers ESM source (axios, chalk), TypeScript source (zod), CommonJS
   only (commander), CommonJS transpiled from ESM (async), minified UMD (dayjs)
   and a bundled UMD (underscore).
+- The held-out packages (`held_out = true` in `inputs.toml`,
+  `research/package-graphs/HELD-OUT.md`): acorn, co, express, immer, js-yaml,
+  nanostores, node-forge and pako. No analysis change is tuned on them. Their
+  drivers under `observed/drivers/heldout/` are written from each package's
+  documentation, or run the package's own test suite (`tests_from`: express,
+  js-yaml, node-forge), and are committed apart from analysis code; the
+  `held-out authorship` CI job runs `held_out_guard.py` on a pull request's
+  changed paths and refuses one that changes both
+  `crates/polint/src/{ts,analysis*,graph}` and a held-out file (anything under
+  `observed/drivers/heldout/`, or an `observed/` file named after a held-out
+  package). `corpus` gives a parser's driver its input: the shipped JavaScript
+  of the named packages, copied into the tree in sorted order.
 - `observed/`: the recorder (`recorder.mjs`), one driver per package that
-  exercises its public API, placeholder modules for axios's Node-adapter
-  dependencies (the driver never sends a request), and the recorded
-  `*.calls.json` and `*.exports.json`.
+  exercises its public API, and the recorded `*.calls.json` (schema
+  `polint-js-bench-observed-calls-2`, with the functions the run entered) and
+  `*.exports.json`. `observed/stubs/node_modules/` holds placeholder modules
+  for axios's Node-adapter dependencies (the driver never sends a request):
+  `form-data` is Node's own `FormData` and `follow-redirects` Node's `http` and
+  `https`. They are committed through an exception to the root ignore of
+  `node_modules/`. The recorder strips TypeScript types in place; it blanks
+  value-import names that only a type declares, and a file that needs code
+  generation (enums, namespaces, parameter properties) runs uninstrumented
+  and is listed under `transformed_not_instrumented`.
 
 ### Label grammar
 
@@ -108,6 +142,9 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   out. Every single-target case is listed in `report.md`.
 - **Export-set accuracy**: per file, exported names from `Symbols` and from
   the module export facts against the keys of the module as Node loads it.
+  A file that fails to load on its own (node-forge's jQuery form helper and
+  its web-worker script, for example) has no keys to compare; it is left out
+  and counted under `load errors`.
 - **Unresolved share**: share of call sites with an unresolved marker, and of
   references with no resolved target.
 - **Why missed** (packages): each observed edge polint does not find is put in
@@ -168,7 +205,26 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   reason is reported, and every tier section is rendered. It also checks the
   outside-tool scorer: position conversion on a line with non-ASCII and astral
   characters before a call, and that it matches an observed edge to the same
-  site and callee as polint's scorer.
+  site and callee as polint's scorer. It checks driver coverage, that a
+  held-out package's misses lose their causes and examples, that the gate
+  leaves a flagged package out of recall but counts its wrong exact targets,
+  and the authorship guard's classification of changed paths.
+- **Driver coverage** (packages): the functions the recording entered, over
+  the census's functions in the analysed files (classes and static blocks
+  left out, since no call enters them). An entered function counts once, as
+  the innermost census function ending at the same byte. It says how much of
+  a package the recall speaks for.
+- **Held-out packages**: `## Held-out packages` scores the held-out set with
+  the tune set's measures, apart from it, and with no gap ranking, no cause
+  and no example of a missed edge, so nothing in the report invites tuning on
+  them. Wrong exact targets and answers with other targets and no unresolved
+  marker keep their examples: either is a defect to fix. A package whose
+  recording entered under 40% of its functions is flagged and left out of
+  held-out recall. The **held-out gate** pools recall per tier over the tune
+  set and over the unflagged held-out packages; it passes on a plan when
+  every held-out tier is within 5 points of the tune set and no held-out
+  package, flagged or not, has a wrong exact target or a false-complete
+  answer. The tune-set tables, cost and outside tools cover the tune set only.
 - **Cost**: `polint check` with the census rule pack in `rule-pack/` (asks for
   `Functions`, `CallGraph`, `Symbols`, `References`), cold and warm, wall time
   and peak RSS from the in-process cost record (`POLINT_GOLDEN_COST_PATH`) and
@@ -243,8 +299,9 @@ unchanged.
   denominator.
 - Implicit observed edges (accessors, coercion, iterator protocol) have no
   call expression. They are listed by kind but left out of headline recall.
-- Four zod files need TypeScript transforms (not just type stripping) and run
-  without instrumentation, so calls into them are not observed.
+- Four zod files and one immer file need TypeScript transforms (not just type
+  stripping) and run without instrumentation, so calls into them are not
+  observed.
 - Wall times come from whatever machine runs the report, and on a shared
   machine they move with its load: the committed baseline ran beside other
   jobs, and the small trees' cold times about doubled from one full run to
