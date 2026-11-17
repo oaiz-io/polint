@@ -438,7 +438,38 @@ fn file_identity(metadata: &std::fs::Metadata, _path: &Path) -> (u64, u64, PathB
     (metadata.dev(), metadata.ino(), PathBuf::new())
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn file_identity(_metadata: &std::fs::Metadata, path: &Path) -> (u64, u64, PathBuf) {
+    // Cargo hard-links each host binary out of `deps`, so the volume and file
+    // index are what tell one file under two names apart.
+    match File::open(path)
+        .ok()
+        .and_then(|file| windows_file_id(&file))
+    {
+        Some((volume, index)) => (volume, index, PathBuf::new()),
+        None => (0, 0, path.to_path_buf()),
+    }
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn windows_file_id(file: &File) -> Option<(u64, u64)> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: the handle belongs to `file`, which outlives the call, and `info`
+    // is a correctly sized, writable BY_HANDLE_FILE_INFORMATION.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
+        return None;
+    }
+    let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+    Some((u64::from(info.dwVolumeSerialNumber), index))
+}
+
+#[cfg(not(any(unix, windows)))]
 fn file_identity(_metadata: &std::fs::Metadata, path: &Path) -> (u64, u64, PathBuf) {
     (0, 0, path.to_path_buf())
 }
