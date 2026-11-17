@@ -367,10 +367,13 @@ fn write_binding_repo(root: &Path) {
          class Quiet extends Base {}\n\
          class Shape {\n  area() { return 0; }\n  describe() { return this.area(); }\n}\n\
          class Square extends Shape {\n  area() { return 4; }\n}\n\
+         function helper() { return 0; }\n\
+         const box = { close() { return 0; } };\n\
+         function patch(thing) { thing.close = function closeLater() { return 1; }; }\n\
          function run() {\n  const kid = new Kid();\n  kid.run();\n  isFn(1);\n  reb();\n  \
          target.parse(1);\n  (function iife() { return 3; })();\n  new Quiet();\n  \
-         new Square().describe();\n  return kid.hello();\n}\n\
-         module.exports = { run, swap, rebind };\n",
+         new Square().describe();\n  box.close();\n  helper.extra();\n  return kid.hello();\n}\n\
+         module.exports = { run, swap, rebind, patch };\n",
     )
     .expect("write cases");
 }
@@ -439,7 +442,13 @@ fn a_binding_that_can_hold_another_value_is_never_an_exact_answer() {
     let output = run_dispatch_repo(temp.path(), &typescript);
     let claims = |needle: &str| typed_claims_at(&output, temp.path(), "src/cases.js", needle);
 
-    for needle in ["reb()", "isFn(1)", "target.parse(1)", "this.area()"] {
+    for needle in [
+        "reb()",
+        "isFn(1)",
+        "target.parse(1)",
+        "this.area()",
+        "box.close()",
+    ] {
         let (exact, _) = claims(needle);
         assert!(
             exact.is_empty(),
@@ -447,12 +456,14 @@ fn a_binding_that_can_hold_another_value_is_never_an_exact_answer() {
              {exact:?}"
         );
     }
-    let (exact, weaker) = claims("this.missing()");
-    assert!(
-        exact.is_empty() && weaker.is_empty(),
-        "a call to a member nobody declares has no typed target, least of all the class: \
-         exact {exact:?}, weaker {weaker:?}"
-    );
+    for needle in ["this.missing()", "helper.extra()"] {
+        let (exact, weaker) = claims(needle);
+        assert!(
+            exact.is_empty() && weaker.is_empty(),
+            "`{needle}` calls a member nobody declares, so it has no typed target, least of \
+             all its receiver: exact {exact:?}, weaker {weaker:?}"
+        );
+    }
 }
 
 #[test]
