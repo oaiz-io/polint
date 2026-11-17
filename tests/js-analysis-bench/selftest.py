@@ -17,15 +17,24 @@ The cases are the ones the tier rules exist for:
 - an outside tool's positions (1-based UTF-16 columns) convert to the same
   byte offsets on a line with non-ASCII and astral characters before a call;
 - the outside scorer matches an observed edge to the same site and callee
-  keys as polint's scorer, because both use `report.Spans`.
+  keys as polint's scorer, because both use `report.Spans`;
+- driver coverage counts each census function once, leaves classes out, and
+  flags a recording under the floor;
+- the held-out gate leaves a flagged package out of recall and keeps its wrong
+  exact targets, and a held-out score keeps no cause and no missed-edge example;
+- the authorship guard refuses analysis code and held-out files in one change,
+  and accepts either alone and recorder or tune-set files that only share
+  letters with a held-out name.
 """
 
 from __future__ import annotations
 
+import copy
 import sys
 import tempfile
 from pathlib import Path
 
+import held_out_guard
 import report
 
 SOURCE = "function a() {}\nfunction b() {}\nfunction run(f) { f(); }\na();\nrun(b);\n"
@@ -190,6 +199,106 @@ def check_outside(failures: list[str]) -> None:
           f"outside score of the synthetic package: {scored}", failures)
 
 
+def census_row(text: str, kind: str) -> dict:
+    start, end = span(text)
+    return {"start": start, "end": end, "kind": kind, "context": None, "class": None}
+
+
+def check_held_out(entry: dict, failures: list[str]) -> None:
+    census = {
+        "syntax_census": {
+            FILE: {
+                "functions": [
+                    census_row("function a() {}", "declaration"),
+                    census_row("function b() {}", "declaration"),
+                    census_row("function run(f) { f(); }", "declaration"),
+                    census_row("a();", "class"),
+                ],
+                "calls": [],
+            }
+        }
+    }
+    entered = [
+        {"function": key("function a() {}"), "name": "a"},
+        {"function": key("function a() {}"), "name": "a"},
+        {"function": key("function run(f) { f(); }"), "name": "run"},
+    ]
+    row = report.driver_coverage({"entered_functions": entered, "instrumented_functions": 3}, census)
+    check((row["census_functions"], row["entered_census_functions"], row["flagged"]) == (3, 2, False),
+          f"driver coverage: {row}", failures)
+    row = report.driver_coverage({"entered_functions": entered[:1], "instrumented_functions": 3}, census)
+    check(row["flagged"], f"coverage under the floor not flagged: {row}", failures)
+
+    scored = copy.deepcopy(entry["refined"])
+    scored["outcome_examples"]["callee not reached"] = [{}]
+    scored["outcome_examples"][report.FALSE_COMPLETE] = [{}]
+    report.withhold_miss_attribution(scored)
+    check("causes" not in scored and list(scored["outcome_examples"]) == [report.FALSE_COMPLETE],
+          f"held-out score keeps miss attribution: {sorted(scored)} {sorted(scored['outcome_examples'])}", failures)
+
+    counted = {**copy.deepcopy(entry), "coverage": {"flagged": False}}
+    flagged = {**copy.deepcopy(entry), "coverage": {"flagged": True}}
+    for plan in ("base", "refined"):
+        flagged[plan]["tiers"]["found"] = {view: 0 for view, _ in report.TIER_VIEWS}
+    gate = report.held_out_gate({"synthetic": entry}, {"counted": counted, "flagged": flagged}, ["base", "refined"])
+    check(gate["counted"] == ["counted"] and gate["flagged"] == ["flagged"], f"gate sets: {gate}", failures)
+    check(all(row["within"] for plan in gate["plans"].values() for row in plan["tiers"].values()),
+          f"a flagged package moved held-out recall: {gate['plans']}", failures)
+    check(gate["plans"]["refined"]["wrong_exact_targets"] == 2,
+          f"held-out wrong exact targets: {gate['plans']['refined']['wrong_exact_targets']}", failures)
+
+    package = {"version": "1.0.0", "format": "cjs", "files": 1, "files_selected": 1, "source_bytes": len(SOURCE),
+               "coverage": report.driver_coverage({"entered_functions": entered, "instrumented_functions": 3}, census)}
+    lines: list[str] = []
+    report.render_held_out(
+        {
+            "plans": {"base": [], "refined": []},
+            "held_out": {"synthetic": {**copy.deepcopy(entry), **package}},
+            "held_out_gate": gate,
+        },
+        lines.append,
+    )
+    text = "\n".join(lines)
+    for heading in ("## Held-out packages", "### Held-out gate", *(f"{heading} (held-out)" for heading in SECTIONS)):
+        check(f"\n{heading}\n" in f"\n{text}\n", f"held-out section missing: {heading}", failures)
+
+
+def check_guard(failures: list[str]) -> None:
+    names = held_out_guard.held_out_names(Path(__file__).resolve().parent / "inputs.toml")
+    check({"co", "pako", "acorn", "node-forge"} <= names, f"held-out names: {sorted(names)}", failures)
+    analysis = "crates/polint/src/analysis_neutral/points_to/mod.rs"
+    cases = [
+        ([analysis, "tests/js-analysis-bench/observed/drivers/heldout/co.mjs"], True),
+        (["crates/polint/src/ts/mir.rs", "tests/js-analysis-bench/observed/packages/node-forge.calls.json"], True),
+        (["crates/polint/src/graph.rs", "tests/js-analysis-bench/observed/packages/acorn.exports.json"], True),
+        ([analysis], False),
+        (["tests/js-analysis-bench/observed/packages/pako.calls.json"], False),
+        ([analysis, "tests/js-analysis-bench/observed/recorder.mjs"], False),
+        ([analysis, "tests/js-analysis-bench/observed/packages/commander.calls.json"], False),
+        ([analysis, "tests/js-analysis-bench/observed/constructs/computed-member.calls.json"], False),
+        (["crates/polint-eval/src/harness/js_bench.rs", "tests/js-analysis-bench/observed/drivers/heldout/co.mjs"], False),
+    ]
+    for paths, refused in cases:
+        analysis_paths, _ = held_out_guard.violations(paths, names)
+        check(bool(analysis_paths) == refused, f"guard on {paths}: refused {bool(analysis_paths)}", failures)
+
+
+def check_exports(failures: list[str]) -> None:
+    """A file that fails to load is counted, and left out of both answers."""
+    observed_exports = {"files": {
+        "a.js": {"system": "cjs", "names": ["x", "y"]},
+        "b.js": {"error": "jQuery is not defined"},
+    }}
+    dump = {
+        "exported_symbols": [{"file": "a.js", "name": "x"}, {"file": "b.js", "name": "z"}],
+        "exports": [{"file": "a.js", "name": "x", "kind": "Named", "status": "Resolved"}],
+    }
+    scored = report.score_exports(observed_exports, dump, ["a.js", "b.js"])
+    check(scored["load_errors"] == 1, f"export load errors: {scored['load_errors']}", failures)
+    check((scored["symbols"]["files"], scored["symbols"]["predicted_names"], scored["symbols"]["matched_names"]) == (1, 1, 1),
+          f"a failed load is scored: {scored['symbols']}", failures)
+
+
 def check(condition: bool, message: str, failures: list[str]) -> None:
     if not condition:
         failures.append(message)
@@ -242,6 +351,9 @@ def main() -> int:
           "the tier sections and SECTIONS differ; update both together", failures)
 
     check_outside(failures)
+    check_held_out(entry, failures)
+    check_guard(failures)
+    check_exports(failures)
 
     for failure in failures:
         print(f"selftest: {failure}", file=sys.stderr)
