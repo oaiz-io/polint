@@ -1,0 +1,36 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@101..181",
+      "name": "tokenize"
+    },
+    {
+      "function": "main.js@184..287",
+      "name": "tokenize"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@235..259",
+      "syntax": "member",
+      "callee": "main.js@101..181",
+      "callee_name": "tokenize"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@331..346",
+      "syntax": "identifier",
+      "callee": "main.js@184..287",
+      "callee_name": "tokenize"
+    }
+  ]
+}
