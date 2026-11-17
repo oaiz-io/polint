@@ -55,13 +55,16 @@ pub(crate) enum TsTypeCallStatus {
 /// rapid-type candidate: the declared target only describes the call, and this
 /// is an instantiated class whose method satisfies it. `Signature` names a
 /// declaration that cannot run, and exists so a site with no runnable target is
-/// distinguishable from one the sidecar never saw.
+/// distinguishable from one the sidecar never saw. An `Inferred` target is one
+/// the checker typed the callee as, read through a binding that can hold
+/// another value when the call runs, so it may be reached but is never exact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum TsTypeDispatch {
     Declared,
     DeclaredSignature,
     Implementation,
     UnionMember,
+    Inferred,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

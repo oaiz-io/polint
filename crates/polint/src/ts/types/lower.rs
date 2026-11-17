@@ -293,6 +293,7 @@ fn dispatch_kind(dispatch: &str) -> TsTypeDispatch {
         "declared" => TsTypeDispatch::Declared,
         "implementation" => TsTypeDispatch::Implementation,
         "union_member" => TsTypeDispatch::UnionMember,
+        "inferred" => TsTypeDispatch::Inferred,
         _ => TsTypeDispatch::DeclaredSignature,
     }
 }
@@ -407,6 +408,19 @@ mod tests {
             TsTypeDispatch::DeclaredSignature
         );
         assert_eq!(dispatch_kind(""), TsTypeDispatch::DeclaredSignature);
+    }
+
+    #[test]
+    fn every_label_the_sidecar_writes_lowers_to_its_own_dispatch() {
+        for (label, dispatch) in [
+            ("declared", TsTypeDispatch::Declared),
+            ("declared_signature", TsTypeDispatch::DeclaredSignature),
+            ("implementation", TsTypeDispatch::Implementation),
+            ("union_member", TsTypeDispatch::UnionMember),
+            ("inferred", TsTypeDispatch::Inferred),
+        ] {
+            assert_eq!(dispatch_kind(label), dispatch, "{label}");
+        }
     }
 
     #[test]

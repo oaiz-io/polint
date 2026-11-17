@@ -52,6 +52,9 @@ pub enum TsTypeDispatchKind {
     Implementation,
     /// One constituent of a union receiver.
     UnionMember,
+    /// The checker typed the callee, but the binding it read may hold another
+    /// value when the call runs.
+    Inferred,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -230,9 +233,9 @@ fn typed_edge(
         // `Model` is reserved for framework and extension recognizers, which
         // may never claim exact precision.
         provenance: CallProvenance::Native,
-        precision: precision_for(callee.dispatch, degraded),
+        precision: precision_for(callee.dispatch, site.status, degraded),
         validation: RefinedCallValidation::ReferentiallyValidated,
-        confidence: confidence_for(callee.dispatch, degraded),
+        confidence: confidence_for(callee.dispatch, site.status, degraded),
         evidence,
         input_stable_keys: vec![site_key.clone(), callee_key.clone()],
         stable_key: stable_key_from_parts(
@@ -310,27 +313,39 @@ fn dispatch_label(dispatch: TsTypeDispatchKind) -> &'static str {
         TsTypeDispatchKind::DeclaredSignature => "declared_signature",
         TsTypeDispatchKind::Implementation => "implementation",
         TsTypeDispatchKind::UnionMember => "union_member",
+        TsTypeDispatchKind::Inferred => "inferred",
     }
 }
 
-/// A declared target is what the checker resolved, so it is exact. An expanded
-/// candidate is narrowed by types but not chosen by them, so it is
-/// setup-aware; in a degraded file it drops to conservative.
-fn precision_for(dispatch: TsTypeDispatchKind, degraded: bool) -> CallPrecision {
-    match (dispatch, degraded) {
-        (TsTypeDispatchKind::Declared, false) => CallPrecision::Exact,
-        (TsTypeDispatchKind::Declared, true) => CallPrecision::SetupAware,
-        (_, false) => CallPrecision::SetupAware,
-        (_, true) => CallPrecision::Conservative,
+/// A declared target at a site the checker resolved to one declaration is what
+/// the call runs, so it is exact; in a degraded file it stays exact but only
+/// setup-aware. Every other answer may reach its target without being the only
+/// one: a declared target among several at a union site, a candidate narrowed
+/// by types but not chosen by them, and a target read through a binding that
+/// can hold another value.
+fn precision_for(
+    dispatch: TsTypeDispatchKind,
+    status: TsTypeSiteStatus,
+    degraded: bool,
+) -> CallPrecision {
+    match (dispatch, status, degraded) {
+        (TsTypeDispatchKind::Declared, TsTypeSiteStatus::Union, _) => CallPrecision::Conservative,
+        (TsTypeDispatchKind::Declared, _, false) => CallPrecision::Exact,
+        (TsTypeDispatchKind::Declared, _, true) => CallPrecision::SetupAware,
+        _ => CallPrecision::Conservative,
     }
 }
 
-fn confidence_for(dispatch: TsTypeDispatchKind, degraded: bool) -> RefinedCallConfidence {
-    match (dispatch, degraded) {
-        (TsTypeDispatchKind::Declared, false) => RefinedCallConfidence::High,
-        (TsTypeDispatchKind::Declared, true) => RefinedCallConfidence::Medium,
-        (_, false) => RefinedCallConfidence::Medium,
-        (_, true) => RefinedCallConfidence::Low,
+fn confidence_for(
+    dispatch: TsTypeDispatchKind,
+    status: TsTypeSiteStatus,
+    degraded: bool,
+) -> RefinedCallConfidence {
+    let answer = dispatch == TsTypeDispatchKind::Declared && status != TsTypeSiteStatus::Union;
+    match (answer, degraded) {
+        (true, false) => RefinedCallConfidence::High,
+        (true, true) | (false, false) => RefinedCallConfidence::Medium,
+        (false, true) => RefinedCallConfidence::Low,
     }
 }
 
@@ -348,9 +363,12 @@ fn edge_kind_for_site(site: &CallSiteFact) -> CallEdgeKind {
 /// Byte-span index over the native TS/JS call sites and functions.
 ///
 /// Both parsers record byte offsets, but they do not record the same spans: the
-/// TypeScript parser includes a declaration's modifiers where Oxc does not, so
-/// the join tries exact equality first and falls back to containment anchored
-/// on the declaration's own name.
+/// TypeScript parser includes a declaration's modifiers and a call's
+/// parenthesised callee where Oxc does not. Those differences only ever move
+/// the start, so the join tries exact equality first and then a span that ends
+/// at the same byte and starts inside the sidecar's. A row that matches
+/// neither describes something the native scan did not record, and is counted
+/// unmatched rather than given the call or function around it.
 struct TsSiteIndex {
     sites_by_file: BTreeMap<FileId, Vec<usize>>,
     functions_by_file: BTreeMap<FileId, Vec<usize>>,
@@ -401,37 +419,18 @@ impl TsSiteIndex {
         {
             return Some(exact);
         }
-        if let Some(same_start) = candidates
-            .iter()
-            .copied()
-            .filter(|candidate| candidate.span.start_byte == span.start_byte)
-            .min_by_key(|candidate| candidate.span.end_byte)
-        {
-            return Some(same_start);
-        }
-        // A call the sidecar sees as one expression can be several MIR
-        // operations, so the narrowest native site containing the sidecar's
-        // start offset is the one that describes the same call.
+        // `(function () {})()` starts at the parenthesis for the type checker
+        // and at the function for the syntax frontend. No other call ends at
+        // the same byte inside it, so the widest such site is the same call.
+        // Neither a shared start nor containment is enough: `chain().greet()`
+        // and `outer(inner())` are two calls each.
         candidates
             .iter()
             .copied()
-            .filter(|candidate| {
-                // A native site recorded as a point still covers its own
-                // offset, so the end is widened by one for that case only —
-                // never by the probe's offset, which would make every earlier
-                // site contain every later one.
-                let end = candidate
-                    .span
-                    .end_byte
-                    .max(candidate.span.start_byte.saturating_add(1));
-                candidate.span.start_byte <= span.start_byte && span.start_byte < end
-            })
+            .filter(|candidate| same_end_inside(&candidate.span, span))
             .min_by_key(|candidate| {
                 (
-                    candidate
-                        .span
-                        .end_byte
-                        .saturating_sub(candidate.span.start_byte),
+                    candidate.span.start_byte,
                     db.resolve_stable_key(candidate.stable_key),
                 )
             })
@@ -458,27 +457,28 @@ impl TsSiteIndex {
         {
             return Some(exact.id);
         }
+        if let Some(same_end) = candidates
+            .iter()
+            .copied()
+            .filter(|candidate| same_end_inside(&candidate.span, span))
+            .min_by_key(|candidate| (candidate.span.start_byte, candidate.id))
+        {
+            return Some(same_end.id);
+        }
         // Names disagree between the two parsers as well: a class method is
         // `greet` to the type checker and `Loud.greet` to the syntax frontend,
         // so a suffix match on the declared name is the strongest name signal
-        // available.
-        let named = candidates
-            .iter()
-            .copied()
-            .filter(|candidate| name_matches(&candidate.name, &callee.name))
-            .collect::<Vec<_>>();
+        // available. A declaration no native function is named for gets no
+        // target: the function around it is a different function.
         let anchor = callee
             .name_span
             .as_ref()
             .map(|name_span| name_span.start_byte)
             .unwrap_or(span.start_byte);
-        let pool: &[&crate::analysis_api::FunctionFact] = if named.is_empty() {
-            &candidates
-        } else {
-            &named
-        };
-        pool.iter()
+        candidates
+            .iter()
             .copied()
+            .filter(|candidate| name_matches(&candidate.name, &callee.name))
             .filter(|candidate| {
                 candidate.span.start_byte <= anchor && anchor < candidate.span.end_byte
             })
@@ -507,6 +507,15 @@ fn name_matches(core_name: &str, declared: &str) -> bool {
             .rsplit('.')
             .next()
             .is_some_and(|tail| tail == declared)
+}
+
+/// Whether the native `candidate` ends where the sidecar's `span` does and
+/// starts inside it.
+fn same_end_inside(candidate: &Span, span: &Span) -> bool {
+    candidate.file == span.file
+        && candidate.end_byte == span.end_byte
+        && span.start_byte <= candidate.start_byte
+        && candidate.start_byte < span.end_byte
 }
 
 fn same_byte_span(left: &Span, right: &Span) -> bool {
@@ -562,6 +571,11 @@ mod tests {
     /// One file with a caller, two callable targets, and one call site whose
     /// byte span the sidecar rows are written against.
     fn fixture() -> Fixture {
+        fixture_with_site(0, 19)
+    }
+
+    /// The same file with its one native call site at `start..end`.
+    fn fixture_with_site(start: u32, end: u32) -> Fixture {
         let mut db = LocalAnalysisDb::new();
         let file = db.add_file(
             "src/app.ts".into(),
@@ -610,7 +624,7 @@ mod tests {
                 owner_symbol: None,
                 body: MirBodyId(0),
                 operation: MirOpId(0),
-                span: span(file, 0, 19),
+                span: span(file, start, end),
                 kind: CallSyntaxKind::Method,
                 callee: CallCallee::Member {
                     base: crate::analysis_neutral::ids::PlaceId(0),
@@ -754,6 +768,14 @@ mod tests {
                 .edges
                 .iter()
                 .all(|edge| edge.confidence == RefinedCallConfidence::Medium)
+        );
+        // A candidate the checker narrowed but did not choose may reach its
+        // target; it never claims that the call reaches only that target.
+        assert!(
+            output
+                .edges
+                .iter()
+                .all(|edge| edge.precision == CallPrecision::Conservative)
         );
         let targets = output
             .edges
@@ -940,6 +962,192 @@ mod tests {
         assert_eq!(output.edges.len(), 1);
         assert_eq!(output.edges[0].target_function, Some(fixture.callee_one));
         assert_eq!(report.unmatched_callees, 0);
+    }
+
+    #[test]
+    fn a_declared_target_at_a_union_site_is_one_candidate_not_the_answer() {
+        let fixture = fixture();
+        let sites = vec![site(
+            &fixture.db,
+            fixture.file,
+            TsTypeSiteStatus::Union,
+            0,
+            19,
+        )];
+        let callees = vec![
+            callee(
+                &fixture.db,
+                fixture.file,
+                "callee:one",
+                TsTypeDispatchKind::Declared,
+                100,
+                160,
+            ),
+            callee(
+                &fixture.db,
+                fixture.file,
+                "callee:two",
+                TsTypeDispatchKind::Declared,
+                200,
+                260,
+            ),
+        ];
+
+        let (output, _) = derive_ts_type_refinements(&fixture.db, &sites, &callees, &[]);
+
+        assert_eq!(output.edges.len(), 2);
+        assert!(
+            output
+                .edges
+                .iter()
+                .all(|edge| edge.precision == CallPrecision::Conservative),
+            "a site with several declared targets has no single exact one"
+        );
+    }
+
+    #[test]
+    fn an_inferred_target_may_be_reached_but_is_never_claimed_exactly() {
+        // The checker typed the callee, but the binding it read can hold
+        // another value at run time: it is reassigned, or its declared type
+        // comes from somewhere other than the value it holds.
+        let fixture = fixture();
+        let sites = vec![site(
+            &fixture.db,
+            fixture.file,
+            TsTypeSiteStatus::Resolved,
+            0,
+            19,
+        )];
+        let callees = vec![callee(
+            &fixture.db,
+            fixture.file,
+            "callee:one",
+            TsTypeDispatchKind::Inferred,
+            100,
+            160,
+        )];
+
+        let (output, _) = derive_ts_type_refinements(&fixture.db, &sites, &callees, &[]);
+
+        assert_eq!(output.edges.len(), 1);
+        let edge = &output.edges[0];
+        assert_eq!(edge.target_function, Some(fixture.callee_one));
+        assert_eq!(edge.precision, CallPrecision::Conservative);
+        assert_eq!(edge.confidence, RefinedCallConfidence::Medium);
+        assert!(edge.evidence.iter().any(|item| item == "dispatch=inferred"));
+    }
+
+    #[test]
+    fn a_call_the_native_scan_does_not_have_is_not_given_the_call_around_it() {
+        // `outer(inner())` where the syntax frontend recorded only `outer`:
+        // the typed answer for `inner` describes a different call, and joining
+        // it to `outer` would claim a target `outer` never reaches.
+        let fixture = fixture();
+        let sites = vec![site(
+            &fixture.db,
+            fixture.file,
+            TsTypeSiteStatus::Resolved,
+            8,
+            15,
+        )];
+        let callees = vec![callee(
+            &fixture.db,
+            fixture.file,
+            "callee:one",
+            TsTypeDispatchKind::Declared,
+            100,
+            160,
+        )];
+
+        let (output, report) = derive_ts_type_refinements(&fixture.db, &sites, &callees, &[]);
+
+        assert!(output.edges.is_empty());
+        assert_eq!(report.unmatched_callsites, 1);
+        assert_eq!(report.matched_callsites, 0);
+    }
+
+    #[test]
+    fn a_call_that_only_shares_its_start_with_a_native_call_does_not_join_it() {
+        // `chain().greet()` recorded natively as the outer call only: the
+        // sidecar's inner `chain()` begins at the same byte but ends earlier.
+        let fixture = fixture();
+        let sites = vec![site(
+            &fixture.db,
+            fixture.file,
+            TsTypeSiteStatus::Resolved,
+            0,
+            9,
+        )];
+        let callees = vec![callee(
+            &fixture.db,
+            fixture.file,
+            "callee:one",
+            TsTypeDispatchKind::Declared,
+            100,
+            160,
+        )];
+
+        let (output, report) = derive_ts_type_refinements(&fixture.db, &sites, &callees, &[]);
+
+        assert!(output.edges.is_empty());
+        assert_eq!(report.unmatched_callsites, 1);
+    }
+
+    #[test]
+    fn a_parenthesised_callee_joins_the_native_call_with_the_same_end() {
+        // `(function () {})()`: the type checker's call starts at the
+        // parenthesis and the syntax frontend's at the function inside it.
+        let fixture = fixture_with_site(1, 19);
+        let sites = vec![site(
+            &fixture.db,
+            fixture.file,
+            TsTypeSiteStatus::Resolved,
+            0,
+            19,
+        )];
+        let callees = vec![callee(
+            &fixture.db,
+            fixture.file,
+            "callee:one",
+            TsTypeDispatchKind::Declared,
+            100,
+            160,
+        )];
+
+        let (output, report) = derive_ts_type_refinements(&fixture.db, &sites, &callees, &[]);
+
+        assert_eq!(report.matched_callsites, 1);
+        assert_eq!(output.edges.len(), 1);
+        assert_eq!(output.edges[0].site, CallSiteId(0));
+    }
+
+    #[test]
+    fn a_declaration_no_native_function_is_named_for_gets_no_enclosing_function() {
+        // The callee lies inside `run`, but nothing native is named for it:
+        // the function around a declaration is not the declaration.
+        let fixture = fixture();
+        let sites = vec![site(
+            &fixture.db,
+            fixture.file,
+            TsTypeSiteStatus::Resolved,
+            0,
+            19,
+        )];
+        let mut inner = callee(
+            &fixture.db,
+            fixture.file,
+            "callee:inner",
+            TsTypeDispatchKind::Declared,
+            5,
+            12,
+        );
+        inner.name = "trackStream".to_string();
+        inner.name_span = Some(span(fixture.file, 5, 10));
+
+        let (output, report) = derive_ts_type_refinements(&fixture.db, &sites, &[inner], &[]);
+
+        assert!(output.edges.is_empty());
+        assert_eq!(report.unmatched_callees, 1);
     }
 
     #[test]
