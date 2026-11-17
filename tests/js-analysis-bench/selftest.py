@@ -10,7 +10,7 @@ The cases are the ones the tier rules exist for:
 - a site answered only by a `Heuristic` edge counts in the apart view and in no
   other, and is open;
 - a typed-hierarchy edge that dispatches to an implementation counts as
-  conservative, not exact, although its precision is `SetupAware`;
+  conservative, and one that claims exact stops the report;
 - a single exact target the run never called there is a wrong exact target;
 - a budget event is reported with its reason;
 - every tier section is rendered, and removing one fails the test;
@@ -113,8 +113,8 @@ def dumps() -> tuple[dict, dict]:
         "refined_edges": [
             # One exact target the run never called from this site.
             refined_edge(call_a, b["key"], "Exact", "Syntactic"),
-            # A typed candidate: SetupAware precision, conservative claim.
-            refined_edge(call_f, b["key"], "SetupAware", "TypeHierarchy", dispatch="implementation"),
+            # A typed candidate: conservative precision, conservative claim.
+            refined_edge(call_f, b["key"], "Conservative", "TypeHierarchy", dispatch="implementation"),
             refined_edge(call_run, run["key"], "Exact", "Syntactic"),
         ],
         "unresolved_calls": [],
@@ -366,6 +366,14 @@ def main() -> int:
     check("points_to.max_dynamic_vars" in text, "budget reason not rendered", failures)
     check(text.count("\n## ") + text.startswith("## ") == len(SECTIONS),
           "the tier sections and SECTIONS differ; update both together", failures)
+
+    for dispatch in sorted(report.TYPED_CANDIDATE_DISPATCH):
+        candidate = refined_edge(key("f()"), key("function b() {}"), "SetupAware", "TypeHierarchy", dispatch=dispatch)
+        try:
+            report.edge_tier(candidate)
+            check(False, f"a typed {dispatch} candidate claiming exact was scored", failures)
+        except SystemExit:
+            pass
 
     check_outside(failures)
     check_held_out(entry, failures)

@@ -164,10 +164,11 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
 - **Tiers**: what each edge claims, from its precision
   (`research/package-graphs/TIERS.md`). `Exact` and `SetupAware` are
   **exact**; `Conservative` and `Ambiguous` are **conservative**; `Heuristic`
-  is **apart**; `Unknown` and `Unsupported` claim nothing. One reading is the
-  bench's own: a typed-hierarchy edge whose evidence says it dispatches to an
-  `implementation` or a `union_member` names a candidate, not the target, and
-  counts as conservative although its precision is `SetupAware`. A refined row
+  is **apart**; `Unknown` and `Unsupported` claim nothing. A typed-hierarchy
+  edge whose evidence says it dispatches to an `implementation`, a
+  `union_member` or an `inferred` target names a candidate, not the target;
+  the engine tiers it conservative, and the report stops on one that claims
+  exact. A refined row
   claims only when its status is `Resolved` or `Ambiguous`, and an `Ambiguous`
   row is never exact. The dump carries the engine's tier for every edge
   (`claim_tier`) and the report stops when its own list disagrees, so a new

@@ -130,6 +130,7 @@ fn ts_type_inputs(
                     TsTypeDispatch::DeclaredSignature => TsTypeDispatchKind::DeclaredSignature,
                     TsTypeDispatch::Implementation => TsTypeDispatchKind::Implementation,
                     TsTypeDispatch::UnionMember => TsTypeDispatchKind::UnionMember,
+                    TsTypeDispatch::Inferred => TsTypeDispatchKind::Inferred,
                 },
                 name: declaration
                     .map(|callable| callable.name.clone())

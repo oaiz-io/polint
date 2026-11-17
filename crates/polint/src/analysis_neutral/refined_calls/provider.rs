@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::analysis_api::{
     CacheStats, Digest, DigestKind, InputComponent, InputSnapshot, ProviderExecution,
@@ -10,7 +10,7 @@ use crate::analysis_api::{
 };
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact, CallSyntaxKind,
-    CallTargetFact, CallTargetStatus, UnresolvedCallReason,
+    CallTargetFact, CallTargetStatus, ClaimTier, UnresolvedCallReason,
 };
 use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
 use crate::analysis_neutral::refined_calls::cache_key::{
@@ -29,6 +29,7 @@ use crate::internal_core::{
 };
 
 use crate::analysis_neutral::AnalysisHost;
+use crate::analysis_neutral::ids::CallSiteId;
 
 use serde::Serialize;
 
@@ -203,6 +204,8 @@ pub fn derive_refined_calls_with_cache_stats(
     );
     checkpoint("solver");
     tier_edges("solver", &output.edges);
+    let unclaimed = unclaimed_site_edges(db, interner, &output.edges, &call_sites);
+    output.edges.extend(unclaimed);
     output = finalized_output(interner, output);
     checkpoint("normalize");
 
@@ -256,6 +259,72 @@ pub fn finalized_output(
         edge.id = crate::analysis_neutral::ids::RefinedCallEdgeId(index as u64);
     }
     output
+}
+
+/// The refined layer answers for every site it has an edge for. A site whose
+/// refined edges all resolve, yet none claims the exact or the conservative
+/// tier, keeps the base layer's unresolved rows as refined edges, so the
+/// refined answer says it is incomplete as the base answer does.
+fn unclaimed_site_edges(
+    db: &impl AnalysisHost,
+    interner: &StableKeyInterner,
+    edges: &[RefinedCallEdgeFact],
+    call_sites: &BTreeMap<CallSiteId, (Language, String)>,
+) -> Vec<RefinedCallEdgeFact> {
+    let mut answered = BTreeSet::new();
+    let mut marked = BTreeSet::new();
+    let mut reached = BTreeSet::new();
+    for edge in edges {
+        reached.insert(edge.site);
+        if edge.status != CallTargetStatus::Resolved {
+            marked.insert(edge.site);
+        } else if edge.precision.tier() <= ClaimTier::Conservative {
+            answered.insert(edge.site);
+        }
+    }
+    db.unresolved_calls()
+        .iter()
+        .filter(|row| {
+            reached.contains(&row.site)
+                && !answered.contains(&row.site)
+                && !marked.contains(&row.site)
+        })
+        .filter_map(|row| {
+            let (language, site_key) = call_sites.get(&row.site)?;
+            let unresolved_key = db.resolve_stable_key(row.stable_key).to_string();
+            let tier = RefinedCallTier::DirectOnly;
+            Some(RefinedCallEdgeFact {
+                id: crate::analysis_neutral::ids::RefinedCallEdgeId(0),
+                site: row.site,
+                base_target: None,
+                caller: row.caller,
+                target_function: None,
+                target_symbol: None,
+                synthetic_target: None,
+                language: *language,
+                edge_kind: CallEdgeKind::Unknown,
+                algorithm: row.algorithm,
+                tier,
+                status: row.status,
+                reason: Some(row.reason),
+                provenance: row.provenance,
+                precision: row.precision,
+                validation: RefinedCallValidation::Native,
+                confidence: RefinedCallConfidence::Low,
+                evidence: vec!["base_unresolved_call".to_string()],
+                input_stable_keys: vec![unresolved_key.clone()],
+                stable_key: stable_key_from_parts(
+                    interner,
+                    FactFamily::RefinedCallEdge,
+                    &[
+                        ("tier", "direct_only".to_string()),
+                        ("unresolved", unresolved_key),
+                        ("site", site_key.clone()),
+                    ],
+                ),
+            })
+        })
+        .collect()
 }
 
 fn refined_edge_from_base_target(

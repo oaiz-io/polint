@@ -11,9 +11,10 @@ use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::cache_key::calls_provider_parameter_digest;
 use crate::analysis_neutral::calls::direct::resolve_direct_call_targets;
 use crate::analysis_neutral::calls::extract::extract_call_sites;
+use crate::analysis_neutral::calls::facts::ClaimTier;
 use crate::analysis_neutral::calls::store::CallOutput;
 use crate::analysis_neutral::calls::typed::{TypedCallInputs, typed_call_targets};
-use crate::analysis_neutral::calls::unresolved::derive_unresolved_calls;
+use crate::analysis_neutral::calls::unresolved::{derive_unresolved_calls, unclaimed_site_row};
 use crate::analysis_neutral::ids::CallSiteId;
 use crate::internal_core::{Diagnostic, DiagnosticRange};
 use crate::internal_core::{FunctionId, SymbolId};
@@ -79,10 +80,22 @@ pub fn derive_calls_with_cache_stats(
     for (index, target) in targets.iter_mut().enumerate() {
         target.id = crate::analysis_neutral::ids::CallTargetId(index as u64);
     }
+    // A site is answered only by a target that claims the exact or the
+    // conservative tier. A target that claims neither, such as a name match, is
+    // kept and reported, but the site stays unresolved and keeps its row.
     let resolved_sites = targets
         .iter()
         .filter(|target| {
             target.status == crate::analysis_neutral::calls::facts::CallTargetStatus::Resolved
+                && target.precision.tier() <= ClaimTier::Conservative
+        })
+        .map(|target| target.site)
+        .collect::<BTreeSet<_>>();
+    let unclaimed_sites = targets
+        .iter()
+        .filter(|target| {
+            target.status == crate::analysis_neutral::calls::facts::CallTargetStatus::Resolved
+                && !resolved_sites.contains(&target.site)
         })
         .map(|target| target.site)
         .collect::<BTreeSet<_>>();
@@ -114,10 +127,21 @@ pub fn derive_calls_with_cache_stats(
                 .unwrap_or(crate::analysis_neutral::calls::facts::CallPrecision::SetupAware);
         }
     }
-    let unresolved = derive_unresolved_calls(db, &sites)
+    let mut unresolved = derive_unresolved_calls(db, &sites)
         .into_iter()
         .filter(|row| !resolved_sites.contains(&row.site) && !report.dead.contains(&row.site))
-        .collect();
+        .collect::<Vec<_>>();
+    let sites_with_rows = unresolved
+        .iter()
+        .map(|row| row.site)
+        .collect::<BTreeSet<_>>();
+    for site in sites.iter().filter(|site| {
+        unclaimed_sites.contains(&site.id)
+            && !sites_with_rows.contains(&site.id)
+            && !report.dead.contains(&site.id)
+    }) {
+        unresolved.push(unclaimed_site_row(db, site));
+    }
     let output = CallOutput {
         sites,
         targets,

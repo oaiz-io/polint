@@ -375,10 +375,12 @@ PRECISION_TIERS = {
     "Unsupported": "none",
 }
 CLAIM_TIERS = ("exact", "conservative", "apart")
-# Typed candidates narrowed by the checker but not chosen by it carry
-# `SetupAware`, the value the direct tier uses for exact answers; the bench
-# reads them as conservative until they carry a value of their own.
-TYPED_CANDIDATE_DISPATCH = {"implementation", "union_member"}
+# Typed edges that name a candidate rather than the checker's answer: an
+# implementation of a declared member, one constituent of a union receiver,
+# or a declared target whose binding may hold another value. The engine
+# tiers them conservative; one that claims exact is an engine defect the
+# report stops on rather than scores.
+TYPED_CANDIDATE_DISPATCH = {"implementation", "union_member", "inferred"}
 # A refined row claims its target only with one of these statuses; an
 # `Ambiguous` row names one of several candidates, so it claims no more than
 # conservative.
@@ -395,7 +397,7 @@ def tier_of(precision: str) -> str:
 
 def edge_tier(edge: dict) -> str:
     """The tier the bench counts an edge in: its precision's tier, checked
-    against the engine's, with typed candidates read as conservative."""
+    against the engine's, and never exact for a typed candidate."""
     tier = tier_of(edge["precision"])
     if edge.get("claim_tier") != tier:
         raise SystemExit(
@@ -403,7 +405,9 @@ def edge_tier(edge: dict) -> str:
             f"the bench says {tier!r}"
         )
     if tier == "exact" and edge["algorithm"] == "TypeHierarchy" and edge.get("dispatch") in TYPED_CANDIDATE_DISPATCH:
-        return "conservative"
+        raise SystemExit(
+            f"edge at {edge['site']}: a typed {edge.get('dispatch')} candidate claims {edge['precision']}"
+        )
     return tier
 
 

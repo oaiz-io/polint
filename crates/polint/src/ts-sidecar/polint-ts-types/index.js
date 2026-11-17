@@ -519,6 +519,23 @@ class ProjectEmitter {
      * @type {Set<string>}
      */
     this.instantiated = new Set();
+    /**
+     * Declarations whose binding the scan sees written after it is declared:
+     * an assignment, a destructuring target, a loop variable, an update, or a
+     * subclass member that overrides it. A call through such a binding may
+     * reach a value other than the one declared, so the declared target is
+     * one candidate rather than the answer.
+     * @type {Set<any>}
+     */
+    this.written = new Set();
+    /**
+     * Member names the scan sees written through a receiver the checker
+     * cannot resolve to a value, as in `store.off = ...` with an untyped
+     * `store`. Such a write may land on any object, so every member binding
+     * of that name may hold another value.
+     * @type {Set<string>}
+     */
+    this.writtenMembers = new Set();
   }
 
   /**
@@ -700,8 +717,12 @@ function enclosingCallable(ts, node, sourceFile) {
 }
 
 /**
- * Declarations a resolved signature points at, or the class the `new` targets
- * when the class declares no constructor.
+ * Declarations a resolved signature points at, or the class a `new` or
+ * `super(...)` constructs.
+ *
+ * A construction names the class its callee names: the resolved signature of
+ * `new Kid()` is the constructor `Kid` inherits when it declares none, and that
+ * constructor's class is not the one the call creates.
  *
  * @param {any} ts
  * @param {any} checker
@@ -711,6 +732,16 @@ function enclosingCallable(ts, node, sourceFile) {
 function calleeDeclarations(ts, checker, node) {
   /** @type {any[]} */
   const declarations = [];
+  const constructs = isConstruction(ts, node);
+  if (constructs) {
+    const callee = calleeNameExpression(ts, node);
+    for (const declaration of valueDeclarations(ts, symbolAt(ts, checker, callee))) {
+      const value = declarationValue(ts, declaration);
+      if (value !== undefined && isClassLike(ts, value)) {
+        return [value];
+      }
+    }
+  }
   let signature;
   try {
     signature = checker.getResolvedSignature(node);
@@ -718,35 +749,304 @@ function calleeDeclarations(ts, checker, node) {
     signature = undefined;
   }
   if (signature !== undefined && signature.declaration !== undefined) {
-    declarations.push(signature.declaration);
+    const declaration = signature.declaration;
+    declarations.push(
+      constructs && ts.isConstructorDeclaration(declaration) ? declaration.parent : declaration
+    );
   }
   if (declarations.length === 0) {
-    const dispatch = dispatchExpression(ts, node);
-    if (dispatch !== undefined) {
-      let symbol;
-      try {
-        symbol = checker.getSymbolAtLocation(dispatch);
-      } catch (error) {
-        symbol = undefined;
+    // The callee's own symbol, never the receiver's: `this.missing()` names
+    // nothing, not the class `this` belongs to.
+    const callee = calleeNameExpression(ts, node);
+    for (const declaration of valueDeclarations(ts, symbolAt(ts, checker, callee))) {
+      const value = declarationValue(ts, declaration);
+      if (value === undefined) {
+        continue;
       }
-      if (symbol !== undefined && symbol !== null) {
-        const aliased =
-          (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? tryAliasedSymbol(checker, symbol) : symbol;
-        for (const declaration of (aliased && aliased.declarations) || []) {
-          if (isCallableDeclaration(ts, declaration) || ts.isClassDeclaration(declaration)) {
-            declarations.push(declaration);
-          } else if (
-            ts.isVariableDeclaration(declaration) &&
-            declaration.initializer !== undefined &&
-            isCallableDeclaration(ts, declaration.initializer)
-          ) {
-            declarations.push(declaration.initializer);
-          }
+      if (isClassLike(ts, value)) {
+        if (constructs) {
+          declarations.push(value);
         }
+        continue;
+      }
+      if (isCallableDeclaration(ts, value)) {
+        declarations.push(value);
       }
     }
   }
   return declarations;
+}
+
+/**
+ * Whether the callee binding of `node` can only hold `target` when the call
+ * runs.
+ *
+ * The checker types a binding by its declaration, so a resolved signature is
+ * the call's answer only when the callee is the function itself, as in an
+ * immediately invoked function, or names a binding with one value declaration
+ * that holds `target` and that the scan never sees written. Anything else (a
+ * reassigned `let`, a property assigned in two places, a factory's result, a
+ * parameter, an overridden method) may hold another value.
+ *
+ * @param {{ts: any, checker: any, project: ProjectEmitter, node: any, target: any}} options
+ * @returns {boolean}
+ */
+function calleeHolds(options) {
+  const {ts, checker, project, node, target} = options;
+  const callee = calleeNameExpression(ts, node);
+  if (callee === undefined) {
+    return false;
+  }
+  if (callee === target) {
+    return true;
+  }
+  return symbolHolds({ts, checker, project, symbol: symbolAt(ts, checker, callee), target, depth: 0});
+}
+
+/** How many `const g = f` steps a binding may take back to its value. */
+const BINDING_CHAIN_LIMIT = 4;
+
+/**
+ * @param {{ts: any, checker: any, project: ProjectEmitter, symbol: any, target: any, depth: number}} options
+ * @returns {boolean}
+ */
+function symbolHolds(options) {
+  const {ts, checker, project, symbol, target, depth} = options;
+  if (symbol === undefined || depth > BINDING_CHAIN_LIMIT) {
+    return false;
+  }
+  const declarations = valueDeclarations(ts, symbol);
+  if (declarations.length !== 1 || project.written.has(declarations[0])) {
+    return false;
+  }
+  const declaration = declarations[0];
+  const member = memberName(ts, declaration);
+  if (member !== undefined && project.writtenMembers.has(member)) {
+    return false;
+  }
+  if (ts.isShorthandPropertyAssignment(declaration)) {
+    let value;
+    try {
+      value = checker.getShorthandAssignmentValueSymbol(declaration);
+    } catch (error) {
+      value = undefined;
+    }
+    return symbolHolds({ts, checker, project, symbol: resolveAlias(ts, checker, value), target, depth: depth + 1});
+  }
+  const value = declarationValue(ts, declaration);
+  if (value === target) {
+    return true;
+  }
+  if (value !== undefined && (ts.isIdentifier(value) || ts.isPropertyAccessExpression(value))) {
+    const next = ts.isPropertyAccessExpression(value) ? value.name : value;
+    return symbolHolds({ts, checker, project, symbol: symbolAt(ts, checker, next), target, depth: depth + 1});
+  }
+  return false;
+}
+
+/**
+ * The expression that names what a call invokes: the member name of a
+ * property access, the key of an element access, the base class of a
+ * `super(...)`, otherwise the callee with its parentheses removed.
+ *
+ * @param {any} ts
+ * @param {any} node
+ * @returns {any}
+ */
+function calleeNameExpression(ts, node) {
+  let callee;
+  if (ts.isTaggedTemplateExpression(node)) {
+    callee = node.tag;
+  } else if (ts.isDecorator(node)) {
+    callee = node.expression;
+  } else {
+    callee = node.expression;
+  }
+  if (callee === undefined || callee === null) {
+    return undefined;
+  }
+  callee = skipParentheses(ts, callee);
+  if (callee.kind === ts.SyntaxKind.SuperKeyword) {
+    return superClassExpression(ts, node);
+  }
+  if (ts.isPropertyAccessExpression(callee)) {
+    return callee.name;
+  }
+  if (ts.isElementAccessExpression(callee)) {
+    return callee.argumentExpression;
+  }
+  return callee;
+}
+
+/**
+ * The `extends` expression of the class whose constructor contains `node`.
+ *
+ * @param {any} ts
+ * @param {any} node
+ * @returns {any}
+ */
+function superClassExpression(ts, node) {
+  let current = node.parent;
+  while (current !== undefined && current !== null && !isClassLike(ts, current)) {
+    current = current.parent;
+  }
+  const heritage = current === undefined || current === null ? undefined : extendsClause(ts, current);
+  return heritage === undefined ? undefined : skipParentheses(ts, heritage.expression);
+}
+
+/**
+ * @param {any} ts
+ * @param {any} node
+ * @returns {any}
+ */
+function extendsClause(ts, node) {
+  for (const clause of node.heritageClauses || []) {
+    if (clause.token === ts.SyntaxKind.ExtendsKeyword && clause.types.length > 0) {
+      return clause.types[0];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * @param {any} ts
+ * @param {any} node
+ * @returns {boolean}
+ */
+function isConstruction(ts, node) {
+  if (ts.isNewExpression(node)) {
+    return true;
+  }
+  return (
+    ts.isCallExpression(node) &&
+    node.expression !== undefined &&
+    node.expression.kind === ts.SyntaxKind.SuperKeyword
+  );
+}
+
+/**
+ * @param {any} ts
+ * @param {any} node
+ * @returns {boolean}
+ */
+function isClassLike(ts, node) {
+  return ts.isClassDeclaration(node) || ts.isClassExpression(node);
+}
+
+/**
+ * @param {any} ts
+ * @param {any} node
+ * @returns {any}
+ */
+function skipParentheses(ts, node) {
+  let current = node;
+  while (current !== undefined && current !== null && ts.isParenthesizedExpression(current)) {
+    current = current.expression;
+  }
+  return current;
+}
+
+/**
+ * The symbol `node` names, through import and export aliases.
+ *
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} node
+ * @returns {any}
+ */
+function symbolAt(ts, checker, node) {
+  if (node === undefined || node === null) {
+    return undefined;
+  }
+  let symbol;
+  try {
+    symbol = checker.getSymbolAtLocation(node);
+  } catch (error) {
+    symbol = undefined;
+  }
+  return resolveAlias(ts, checker, symbol);
+}
+
+/**
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} symbol
+ * @returns {any}
+ */
+function resolveAlias(ts, checker, symbol) {
+  if (symbol === undefined || symbol === null) {
+    return undefined;
+  }
+  return (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? tryAliasedSymbol(checker, symbol) : symbol;
+}
+
+/**
+ * The declarations of `symbol` that give its binding a value: type-only
+ * declarations and overload signatures describe a value without holding one.
+ *
+ * @param {any} ts
+ * @param {any} symbol
+ * @returns {any[]}
+ */
+function valueDeclarations(ts, symbol) {
+  if (symbol === undefined || symbol === null) {
+    return [];
+  }
+  return (symbol.declarations || []).filter(
+    /** @param {any} declaration */ (declaration) =>
+      !isTypeLevelDeclaration(ts, declaration) &&
+      !ts.isInterfaceDeclaration(declaration) &&
+      !ts.isTypeAliasDeclaration(declaration) &&
+      !ts.isPropertySignature(declaration) &&
+      !ts.isModuleDeclaration(declaration) &&
+      !ts.isTypeParameterDeclaration(declaration)
+  );
+}
+
+/**
+ * The value a declaration binds: the declaration itself for a function,
+ * method or class, the initializer of a variable or property, the right side
+ * of an assignment, or `undefined` when the declaration binds no expression
+ * the scan can read (a parameter, a destructured element).
+ *
+ * @param {any} ts
+ * @param {any} declaration
+ * @returns {any}
+ */
+function declarationValue(ts, declaration) {
+  if (isCallableDeclaration(ts, declaration) || isClassLike(ts, declaration)) {
+    return declaration;
+  }
+  if (
+    ts.isVariableDeclaration(declaration) ||
+    ts.isPropertyDeclaration(declaration) ||
+    ts.isPropertyAssignment(declaration)
+  ) {
+    return declaration.initializer === undefined
+      ? undefined
+      : skipParentheses(ts, declaration.initializer);
+  }
+  if (ts.isBinaryExpression(declaration)) {
+    return declaration.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ? skipParentheses(ts, declaration.right)
+      : undefined;
+  }
+  if (ts.isPropertyAccessExpression(declaration) || ts.isElementAccessExpression(declaration)) {
+    const parent = declaration.parent;
+    if (
+      parent !== undefined &&
+      ts.isBinaryExpression(parent) &&
+      parent.left === declaration &&
+      parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      return skipParentheses(ts, parent.right);
+    }
+    return undefined;
+  }
+  if (ts.isExportAssignment(declaration)) {
+    return skipParentheses(ts, declaration.expression);
+  }
+  return undefined;
 }
 
 /**
@@ -1110,9 +1410,236 @@ function collectFile(options) {
         project.instantiated.add(project.callableIdentity(target.node, target.sourceFile));
       }
     }
+    collectWrites({ts, checker, project, node});
     ts.forEachChild(node, visit);
   };
   ts.forEachChild(sourceFile, visit);
+}
+
+/**
+ * Record the bindings `node` writes into `project.written`.
+ *
+ * @param {{ts: any, checker: any, project: ProjectEmitter, node: any}} options
+ */
+function collectWrites(options) {
+  const {ts, checker, project, node} = options;
+  /**
+   * @param {any} symbol
+   * @param {any} write
+   */
+  const markWritten = (symbol, write) => {
+    for (const candidate of [symbol, resolveAlias(ts, checker, symbol)]) {
+      if (candidate === undefined || candidate === null) {
+        continue;
+      }
+      const declarations = candidate.declarations || [];
+      // An assignment the binder counts as a declaration (`exports.f = ...`,
+      // `target.parse = ...` in a script) is a value of its own, counted by
+      // the declaration rule rather than as a write.
+      if (declarations.includes(write) || (write.left !== undefined && declarations.includes(write.left))) {
+        continue;
+      }
+      for (const declaration of declarations) {
+        project.written.add(declaration);
+      }
+    }
+  };
+  /**
+   * @param {any} target
+   * @param {any} write
+   */
+  const recordTarget = (target, write) => {
+    const expression = skipParentheses(ts, target);
+    if (expression === undefined || expression === null) {
+      return;
+    }
+    if (ts.isArrayLiteralExpression(expression)) {
+      for (const element of expression.elements) {
+        recordTarget(ts.isSpreadElement(element) ? element.expression : element, write);
+      }
+      return;
+    }
+    if (ts.isObjectLiteralExpression(expression)) {
+      for (const property of expression.properties) {
+        if (ts.isPropertyAssignment(property)) {
+          recordTarget(property.initializer, write);
+        } else if (ts.isShorthandPropertyAssignment(property)) {
+          let symbol;
+          try {
+            symbol = checker.getShorthandAssignmentValueSymbol(property);
+          } catch (error) {
+            symbol = undefined;
+          }
+          markWritten(symbol, write);
+        } else if (ts.isSpreadAssignment(property)) {
+          recordTarget(property.expression, write);
+        }
+      }
+      return;
+    }
+    if (
+      ts.isBinaryExpression(expression) &&
+      expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      // A destructuring default: `[f = g] = list` writes `f`.
+      recordTarget(expression.left, write);
+      return;
+    }
+    let name;
+    if (ts.isIdentifier(expression)) {
+      name = expression;
+    } else if (ts.isPropertyAccessExpression(expression)) {
+      name = expression.name;
+    } else if (ts.isElementAccessExpression(expression)) {
+      name = expression.argumentExpression;
+    }
+    if (name === undefined) {
+      return;
+    }
+    let symbol;
+    try {
+      symbol = checker.getSymbolAtLocation(name);
+    } catch (error) {
+      symbol = undefined;
+    }
+    if (!ts.isIdentifier(expression) && (symbol === undefined || valueDeclarations(ts, symbol).length === 0)) {
+      // Nothing the checker knows is written, or only a type's shape is: the
+      // object written is unknown, so the name is what the write is known by.
+      const key = propertyKeyText(ts, name);
+      if (key !== undefined) {
+        project.writtenMembers.add(key);
+      }
+    }
+    markWritten(symbol, write);
+  };
+
+  if (ts.isBinaryExpression(node)) {
+    const operator = node.operatorToken.kind;
+    if (operator >= ts.SyntaxKind.FirstAssignment && operator <= ts.SyntaxKind.LastAssignment) {
+      recordTarget(node.left, node);
+    }
+    return;
+  }
+  if (ts.isForInStatement(node) || ts.isForOfStatement(node)) {
+    if (!ts.isVariableDeclarationList(node.initializer)) {
+      recordTarget(node.initializer, node);
+    }
+    return;
+  }
+  if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) {
+    if (
+      node.operator === ts.SyntaxKind.PlusPlusToken ||
+      node.operator === ts.SyntaxKind.MinusMinusToken
+    ) {
+      recordTarget(node.operand, node);
+    }
+    return;
+  }
+  if (isClassLike(ts, node)) {
+    collectOverrides({ts, checker, project, node});
+  }
+}
+
+/**
+ * The name a member declaration gives its binding: a method, a property of a
+ * class or an object literal, an accessor, or an assignment the binder counts
+ * as a property (`target.parse = ...`). Other declarations have none.
+ *
+ * @param {any} ts
+ * @param {any} declaration
+ * @returns {string | undefined}
+ */
+function memberName(ts, declaration) {
+  if (
+    !ts.isMethodDeclaration(declaration) &&
+    !ts.isPropertyDeclaration(declaration) &&
+    !ts.isPropertyAssignment(declaration) &&
+    !ts.isShorthandPropertyAssignment(declaration) &&
+    !ts.isGetAccessorDeclaration(declaration) &&
+    !ts.isSetAccessorDeclaration(declaration) &&
+    !ts.isBinaryExpression(declaration) &&
+    !ts.isPropertyAccessExpression(declaration) &&
+    !ts.isElementAccessExpression(declaration)
+  ) {
+    return undefined;
+  }
+  const name = ts.getNameOfDeclaration(declaration);
+  return name === undefined ? undefined : propertyKeyText(ts, name);
+}
+
+/**
+ * The text of a property key the source spells out, `undefined` for a
+ * computed one.
+ *
+ * @param {any} ts
+ * @param {any} name
+ * @returns {string | undefined}
+ */
+function propertyKeyText(ts, name) {
+  if (
+    name !== undefined &&
+    (ts.isIdentifier(name) ||
+      ts.isPrivateIdentifier(name) ||
+      ts.isStringLiteralLike(name) ||
+      ts.isNumericLiteral(name))
+  ) {
+    return name.text;
+  }
+  return undefined;
+}
+
+/**
+ * Record each base-class member a subclass member overrides: a call through
+ * the base member may run the override.
+ *
+ * @param {{ts: any, checker: any, project: ProjectEmitter, node: any}} options
+ */
+function collectOverrides(options) {
+  const {ts, checker, project, node} = options;
+  const heritage = extendsClause(ts, node);
+  if (heritage === undefined) {
+    return;
+  }
+  let instanceBase;
+  let staticBase;
+  try {
+    instanceBase = checker.getTypeAtLocation(heritage);
+    staticBase = checker.getTypeAtLocation(heritage.expression);
+  } catch (error) {
+    return;
+  }
+  for (const member of node.members || []) {
+    if (member.name === undefined || member.name === null || ts.isConstructorDeclaration(member)) {
+      continue;
+    }
+    let name;
+    if (ts.isIdentifier(member.name) || ts.isPrivateIdentifier(member.name)) {
+      name = String(member.name.escapedText);
+    } else if (ts.isStringLiteral(member.name) || ts.isNumericLiteral(member.name)) {
+      name = member.name.text;
+    } else {
+      continue;
+    }
+    const isStatic =
+      member.modifiers !== undefined &&
+      member.modifiers !== null &&
+      member.modifiers.some(
+        /** @param {any} modifier */ (modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword
+      );
+    const base = isStatic ? staticBase : instanceBase;
+    if (base === undefined || base === null) {
+      continue;
+    }
+    let property;
+    try {
+      property = checker.getPropertyOfType(base, name);
+    } catch (error) {
+      property = undefined;
+    }
+    for (const declaration of (property && property.declarations) || []) {
+      project.written.add(declaration);
+    }
+  }
 }
 
 /**
@@ -1384,7 +1911,10 @@ function emitCallsite(options) {
       emitCallee(declaration, 'declared_signature');
       continue;
     }
-    emitCallee(declaration, 'declared');
+    emitCallee(
+      declaration,
+      calleeHolds({ts, checker, project, node, target: declaration}) ? 'declared' : 'inferred'
+    );
   }
 
   if (expandDispatch && !isAny && !isUnknown) {

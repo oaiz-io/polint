@@ -44,6 +44,27 @@ pub fn derive_unresolved_calls(
     rows.into_values().collect()
 }
 
+/// The unresolved row for a site whose only targets claim no tier. A target
+/// found by a name match is not a semantic reference, so the site still lacks
+/// one, whatever its shape.
+pub(crate) fn unclaimed_site_row(
+    db: &impl AnalysisHost,
+    site: &CallSiteFact,
+) -> UnresolvedCallFact {
+    let interner_handle = db.stable_key_interner();
+    let mut rows = BTreeMap::new();
+    insert_unresolved(
+        &interner_handle,
+        &mut rows,
+        site,
+        UnresolvedCallReason::MissingSemanticReference,
+        "unclaimed-targets",
+    );
+    rows.into_values()
+        .next()
+        .expect("inserting into an empty map leaves one row")
+}
+
 fn insert_unresolved(
     interner: &crate::internal_core::StableKeyInterner,
     rows: &mut BTreeMap<String, UnresolvedCallFact>,
