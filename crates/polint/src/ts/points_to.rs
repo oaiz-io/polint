@@ -353,6 +353,9 @@ pub fn budget_status(result: &PointsToSolveResult) -> BudgetStatus {
 }
 
 #[cfg(test)]
+mod solver_composition;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
