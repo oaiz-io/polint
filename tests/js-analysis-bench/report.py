@@ -389,19 +389,91 @@ def is_test_path(path: str) -> bool:
 # facts: one plan's dump turned into lookups
 
 
-class Facts:
+class Spans:
+    """Call sites and functions by span, and the bench's two matching rules.
+
+    Every scorer of the bench matches an observed edge to a call graph through
+    `site_for` and `function_for`: polint's facts and the outside tools' graphs
+    alike, so their recall counts the same edges. A site row has `key`, `file`,
+    `start` and `end` (UTF-8 bytes); a function row also has `module`.
+    """
+
+    def __init__(self, sites: list[dict], functions: list[dict]):
+        self.sites = {site["key"]: site for site in sites}
+        self.sites_by_end = defaultdict(list)
+        for site in sites:
+            self.sites_by_end[(site["file"], site["end"])].append(site)
+        self.function_rows = functions
+        self.functions = {function["key"]: function for function in functions}
+        self.functions_by_end = defaultdict(list)
+        for function in functions:
+            self.functions_by_end[(function["file"], function["end"])].append(function)
+
+    def site_for(self, key: str) -> dict | None:
+        """Exact span first, then the site in the same file ending at the same byte."""
+        if key in self.sites:
+            return self.sites[key]
+        path, _, end = parse_key(key)
+        candidates = self.sites_by_end.get((path, end), [])
+        return min(candidates, key=lambda site: site["end"] - site["start"]) if candidates else None
+
+    def function_for(self, key: str, name: str) -> dict | None:
+        """The function with the same span, else the innermost one in the same
+        file ending at the same byte.
+
+        The exact span comes first because a concise arrow returning another
+        arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.
+        Without an exact span, a candidate that starts at or before the observed
+        start wins over one that starts inside it: the observed span of a
+        generic arrow `<T>(a: T) => (b) => ...` starts after its type
+        parameters, and the innermost function ending at the same byte is then
+        the arrow it returns, not the one that was called.
+        Polint represents a class constructor by the class, so an observed
+        `constructor` maps to the innermost function enclosing it.
+        """
+        path, start, end = parse_key(key)
+        candidates = [f for f in self.functions_by_end.get((path, end), []) if not f["module"]]
+        exact = [f for f in candidates if f["start"] == start]
+        if exact:
+            return exact[0]
+        enclosing = [f for f in candidates if f["start"] <= start]
+        if enclosing:
+            return max(enclosing, key=lambda f: f["start"])
+        if not candidates and name == "constructor":
+            candidates = [
+                f
+                for f in self.function_rows
+                if f["file"] == path and not f["module"] and f["start"] <= start and end <= f["end"]
+            ]
+        return min(candidates, key=lambda f: f["end"] - f["start"]) if candidates else None
+
+
+def unobserved_targets(observed: dict, observed_at: dict, claimed: dict, spans: Spans):
+    """Yield `(site, target, shape)` for each claimed target at a site the run
+    executed that the run never called from there.
+
+    `observed_at` maps a site to the functions the run was seen calling from it,
+    `claimed` a site to the targets a call graph claims there. A target counts
+    when it is in an instrumented file, so the run would have recorded a call to
+    it. `shape` is `single_target` when the answer at the site names one target
+    and `multi_target` otherwise.
+    """
+    instrumented = set(observed["instrumented_files"])
+    for site_key, called in sorted(observed_at.items()):
+        targets = claimed.get(site_key, set())
+        for target in sorted(targets - called):
+            function = spans.functions.get(target)
+            if function is None or function["module"] or function["file"] not in instrumented:
+                continue
+            yield site_key, target, "single_target" if len(targets) == 1 else "multi_target"
+
+
+class Facts(Spans):
     def __init__(self, dump: dict, plan: str):
+        super().__init__(dump["call_sites"], dump["functions"])
         self.plan = plan
         self.dump = dump
         self.files = {row["path"] for row in dump["files"]}
-        self.sites = {site["key"]: site for site in dump["call_sites"]}
-        self.sites_by_end = defaultdict(list)
-        for site in dump["call_sites"]:
-            self.sites_by_end[(site["file"], site["end"])].append(site)
-        self.functions = {function["key"]: function for function in dump["functions"]}
-        self.functions_by_end = defaultdict(list)
-        for function in dump["functions"]:
-            self.functions_by_end[(function["file"], function["end"])].append(function)
         self.unresolved_sites = {row["site"] for row in dump["unresolved_calls"]}
 
         # Edges this plan's answer gives: site -> {target function key}.
@@ -476,44 +548,6 @@ class Facts:
         """The targets the answer claims at `site` in `tier`."""
         tiers = self.tier_targets.get(site)
         return tiers.get(tier, set()) if tiers else set()
-
-    def site_for(self, key: str) -> dict | None:
-        """Exact span first, then the polint site in the same file ending at the same byte."""
-        if key in self.sites:
-            return self.sites[key]
-        path, _, end = parse_key(key)
-        candidates = self.sites_by_end.get((path, end), [])
-        return min(candidates, key=lambda site: site["end"] - site["start"]) if candidates else None
-
-    def function_for(self, key: str, name: str) -> dict | None:
-        """The polint function with the same span, else the innermost one in the
-        same file ending at the same byte.
-
-        The exact span comes first because a concise arrow returning another
-        arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.
-        Without an exact span, a candidate that starts at or before the observed
-        start wins over one that starts inside it: the observed span of a
-        generic arrow `<T>(a: T) => (b) => ...` starts after its type
-        parameters, and the innermost function ending at the same byte is then
-        the arrow it returns, not the one that was called.
-        Polint represents a class constructor by the class, so an observed
-        `constructor` maps to the innermost polint function enclosing it.
-        """
-        path, start, end = parse_key(key)
-        candidates = [f for f in self.functions_by_end.get((path, end), []) if not f["module"]]
-        exact = [f for f in candidates if f["start"] == start]
-        if exact:
-            return exact[0]
-        enclosing = [f for f in candidates if f["start"] <= start]
-        if enclosing:
-            return max(enclosing, key=lambda f: f["start"])
-        if not candidates and name == "constructor":
-            candidates = [
-                f
-                for f in self.dump["functions"]
-                if f["file"] == path and not f["module"] and f["start"] <= start and end <= f["end"]
-            ]
-        return min(candidates, key=lambda f: f["end"] - f["start"]) if candidates else None
 
     def unresolved_call_share(self) -> dict:
         total = len(self.sites)
@@ -1276,27 +1310,20 @@ def unobserved_claimed_targets(observed: dict, observed_at: dict, facts: Facts, 
     elsewhere. On a multi-target answer it is only an upper bound, because the
     run may not have taken the path that reaches the other targets.
     """
-    instrumented = set(observed["instrumented_files"])
     counts = Counter({"single_target": 0, "multi_target": 0})
     examples = []
-    for site_key, called in sorted(observed_at.items()):
-        claimed = facts.claimed_targets.get(site_key, set())
-        for target in sorted(claimed - called):
-            function = facts.functions.get(target)
-            if function is None or function["module"] or function["file"] not in instrumented:
-                continue
-            shape = "single_target" if len(claimed) == 1 else "multi_target"
-            counts[shape] += 1
-            if shape == "single_target" or len(examples) < EXAMPLES_PER_OUTCOME:
-                examples.append(
-                    {
-                        "answer": shape,
-                        "site": sources.at(site_key),
-                        "site_text": sources.excerpt(site_key),
-                        "target": describe_function(facts, target, sources),
-                        "observed_callees": [describe_function(facts, key, sources) for key in sorted(called)],
-                    }
-                )
+    for site_key, target, shape in unobserved_targets(observed, observed_at, facts.claimed_targets, facts):
+        counts[shape] += 1
+        if shape == "single_target" or len(examples) < EXAMPLES_PER_OUTCOME:
+            examples.append(
+                {
+                    "answer": shape,
+                    "site": sources.at(site_key),
+                    "site_text": sources.excerpt(site_key),
+                    "target": describe_function(facts, target, sources),
+                    "observed_callees": [describe_function(facts, key, sources) for key in sorted(observed_at[site_key])],
+                }
+            )
     return {**dict(sorted(counts.items())), "examples": examples}
 
 
@@ -2282,6 +2309,14 @@ def render_tier_sections(packages: dict, plans: list[str], add, title: str = "")
     render_sites_gained(packages, plans, add, title)
 
 
+def outside_tools():
+    """The outside-tool scorer, which imports this module for its matching."""
+    sys.path.insert(0, str(bench.BENCH_DIR / "outside"))
+    import score_outside
+
+    return score_outside
+
+
 def render_markdown(report: dict) -> str:
     out = []
     add = out.append
@@ -2463,6 +2498,8 @@ def render_markdown(report: dict) -> str:
     render_outcome_examples(report, add)
     render_tier_sections(report["packages"], list(report["plans"]), add)
     render_analysed_set_comparisons(report, add)
+    if report.get("outside") is not None:
+        outside_tools().render(report["outside"], report["packages"], list(report["plans"]), add)
 
     add("## Exports (against the loaded module's export keys)")
     add("")
@@ -2710,6 +2747,7 @@ def run(args) -> int:
             },
             "gap_ranking": rank_gaps(packages),
             "analysed_set_comparisons": comparisons,
+            "outside": outside_tools().score_all(inputs),
             "decisions": DECISIONS,
             "cost": None,
         }
