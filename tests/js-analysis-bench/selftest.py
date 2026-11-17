@@ -299,6 +299,23 @@ def check_exports(failures: list[str]) -> None:
           f"a failed load is scored: {scored['symbols']}", failures)
 
 
+def check_stage_times(failures: list[str]) -> None:
+    """Stage lines are summed per provider, other log lines and colour codes ignored."""
+    stderr = "\n".join([
+        '2026-01-01T00:00:00Z  INFO polint::kernel::stage: stage done provider="polint.ts.syntax" elapsed_ms=7 rss_mb=30 peak_rss_mb=29 facts=1',
+        '\x1b[2m2026-01-01T00:00:01Z\x1b[0m  INFO polint::kernel::stage: stage done provider="polint.semantic_graph" elapsed_ms=40 peak_rss_mb=90',
+        '2026-01-01T00:00:02Z  INFO polint::kernel::stage: stage done provider="polint.semantic_graph" elapsed_ms=2 peak_rss_mb=95',
+        '2026-01-01T00:00:03Z  INFO polint::kernel: phase: ts.syntax done',
+        "thread 'main' panicked",
+    ])
+    stages = report.stage_times(stderr)
+    expected = {
+        "polint.ts.syntax": {"elapsed_ms": 7, "peak_rss_mb": 29},
+        "polint.semantic_graph": {"elapsed_ms": 42, "peak_rss_mb": 95},
+    }
+    check(stages == expected, f"stage times: {stages}", failures)
+
+
 def check(condition: bool, message: str, failures: list[str]) -> None:
     if not condition:
         failures.append(message)
@@ -354,6 +371,7 @@ def main() -> int:
     check_held_out(entry, failures)
     check_guard(failures)
     check_exports(failures)
+    check_stage_times(failures)
 
     for failure in failures:
         print(f"selftest: {failure}", file=sys.stderr)

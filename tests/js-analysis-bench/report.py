@@ -291,18 +291,50 @@ def run_dump(
     else:
         # A compiler in the caller's environment must not reach the other plans.
         env.pop(TYPESCRIPT_ENV, None)
+    env["RUST_LOG"] = STAGE_LOG
+    env["NO_COLOR"] = "1"
     result = bench_matrix.measure(
         [str(test_binary), DUMP_FILTER, "--exact", "--ignored", "--test-threads", "1"],
         bench.REPO_ROOT,
         env,
         timeout,
     )
-    cost = {"wall_ms": round(result.wall_ms), "peak_rss_bytes": result.peak_rss_bytes}
+    cost = {
+        "wall_ms": round(result.wall_ms),
+        "peak_rss_bytes": result.peak_rss_bytes,
+        "stages": stage_times(result.stderr),
+    }
     if result.timed_out:
         return {"dump": None, "cost": cost, "error": f"timed out after {timeout} s"}
     if result.exit_code != 0 or not out.exists():
-        return {"dump": None, "cost": cost, "error": f"dump failed: {result.stderr_tail}"}
+        tail = [line for line in result.stderr.splitlines() if "stage done" not in line][-8:]
+        return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
     return {"dump": out, "cost": cost, "error": None}
+
+
+# The kernel's per-provider stage log: one `stage done` line per provider run.
+STAGE_LOG = "polint::kernel::stage=info"
+STAGE_FIELD = re.compile(r'\b(provider|elapsed_ms|peak_rss_mb)=("[^"]*"|\S+)')
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def stage_times(stderr: str) -> dict:
+    """Each provider's summed stage wall time and the process peak RSS when it ended.
+
+    A provider that runs more than once in a dump has its times added; the
+    peak is the largest seen at the end of any of its runs."""
+    stages: dict = {}
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if "stage done" not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in STAGE_FIELD.findall(line)}
+        if "provider" not in fields or "elapsed_ms" not in fields:
+            continue
+        row = stages.setdefault(fields["provider"], {"elapsed_ms": 0, "peak_rss_mb": 0})
+        row["elapsed_ms"] += int(fields["elapsed_ms"])
+        row["peak_rss_mb"] = max(row["peak_rss_mb"], int(fields.get("peak_rss_mb", 0)))
+    return stages
 
 
 def load_dump(run: dict) -> None:
@@ -2006,7 +2038,7 @@ def add_per_mb(row: dict, source_bytes: int) -> None:
         row[tier]["analysis_wall_ms_per_mb"] = round(row[tier]["analysis_wall_ms"] / megabytes)
 
 
-def machine(launcher_peak_rss_bytes: int) -> dict:
+def machine(launcher_peak_rss_bytes: int, load_at_start: tuple[float, float, float]) -> dict:
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=bench.REPO_ROOT, capture_output=True, text=True
     ).stdout.strip()
@@ -2016,6 +2048,9 @@ def machine(launcher_peak_rss_bytes: int) -> dict:
         "python": platform.python_version(),
         "git_head": head,
         "launcher_peak_rss_bytes": launcher_peak_rss_bytes,
+        # One-, five- and fifteen-minute load averages when measuring started and ended.
+        "load_average_start": [round(value, 2) for value in load_at_start],
+        "load_average_end": [round(value, 2) for value in os.getloadavg()],
     }
 
 
@@ -2723,7 +2758,9 @@ def render_markdown(report: dict) -> str:
         add("Not measured in this run (`--no-cost`).")
     else:
         add("The only part of this report that changes between runs. Machine: "
-            f"{cost['machine']['platform']}, {cost['machine']['cpus']} CPUs, commit {cost['machine']['git_head'][:12]}.")
+            f"{cost['machine']['platform']}, {cost['machine']['cpus']} CPUs, commit {cost['machine']['git_head'][:12]}, "
+            f"load average {load_line(cost['machine'].get('load_average_start'))} at the start and "
+            f"{load_line(cost['machine'].get('load_average_end'))} at the end (1, 5, 15 minutes).")
         add("")
         add(f"`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, "
             f"`References`; median of {cost['runs']} runs. `analysis` is the in-process cost record "
@@ -2759,12 +2796,47 @@ def render_markdown(report: dict) -> str:
                 f"| {row['refined']['peak_rss_bytes'] / MB:.0f} | {report['dump_budgets_s'].get(name, 'none')} |"
             )
     add("")
+    render_stage_times(report, add)
     add("## Decisions recorded by this run")
     add("")
     for decision in report["decisions"]:
         add(f"- {decision}")
     add("")
     return "\n".join(out)
+
+
+def load_line(load: list[float] | None) -> str:
+    return "not recorded" if not load else " / ".join(f"{value:.2f}" for value in load)
+
+
+SEMANTIC_GRAPH_STAGE = "polint.semantic_graph"
+
+
+def render_stage_times(report: dict, add) -> None:
+    """The three largest provider stages of every fact dump, from the kernel's stage log."""
+    add("### Stage times")
+    add("")
+    add(f"Every fact dump runs with `RUST_LOG={STAGE_LOG}`; each provider's `stage done` lines are summed. "
+        "Stage times are as noisy as the dump times above. `semantic_graph share` is the "
+        f"`{SEMANTIC_GRAPH_STAGE}` stage's part of the refined plan's summed stage time. Peak MB is the process "
+        "peak when the stage ended.")
+    add("")
+    add("| tree | plan | stage total s | largest stages: s (peak MB) | semantic_graph share |")
+    add("|---|---|---|---|---|")
+    for name, plans in report["dump_cost"].items():
+        for plan, row in plans.items():
+            stages = row.get("stages") or {}
+            total = sum(stage["elapsed_ms"] for stage in stages.values())
+            largest = sorted(stages.items(), key=lambda item: (-item[1]["elapsed_ms"], item[0]))[:3]
+            listed = ", ".join(
+                f"`{provider.removeprefix('polint.')}` {stage['elapsed_ms'] / 1000:.1f} ({stage['peak_rss_mb']})"
+                for provider, stage in largest
+            ) or "no stage log"
+            share = "n/a"
+            if plan == "refined" and total:
+                share = pct(stages.get(SEMANTIC_GRAPH_STAGE, {}).get("elapsed_ms", 0) / total)
+            add(f"| {name} | {plan} | {total / 1000:.1f} | {listed} | {share} |")
+    add("")
 
 
 DECISIONS = [
@@ -2831,6 +2903,8 @@ def run(args) -> int:
     if typescript is not None:
         PLANS[TYPED_PLAN] = PLANS["refined"]
     polint, test_binary = build(args)
+    # The machine's load once the build is done, before anything is measured.
+    load_at_start = os.getloadavg()
     version = subprocess.run([str(polint), "--version"], capture_output=True, text=True, check=True).stdout.split()[-1]
 
     budgets = {package["name"]: package["dump_budget_s"] for package in inputs["package"] if "dump_budget_s" in package}
@@ -2964,7 +3038,7 @@ def run(args) -> int:
             for name in tune_names:
                 add_per_mb(check_cost[name], report["packages"][name].get("source_bytes", 0))
             report["cost"] = {
-                "machine": machine(launcher_peak_rss_bytes),
+                "machine": machine(launcher_peak_rss_bytes, load_at_start),
                 "runs": args.cost_runs,
                 "check": check_cost,
                 "dump": {
