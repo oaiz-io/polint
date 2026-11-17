@@ -18,6 +18,8 @@ pub(crate) mod host;
 pub(crate) mod incremental;
 mod metadata;
 pub(crate) mod metrics_projection;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod name_match_tests;
 mod outcome;
 mod provider;
 pub(crate) mod resource;
