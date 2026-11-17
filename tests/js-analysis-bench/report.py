@@ -71,6 +71,11 @@ TYPED_SOURCE_SUFFIXES = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", "
 # Files the run records after their types are stripped.
 TYPESCRIPT_SUFFIXES = {".ts", ".mts", ".cts", ".tsx"}
 TYPED_CONFIG = "[languages.ts]\ntype_sidecar = true\n"
+# A staged tree is analysed as the package it is: its `analysed` globs are the
+# include set, and of the repository default excludes only those that never
+# hold a package's own code apply. A package that ships its dependencies under
+# `vendor/` (chalk) ships them as its own code.
+PACKAGE_EXCLUDE = ["**/node_modules/**", "**/.git/**"]
 TYPESCRIPT_ENV = "POLINT_TS_TYPESCRIPT"
 # The syntax census rides on the cheapest plan in its own run, so it never
 # adds to the timed base and refined dumps.
@@ -185,6 +190,11 @@ def cargo_executable(argv: list[str], wanted, what: str) -> Path:
     return executable
 
 
+def package_config(include: list[str]) -> str:
+    """The `.polint.toml` workspace section of a staged package tree."""
+    return f"[workspace]\ninclude = {json.dumps(include)}\nexclude = {json.dumps(PACKAGE_EXCLUDE)}\n"
+
+
 def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
     """Copy every analysed tree outside git; return {case id: tree}, {package: tree}.
 
@@ -199,6 +209,7 @@ def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
     for case in cases:
         dest = scratch / "constructs" / case["id"]
         shutil.copytree(case["root"], dest)
+        (dest / ".polint.toml").write_text(package_config(["**/*"]))
         case_trees[case["id"]] = dest
     package_trees = {}
     for package in inputs["package"]:
@@ -208,6 +219,7 @@ def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
         for rel in [*analysed, "package.json"]:
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(root / rel, dest / rel)
+        (dest / ".polint.toml").write_text(package_config(package["analysed"]))
         package_trees[package["name"]] = dest
     return case_trees, package_trees
 
@@ -227,6 +239,7 @@ def stage_previous_sets(scratch: Path, inputs: dict) -> dict:
         for rel in [*analysed, "package.json"]:
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(root / rel, dest / rel)
+        (dest / ".polint.toml").write_text(package_config(package["analysed"]))
         trees[package["name"]] = dest
     return trees
 
@@ -235,10 +248,10 @@ def stage_typed(scratch: Path, trees: dict) -> dict:
     """Copy each tree for the typed plan; return {key: typed tree}.
 
     The copy gets a tsconfig (unless the tree brings its own) so the sidecar
-    has a project to load, and a `.polint.toml` that names the tier, so a
+    has a project to load, and its `.polint.toml` also names the tier, so a
     sidecar that cannot start is a reported setup failure, not a silent skip.
     The plain trees stay untouched: the base and refined plans and the cost
-    runs must not see either file."""
+    runs must not see the tsconfig or the tier."""
     typed = {}
     for key, tree in trees.items():
         dest = scratch / "typed" / tree.relative_to(scratch)
@@ -253,7 +266,8 @@ def stage_typed(scratch: Path, trees: dict) -> dict:
             )
             config = {**TYPED_TSCONFIG, "files": sources}
             (dest / "tsconfig.json").write_text(json.dumps(config, indent=2) + "\n")
-        (dest / ".polint.toml").write_text(TYPED_CONFIG)
+        config = dest / ".polint.toml"
+        config.write_text((config.read_text() if config.exists() else "") + TYPED_CONFIG)
         typed[key] = dest
     return typed
 
@@ -2024,8 +2038,20 @@ def check_env(cost_path: Path) -> dict:
     return env
 
 
-def write_rule_config(tree: Path) -> None:
-    (tree / ".polint.toml").write_text(f'[rules]\npaths = ["{bench.RULE_PACK}"]\n')
+def write_rule_config(tree: Path) -> str:
+    """Add the census rule pack to the tree's config; return the config to restore."""
+    config = tree / ".polint.toml"
+    original = config.read_text() if config.exists() else ""
+    config.write_text(original + f'[rules]\npaths = ["{bench.RULE_PACK}"]\n')
+    return original
+
+
+def restore_config(tree: Path, original: str) -> None:
+    config = tree / ".polint.toml"
+    if original:
+        config.write_text(original)
+    else:
+        config.unlink()
 
 
 CHECK_ARGS = ["check", "--format", "json", "--fail-on", "none", "--color", "never"]
@@ -2050,13 +2076,14 @@ def measure_cost(polint: Path, trees: dict, scratch: Path, runs: int, timeout: i
     """Cold and warm `polint check` with the census rule pack, median of `runs`."""
     # Builds the rule host once, unmeasured.
     first = next(iter(trees.values()))
-    write_rule_config(first)
+    original = write_rule_config(first)
     one_check(polint, first, scratch, timeout)
     shutil.rmtree(first / ".polint", ignore_errors=True)
+    restore_config(first, original)
 
     results = {}
     for name, tree in trees.items():
-        write_rule_config(tree)
+        original = write_rule_config(tree)
         samples = {"cold": [], "warm": []}
         stored = stored_gzip = 0
         for _ in range(runs):
@@ -2066,7 +2093,7 @@ def measure_cost(polint: Path, trees: dict, scratch: Path, runs: int, timeout: i
             stored_gzip = gzip_bytes(tree / ".polint" / "cache")
             samples["warm"].append(one_check(polint, tree, scratch, timeout))
         shutil.rmtree(tree / ".polint", ignore_errors=True)
-        (tree / ".polint.toml").unlink()
+        restore_config(tree, original)
         row = {"stored_bytes": stored, "stored_gzip_bytes": stored_gzip}
         for tier, values in samples.items():
             medians = {key: statistics.median(v[key] for v in values) for key in values[0]}
@@ -2918,10 +2945,12 @@ DECISIONS = [
     "a `Class.constructor` label and an observed constructor callee map to the class function.",
     "Observed implicit edges (accessors, coercions, iterator protocol) have a position but no call expression; "
     "they are reported by kind but left out of the headline package recall, which is over calls and callbacks.",
-    "Packages are analysed with polint's default discovery, so its default excludes (for example `**/vendor/**`) "
-    "apply; observed edges touching such files count as 'site or callee in a file polint does not analyse'.",
-    "Missing call sites and functions are not worked around: functions under a unary operator, functions declared "
-    "inside try, catch or if blocks, and calls in exported variable initializers are reported as misses.",
+    "A package is analysed as the package it is: its `analysed` globs are the include set (a construct case "
+    "includes all its files), and of polint's default excludes only `**/node_modules/**` and `**/.git/**` apply, "
+    "so a package's own `vendor/` is analysed; observed edges touching an excluded file count as 'site or callee "
+    "in a file polint does not analyse'.",
+    "Missing call sites and functions are not worked around: a function or call polint does not extract counts "
+    "as a miss.",
     "An observed callee maps to the polint function with the same span before the innermost one ending at the same "
     "byte: a concise arrow returning an arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.",
     "Every missed observed edge is attributed to one gap from a syntax census: Oxc's own function and call spans with "

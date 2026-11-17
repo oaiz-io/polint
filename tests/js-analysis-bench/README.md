@@ -308,8 +308,11 @@ unchanged.
   jobs, and the small trees' cold times about doubled from one full run to
   the next. Compare times only between runs on the same quiet machine; peak
   RSS, stored bytes and every score are stable.
-- Packages use polint's default discovery, so default excludes apply (chalk's
-  `source/vendor/` is not analysed).
+- A package is analysed as the package it is: the report writes a
+  `.polint.toml` into each staged tree whose `[workspace] include` is the
+  package's `analysed` globs and whose `exclude` keeps only
+  `**/node_modules/**` and `**/.git/**`, so a package's own `vendor/` (chalk's
+  `source/vendor/`) is analysed. A repository keeps polint's default excludes.
 
 ## Findings in the baseline
 
