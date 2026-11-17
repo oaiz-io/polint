@@ -177,6 +177,18 @@ function blankTypeOnlySpecifiers(executable, format) {
   return out + executable.slice(position);
 }
 
+const MODULE_SYNTAX = /^[ \t]*(?:import|export)\b/m;
+
+// The `"type"` of the nearest package.json inside the tree, or null.
+function packageType(file) {
+  for (let directory = path.dirname(file); directory.startsWith(ROOT); directory = path.dirname(directory)) {
+    const manifest = path.join(directory, "package.json");
+    if (fs.existsSync(manifest)) return JSON.parse(fs.readFileSync(manifest, "utf8")).type ?? null;
+    if (directory === ROOT) break;
+  }
+  return null;
+}
+
 // Node strips a TypeScript file before this hook sees it and refuses enums and
 // namespaces there. The hook reads and transforms the source itself, so for
 // such a file it asks Node only for the format, decided as Node decides it for
@@ -189,7 +201,7 @@ function loadFormat(url, context, nextLoad) {
     const file = fileURLToPath(url);
     let format = "commonjs";
     if (file.endsWith(".mts")) format = "module";
-    else if (!file.endsWith(".cts") && /^[ \t]*(?:import|export)\b/m.test(fs.readFileSync(file, "utf8"))) format = "module";
+    else if (!file.endsWith(".cts") && MODULE_SYNTAX.test(fs.readFileSync(file, "utf8"))) format = "module";
     return nextLoad(url, { ...context, format });
   }
 }
@@ -217,8 +229,21 @@ registerHooks({
     let format = loaded.format;
     if (format === "module-typescript") format = "module";
     if (format === "commonjs-typescript") format = "commonjs";
-    // A `require` of a `.js` file outside any `"type"` scope reports no format.
-    if (format == null) format = file.endsWith(".mjs") ? "module" : "commonjs";
+    // A `require` of a file outside any `"type"` scope reports no format, or
+    // `typescript` for a `.ts` file, and leaves the choice to Node.
+    if (format == null || format === "typescript") format = file.endsWith(".mjs") ? "module" : "commonjs";
+    // Node then runs such a `.ts` file as a module when its syntax says so.
+    // The hook decides as Node does, so type-only names are blanked on that
+    // path too.
+    if (
+      format === "commonjs" &&
+      isTypeScript(file) &&
+      !file.endsWith(".cts") &&
+      packageType(file) === null &&
+      MODULE_SYNTAX.test(original)
+    ) {
+      format = "module";
+    }
     let executable = original;
     let stripped = true;
     if (isTypeScript(file)) {
