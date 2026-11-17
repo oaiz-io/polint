@@ -528,6 +528,14 @@ class ProjectEmitter {
      * @type {Set<any>}
      */
     this.written = new Set();
+    /**
+     * Member names the scan sees written through a receiver the checker
+     * cannot resolve to a value, as in `store.off = ...` with an untyped
+     * `store`. Such a write may land on any object, so every member binding
+     * of that name may hold another value.
+     * @type {Set<string>}
+     */
+    this.writtenMembers = new Set();
   }
 
   /**
@@ -812,6 +820,10 @@ function symbolHolds(options) {
     return false;
   }
   const declaration = declarations[0];
+  const member = memberName(ts, declaration);
+  if (member !== undefined && project.writtenMembers.has(member)) {
+    return false;
+  }
   if (ts.isShorthandPropertyAssignment(declaration)) {
     let value;
     try {
@@ -1490,6 +1502,14 @@ function collectWrites(options) {
     } catch (error) {
       symbol = undefined;
     }
+    if (!ts.isIdentifier(expression) && (symbol === undefined || valueDeclarations(ts, symbol).length === 0)) {
+      // Nothing the checker knows is written, or only a type's shape is: the
+      // object written is unknown, so the name is what the write is known by.
+      const key = propertyKeyText(ts, name);
+      if (key !== undefined) {
+        project.writtenMembers.add(key);
+      }
+    }
     markWritten(symbol, write);
   };
 
@@ -1518,6 +1538,54 @@ function collectWrites(options) {
   if (isClassLike(ts, node)) {
     collectOverrides({ts, checker, project, node});
   }
+}
+
+/**
+ * The name a member declaration gives its binding: a method, a property of a
+ * class or an object literal, an accessor, or an assignment the binder counts
+ * as a property (`target.parse = ...`). Other declarations have none.
+ *
+ * @param {any} ts
+ * @param {any} declaration
+ * @returns {string | undefined}
+ */
+function memberName(ts, declaration) {
+  if (
+    !ts.isMethodDeclaration(declaration) &&
+    !ts.isPropertyDeclaration(declaration) &&
+    !ts.isPropertyAssignment(declaration) &&
+    !ts.isShorthandPropertyAssignment(declaration) &&
+    !ts.isGetAccessorDeclaration(declaration) &&
+    !ts.isSetAccessorDeclaration(declaration) &&
+    !ts.isBinaryExpression(declaration) &&
+    !ts.isPropertyAccessExpression(declaration) &&
+    !ts.isElementAccessExpression(declaration)
+  ) {
+    return undefined;
+  }
+  const name = ts.getNameOfDeclaration(declaration);
+  return name === undefined ? undefined : propertyKeyText(ts, name);
+}
+
+/**
+ * The text of a property key the source spells out, `undefined` for a
+ * computed one.
+ *
+ * @param {any} ts
+ * @param {any} name
+ * @returns {string | undefined}
+ */
+function propertyKeyText(ts, name) {
+  if (
+    name !== undefined &&
+    (ts.isIdentifier(name) ||
+      ts.isPrivateIdentifier(name) ||
+      ts.isStringLiteralLike(name) ||
+      ts.isNumericLiteral(name))
+  ) {
+    return name.text;
+  }
+  return undefined;
 }
 
 /**

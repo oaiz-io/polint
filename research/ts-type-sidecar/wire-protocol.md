@@ -144,12 +144,16 @@ external target, and no `callable` row is emitted for it.
 - `declared` — what `getResolvedSignature` answered, it has a body, and the
   callee can hold nothing else: the callee is the function itself, or names a
   binding with one value declaration that holds it and that the scan never
-  sees written or overridden. Exact.
+  sees written or overridden. A member also counts as written when the scan
+  sees its name written through a receiver the checker cannot resolve to a
+  value (`store.off = ...` with an untyped `store`), since that write may land
+  on any object. Exact.
 - `inferred` — what `getResolvedSignature` answered, and it has a body, but
   the callee's binding may hold another value when the call runs: a
   reassigned variable, a property assigned in more than one place, a factory's
-  result, a parameter or destructured element, a member a subclass overrides.
-  A candidate, never the answer.
+  result, a parameter or destructured element, a member a subclass overrides,
+  a member whose name an untyped receiver writes. A candidate, never the
+  answer.
 - `declared_signature` — what `getResolvedSignature` answered, and it cannot
   run: an interface member, an overload signature, an abstract method, a
   function type. It crosses the wire so a call site with no runnable target
