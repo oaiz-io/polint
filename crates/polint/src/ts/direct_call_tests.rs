@@ -1,14 +1,35 @@
 //! Direct call resolution over real TS/JS sources, end to end through the
 //! analysis kernel: each case names one call site and the exact set of
-//! functions the direct resolver may give it a precise edge to.
+//! functions the direct resolver may give it a precise edge to. A few cases
+//! check the refined edges of the same site, which every resolver feeds.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analysis_neutral::calls::facts::{CallPrecision, CallProvenance, CallTargetStatus};
+use crate::analysis_neutral::calls::facts::{
+    CallPrecision, CallProvenance, CallTargetStatus, ClaimTier,
+};
+
+/// Which edges of a call site a case reads.
+#[derive(Clone, Copy)]
+enum Edges {
+    /// Precise native direct targets.
+    Direct,
+    /// Refined edges that claim a target in any tier.
+    Refined,
+}
 
 /// The texts of the functions that `call` (a snippet unique in `main`) has
 /// precise direct edges to.
 fn direct_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSet<String> {
+    targets_at(files, main, call, Edges::Direct)
+}
+
+/// The texts of the functions a refined edge at `call` claims, in any tier.
+fn refined_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSet<String> {
+    targets_at(files, main, call, Edges::Refined)
+}
+
+fn targets_at(files: &[(&str, &str)], main: &str, call: &str, edges: Edges) -> BTreeSet<String> {
     let repo = tempfile::tempdir().unwrap();
     for (name, body) in files {
         std::fs::write(repo.path().join(name), body).unwrap();
@@ -51,18 +72,35 @@ fn direct_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSet
         })
         .max_by_key(|site| site.span.end_byte)
         .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
-    output
-        .db
-        .call_targets()
-        .iter()
-        .filter(|target| {
-            target.site == site.id
-                && target.status == CallTargetStatus::Resolved
-                && target.provenance == CallProvenance::NativeDirect
-                && target.precision != CallPrecision::Heuristic
-        })
+    let targets = match edges {
+        Edges::Direct => output
+            .db
+            .call_targets()
+            .iter()
+            .filter(|target| {
+                target.site == site.id
+                    && target.status == CallTargetStatus::Resolved
+                    && target.provenance == CallProvenance::NativeDirect
+                    && target.precision != CallPrecision::Heuristic
+            })
+            .filter_map(|target| target.target_function)
+            .collect::<Vec<_>>(),
+        Edges::Refined => output
+            .db
+            .refined_call_edges()
+            .iter()
+            .filter(|edge| {
+                edge.site == site.id
+                    && edge.status == CallTargetStatus::Resolved
+                    && edge.precision.tier() != ClaimTier::NoClaim
+            })
+            .filter_map(|edge| edge.target_function)
+            .collect(),
+    };
+    targets
+        .into_iter()
         .filter_map(|target| {
-            let function = functions.get(&target.target_function?)?;
+            let function = functions.get(&target)?;
             let body = sources[paths.get(&function.file)?.as_str()];
             Some(
                 body[function.span.start_byte as usize..function.span.end_byte as usize]
@@ -168,6 +206,40 @@ fn overload_with_an_object_literal_return_type_targets_the_implementation() {
     assert_eq!(
         direct_targets_at(&[("main.ts", main)], "main.ts", "pick(\"a\")"),
         set(&["function pick(x: any) { return { value: x }; }"])
+    );
+}
+
+/// An overload signature has no body, so no call reaches it: every refined
+/// edge, through an import, a namespace member or a local binding, names the
+/// implementation alone.
+#[test]
+fn refined_edges_reach_the_implementation_of_an_overload() {
+    let util = "export function issue(a: string, b: number): string;\n\
+                export function issue(a: string): string;\n\
+                export function issue(...args: any[]): string { return String(args[0]); }\n";
+    let main = "import * as util from \"./util\";\n\
+                import { issue } from \"./util\";\n\
+                function pick(x: string): string;\n\
+                function pick(x: any) { return x; }\n\
+                export function run() {\n\
+                \x20 util.issue(\"a\");\n\
+                \x20 issue(\"b\");\n\
+                \x20 pick(\"c\");\n\
+                }\n";
+    let files = [("util.ts", util), ("main.ts", main)];
+    let implementation = "function issue(...args: any[]): string { return String(args[0]); }";
+
+    assert_eq!(
+        refined_targets_at(&files, "main.ts", "util.issue(\"a\")"),
+        set(&[implementation])
+    );
+    assert_eq!(
+        refined_targets_at(&files, "main.ts", "issue(\"b\")"),
+        set(&[implementation])
+    );
+    assert_eq!(
+        refined_targets_at(&files, "main.ts", "pick(\"c\")"),
+        set(&["function pick(x: any) { return x; }"])
     );
 }
 
