@@ -214,3 +214,119 @@ fn reassigned_function_declaration_has_no_precise_target() {
         set(&[])
     );
 }
+
+/// In non-strict code a function declared in a block is also assigned to the
+/// same-named `var` of the enclosing function when the block runs, so the
+/// call after the block reaches the block's function, not the literal.
+#[test]
+fn sloppy_block_function_leaves_a_same_named_var_without_a_precise_target() {
+    let main = "function run() {\n\
+                \x20 var f = () => \"arrow\";\n\
+                \x20 { function f() { return \"decl\"; } }\n\
+                \x20 return f();\n\
+                }\n\
+                module.exports = run;\n";
+
+    assert_eq!(
+        direct_targets_at(&[("main.cjs", main)], "main.cjs", "f();"),
+        set(&[])
+    );
+}
+
+#[test]
+fn sloppy_block_function_leaves_a_same_named_function_without_a_precise_target() {
+    let nested = "function run() {\n\
+                  \x20 function f() { return \"outer\"; }\n\
+                  \x20 { function f() { return \"inner\"; } }\n\
+                  \x20 return f();\n\
+                  }\n\
+                  module.exports = run;\n";
+    let branches = "function run(x) {\n\
+                    \x20 if (x) { function g() { return \"a\"; } } else { function g() { return \"b\"; } }\n\
+                    \x20 return g();\n\
+                    }\n\
+                    module.exports = run;\n";
+
+    assert_eq!(
+        direct_targets_at(&[("main.cjs", nested)], "main.cjs", "f();"),
+        set(&[])
+    );
+    assert_eq!(
+        direct_targets_at(&[("main.cjs", branches)], "main.cjs", "g();"),
+        set(&[])
+    );
+}
+
+/// Strict code keeps a block's function inside its block, so the call after
+/// the block still reaches the outer function.
+#[test]
+fn strict_block_function_leaves_the_outer_function_as_the_target() {
+    let directive = "function run() {\n\
+                     \x20 \"use strict\";\n\
+                     \x20 function f() { return \"outer\"; }\n\
+                     \x20 { function f() { return \"inner\"; } }\n\
+                     \x20 return f();\n\
+                     }\n\
+                     module.exports = run;\n";
+    let module = "function run() {\n\
+                  \x20 function f() { return \"outer\"; }\n\
+                  \x20 { function f() { return \"inner\"; } }\n\
+                  \x20 return f();\n\
+                  }\n\
+                  export default run;\n";
+
+    assert_eq!(
+        direct_targets_at(&[("main.cjs", directive)], "main.cjs", "f();"),
+        set(&["function f() { return \"outer\"; }"])
+    );
+    assert_eq!(
+        direct_targets_at(&[("main.mjs", module)], "main.mjs", "f();"),
+        set(&["function f() { return \"outer\"; }"])
+    );
+}
+
+#[test]
+fn call_inside_a_sloppy_block_reaches_the_block_function() {
+    let main = "function run() {\n\
+                \x20 function f() { return \"outer\"; }\n\
+                \x20 { function f() { return \"inner\"; } f(); }\n\
+                }\n\
+                module.exports = run;\n";
+
+    assert_eq!(
+        direct_targets_at(&[("main.cjs", main)], "main.cjs", "f();"),
+        set(&["function f() { return \"inner\"; }"])
+    );
+}
+
+/// A `let` between the block and the function scope keeps the block's function
+/// in its block, so the call after it reaches the file's `f`, which the
+/// block's function must not stand in for.
+#[test]
+fn block_function_under_a_same_named_block_binding_has_no_precise_target() {
+    let main = "function f() { return \"file\"; }\n\
+                function run() {\n\
+                \x20 { let f = 1; { function f() { return \"block\"; } } }\n\
+                \x20 return f();\n\
+                }\n\
+                module.exports = run;\n";
+
+    assert_eq!(
+        direct_targets_at(&[("main.cjs", main)], "main.cjs", "f();"),
+        set(&[])
+    );
+}
+
+#[test]
+fn named_function_expression_keeps_its_target_under_a_same_named_binding() {
+    let main = "function run() {\n\
+                \x20 let fact = 1;\n\
+                \x20 return (function fact(n) { return n ? fact(n - 1) : fact; })(3);\n\
+                }\n\
+                module.exports = run;\n";
+
+    assert_eq!(
+        direct_targets_at(&[("main.cjs", main)], "main.cjs", "fact(n - 1)"),
+        set(&["function fact(n) { return n ? fact(n - 1) : fact; }"])
+    );
+}

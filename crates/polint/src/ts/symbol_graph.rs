@@ -481,6 +481,9 @@ fn derive_ts_semantic_index(
 /// row from its own body, provided its symbol is never written and every
 /// declaration of the symbol is a function, interface or namespace.
 ///
+/// A `let`, `var` or function binding that a block-level function declaration
+/// overwrites gets no row: see [`bindings_written_by_block_functions`].
+///
 /// A file that mentions `eval` or has a `with` statement gets no rows at all:
 /// a direct eval can write a binding or declare a `var` that shadows one, and
 /// a `with` body can see an object property instead of the binding, neither
@@ -502,6 +505,7 @@ fn add_ts_value_function_rows(
         return;
     }
     let root_is_module_scope = program.body.iter().any(Statement::is_module_declaration);
+    let written_by_block_functions = bindings_written_by_block_functions(scoping, nodes);
     for node in nodes.iter() {
         let (symbol, function_span, kind) = match node.kind() {
             AstKind::VariableDeclarator(declarator) => {
@@ -521,6 +525,7 @@ fn add_ts_value_function_rows(
                     VariableDeclarationKind::Let | VariableDeclarationKind::Var => {
                         scoping.symbol_redeclarations(symbol).is_empty()
                             && !scoping.symbol_is_mutated(symbol)
+                            && !written_by_block_functions.contains(&symbol)
                             && (root_is_module_scope
                                 || scoping.symbol_scope_id(symbol) != scoping.root_scope_id())
                     }
@@ -536,6 +541,7 @@ fn add_ts_value_function_rows(
                     continue;
                 };
                 if scoping.symbol_is_mutated(symbol)
+                    || written_by_block_functions.contains(&symbol)
                     || !only_function_declarations(scoping, nodes, symbol)
                 {
                     continue;
@@ -555,6 +561,54 @@ fn add_ts_value_function_rows(
             kind,
         });
     }
+}
+
+/// Bindings whose value a function declaration in a nested block of non-strict
+/// code decides in a way no Oxc reference shows.
+///
+/// When such a block runs, its function is also assigned to the same-named
+/// binding of the enclosing function scope. Oxc keeps the block's function a
+/// separate symbol when that scope already binds the name, so the outer symbol
+/// is written without a write reference. Otherwise Oxc moves the block's
+/// function into the function scope, which is wrong when a scope between the
+/// two binds the name: the function then stays in its block.
+fn bindings_written_by_block_functions(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> BTreeSet<OxcSymbolId> {
+    let mut written = BTreeSet::new();
+    for node in nodes.iter() {
+        let AstKind::Function(function) = node.kind() else {
+            continue;
+        };
+        let Some(id) = &function.id else {
+            continue;
+        };
+        let Some(symbol) = id.symbol_id.get() else {
+            continue;
+        };
+        let scope = scoping.symbol_scope_id(symbol);
+        if scoping.scope_flags(scope).is_strict_mode() {
+            continue;
+        }
+        let outer = scoping
+            .scope_ancestors(scope)
+            .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
+            .and_then(|function_scope| scoping.get_binding(function_scope, id.name));
+        if let Some(outer) = outer.filter(|outer| *outer != symbol) {
+            written.insert(outer);
+        }
+        let declared_in = node.scope_id();
+        if function.is_declaration()
+            && scoping
+                .scope_ancestors(declared_in)
+                .take_while(|ancestor| *ancestor != scope)
+                .any(|between| scoping.get_binding(between, id.name).is_some())
+        {
+            written.insert(symbol);
+        }
+    }
+    written
 }
 
 /// Whether every declaration of `symbol` is a function, or a type-side
