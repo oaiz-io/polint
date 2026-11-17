@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "apply.js",
@@ -108,6 +108,1244 @@
   "instrumented_functions": 412,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "applyEach.js@268..363",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "applyEachSeries.js@292..387",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "asyncify.js@2555..3270",
+      "name": "asyncify"
+    },
+    {
+      "function": "asyncify.js@2637..2828",
+      "name": ""
+    },
+    {
+      "function": "asyncify.js@2877..3266",
+      "name": ""
+    },
+    {
+      "function": "asyncify.js@3272..3526",
+      "name": "handlePromise"
+    },
+    {
+      "function": "asyncify.js@3340..3403",
+      "name": ""
+    },
+    {
+      "function": "asyncify.js@3528..3728",
+      "name": "invokeCallback"
+    },
+    {
+      "function": "asyncify.js@411..506",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "auto.js@10708..11457",
+      "name": "checkForDeadlocks"
+    },
+    {
+      "function": "auto.js@11138..11298",
+      "name": ""
+    },
+    {
+      "function": "auto.js@11463..11762",
+      "name": "getDependents"
+    },
+    {
+      "function": "auto.js@11558..11731",
+      "name": ""
+    },
+    {
+      "function": "auto.js@476..571",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "auto.js@6844..11819",
+      "name": "auto"
+    },
+    {
+      "function": "auto.js@7711..8736",
+      "name": ""
+    },
+    {
+      "function": "auto.js@8274..8728",
+      "name": ""
+    },
+    {
+      "function": "auto.js@8541..8716",
+      "name": ""
+    },
+    {
+      "function": "auto.js@8790..8880",
+      "name": "enqueueTask"
+    },
+    {
+      "function": "auto.js@8848..8872",
+      "name": ""
+    },
+    {
+      "function": "auto.js@8886..9199",
+      "name": "processQueue"
+    },
+    {
+      "function": "auto.js@9205..9423",
+      "name": "addListener"
+    },
+    {
+      "function": "auto.js@9429..9590",
+      "name": "taskComplete"
+    },
+    {
+      "function": "auto.js@9548..9558",
+      "name": ""
+    },
+    {
+      "function": "auto.js@9596..10702",
+      "name": "runTask"
+    },
+    {
+      "function": "auto.js@9708..10464",
+      "name": ""
+    },
+    {
+      "function": "autoInject.js@1524..1917",
+      "name": "parseParams"
+    },
+    {
+      "function": "autoInject.js@1876..1913",
+      "name": ""
+    },
+    {
+      "function": "autoInject.js@302..397",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "autoInject.js@5792..7065",
+      "name": "autoInject"
+    },
+    {
+      "function": "autoInject.js@5886..7008",
+      "name": ""
+    },
+    {
+      "function": "autoInject.js@609..1522",
+      "name": "stripComments"
+    },
+    {
+      "function": "autoInject.js@6804..7002",
+      "name": "newTask"
+    },
+    {
+      "function": "autoInject.js@6877..6898",
+      "name": ""
+    },
+    {
+      "function": "cargo.js@201..296",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "cargo.js@2624..2712",
+      "name": "cargo"
+    },
+    {
+      "function": "cargoQueue.js@201..296",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "compose.js@1452..1531",
+      "name": "compose"
+    },
+    {
+      "function": "compose.js@186..281",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "concat.js@296..391",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "concat.js@3444..3564",
+      "name": "concat"
+    },
+    {
+      "function": "concatLimit.js@1415..2000",
+      "name": "concatLimit"
+    },
+    {
+      "function": "concatLimit.js@1575..1733",
+      "name": ""
+    },
+    {
+      "function": "concatLimit.js@1617..1725",
+      "name": ""
+    },
+    {
+      "function": "concatLimit.js@1735..1996",
+      "name": ""
+    },
+    {
+      "function": "concatLimit.js@393..488",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "concatSeries.js@296..391",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "constant.js@101..266",
+      "name": "default"
+    },
+    {
+      "function": "constant.js@133..263",
+      "name": ""
+    },
+    {
+      "function": "detect.js@2997..3161",
+      "name": "detect"
+    },
+    {
+      "function": "detect.js@3080..3092",
+      "name": ""
+    },
+    {
+      "function": "detect.js@3094..3113",
+      "name": ""
+    },
+    {
+      "function": "detect.js@397..492",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "detectLimit.js@426..521",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "detectSeries.js@426..521",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "dir.js@200..295",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "doUntil.js@315..410",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "doWhilst.js@402..497",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "each.js@3770..3933",
+      "name": "eachLimit"
+    },
+    {
+      "function": "each.js@506..601",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "eachLimit.js@1517..1699",
+      "name": "eachLimit"
+    },
+    {
+      "function": "eachLimit.js@535..630",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "eachOf.js@1226..1540",
+      "name": "iteratorCallback"
+    },
+    {
+      "function": "eachOf.js@1753..1880",
+      "name": "eachOfGeneric"
+    },
+    {
+      "function": "eachOf.js@5425..5654",
+      "name": "eachOf"
+    },
+    {
+      "function": "eachOf.js@825..920",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "eachOf.js@973..1668",
+      "name": "eachOfArrayLike"
+    },
+    {
+      "function": "eachOfLimit.js@1389..1544",
+      "name": "eachOfLimit"
+    },
+    {
+      "function": "eachOfLimit.js@416..511",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "eachOfSeries.js@1117..1236",
+      "name": "eachOfSeries"
+    },
+    {
+      "function": "eachOfSeries.js@296..391",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "eachSeries.js@1369..1484",
+      "name": "eachSeries"
+    },
+    {
+      "function": "eachSeries.js@288..383",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "ensureAsync.js@1811..2277",
+      "name": "ensureAsync"
+    },
+    {
+      "function": "ensureAsync.js@1897..2274",
+      "name": ""
+    },
+    {
+      "function": "ensureAsync.js@2011..2214",
+      "name": ""
+    },
+    {
+      "function": "ensureAsync.js@2099..2127",
+      "name": ""
+    },
+    {
+      "function": "ensureAsync.js@289..384",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "every.js@3316..3472",
+      "name": "every"
+    },
+    {
+      "function": "every.js@3398..3411",
+      "name": ""
+    },
+    {
+      "function": "every.js@3413..3424",
+      "name": ""
+    },
+    {
+      "function": "every.js@397..492",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "everyLimit.js@426..521",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "everySeries.js@421..516",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "filter.js@2687..2810",
+      "name": "filter"
+    },
+    {
+      "function": "filter.js@375..470",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "filterLimit.js@404..499",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "filterSeries.js@399..494",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "forever.js@1733..2029",
+      "name": "forever"
+    },
+    {
+      "function": "forever.js@1892..2008",
+      "name": "next"
+    },
+    {
+      "function": "forever.js@510..605",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "groupBy.js@222..317",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "groupBy.js@3442..3564",
+      "name": "groupBy"
+    },
+    {
+      "function": "groupByLimit.js@1426..2351",
+      "name": "groupByLimit"
+    },
+    {
+      "function": "groupByLimit.js@1587..1749",
+      "name": ""
+    },
+    {
+      "function": "groupByLimit.js@1629..1741",
+      "name": ""
+    },
+    {
+      "function": "groupByLimit.js@1751..2347",
+      "name": ""
+    },
+    {
+      "function": "groupByLimit.js@393..488",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "groupBySeries.js@228..323",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "index.js@9296..9391",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/DoublyLinkedList.js@1424..1528",
+      "name": "push"
+    },
+    {
+      "function": "internal/DoublyLinkedList.js@1534..1605",
+      "name": "shift"
+    },
+    {
+      "function": "internal/DoublyLinkedList.js@2162..2248",
+      "name": "setInitial"
+    },
+    {
+      "function": "internal/DoublyLinkedList.js@401..485",
+      "name": "constructor"
+    },
+    {
+      "function": "internal/DoublyLinkedList.js@491..757",
+      "name": "removeLink"
+    },
+    {
+      "function": "internal/DoublyLinkedList.js@845..1071",
+      "name": "insertAfter"
+    },
+    {
+      "function": "internal/Heap.js@1216..1350",
+      "name": "push"
+    },
+    {
+      "function": "internal/Heap.js@1420..1595",
+      "name": "shift"
+    },
+    {
+      "function": "internal/Heap.js@2196..2244",
+      "name": "leftChi"
+    },
+    {
+      "function": "internal/Heap.js@2246..2297",
+      "name": "parent"
+    },
+    {
+      "function": "internal/Heap.js@2299..2463",
+      "name": "smaller"
+    },
+    {
+      "function": "internal/Heap.js@237..332",
+      "name": "constructor"
+    },
+    {
+      "function": "internal/Heap.js@338..391",
+      "name": "length"
+    },
+    {
+      "function": "internal/Heap.js@463..734",
+      "name": "percUp"
+    },
+    {
+      "function": "internal/Heap.js@740..1210",
+      "name": "percDown"
+    },
+    {
+      "function": "internal/applyEach.js@101..454",
+      "name": "default"
+    },
+    {
+      "function": "internal/applyEach.js@132..451",
+      "name": "applyEach"
+    },
+    {
+      "function": "internal/applyEach.js@214..424",
+      "name": ""
+    },
+    {
+      "function": "internal/applyEach.js@296..402",
+      "name": ""
+    },
+    {
+      "function": "internal/applyEach.js@653..748",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/asyncEachOfLimit.js@219..314",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/awaitify.js@199..782",
+      "name": "awaitify"
+    },
+    {
+      "function": "internal/awaitify.js@334..757",
+      "name": "awaitable"
+    },
+    {
+      "function": "internal/awaitify.js@501..749",
+      "name": ""
+    },
+    {
+      "function": "internal/awaitify.js@554..699",
+      "name": ""
+    },
+    {
+      "function": "internal/consoleFunc.js@214..309",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/consoleFunc.js@311..885",
+      "name": "consoleFunc"
+    },
+    {
+      "function": "internal/createTester.js@1062..1183",
+      "name": ""
+    },
+    {
+      "function": "internal/createTester.js@316..411",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/createTester.js@413..1194",
+      "name": "_createTester"
+    },
+    {
+      "function": "internal/createTester.js@467..1191",
+      "name": ""
+    },
+    {
+      "function": "internal/createTester.js@639..1060",
+      "name": ""
+    },
+    {
+      "function": "internal/createTester.js@693..1048",
+      "name": ""
+    },
+    {
+      "function": "internal/eachOfLimit.js@1513..2033",
+      "name": "iterateeCallback"
+    },
+    {
+      "function": "internal/eachOfLimit.js@2043..2571",
+      "name": "replenish"
+    },
+    {
+      "function": "internal/eachOfLimit.js@628..723",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/eachOfLimit.js@743..2602",
+      "name": "default"
+    },
+    {
+      "function": "internal/eachOfLimit.js@765..2599",
+      "name": ""
+    },
+    {
+      "function": "internal/filter.js@1372..1586",
+      "name": "_filter"
+    },
+    {
+      "function": "internal/filter.js@318..413",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/filter.js@415..899",
+      "name": "filterArray"
+    },
+    {
+      "function": "internal/filter.js@532..670",
+      "name": ""
+    },
+    {
+      "function": "internal/filter.js@576..662",
+      "name": ""
+    },
+    {
+      "function": "internal/filter.js@672..895",
+      "name": ""
+    },
+    {
+      "function": "internal/getIterator.js@101..181",
+      "name": "default"
+    },
+    {
+      "function": "internal/initialParams.js@101..253",
+      "name": "default"
+    },
+    {
+      "function": "internal/initialParams.js@128..250",
+      "name": ""
+    },
+    {
+      "function": "internal/isArrayLike.js@113..245",
+      "name": "isArrayLike"
+    },
+    {
+      "function": "internal/iterator.js@1164..1426",
+      "name": "createIterator"
+    },
+    {
+      "function": "internal/iterator.js@333..428",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/iterator.js@430..609",
+      "name": "createArrayIterator"
+    },
+    {
+      "function": "internal/iterator.js@521..606",
+      "name": "next"
+    },
+    {
+      "function": "internal/iterator.js@839..1162",
+      "name": "createObjectIterator"
+    },
+    {
+      "function": "internal/iterator.js@976..1159",
+      "name": "next"
+    },
+    {
+      "function": "internal/map.js@212..307",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/map.js@309..727",
+      "name": "_asyncMap"
+    },
+    {
+      "function": "internal/map.js@507..675",
+      "name": ""
+    },
+    {
+      "function": "internal/map.js@587..667",
+      "name": ""
+    },
+    {
+      "function": "internal/map.js@677..723",
+      "name": ""
+    },
+    {
+      "function": "internal/once.js@106..328",
+      "name": "once"
+    },
+    {
+      "function": "internal/once.js@130..274",
+      "name": "wrapper"
+    },
+    {
+      "function": "internal/onlyOnce.js@110..326",
+      "name": "onlyOnce"
+    },
+    {
+      "function": "internal/onlyOnce.js@145..323",
+      "name": ""
+    },
+    {
+      "function": "internal/parallel.js@387..482",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/parallel.js@526..923",
+      "name": ""
+    },
+    {
+      "function": "internal/parallel.js@639..888",
+      "name": ""
+    },
+    {
+      "function": "internal/parallel.js@703..880",
+      "name": ""
+    },
+    {
+      "function": "internal/parallel.js@890..919",
+      "name": ""
+    },
+    {
+      "function": "internal/queue.js@1088..1160",
+      "name": "on"
+    },
+    {
+      "function": "internal/queue.js@1383..1615",
+      "name": "off"
+    },
+    {
+      "function": "internal/queue.js@1621..1721",
+      "name": "trigger"
+    },
+    {
+      "function": "internal/queue.js@1686..1713",
+      "name": ""
+    },
+    {
+      "function": "internal/queue.js@1764..2969",
+      "name": "_insert"
+    },
+    {
+      "function": "internal/queue.js@2027..2320",
+      "name": "promiseCallback"
+    },
+    {
+      "function": "internal/queue.js@2672..2767",
+      "name": ""
+    },
+    {
+      "function": "internal/queue.js@2854..2951",
+      "name": ""
+    },
+    {
+      "function": "internal/queue.js@2975..3810",
+      "name": "_createCB"
+    },
+    {
+      "function": "internal/queue.js@3018..3803",
+      "name": ""
+    },
+    {
+      "function": "internal/queue.js@3816..4077",
+      "name": "_maybeDrain"
+    },
+    {
+      "function": "internal/queue.js@4103..4427",
+      "name": "eventMethod"
+    },
+    {
+      "function": "internal/queue.js@4111..4427",
+      "name": ""
+    },
+    {
+      "function": "internal/queue.js@4532..4658",
+      "name": "_createTaskItem"
+    },
+    {
+      "function": "internal/queue.js@4876..5148",
+      "name": "push"
+    },
+    {
+      "function": "internal/queue.js@5017..5064",
+      "name": ""
+    },
+    {
+      "function": "internal/queue.js@544..639",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/queue.js@6162..7313",
+      "name": "process"
+    },
+    {
+      "function": "internal/queue.js@641..8488",
+      "name": "queue"
+    },
+    {
+      "function": "internal/queue.js@7518..7591",
+      "name": "idle"
+    },
+    {
+      "function": "internal/range.js@107..236",
+      "name": "range"
+    },
+    {
+      "function": "internal/reject.js@297..392",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/reject.js@394..661",
+      "name": "reject"
+    },
+    {
+      "function": "internal/reject.js@550..647",
+      "name": ""
+    },
+    {
+      "function": "internal/reject.js@591..639",
+      "name": ""
+    },
+    {
+      "function": "internal/setImmediate.js@530..608",
+      "name": "wrap"
+    },
+    {
+      "function": "internal/setImmediate.js@564..605",
+      "name": ""
+    },
+    {
+      "function": "internal/setImmediate.js@587..604",
+      "name": ""
+    },
+    {
+      "function": "internal/withoutIndex.js@115..217",
+      "name": "_withoutIndex"
+    },
+    {
+      "function": "internal/withoutIndex.js@161..214",
+      "name": ""
+    },
+    {
+      "function": "internal/wrapAsync.js@262..357",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "internal/wrapAsync.js@359..438",
+      "name": "isAsync"
+    },
+    {
+      "function": "internal/wrapAsync.js@440..529",
+      "name": "isAsyncGenerator"
+    },
+    {
+      "function": "internal/wrapAsync.js@531..624",
+      "name": "isAsyncIterable"
+    },
+    {
+      "function": "internal/wrapAsync.js@626..810",
+      "name": "wrapAsync"
+    },
+    {
+      "function": "log.js@200..295",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "map.js@363..458",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "map.js@4394..4511",
+      "name": "map"
+    },
+    {
+      "function": "mapLimit.js@1384..1530",
+      "name": "mapLimit"
+    },
+    {
+      "function": "mapLimit.js@392..487",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "mapSeries.js@1295..1424",
+      "name": "mapSeries"
+    },
+    {
+      "function": "mapSeries.js@387..482",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "mapValues.js@232..327",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "mapValues.js@4432..4556",
+      "name": "mapValues"
+    },
+    {
+      "function": "mapValuesLimit.js@1573..2020",
+      "name": "mapValuesLimit"
+    },
+    {
+      "function": "mapValuesLimit.js@1804..1986",
+      "name": ""
+    },
+    {
+      "function": "mapValuesLimit.js@1854..1978",
+      "name": ""
+    },
+    {
+      "function": "mapValuesLimit.js@1988..2016",
+      "name": ""
+    },
+    {
+      "function": "mapValuesLimit.js@503..598",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "mapValuesSeries.js@238..333",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "memoize.js@2028..3036",
+      "name": "memoize"
+    },
+    {
+      "function": "memoize.js@2058..2064",
+      "name": ""
+    },
+    {
+      "function": "memoize.js@2234..2955",
+      "name": ""
+    },
+    {
+      "function": "memoize.js@2358..2392",
+      "name": ""
+    },
+    {
+      "function": "memoize.js@2551..2937",
+      "name": ""
+    },
+    {
+      "function": "memoize.js@465..560",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "parallel.js@306..401",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "parallel.js@5431..5540",
+      "name": "parallel"
+    },
+    {
+      "function": "parallelLimit.js@1339..1477",
+      "name": "parallelLimit"
+    },
+    {
+      "function": "parallelLimit.js@338..433",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "priorityQueue.js@101..1136",
+      "name": "default"
+    },
+    {
+      "function": "priorityQueue.js@1312..1407",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "priorityQueue.js@338..468",
+      "name": "_createTaskItem"
+    },
+    {
+      "function": "priorityQueue.js@475..703",
+      "name": "createDataItems"
+    },
+    {
+      "function": "priorityQueue.js@788..899",
+      "name": "push"
+    },
+    {
+      "function": "queue.js@101..291",
+      "name": "default"
+    },
+    {
+      "function": "queue.js@218..271",
+      "name": ""
+    },
+    {
+      "function": "queue.js@496..591",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "race.js@1692..2045",
+      "name": "race"
+    },
+    {
+      "function": "race.js@386..481",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "reduce.js@4436..4790",
+      "name": "reduce"
+    },
+    {
+      "function": "reduce.js@4633..4758",
+      "name": ""
+    },
+    {
+      "function": "reduce.js@4680..4750",
+      "name": ""
+    },
+    {
+      "function": "reduce.js@4760..4786",
+      "name": ""
+    },
+    {
+      "function": "reduce.js@498..593",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "reduceRight.js@202..297",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "reflect.js@1607..2232",
+      "name": "reflect"
+    },
+    {
+      "function": "reflect.js@1714..2228",
+      "name": "reflectOn"
+    },
+    {
+      "function": "reflect.js@1776..2181",
+      "name": ""
+    },
+    {
+      "function": "reflect.js@344..439",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "reflectAll.js@205..300",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "reject.js@2465..2588",
+      "name": "reject"
+    },
+    {
+      "function": "reject.js@375..470",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "rejectLimit.js@404..499",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "rejectSeries.js@399..494",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "retry.js@283..378",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "retry.js@380..462",
+      "name": "constant"
+    },
+    {
+      "function": "retry.js@3953..5029",
+      "name": "retry"
+    },
+    {
+      "function": "retry.js@418..459",
+      "name": ""
+    },
+    {
+      "function": "retry.js@4558..4952",
+      "name": "retryAttempt"
+    },
+    {
+      "function": "retry.js@4598..4944",
+      "name": ""
+    },
+    {
+      "function": "retry.js@5031..5490",
+      "name": "parseTimes"
+    },
+    {
+      "function": "retryable.js@496..591",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "seq.js@1977..2619",
+      "name": "seq"
+    },
+    {
+      "function": "seq.js@2074..2616",
+      "name": ""
+    },
+    {
+      "function": "seq.js@2358..2516",
+      "name": ""
+    },
+    {
+      "function": "seq.js@2427..2503",
+      "name": ""
+    },
+    {
+      "function": "seq.js@2518..2555",
+      "name": ""
+    },
+    {
+      "function": "seq.js@369..464",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "series.js@328..423",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "series.js@5676..5789",
+      "name": "series"
+    },
+    {
+      "function": "setImmediate.js@204..299",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "some.js@3569..3717",
+      "name": "some"
+    },
+    {
+      "function": "some.js@3659..3669",
+      "name": ""
+    },
+    {
+      "function": "some.js@397..492",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "someLimit.js@426..521",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "someSeries.js@421..516",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "sortBy.js@373..468",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "sortBy.js@5530..6122",
+      "name": "sortBy"
+    },
+    {
+      "function": "sortBy.js@5666..5832",
+      "name": ""
+    },
+    {
+      "function": "sortBy.js@5704..5824",
+      "name": ""
+    },
+    {
+      "function": "sortBy.js@5834..5966",
+      "name": ""
+    },
+    {
+      "function": "sortBy.js@5945..5957",
+      "name": ""
+    },
+    {
+      "function": "sortBy.js@5974..6120",
+      "name": "comparator"
+    },
+    {
+      "function": "timeout.js@1857..2721",
+      "name": "timeout"
+    },
+    {
+      "function": "timeout.js@1994..2717",
+      "name": ""
+    },
+    {
+      "function": "timeout.js@2435..2578",
+      "name": ""
+    },
+    {
+      "function": "timeout.js@344..439",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "times.js@1341..1453",
+      "name": "times"
+    },
+    {
+      "function": "times.js@212..307",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "timesLimit.js@1211..1417",
+      "name": "timesLimit"
+    },
+    {
+      "function": "timesLimit.js@411..506",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "timesSeries.js@218..313",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "transform.js@464..559",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "tryEach.js@1956..2453",
+      "name": "tryEach"
+    },
+    {
+      "function": "tryEach.js@2074..2418",
+      "name": ""
+    },
+    {
+      "function": "tryEach.js@2133..2410",
+      "name": ""
+    },
+    {
+      "function": "tryEach.js@2420..2449",
+      "name": ""
+    },
+    {
+      "function": "tryEach.js@401..496",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "until.js@1852..2046",
+      "name": "until"
+    },
+    {
+      "function": "until.js@1978..2022",
+      "name": ""
+    },
+    {
+      "function": "until.js@1990..2021",
+      "name": ""
+    },
+    {
+      "function": "until.js@305..400",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "waterfall.js@2467..3114",
+      "name": "waterfall"
+    },
+    {
+      "function": "waterfall.js@2741..2891",
+      "name": "nextTask"
+    },
+    {
+      "function": "waterfall.js@2897..3093",
+      "name": "next"
+    },
+    {
+      "function": "waterfall.js@491..586",
+      "name": "_interopRequireDefault"
+    },
+    {
+      "function": "whilst.js@1660..2250",
+      "name": "whilst"
+    },
+    {
+      "function": "whilst.js@1879..2034",
+      "name": "next"
+    },
+    {
+      "function": "whilst.js@2040..2222",
+      "name": "check"
+    },
+    {
+      "function": "whilst.js@402..497",
+      "name": "_interopRequireDefault"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

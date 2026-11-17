@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "lib/adapters/adapters.js",
@@ -71,6 +71,1228 @@
   "instrumented_functions": 533,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "lib/adapters/adapters.js@1381..1462",
+      "name": "isResolvedHandle"
+    },
+    {
+      "function": "lib/adapters/adapters.js@1911..3183",
+      "name": "getAdapter"
+    },
+    {
+      "function": "lib/adapters/adapters.js@631..1037",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@11765..12127",
+      "name": "trackRequestStream"
+    },
+    {
+      "function": "lib/adapters/fetch.js@11875..12100",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@15963..16096",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@17704..17767",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@18179..18653",
+      "name": "onChunkProgress"
+    },
+    {
+      "function": "lib/adapters/fetch.js@18763..18854",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@1990..2082",
+      "name": "test"
+    },
+    {
+      "function": "lib/adapters/fetch.js@20352..20629",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@2118..2349",
+      "name": "maybeWithAuthCredentials"
+    },
+    {
+      "function": "lib/adapters/fetch.js@23341..24023",
+      "name": "getFetch"
+    },
+    {
+      "function": "lib/adapters/fetch.js@23522..23644",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@2368..23284",
+      "name": "factory"
+    },
+    {
+      "function": "lib/adapters/fetch.js@3294..3347",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@3307..3347",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@3556..4009",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@3720..3802",
+      "name": "duplex"
+    },
+    {
+      "function": "lib/adapters/fetch.js@4115..4166",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@4449..4500",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@4960..5447",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@5036..5439",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@5105..5429",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@5477..5873",
+      "name": "getBodyLength"
+    },
+    {
+      "function": "lib/adapters/fetch.js@5904..6062",
+      "name": "resolveBodyLength"
+    },
+    {
+      "function": "lib/adapters/fetch.js@6074..23281",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/fetch.js@6619..6685",
+      "name": "own"
+    },
+    {
+      "function": "lib/adapters/http.js@10165..10267",
+      "name": "flushOnFinish"
+    },
+    {
+      "function": "lib/adapters/http.js@12303..20268",
+      "name": "setProxy"
+    },
+    {
+      "function": "lib/adapters/http.js@20414..20930",
+      "name": "wrapAsync"
+    },
+    {
+      "function": "lib/adapters/http.js@20456..20926",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/http.js@20529..20649",
+      "name": "done"
+    },
+    {
+      "function": "lib/adapters/http.js@20673..20732",
+      "name": "_resolve"
+    },
+    {
+      "function": "lib/adapters/http.js@20755..20822",
+      "name": "_reject"
+    },
+    {
+      "function": "lib/adapters/http.js@20862..20905",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/http.js@23512..55805",
+      "name": "httpAdapter"
+    },
+    {
+      "function": "lib/adapters/http.js@23564..55799",
+      "name": "dispatchHttpRequest"
+    },
+    {
+      "function": "lib/adapters/http.js@24020..24059",
+      "name": "own"
+    },
+    {
+      "function": "lib/adapters/http.js@26149..26314",
+      "name": "clearConnectPhaseTimer"
+    },
+    {
+      "function": "lib/adapters/http.js@26993..27281",
+      "name": "onFinished"
+    },
+    {
+      "function": "lib/adapters/http.js@27553..28048",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/http.js@27914..27987",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/http.js@31958..32026",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/http.js@43375..50158",
+      "name": "handleResponse"
+    },
+    {
+      "function": "lib/adapters/http.js@47809..48564",
+      "name": "handleStreamData"
+    },
+    {
+      "function": "lib/adapters/http.js@49232..49939",
+      "name": "handleStreamEnd"
+    },
+    {
+      "function": "lib/adapters/http.js@51234..51995",
+      "name": "handleRequestSocket"
+    },
+    {
+      "function": "lib/adapters/http.js@52023..52286",
+      "name": "clearCurrentReq"
+    },
+    {
+      "function": "lib/adapters/http.js@5222..5422",
+      "name": "getProxyEnvAgent"
+    },
+    {
+      "function": "lib/adapters/http.js@5424..7671",
+      "name": "getDirectAgent"
+    },
+    {
+      "function": "lib/adapters/http.js@54265..54306",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/http.js@54440..54591",
+      "name": ""
+    },
+    {
+      "function": "lib/adapters/http.js@7673..8001",
+      "name": "setDirectAgent"
+    },
+    {
+      "function": "lib/adapters/http.js@9613..9655",
+      "name": ""
+    },
+    {
+      "function": "lib/axios.js@1385..1493",
+      "name": "create"
+    },
+    {
+      "function": "lib/axios.js@2044..2102",
+      "name": "all"
+    },
+    {
+      "function": "lib/axios.js@2299..2379",
+      "name": "formToJSON"
+    },
+    {
+      "function": "lib/axios.js@973..1516",
+      "name": "createInstance"
+    },
+    {
+      "function": "lib/cancel/CancelToken.js@1249..1502",
+      "name": "cancel"
+    },
+    {
+      "function": "lib/cancel/CancelToken.js@1590..1668",
+      "name": "throwIfRequested"
+    },
+    {
+      "function": "lib/cancel/CancelToken.js@2597..2764",
+      "name": "source"
+    },
+    {
+      "function": "lib/cancel/CancelToken.js@2665..2711",
+      "name": "executor"
+    },
+    {
+      "function": "lib/cancel/CancelToken.js@269..1508",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/cancel/CancelToken.js@457..530",
+      "name": "promiseExecutor"
+    },
+    {
+      "function": "lib/cancel/CancelToken.js@624..821",
+      "name": ""
+    },
+    {
+      "function": "lib/cancel/CanceledError.js@387..584",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/cancel/isCancel.js@30..98",
+      "name": "isCancel"
+    },
+    {
+      "function": "lib/core/Axios.js@10165..10483",
+      "name": "forEachMethodNoData"
+    },
+    {
+      "function": "lib/core/Axios.js@10258..10480",
+      "name": ""
+    },
+    {
+      "function": "lib/core/Axios.js@10536..11236",
+      "name": "forEachMethodWithData"
+    },
+    {
+      "function": "lib/core/Axios.js@10579..10948",
+      "name": "generateHTTPMethod"
+    },
+    {
+      "function": "lib/core/Axios.js@10628..10943",
+      "name": "httpMethod"
+    },
+    {
+      "function": "lib/core/Axios.js@1682..1873",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/core/Axios.js@2109..4186",
+      "name": "request"
+    },
+    {
+      "function": "lib/core/Axios.js@4190..9818",
+      "name": "_request"
+    },
+    {
+      "function": "lib/core/Axios.js@6916..7048",
+      "name": ""
+    },
+    {
+      "function": "lib/core/Axios.js@7284..7986",
+      "name": "unshiftRequestInterceptors"
+    },
+    {
+      "function": "lib/core/Axios.js@8070..8206",
+      "name": "pushResponseInterceptors"
+    },
+    {
+      "function": "lib/core/Axios.js@858..1502",
+      "name": "isHeadersBucket"
+    },
+    {
+      "function": "lib/core/Axios.js@9822..10060",
+      "name": "getUri"
+    },
+    {
+      "function": "lib/core/AxiosError.js@2761..2979",
+      "name": "getCauseStackIndex"
+    },
+    {
+      "function": "lib/core/AxiosError.js@3741..4478",
+      "name": "appendCauseStack"
+    },
+    {
+      "function": "lib/core/AxiosError.js@4515..6181",
+      "name": "from"
+    },
+    {
+      "function": "lib/core/AxiosError.js@6593..7443",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@10093..10125",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@10157..10707",
+      "name": "accessor"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@10390..10599",
+      "name": "defineAccessor"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@10919..11118",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@11035..11046",
+      "name": "get"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@218..310",
+      "name": "normalizeHeader"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@3019..3077",
+      "name": "isValidHeaderName"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@312..507",
+      "name": "normalizeValue"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@3823..3882",
+      "name": "headerSlot"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@4292..4471",
+      "name": "formatHeader"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@4403..4467",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@4473..5016",
+      "name": "buildAccessors"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@4601..5012",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@4866..4973",
+      "name": "value"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@5041..5101",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@509..741",
+      "name": "parseTokens"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@5105..6705",
+      "name": "set"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@5172..5602",
+      "name": "setHeader"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@5627..5737",
+      "name": "setHeaders"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@5679..5736",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@6709..7297",
+      "name": "get"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@7301..7603",
+      "name": "has"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@7607..8138",
+      "name": "delete"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@7686..7996",
+      "name": "deleteHeader"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@8462..9035",
+      "name": "normalize"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@8571..9011",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@9121..9388",
+      "name": "toJSON"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@9203..9365",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@9392..9478",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@9482..9613",
+      "name": "toString"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@9547..9589",
+      "name": ""
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@9837..9921",
+      "name": "from"
+    },
+    {
+      "function": "lib/core/AxiosHeaders.js@9999..10153",
+      "name": "concat"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@1479..1707",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@2079..2675",
+      "name": "use"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@269..346",
+      "name": "countHandlers"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@2822..3519",
+      "name": "eject"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@348..513",
+      "name": "trimHandlers"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@3604..3724",
+      "name": "clear"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@4019..4507",
+      "name": "forEach"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@4194..4283",
+      "name": "forEachHandler"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@673..823",
+      "name": "normalizeHandlerId"
+    },
+    {
+      "function": "lib/core/InterceptorManager.js@825..1448",
+      "name": "syncHandlerEntries"
+    },
+    {
+      "function": "lib/core/assertParamsAcyclic.js@106..1621",
+      "name": "assertParamsAcyclic"
+    },
+    {
+      "function": "lib/core/assertParamsAcyclic.js@1246..1613",
+      "name": ""
+    },
+    {
+      "function": "lib/core/buildFullPath.js@1723..2130",
+      "name": "assertValidHttpProtocolURL"
+    },
+    {
+      "function": "lib/core/buildFullPath.js@2528..2898",
+      "name": "buildFullPath"
+    },
+    {
+      "function": "lib/core/dispatchRequest.js@1151..1305",
+      "name": "resolveClock"
+    },
+    {
+      "function": "lib/core/dispatchRequest.js@1264..1287",
+      "name": ""
+    },
+    {
+      "function": "lib/core/dispatchRequest.js@1704..1790",
+      "name": "elapsedSince"
+    },
+    {
+      "function": "lib/core/dispatchRequest.js@2009..4217",
+      "name": "dispatchRequest"
+    },
+    {
+      "function": "lib/core/dispatchRequest.js@2865..3515",
+      "name": "onAdapterResolution"
+    },
+    {
+      "function": "lib/core/dispatchRequest.js@3521..4210",
+      "name": "onAdapterRejection"
+    },
+    {
+      "function": "lib/core/dispatchRequest.js@513..733",
+      "name": "throwIfCancellationRequested"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@1744..2152",
+      "name": ""
+    },
+    {
+      "function": "lib/core/mergeConfig.js@179..244",
+      "name": "headersToObject"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@2211..2563",
+      "name": "getMergedValue"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@2565..2798",
+      "name": "mergeDeepProperties"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@273..637",
+      "name": "ownEnumerableKeys"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@2846..2957",
+      "name": "valueFromConfig2"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@3005..3195",
+      "name": "defaultToConfig2"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@3905..4130",
+      "name": "mergeDirectKeys"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@4132..4251",
+      "name": "mergeHeaders"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@6213..7870",
+      "name": "mergeConfig"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@794..2209",
+      "name": "mergeParams"
+    },
+    {
+      "function": "lib/core/mergeConfig.js@900..1394",
+      "name": "copy"
+    },
+    {
+      "function": "lib/core/settle.js@353..845",
+      "name": "settle"
+    },
+    {
+      "function": "lib/core/transformData.js@392..775",
+      "name": "transformData"
+    },
+    {
+      "function": "lib/core/transformData.js@608..731",
+      "name": "transform"
+    },
+    {
+      "function": "lib/defaults/index.js@1360..3213",
+      "name": "transformRequest"
+    },
+    {
+      "function": "lib/defaults/index.js@3248..4306",
+      "name": "transformResponse"
+    },
+    {
+      "function": "lib/defaults/index.js@429..509",
+      "name": "own"
+    },
+    {
+      "function": "lib/defaults/index.js@4665..4744",
+      "name": "validateStatus"
+    },
+    {
+      "function": "lib/defaults/index.js@4900..4948",
+      "name": ""
+    },
+    {
+      "function": "lib/defaults/index.js@922..1236",
+      "name": "stringifySafely"
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@1111..1276",
+      "name": "_read"
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@1280..4088",
+      "name": "_transform"
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@175..1107",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@1845..2293",
+      "name": "pushChunk"
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@2323..3830",
+      "name": "transformChunk"
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@3859..4082",
+      "name": "transformNextChunk"
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@432..508",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/AxiosTransformStream.js@955..1101",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/AxiosURLSearchParams.js@1028..1095",
+      "name": "append"
+    },
+    {
+      "function": "lib/helpers/AxiosURLSearchParams.js@1119..1376",
+      "name": "toString"
+    },
+    {
+      "function": "lib/helpers/AxiosURLSearchParams.js@1180..1224",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/AxiosURLSearchParams.js@1270..1353",
+      "name": "each"
+    },
+    {
+      "function": "lib/helpers/AxiosURLSearchParams.js@838..956",
+      "name": "AxiosURLSearchParams"
+    },
+    {
+      "function": "lib/helpers/Http2Sessions.js@409..469",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/helpers/HttpStatusCode.js@1890..1993",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/bind.js@340..443",
+      "name": "bind"
+    },
+    {
+      "function": "lib/helpers/bind.js@378..440",
+      "name": "wrap"
+    },
+    {
+      "function": "lib/helpers/buildURL.js@337..501",
+      "name": "encode"
+    },
+    {
+      "function": "lib/helpers/buildURL.js@783..1818",
+      "name": "buildURL"
+    },
+    {
+      "function": "lib/helpers/combineURLs.js@223..491",
+      "name": "combineURLs"
+    },
+    {
+      "function": "lib/helpers/composeSignals.js@161..1610",
+      "name": "composeSignals"
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@1842..2063",
+      "name": "arrayToObject"
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@2065..2308",
+      "name": "normalizeArray"
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@208..451",
+      "name": "throwIfDepthExceeded"
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@2310..2664",
+      "name": "normalizeArrays"
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@2460..2642",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@2873..4128",
+      "name": "formDataToJSON"
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@2911..3863",
+      "name": "buildPath"
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@3993..4070",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/formDataToJSON.js@650..1662",
+      "name": "parsePropPath"
+    },
+    {
+      "function": "lib/helpers/formDataToStream.js@1299..1502",
+      "name": "encode"
+    },
+    {
+      "function": "lib/helpers/formDataToStream.js@1506..1707",
+      "name": "escapeName"
+    },
+    {
+      "function": "lib/helpers/formDataToStream.js@1736..3064",
+      "name": "formDataToStream"
+    },
+    {
+      "function": "lib/helpers/formDataToStream.js@2377..2498",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/formDataToStream.js@2901..3054",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/formDataToStream.js@461..1295",
+      "name": "constructor"
+    },
+    {
+      "function": "lib/helpers/isAbsoluteURL.js@212..616",
+      "name": "isAbsoluteURL"
+    },
+    {
+      "function": "lib/helpers/isAxiosError.js@267..368",
+      "name": "isAxiosError"
+    },
+    {
+      "function": "lib/helpers/normalizeURLForProtocolCheck.js@205..472",
+      "name": "normalizeURLForProtocolCheck"
+    },
+    {
+      "function": "lib/helpers/parseHeaders.js@1027..1568",
+      "name": "parser"
+    },
+    {
+      "function": "lib/helpers/parseHeaders.js@814..1590",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/progressEventReducer.js@1127..1333",
+      "name": "progressEventDecorator"
+    },
+    {
+      "function": "lib/helpers/progressEventReducer.js@1209..1307",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/progressEventReducer.js@1368..1447",
+      "name": "asyncDecorator"
+    },
+    {
+      "function": "lib/helpers/progressEventReducer.js@1402..1447",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/progressEventReducer.js@1429..1446",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/progressEventReducer.js@152..1086",
+      "name": "progressEventReducer"
+    },
+    {
+      "function": "lib/helpers/progressEventReducer.js@285..1076",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/resolveConfig.js@1192..1264",
+      "name": "own"
+    },
+    {
+      "function": "lib/helpers/resolveConfig.js@942..4024",
+      "name": "resolveConfig"
+    },
+    {
+      "function": "lib/helpers/sanitizeHeaderValue.js@1132..1201",
+      "name": "sanitizeHeaderValue"
+    },
+    {
+      "function": "lib/helpers/sanitizeHeaderValue.js@1249..1322",
+      "name": "sanitizeByteStringHeaderValue"
+    },
+    {
+      "function": "lib/helpers/sanitizeHeaderValue.js@1332..1588",
+      "name": "toByteStringHeaderObject"
+    },
+    {
+      "function": "lib/helpers/sanitizeHeaderValue.js@1461..1555",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/sanitizeHeaderValue.js@49..491",
+      "name": "trimSPorHTAB"
+    },
+    {
+      "function": "lib/helpers/sanitizeHeaderValue.js@882..1095",
+      "name": "sanitizeValue"
+    },
+    {
+      "function": "lib/helpers/speedometer.js@141..1064",
+      "name": "speedometer"
+    },
+    {
+      "function": "lib/helpers/speedometer.js@411..1061",
+      "name": "push"
+    },
+    {
+      "function": "lib/helpers/spread.js@463..565",
+      "name": "spread"
+    },
+    {
+      "function": "lib/helpers/spread.js@500..562",
+      "name": "wrap"
+    },
+    {
+      "function": "lib/helpers/throttle.js@107..892",
+      "name": "throttle"
+    },
+    {
+      "function": "lib/helpers/throttle.js@236..398",
+      "name": "invoke"
+    },
+    {
+      "function": "lib/helpers/throttle.js@421..748",
+      "name": "throttled"
+    },
+    {
+      "function": "lib/helpers/throttle.js@767..801",
+      "name": "flush"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@1364..1671",
+      "name": "renderKey"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@1467..1640",
+      "name": "each"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@1849..1933",
+      "name": "isFlatArray"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@1990..2047",
+      "name": "filter"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@2635..7703",
+      "name": "toFormData"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@2898..3031",
+      "name": "option"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@3595..4367",
+      "name": "convertValue"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@4371..4621",
+      "name": "throwIfMaxDepthExceeded"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@5428..6845",
+      "name": "defaultVisitor"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@6263..6657",
+      "name": "each"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@658..750",
+      "name": "isVisitable"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@6964..7580",
+      "name": "build"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@7255..7556",
+      "name": "each"
+    },
+    {
+      "function": "lib/helpers/toFormData.js@920..1013",
+      "name": "removeBrackets"
+    },
+    {
+      "function": "lib/helpers/trackStream.js@1107..1618",
+      "name": "pull"
+    },
+    {
+      "function": "lib/helpers/trackStream.js@27..291",
+      "name": "streamChunk"
+    },
+    {
+      "function": "lib/helpers/trackStream.js@319..458",
+      "name": "readBytes"
+    },
+    {
+      "function": "lib/helpers/trackStream.js@480..804",
+      "name": "readStream"
+    },
+    {
+      "function": "lib/helpers/trackStream.js@834..1762",
+      "name": "trackStream"
+    },
+    {
+      "function": "lib/helpers/trackStream.js@978..1063",
+      "name": "_onFinish"
+    },
+    {
+      "function": "lib/helpers/validator.js@1060..1649",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/validator.js@1677..1881",
+      "name": "spelling"
+    },
+    {
+      "function": "lib/helpers/validator.js@2042..3030",
+      "name": "assertOptions"
+    },
+    {
+      "function": "lib/helpers/validator.js@241..382",
+      "name": ""
+    },
+    {
+      "function": "lib/helpers/validator.js@277..379",
+      "name": "validator"
+    },
+    {
+      "function": "lib/helpers/validator.js@750..1652",
+      "name": "transitional"
+    },
+    {
+      "function": "lib/platform/common/utils.js@1193..1393",
+      "name": ""
+    },
+    {
+      "function": "lib/platform/node/index.js@326..610",
+      "name": "generateString"
+    },
+    {
+      "function": "lib/utils.js@11307..11373",
+      "name": "isReactNative"
+    },
+    {
+      "function": "lib/utils.js@11959..12005",
+      "name": "isStream"
+    },
+    {
+      "function": "lib/utils.js@12166..12415",
+      "name": "getGlobal"
+    },
+    {
+      "function": "lib/utils.js@12541..13118",
+      "name": "isFormData"
+    },
+    {
+      "function": "lib/utils.js@1317..1406",
+      "name": "isPrototypeBoundary"
+    },
+    {
+      "function": "lib/utils.js@14335..15146",
+      "name": "forEach"
+    },
+    {
+      "function": "lib/utils.js@15480..15772",
+      "name": "findKey"
+    },
+    {
+      "function": "lib/utils.js@15791..15979",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@16010..16067",
+      "name": "isContextDefined"
+    },
+    {
+      "function": "lib/utils.js@16550..18970",
+      "name": "merge"
+    },
+    {
+      "function": "lib/utils.js@17110..18406",
+      "name": "assignValue"
+    },
+    {
+      "function": "lib/utils.js@1874..2344",
+      "name": "isSafeAndFullyMutable"
+    },
+    {
+      "function": "lib/utils.js@19357..20072",
+      "name": "extend"
+    },
+    {
+      "function": "lib/utils.js@19421..20033",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@20256..20368",
+      "name": "stripBOM"
+    },
+    {
+      "function": "lib/utils.js@2111..2340",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@21369..22064",
+      "name": "toFlatObject"
+    },
+    {
+      "function": "lib/utils.js@22286..22576",
+      "name": "endsWith"
+    },
+    {
+      "function": "lib/utils.js@24074..24215",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@24142..24212",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@24539..24782",
+      "name": "forEachEntry"
+    },
+    {
+      "function": "lib/utils.js@25355..25498",
+      "name": "toCamelCase"
+    },
+    {
+      "function": "lib/utils.js@25426..25494",
+      "name": "replacer"
+    },
+    {
+      "function": "lib/utils.js@25784..26137",
+      "name": "reduceDescriptors"
+    },
+    {
+      "function": "lib/utils.js@25922..26080",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@26225..26782",
+      "name": "freezeMethods"
+    },
+    {
+      "function": "lib/utils.js@26261..26778",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@27190..27452",
+      "name": "toObjectSet"
+    },
+    {
+      "function": "lib/utils.js@27258..27334",
+      "name": "define"
+    },
+    {
+      "function": "lib/utils.js@27285..27328",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@27468..27476",
+      "name": "noop"
+    },
+    {
+      "function": "lib/utils.js@27502..27614",
+      "name": "toFiniteNumber"
+    },
+    {
+      "function": "lib/utils.js@27776..27939",
+      "name": "isSpecCompliantForm"
+    },
+    {
+      "function": "lib/utils.js@2966..3368",
+      "name": "hasOwnInPrototypeChain"
+    },
+    {
+      "function": "lib/utils.js@30323..30930",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@31412..31467",
+      "name": "isIterable"
+    },
+    {
+      "function": "lib/utils.js@31975..32065",
+      "name": "isSafeIterable"
+    },
+    {
+      "function": "lib/utils.js@342..417",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@368..417",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@3870..3959",
+      "name": "getSafeProp"
+    },
+    {
+      "function": "lib/utils.js@4422..5520",
+      "name": "toSafeFlatObject"
+    },
+    {
+      "function": "lib/utils.js@466..580",
+      "name": "isUnsafeObjectKey"
+    },
+    {
+      "function": "lib/utils.js@5539..5670",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@5550..5670",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@5714..5800",
+      "name": "kindOfTest"
+    },
+    {
+      "function": "lib/utils.js@5764..5797",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@5822..5864",
+      "name": "typeOfTest"
+    },
+    {
+      "function": "lib/utils.js@5832..5864",
+      "name": ""
+    },
+    {
+      "function": "lib/utils.js@6414..6648",
+      "name": "isBuffer"
+    },
+    {
+      "function": "lib/utils.js@7046..7292",
+      "name": "isArrayBufferView"
+    },
+    {
+      "function": "lib/utils.js@8044..8098",
+      "name": "isObject"
+    },
+    {
+      "function": "lib/utils.js@8271..8315",
+      "name": "isBoolean"
+    },
+    {
+      "function": "lib/utils.js@8503..9525",
+      "name": "isPlainObject"
+    }
+  ],
   "edges": [
     {
       "kind": "call",
