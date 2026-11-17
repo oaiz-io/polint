@@ -396,7 +396,12 @@ def sandbox_run(
         if driver is not None:
             argv += ["-e", f"BENCH_DRIVER={driver}"]
         if stubs:
-            argv += ["-v", f"{OBSERVED / 'stubs' / 'node_modules'}:/bench/node_modules:ro"]
+            stub_modules = OBSERVED / "stubs" / "node_modules"
+            # Docker would create a missing mount source as an empty,
+            # root-owned directory and the package would fail to load.
+            if not stub_modules.is_dir():
+                raise SystemExit(f"{stub_modules} is missing; the stub modules are committed with the bench")
+            argv += ["-v", f"{stub_modules}:/bench/node_modules:ro"]
         if modules is not None:
             argv += ["-v", f"{modules}:/bench/pkg/node_modules:ro"]
         argv += [
