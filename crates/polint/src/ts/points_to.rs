@@ -127,6 +127,8 @@ impl TsPointsToInputs {
 pub struct TsPointsToSolveResult {
     pub points_to: PointsToSolveResult,
     pub derived_edges: Vec<DerivedEdgeFact>,
+    /// Call sites whose callee set the solve left incomplete under its budget.
+    pub incomplete_sites: u64,
 }
 
 pub fn solve_ts_points_to(
@@ -144,13 +146,22 @@ pub fn solve_ts_points_to(
     // Membership-only dedup by StableKeyId; emission order is assigned below via
     // `SolverOutput::normalized` (resolved-text sort), never allocation order.
     let mut edges = std::collections::HashMap::new();
+    let mut incomplete_sites = 0_u64;
 
     for callsite in &inputs.callsites {
         let Some(set) = sets.get(&var_for_node(callsite.callsite_node)) else {
             continue;
         };
-        if set.status != PointsToStatus::Present {
-            continue;
+        // An incomplete set still derives its edges, with the set's status: every
+        // object in it was derived, and the site is reported as incomplete.
+        match set.status {
+            PointsToStatus::Present => {}
+            PointsToStatus::BudgetExceeded => incomplete_sites += 1,
+            PointsToStatus::Unknown
+            | PointsToStatus::Unsupported
+            | PointsToStatus::SetupMissing => {
+                continue;
+            }
         }
         for object in &set.objects {
             let Some((target, target_stable_key)) = inputs.callable_objects.get(object) else {
@@ -215,6 +226,7 @@ pub fn solve_ts_points_to(
     TsPointsToSolveResult {
         points_to,
         derived_edges,
+        incomplete_sites,
     }
 }
 
@@ -229,6 +241,7 @@ fn project_constraints(
             &mut projected,
             node_stable_key,
             "callable_object",
+            PointsToPrecision::FlowInsensitive,
             PointsToConstraintKind::AddressOf {
                 dst: var_for_node(node),
                 object,
@@ -246,6 +259,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "copy",
+                    constraint.precision,
                     PointsToConstraintKind::Copy {
                         dst: var_for_node(*dst),
                         src: var_for_node(*src),
@@ -259,6 +273,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "allocation_object",
+                    constraint.precision,
                     PointsToConstraintKind::AddressOf {
                         dst: var_for_node(*object),
                         object: object_token,
@@ -269,6 +284,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "allocation_destination",
+                    constraint.precision,
                     PointsToConstraintKind::AddressOf {
                         dst: var_for_node(*dst),
                         object: object_token,
@@ -281,6 +297,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "field_load",
+                    constraint.precision,
                     PointsToConstraintKind::FieldLoad {
                         dst: var_for_node(*dst),
                         base: var_for_node(*base),
@@ -294,6 +311,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "field_store",
+                    constraint.precision,
                     PointsToConstraintKind::FieldStore {
                         base: var_for_node(*base),
                         field: field.clone(),
@@ -310,21 +328,24 @@ fn project_constraints(
     projected
         .into_iter()
         .enumerate()
-        .map(|(index, (_, (stable_key, kind)))| PointsToConstraintFact {
-            id: PointsToConstraintId(index as u64),
-            stable_key,
-            kind,
-            status: PointsToStatus::Present,
-            precision: PointsToPrecision::FlowInsensitive,
-        })
+        .map(
+            |(index, (_, (stable_key, kind, precision)))| PointsToConstraintFact {
+                id: PointsToConstraintId(index as u64),
+                stable_key,
+                kind,
+                status: PointsToStatus::Present,
+                precision,
+            },
+        )
         .collect()
 }
 
 fn insert_projected_constraint(
     interner: &crate::internal_core::StableKeyInterner,
-    projected: &mut BTreeMap<String, (StableKeyId, PointsToConstraintKind)>,
+    projected: &mut BTreeMap<String, (StableKeyId, PointsToConstraintKind, PointsToPrecision)>,
     source_stable_key: StableKeyId,
     relation: &str,
+    precision: PointsToPrecision,
     kind: PointsToConstraintKind,
 ) {
     let stable_key = stable_key_from_parts(
@@ -335,9 +356,12 @@ fn insert_projected_constraint(
             ("relation", relation.to_string()),
         ],
     );
+    // A key seen twice keeps the weaker precision, so a heuristic source is
+    // never projected as exact.
     projected
         .entry(interner.resolve(stable_key).to_string())
-        .or_insert((stable_key, kind));
+        .and_modify(|(_, _, held)| *held = (*held).max(precision))
+        .or_insert((stable_key, kind, precision));
 }
 
 fn var_for_node(node: SemanticNodeId) -> PtVarId {

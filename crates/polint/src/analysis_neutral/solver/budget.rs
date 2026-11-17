@@ -11,8 +11,9 @@
 //! `PointsToBudgetStatus` are treated as a **sub-domain projection** of the
 //! unified types via explicit mapping functions
 //! ([`SolverBudget::points_to_budget`] / [`BudgetStatus::from_points_to`]) rather
-//! than editing `PointsToBudget`. Its `Default` (10_000 / 64 / 512) stays
-//! byte-identical, so points-to fixtures do not change.
+//! than editing `PointsToBudget`. The two defaults are equal, and the
+//! points-to step ceiling is its own knob because `max_steps` also bounds the
+//! engine's edge closure.
 
 use serde::{Deserialize, Serialize};
 
@@ -26,17 +27,18 @@ use crate::analysis_neutral::points_to::solver::PointsToBudget;
 /// the points-to-specific caps plus the Go RTA and TS token controls.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PointsToSubBudget {
+    pub max_steps: usize,
     pub max_objects_per_var: usize,
     pub max_dynamic_vars: usize,
 }
 
 impl Default for PointsToSubBudget {
     fn default() -> Self {
-        // Mirror `PointsToBudget::default()` (64 / 512) so the projection stays
-        // byte-identical to the standalone points-to defaults.
+        let standalone = PointsToBudget::default();
         Self {
-            max_objects_per_var: 64,
-            max_dynamic_vars: 512,
+            max_steps: standalone.max_steps,
+            max_objects_per_var: standalone.max_objects_per_var,
+            max_dynamic_vars: standalone.max_dynamic_vars,
         }
     }
 }
@@ -133,7 +135,7 @@ impl SolverBudget {
     /// `Default`, so the points-to fixtures stay byte-identical.
     pub fn points_to_budget(&self) -> PointsToBudget {
         PointsToBudget {
-            max_steps: self.max_steps,
+            max_steps: self.points_to.max_steps,
             max_objects_per_var: self.points_to.max_objects_per_var,
             max_dynamic_vars: self.points_to.max_dynamic_vars,
         }
@@ -244,13 +246,14 @@ mod tests {
         assert_eq!(budget.max_steps, 10_000);
         assert!(budget.max_outer_iterations > 0);
 
-        // The projection reproduces the standalone points-to defaults exactly,
-        // without touching PointsToBudget::default itself.
+        // The projection reproduces the standalone points-to defaults exactly.
+        // The points-to step ceiling is its own knob: the cross-domain
+        // `max_steps` also bounds the engine's edge closure.
         let projected = budget.points_to_budget();
         assert_eq!(projected, PointsToBudget::default());
-        assert_eq!(projected.max_steps, 10_000);
-        assert_eq!(projected.max_objects_per_var, 64);
-        assert_eq!(projected.max_dynamic_vars, 512);
+        assert_eq!(projected.max_steps, 50_000_000);
+        assert_eq!(projected.max_objects_per_var, 4_096);
+        assert_eq!(projected.max_dynamic_vars, 4_000_000);
     }
 
     #[test]
@@ -284,12 +287,13 @@ mod tests {
 
     #[test]
     fn points_to_budget_default_is_unchanged_by_projection() {
-        // Guard the D-03/D-05 invariant: the standalone points-to defaults remain
-        // 10_000 / 64 / 512 (byte-identical fixtures).
+        // The standalone defaults are ceilings a real package stays under:
+        // the old 10_000 / 64 / 512 stopped every package above about a
+        // thousand call sites.
         let pt = PointsToBudget::default();
-        assert_eq!(pt.max_steps, 10_000);
-        assert_eq!(pt.max_objects_per_var, 64);
-        assert_eq!(pt.max_dynamic_vars, 512);
+        assert_eq!(pt.max_steps, 50_000_000);
+        assert_eq!(pt.max_objects_per_var, 4_096);
+        assert_eq!(pt.max_dynamic_vars, 4_000_000);
     }
 
     #[test]

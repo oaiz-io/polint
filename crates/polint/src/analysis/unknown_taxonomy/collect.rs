@@ -20,6 +20,7 @@ use crate::analysis::unknown_taxonomy::facts::{
     UnknownCategory, UnknownRow, UnknownRowInput, UnknownSpan, normalize_rows,
 };
 use crate::analysis_kernel::FactFamily;
+use crate::analysis_neutral::module_graph::topology::TopologyPackageKind;
 #[cfg(test)]
 use crate::core::ResolutionPrecision;
 use crate::core::{AnalysisDb, ResolutionStatus, SymbolPrecision, SymbolResolutionStatus};
@@ -339,12 +340,28 @@ fn unsupported_semantic_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
         .collect()
 }
 
+/// The name of the analysed package: the package whose manifest is nearest the
+/// workspace root, or `<workspace>` when no package manifest was read.
+fn analysed_package_name(db: &AnalysisDb) -> String {
+    db.topology_packages()
+        .iter()
+        .filter(|package| package.kind != TopologyPackageKind::External)
+        .min_by(|left, right| {
+            (left.path.len(), &left.path, &left.name).cmp(&(
+                right.path.len(),
+                &right.path,
+                &right.name,
+            ))
+        })
+        .map_or_else(|| "<workspace>".to_string(), |package| package.name.clone())
+}
+
 fn solver_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let mut rows = Vec::new();
     if db.solver_budget_status() == crate::analysis::solver::budget::BudgetStatus::BudgetExceeded {
-        let reason = if db.solver_budget_reasons().is_empty() {
+        let reasons = if db.solver_budget_reasons().is_empty() {
             "budget_exceeded".to_string()
         } else {
             db.solver_budget_reasons()
@@ -353,6 +370,11 @@ fn solver_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
                 .collect::<Vec<_>>()
                 .join(",")
         };
+        let reason = format!(
+            "{reasons} (package {}, {} call sites incomplete)",
+            analysed_package_name(db),
+            db.solver_incomplete_sites()
+        );
         rows.push(UnknownRow::new(UnknownRowInput {
             category: UnknownCategory::BudgetExceeded,
             capability: Some("solver".to_string()),
@@ -1187,6 +1209,7 @@ mod tests {
             }],
             budget_status: BudgetStatus::BudgetExceeded,
             budget_reasons: BTreeSet::from(["solver.max_steps".to_string()]),
+            incomplete_sites: 0,
         })
         .expect("solver facts");
         let file = db.add_file("a.ts".into(), "a.ts".to_string(), "call();".to_string());
@@ -1244,7 +1267,8 @@ mod tests {
         assert!(
             graph_engine_unknowns(&db).iter().any(|row| {
                 row.family.as_deref() == Some("SolverRun")
-                    && row.reason.as_deref() == Some("solver.max_steps")
+                    && row.reason.as_deref()
+                        == Some("solver.max_steps (package <workspace>, 0 call sites incomplete)")
             }),
             "run-level solver budget reason must survive storage and taxonomy projection"
         );
@@ -1256,6 +1280,7 @@ mod tests {
         db.replace_solver_facts(SolverOutput {
             budget_status: BudgetStatus::BudgetExceeded,
             budget_reasons: BTreeSet::from(["go.max_rta_rounds".to_string()]),
+            incomplete_sites: 3,
             ..SolverOutput::default()
         })
         .expect("solver facts");
@@ -1265,7 +1290,59 @@ mod tests {
         assert!(rows.iter().any(|row| {
             row.family.as_deref() == Some("SolverRun")
                 && row.category == UnknownCategory::BudgetExceeded
-                && row.reason.as_deref() == Some("go.max_rta_rounds")
+                && row.reason.as_deref()
+                    == Some("go.max_rta_rounds (package <workspace>, 3 call sites incomplete)")
+        }));
+    }
+
+    #[test]
+    fn run_level_solver_budget_row_names_the_package_nearest_the_root() {
+        use crate::analysis_neutral::module_graph::topology::{
+            TopologyOutput, TopologyPackageFact, TopologyPackageId, TopologyPrecision,
+            TopologyStatus,
+        };
+        let mut db = AnalysisDb::new();
+        let package =
+            |id: u64, name: &str, path: &str, kind: TopologyPackageKind| TopologyPackageFact {
+                id: TopologyPackageId(id),
+                workspace_root: None,
+                package: None,
+                module_node: None,
+                kind,
+                name: name.to_string(),
+                version: None,
+                path: path.to_string(),
+                language: Some(Language::TypeScript),
+                stable_key: db
+                    .stable_key_interner()
+                    .intern(format!("js-package:{path}:{name}")),
+                producer_id: "test",
+                precision: TopologyPrecision::ExactStatic,
+                status: TopologyStatus::Present,
+            };
+        let packages = vec![
+            package(0, "inner", "packages/inner", TopologyPackageKind::JsPackage),
+            package(1, "dep", "", TopologyPackageKind::External),
+            package(2, "outer", "packages", TopologyPackageKind::JsPackage),
+        ];
+        db.replace_topology_facts(TopologyOutput {
+            packages,
+            ..TopologyOutput::default()
+        });
+        db.replace_solver_facts(SolverOutput {
+            budget_status: BudgetStatus::BudgetExceeded,
+            budget_reasons: BTreeSet::from(["solver.max_steps".to_string()]),
+            incomplete_sites: 2,
+            ..SolverOutput::default()
+        })
+        .expect("solver facts");
+
+        let rows = graph_engine_unknowns(&db);
+
+        assert!(rows.iter().any(|row| {
+            row.family.as_deref() == Some("SolverRun")
+                && row.reason.as_deref()
+                    == Some("solver.max_steps (package outer, 2 call sites incomplete)")
         }));
     }
 

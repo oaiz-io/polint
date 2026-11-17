@@ -34,6 +34,8 @@ pub struct SolverPolicyOutcome {
     pub budget_reasons: BTreeSet<String>,
     /// Number of internal work steps reported by this policy.
     pub steps: u64,
+    /// Call sites this policy left incomplete because its budget ran out.
+    pub incomplete_sites: u64,
 }
 
 impl SolverPolicyOutcome {
@@ -45,6 +47,7 @@ impl SolverPolicyOutcome {
             budget_status: BudgetStatus::WithinBudget,
             budget_reasons: BTreeSet::new(),
             steps: 0,
+            incomplete_sites: 0,
         }
     }
 }
@@ -88,6 +91,7 @@ impl SolverPolicy for PointsToPolicy {
             budget_status,
             budget_reasons,
             steps: 0,
+            incomplete_sites: 0,
         }
     }
 }

@@ -781,11 +781,13 @@ max_object_receiver_candidates_per_callsite = 127
             derived_edges: Vec::new(),
             budget_status: BudgetStatus::WithinBudget,
             budget_reasons: BTreeSet::new(),
+            incomplete_sites: 0,
         };
         let exceeded = SolverOutput {
             derived_edges: Vec::new(),
             budget_status: BudgetStatus::BudgetExceeded,
             budget_reasons: BTreeSet::from([BudgetReason::SolverMaxSteps.as_str().to_string()]),
+            incomplete_sites: 0,
         };
 
         let interner = crate::core::test_stable_key_interner();

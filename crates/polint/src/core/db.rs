@@ -1844,6 +1844,10 @@ impl AnalysisDb {
         self.solver_store_inner().budget_reasons()
     }
 
+    pub(crate) fn solver_incomplete_sites(&self) -> u64 {
+        self.solver_store_inner().incomplete_sites()
+    }
+
     /// Test helper: install Go semantic facts into the facade DB (production writes go through
     /// the `polint-go` provider → fact-store path).
     #[cfg(test)]

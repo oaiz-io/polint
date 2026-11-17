@@ -391,12 +391,47 @@ fn budget_event_keeps_sets_and_edges_derived_before_it() {
     );
 }
 
+/// A call through a set the budget left incomplete keeps the edges it has,
+/// marked incomplete, and is counted as a site left incomplete.
+#[test]
+fn call_through_an_incomplete_set_keeps_its_edges_and_is_counted() {
+    let mut fixture = budget_fixture();
+    fixture.call(
+        "main",
+        "x()",
+        Call {
+            callee: "x",
+            ..Call::default()
+        },
+    );
+    let unbounded = fixture.solve(&SolverBudget::default());
+    assert_eq!(unbounded.incomplete_sites, 0);
+
+    let result = fixture.solve(&budget(|budget| budget.points_to.max_objects_per_var = 1));
+    assert_eq!(
+        fixture.targets(&result, "x()"),
+        BTreeMap::from([(
+            "f".to_string(),
+            (
+                PointsToStatus::BudgetExceeded,
+                PointsToPrecision::FlowInsensitive
+            )
+        )]),
+        "the edge derived before the event is kept and marked incomplete"
+    );
+    assert_eq!(
+        fixture.targets(&result, "d()"),
+        BTreeMap::from([("f".to_string(), EXACT)])
+    );
+    assert_eq!(result.incomplete_sites, 1, "only `x()` is left incomplete");
+}
+
 /// The degenerate budget stays honest: no step, no set, no edge, and the
 /// run says why.
 #[test]
 fn zero_step_budget_derives_nothing_and_says_so() {
     let fixture = budget_fixture();
-    let result = fixture.solve(&budget(|budget| budget.max_steps = 0));
+    let result = fixture.solve(&budget(|budget| budget.points_to.max_steps = 0));
     assert_eq!(
         result.points_to.budget_status,
         PointsToBudgetStatus::BudgetExceeded
@@ -414,6 +449,10 @@ fn zero_step_budget_derives_nothing_and_says_so() {
         "no object is placed without a step"
     );
     assert!(result.derived_edges.is_empty());
+    assert_eq!(
+        result.incomplete_sites, 1,
+        "the one call site is incomplete"
+    );
 }
 
 /// `function g(p, q) { q() }`, called as `g(h1, h2)`.
