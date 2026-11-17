@@ -17,6 +17,29 @@ earlier decisions it moves.
   target benchmarks.
 - [VALIDATION.md](VALIDATION.md): the source trail and what was not checked.
 
+The research done before the iteration starts, 2026-11-17:
+
+- [DIAGNOSIS.md](DIAGNOSIS.md): why the classical layer misses what it
+  misses, checked in the code and measured. The first diagnosis was
+  corrected: the points-to solve is discarded by a budget latch on every
+  package above about a thousand call sites, the solver has no call rule,
+  and lowering is incomplete in listed ways. Twenty missed edges traced.
+- [BASELINES.md](BASELINES.md): Jelly and ACG run on the same packages and
+  scored by the same oracle. Jelly static 84.5%, at 13 wrong single-target
+  and 5,811 wrong multi-target claims.
+- [HELD-OUT.md](HELD-OUT.md): the held-out set, pinned, with the recording
+  protocol and what the Jelly PLDI 2024 artifact does and does not offer.
+- [TIERS.md](TIERS.md): the closed lists: `CallPrecision` to the two tiers,
+  the assumptions an exact claim may carry, the constructs WP2 must lower
+  against what MIR carries.
+- [STORAGE-A.md](STORAGE-A.md): the monotonicity argument against this
+  solver's real behaviour, and what the stitch must re-derive.
+- [TARGETS.md](TARGETS.md): every target kept, replaced or added, with the
+  reason.
+- [implementation/README.md](implementation/README.md): the pull-request
+  sequence for WP0 to WP6 and the map to the GSD phases under
+  `.planning/phases/72-…` to `79-…`.
+
 ## The goal
 
 A whole program is the application plus every library it depends on, and most

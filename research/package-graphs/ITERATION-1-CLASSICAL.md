@@ -75,22 +75,51 @@ missing part is value flow.
   and four rounds across modules. Its own description is "bounded, heuristic
   callable flow".
 
-Reading (confidence: medium; the module documentation and the constraint
-projection in `ts/semantic_graph_build.rs` were read, not all of the walker):
-the solver is not the gap. The gap is that JS/TS value flow is not lowered
-into constraints completely and uniformly. A walk that starts at a call site
-and looks for its callee finds what its recognisers cover; a constraint for
-every assignment, property access, argument and return finds what the program
-does.
+The first reading of this document (medium confidence, before the code was
+read in full) was that the solver is not the gap and lowering is. That reading
+was checked and corrected in [DIAGNOSIS.md](DIAGNOSIS.md); the verdict, in
+order of weight:
 
-Evidence that fits this reading: on zod the refined layer resolves 274 call
-sites more than base (43,508 to 43,234 without a target), none of them on an
-executed edge, at 3.7 times the time and 2.9 times the memory.
+1. The points-to solve is discarded wholesale on every package above about a
+   thousand call sites: three global budgets sized for fixtures (10,000 steps,
+   64 objects per set, 512 field slots) mark every set `BudgetExceeded` when
+   one trips, and no edge is derived from such a set. axios, async and zod
+   have zero resolved points-to edges; `polint inspect unknowns` on axios
+   reports the latch. The walker's rows ride through the same solve and are
+   lost with it. Only commander stays inside the budget, which is the whole
+   of the `refined` column's gain.
+2. The solver has no call rule (arguments to parameters, return to result,
+   receiver to `this`). The walker does that job with recognisers under a
+   depth cap, a visit budget, four module rounds and a single return pass.
+   It is not a fixed point and cannot be made one.
+3. Lowering is incomplete in the specific ways the twenty traces in
+   DIAGNOSIS §3 list: closures that capture parameters, function objects with
+   properties, rest and spread, `call`/`apply`/`bind`, `(0, f)(x)`, `this` in
+   object-literal methods, computed keys with a known field set, and the
+   platform.
+4. The typed plan's 15 wrong exact targets come from the join between the
+   checker's declaration and polint's functions falling back to the nearest
+   enclosing function, not from the checker.
+
+The "274 call sites more than base on zod" were not the points-to layer:
+they are test-framework recogniser rows in `src/**/tests/**`, files the
+driver never runs, which the refined plan's capabilities enable. The
+outside baselines are now measured, not quoted: Jelly static reaches 84.5%
+on these packages with 13 wrong single-target claims and 5,811 wrong
+multi-target claims ([BASELINES.md](BASELINES.md)).
 
 ## Work packages
 
 In order. Each is its own pull request. Each lands with tests that fail
-without it, and a bench report that shows its effect.
+without it, and a bench report that shows its effect. The executable plan,
+one GSD phase per pull request with files, steps, fixtures-first tests,
+exit commands, mutation checks and the lines not to cross, is in
+[implementation/README.md](implementation/README.md) and
+`.planning/phases/72-…` to `79-…`. The diagnosis moved two things: WP2 lands
+as two pull requests, the solver's call rule and budget semantics first
+(nothing lowered can be measured while the solve is discarded), then the
+lowering; and the walker's retirement is a measured criterion of WP2, not a
+hope.
 
 ### WP0. Measure first
 
@@ -106,16 +135,23 @@ without it, and a bench report that shows its effect.
    percentile).
 3. **Open-site report.** Share of call sites that are open, by reason.
 4. **Outside baselines on the same packages, scored by the same scorer.**
-   Jelly (static, and with `--approx`) and the field-based analysis of
-   Feldthaus et al. This replaces averages borrowed from papers with numbers
-   on this bench. The micro suite's manifest
-   (`research/evaluation-harness/suites/jelly-callgraph-micro.toml`) already
-   pins a Jelly checkout.
-5. **A held-out set.** Add packages that no change is tuned on.
-   `static-analysis-2.0/OPEN-QUESTIONS.md` Q1 already decided the source:
-   projects from the Jelly PLDI 2024 artifact that have dynamic call graphs.
-   Record driver coverage for every package, so a recall number over a thin
-   run is visible as such.
+   Measured in [BASELINES.md](BASELINES.md) with a throwaway scorer: Jelly
+   static 84.5%, `--approx` 85.4%, ACG unusable on modern syntax. WP0 commits
+   the scorer as a bench measure so the columns are reproducible from
+   tracked files.
+5. **A held-out set.** Decided in [HELD-OUT.md](HELD-OUT.md): eight pinned
+   packages, their observed calls recorded once under the authorship rule,
+   driver coverage reported with every number. The Jelly PLDI 2024 artifact
+   is a 43 GB VM image with nothing separately downloadable, so its traces
+   are a cross-check at most, not the baseline Q1 hoped for.
+6. **Cost, re-measured on a quiet machine**, with the refined plan's
+   `semantic_graph` provider timed apart; confirm or refute the 50× axios
+   regression DIAGNOSIS §5 observed, and bisect if it holds.
+7. **Budget events**, reported per package from the solver's status, so the
+   latch is visible in the report before WP2 removes it.
+8. **Two measures the diagnosis needed and the report lacks**: refined edges
+   by tier, algorithm, status and precision; and sites gained by the refined
+   plan grouped by file and intersected with executed sites.
 
 Exit: one report with all of the above for v0.5.3, committed as the baseline
 of this iteration.
@@ -128,9 +164,10 @@ The bench lists these as misses that are not worked around:
   (dayjs: 117 edges, 0% recall);
 - functions declared inside `try`, `catch` and `if` blocks;
 - calls in exported variable initialisers;
-- Babel's CommonJS interop: `(0, x.default)(...)`,
-  `_interopRequireDefault(require(p))`, `exports.default = f` (async: 154
-  edges);
+- Babel's CommonJS interop: `(0, x.default)(...)` (the call extractor
+  reports a sequence-expression callee as `Unknown`; it is a call to the
+  last operand), `_interopRequireDefault(require(p))`, `exports.default = f`
+  (async: 154 edges);
 - a package's own `vendor/` directory. The default exclusion is right for a
   repository and wrong when the package itself is the unit (chalk: 47 of 72
   edges).
@@ -138,7 +175,27 @@ The bench lists these as misses that are not worked around:
 Exit: `not_extracted`, `not_analysed` and `sequence_interop` are 0 on the
 tune set, apart from exclusions that are written down with a reason.
 
-### WP2. Lower all JS/TS value flow into constraints (stage 1)
+### WP2. The call rule, then lower all JS/TS value flow into constraints (stage 1)
+
+Two pull requests. The first makes the solver able to carry what the second
+lowers:
+
+- **2a. Solver semantics.** Remove the global latches: a budget event ends
+  the solve, keeps every set derived so far, marks the package incomplete
+  with the reason, and never blanks the result. Add the call rule: a
+  `CallConstraint` names the callee place, the argument places, the result
+  place and the receiver place; when the callee set gains a function, copy
+  arguments to parameters, return to result, receiver to `this`. Give every
+  function a parameter place per position, a rest place, a `this` place and
+  a return place. Key field slots by `(object identity, field)`. Exit: the
+  composition fixtures of [STORAGE-A.md](STORAGE-A.md) solve to the same
+  edges in any constraint order and at any budget that does not trip, and
+  the three large tune-set packages report a solve with no budget event.
+- **2b. Lowering**, by the closed list in [TIERS.md](TIERS.md) (c), in the
+  order of edges it wins on the tune set: calls and closures, function
+  objects and prototypes, `this` and classes, modules, platform models,
+  computed keys and destructuring, accessors, `call`/`apply`/`bind`,
+  `await` and generators.
 
 Generate constraints from MIR for every construct, not from a search that
 starts at a call site:
@@ -165,18 +222,22 @@ Each construct lands with two construct fixtures under
 
 Exit: the walker is no longer the source of flow constraints. It is removed,
 or kept only for the edges that a measurement shows nothing else finds, with
-that measurement in the pull request.
+that measurement in the pull request. Measured: `Heuristic` edges on the tune
+set are 0, and the `semantic_graph` provider is at most 10% of the refined
+plan's time on every package.
 
 ### WP3. Solver: fixed point, scale, tiers
 
 - The solve reaches a fixed point on every tune-set package with no budget
-  event. Where a budget is still hit, the affected sites say so.
+  event. Where a budget is still hit, the affected sites say so, and the
+  edges derived before it stay (WP2a made that the contract).
 - The standard scaling work: cycle collapse, difference propagation, shared
   points-to sets, and the indirection bounding that
   `static-analysis-2.0/02-memory-and-representation.md` already names.
 - Tier assignment from the solution: a site with one target and no open
-  inflow is exact, with its assumptions recorded; anything else is
-  conservative, and open when a value can still enter from outside.
+  inflow is exact, with its assumptions recorded from the closed list in
+  [TIERS.md](TIERS.md) (b); anything else is conservative, and open when a
+  value can still enter from outside.
 
 Exit: the cost targets below.
 
@@ -185,7 +246,10 @@ Exit: the cost targets below.
 The checker's facts become constraints and filters in the one solver, not a
 separate tier beside it: declared types filter targets that cannot fit, and
 they seed receivers where flow is open (as conservative edges). The 15 single
-wrong targets the typed plan claims today are fixed here.
+wrong targets the typed plan claims today are fixed here; DIAGNOSIS §4 traces
+them to the join rule in `refined_calls/ts_types.rs` (a declaration that is
+not a function, or a union receiver, must not give an exact edge), with the
+fifteen as fixtures.
 
 Exit: the typed plan finds every edge the refined plan finds, and claims no
 wrong exact target.
@@ -193,7 +257,10 @@ wrong exact target.
 ### WP5. Package graph v0: export, stitch, composition test
 
 Follow [PACKAGE-GRAPH.md](PACKAGE-GRAPH.md), storage option A: the package's
-constraints and its solved state.
+constraints and its solved state, under the preconditions
+[STORAGE-A.md](STORAGE-A.md) derives from the solver (no latches, stable slot
+identities, no walker rows, no stored copy closure, solution stored for
+stitch-readable nodes only).
 
 - Export a package graph for one package, crate-private, through the bench
   dump only. No public command and no SDK surface in this iteration.
@@ -221,8 +288,11 @@ Exit: that test. Nothing more of stages 2 to 5 is built in this iteration.
 
 ## Success criteria and targets
 
-Tune set: the seven packages above. The held-out set comes from WP0. "No
-types" is today's `refined` plan.
+Tune set: the seven packages above. The held-out set is the eight packages
+of [HELD-OUT.md](HELD-OUT.md). "No types" is today's `refined` plan. Every
+target below was checked against the diagnosis and the measured baselines
+in [TARGETS.md](TARGETS.md), which records what was kept, replaced or added
+and why; the tables here are the result.
 
 ### Accuracy
 
@@ -232,18 +302,21 @@ types" is today's `refined` plan.
 | Recall per package, no types | 0% to 60% | every package at least 65% |
 | Recall, exact tier alone, no types | 44.5% (base) | 60% |
 | Recall with types | 61.4% | 85% |
-| Against Jelly (static) on the same packages | not measured | at or above Jelly overall |
+| Against Jelly on the same packages (measured: static 84.5%, `--approx` 85.4%) | 47.5% / 61.4% | no types at least 80%, with types at least 85%, and the precision rows below, which Jelly does not meet |
 | Call sites with a complete answer the run contradicts | 0 | 0 |
-| Wrong exact targets at executed sites | 0, 0, 17 (base, refined, typed) | 0 on every plan |
+| Wrong exact targets at executed sites | 0, 0, 15 single and 2 multi (base, refined, typed) | 0 on every plan |
 | Executed-site precision, conservative tier | not measured | at least 70%, reported per package |
+| Targets per resolved site, mean and 95th percentile, per tier | not measured | reported; no gate this iteration |
 | Precision on hand-labelled constructs, exact tier | 100% | 100% |
 | Edges lost to code the engine does not read | 349 | 0, apart from written exclusions |
-| Held-out recall | no held-out set | within 5 points of the tune set |
+| `Heuristic` edges on the tune set | 161 (all on commander) | 0 |
+| Budget events that discard derived edges | on every package above about 1,000 call sites | none, by construction |
+| Held-out recall | no held-out set | within 5 points of the tune set; packages under 40% driver coverage reported and left out of the average |
 
-The published reference points are Jelly's 75.9% average static recall on 36
-projects, and at least 85% recall with at least 66% precision for the
-field-based analysis of Feldthaus et al. on its own benchmarks. The targets
-sit at or above them; WP0 replaces them with measurements on this bench.
+The measured reference points on this bench are Jelly static at 84.5% with
+13 wrong single-target and 5,811 wrong multi-target claims, and Jelly with
+approximate interpretation at 85.4%; the field-based tool of Feldthaus et al.
+does not parse these packages ([BASELINES.md](BASELINES.md)).
 
 What remains missed at the end is reported by cause with counts. That list is
 the input to stage 2: it should consist of what no static analysis sees
@@ -255,12 +328,14 @@ Same machine as the committed baseline.
 
 | Measure | v0.5.3 | Target |
 |---|---|---|
-| zod, full graph, no types | 48.8 s | 20 s |
+| zod, full graph, no types | 48.8 s | 20 s (Jelly static: 22.9 s in docker) |
 | zod, peak memory, no types | 3.8 GB | 2 GB |
-| axios, full graph, no types | 2.1 s | 1.5 s |
-| Budget events on the tune set | not reported | 0, and reported |
+| axios, full graph, no types | 2.1 s committed; 105 to 112 s measured on this checkout under load (DIAGNOSIS §5, to be confirmed in WP0) | 1.5 s |
+| Refined plan against base plan, every tune-set package | up to 50× on axios if §5 holds | at most 3× |
+| `semantic_graph` provider (the walker) share of the refined plan | 91 to 95 s of 105 to 112 s on axios here | removed, or at most 10% |
+| Budget events on the tune set | present on axios: `points_to.max_dynamic_vars`, `solver.max_steps` | 0, and reported |
 | Stitch time on a real tree, against analysing it whole | no stitcher | at most 20% |
-| Stored package graph, gzip, per MB of source | no package graph (the fact store is 6.9 MB per MB for zod) | at most 2 MB |
+| Stored package graph, gzip, per MB of source | no package graph (the fact store is 6.9 MB per MB for zod; Jelly's zod call graph is 0.18 MB per MB) | at most 2 MB, as a ceiling |
 
 The stitch and size targets are first estimates. WP5 measures them, and the
 measurement sets the budget for the next iteration.
@@ -272,7 +347,9 @@ measurement sets the budget for the next iteration.
 - Two scans of the same package give a byte-identical package graph, for any
   thread count.
 - Every edge carries stage, algorithm and tier. Every open site carries a
-  reason.
+  reason. Every exact-complete site carries its assumption ids.
+- The package graph refuses to store a budget-exceeded solve and the
+  stitcher refuses to read one.
 - Every new guard has a test that fails without it; mutation checks are
   listed in each pull request, as in #139 and #140.
 
