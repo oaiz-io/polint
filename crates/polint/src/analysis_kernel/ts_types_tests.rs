@@ -364,8 +364,12 @@ fn write_binding_repo(root: &Path) {
          const target = {};\n\
          target.parse = function parseA(v) { return v; };\n\
          function rebind() { target.parse = function parseB(v) { return -v; }; }\n\
+         class Quiet extends Base {}\n\
+         class Shape {\n  area() { return 0; }\n  describe() { return this.area(); }\n}\n\
+         class Square extends Shape {\n  area() { return 4; }\n}\n\
          function run() {\n  const kid = new Kid();\n  kid.run();\n  isFn(1);\n  reb();\n  \
-         target.parse(1);\n  (function iife() { return 3; })();\n  return kid.hello();\n}\n\
+         target.parse(1);\n  (function iife() { return 3; })();\n  new Quiet();\n  \
+         new Square().describe();\n  return kid.hello();\n}\n\
          module.exports = { run, swap, rebind };\n",
     )
     .expect("write cases");
@@ -435,7 +439,7 @@ fn a_binding_that_can_hold_another_value_is_never_an_exact_answer() {
     let output = run_dispatch_repo(temp.path(), &typescript);
     let claims = |needle: &str| typed_claims_at(&output, temp.path(), "src/cases.js", needle);
 
-    for needle in ["reb()", "isFn(1)", "target.parse(1)"] {
+    for needle in ["reb()", "isFn(1)", "target.parse(1)", "this.area()"] {
         let (exact, _) = claims(needle);
         assert!(
             exact.is_empty(),
@@ -465,6 +469,7 @@ fn a_call_the_checker_answers_keeps_its_exact_target() {
 
     for (needle, target) in [
         ("new Kid()", "Kid"),
+        ("new Quiet()", "Quiet"),
         ("super(1)", "Base"),
         ("kid.run()", "Kid.run"),
         ("kid.hello()", "Base.hello"),
