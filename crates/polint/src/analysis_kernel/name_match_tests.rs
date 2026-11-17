@@ -22,6 +22,20 @@ function parse(input) {
 export { parse };
 ";
 
+/// `this.name()` is answered by points-to with a heuristic edge, which claims
+/// no tier, while the base layer marks the site unresolved.
+const METHOD_THROUGH_THIS: &str = "\
+class Command {
+  name() {
+    return \"command\";
+  }
+  describe() {
+    return this.name();
+  }
+}
+module.exports = { Command };
+";
+
 const BASE: &[&str] = &["syntax", "call_graph", "symbols", "references"];
 const REFINED: &[&str] = &[
     "syntax",
@@ -119,6 +133,43 @@ fn the_refined_answer_for_a_name_matched_call_keeps_its_unresolved_row() {
             edge.precision
         );
     }
+    assert!(
+        refined
+            .iter()
+            .any(|edge| edge.status != CallTargetStatus::Resolved),
+        "the refined answer has no unresolved row"
+    );
+}
+
+#[test]
+fn a_site_whose_refined_edges_claim_nothing_keeps_its_unresolved_row() {
+    let output = run(METHOD_THROUGH_THIS, REFINED);
+    let site = member_site(&output, "name");
+    assert!(
+        output
+            .db
+            .unresolved_calls()
+            .iter()
+            .any(|row| row.site == site.id),
+        "the base layer marks the site unresolved"
+    );
+    let refined = output
+        .db
+        .refined_call_edges()
+        .iter()
+        .filter(|edge| edge.site == site.id)
+        .collect::<Vec<_>>();
+
+    assert!(
+        refined
+            .iter()
+            .any(|edge| edge.status == CallTargetStatus::Resolved),
+        "the refined layer resolves an edge at the site"
+    );
+    assert!(
+        refined.iter().all(|edge| !claims(edge.precision.tier())),
+        "a refined edge claims a tier"
+    );
     assert!(
         refined
             .iter()
