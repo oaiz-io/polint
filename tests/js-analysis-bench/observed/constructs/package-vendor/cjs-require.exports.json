@@ -1,0 +1,22 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "main.js": {
+      "system": "cjs",
+      "names": [
+        "render"
+      ],
+      "whole_value": "object"
+    },
+    "vendor/util/index.js": {
+      "system": "cjs",
+      "names": [
+        "compact",
+        "join"
+      ],
+      "whole_value": "object"
+    }
+  }
+}
