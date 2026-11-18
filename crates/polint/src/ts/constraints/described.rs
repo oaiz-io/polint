@@ -509,20 +509,20 @@ impl<'a> Solve<'a> {
     /// the tokens already followed for this load: reaching one again through
     /// another parent adds nothing new, so the walk stays linear in the
     /// prototype graph. A token met again on the current path is a cycle, and
-    /// the load is left open there, as it is at an escaped object.
+    /// the load is left open there.
     fn lookup(&mut self, load: Load, token: Token, depth: u8, walk: &mut Walk) {
         if walk.done.contains(&token) {
             return;
         }
-        // Outside code may shadow any field of an escaped object, so a load
-        // from one is unknown and the walk does not continue past it.
-        if depth >= 16
-            || !walk.path.insert(token)
-            || matches!(token, Token::Unknown | Token::Prim)
-            || self.escaped.contains(&token)
+        if depth >= 16 || !walk.path.insert(token) || matches!(token, Token::Unknown | Token::Prim)
         {
             self.add(load.dst, Token::Unknown);
             return;
+        }
+        // Outside code may shadow any field of an escaped object, so the
+        // inherited value is a candidate beside an unknown one.
+        if self.escaped.contains(&token) {
+            self.add(load.dst, Token::Unknown);
         }
         if self.stored.contains(&(token, load.field)) {
             let slot = self.slot(token, load.field);
@@ -770,6 +770,48 @@ mod tests {
         assert_eq!(described.escaped_objects, BTreeSet::from([Obj::Site(OBJ)]));
         assert_eq!(described.escaped_functions, BTreeSet::from([F]));
         assert!(described.open.contains(&FlowVar::Param(F, 0)));
+    }
+
+    #[test]
+    fn an_escaped_object_inherits_its_prototype_methods_beside_an_unknown_value() {
+        const PROTO: FlowSpan = (80, 90);
+        let rows = vec![
+            FlowRow::Alloc {
+                dst: FlowVar::Local(1),
+                object: FlowObject::Site(PROTO),
+            },
+            FlowRow::Store {
+                base: FlowVar::Local(1),
+                field: "exact:run".into(),
+                src: FlowVar::Function(G),
+            },
+            FlowRow::Alloc {
+                dst: FlowVar::Local(0),
+                object: FlowObject::Site(OBJ),
+            },
+            FlowRow::Store {
+                base: FlowVar::Local(0),
+                field: "$proto".into(),
+                src: FlowVar::Local(1),
+            },
+            copy(FlowVar::Sink, FlowVar::Local(0)),
+            FlowRow::Load {
+                dst: FlowVar::Temp(1),
+                base: FlowVar::Local(0),
+                field: "exact:run".into(),
+            },
+        ];
+        let described = describe(
+            &flows(rows, vec![call(FlowVar::Temp(1), Vec::new())]),
+            |_| true,
+        );
+        assert!(described.named.is_empty());
+        assert!(described.open.contains(&FlowVar::Temp(1)));
+        assert!(
+            described
+                .lookups
+                .contains(&(5, Token::Object(0, Obj::Site(PROTO))))
+        );
     }
 
     #[test]
