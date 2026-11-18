@@ -95,6 +95,9 @@ pub(crate) struct TsTypeCallableFact {
     /// at `export` for one and at `function` for the other — but both spans
     /// contain the name, so the name anchors the join when the spans disagree.
     pub(crate) name_span: Option<Span>,
+    /// The fewest arguments a call must pass, as the declared parameters say;
+    /// `None` for a class, an accessor and a declaration in a JavaScript file.
+    pub(crate) required_parameters: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +108,10 @@ pub(crate) struct TsTypeCallsiteFact {
     pub(crate) callsite: String,
     pub(crate) enclosing: Option<String>,
     pub(crate) call_kind: String,
+    /// Parameter count of the signature the checker resolved for the call;
+    /// `None` when that signature has a rest parameter, is declared in a
+    /// JavaScript file, or was not resolved to a declaration.
+    pub(crate) signature_parameters: Option<u32>,
     pub(crate) status: TsTypeCallStatus,
     pub(crate) reason: Option<String>,
     pub(crate) relative_file: Option<String>,

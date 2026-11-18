@@ -552,20 +552,22 @@ fn ts_types_output_digest(
     }));
     parts.extend(output.callables.iter().map(|callable| {
         format!(
-            "callable={} name={} kind={:?} file={} span={}",
+            "callable={} name={} kind={:?} required={:?} file={} span={}",
             interner.resolve(callable.stable_key),
             callable.name,
             callable.kind,
+            callable.required_parameters,
             callable.relative_file.as_deref().unwrap_or(""),
             option_span_part(callable.span.as_ref())
         )
     }));
     parts.extend(output.callsites.iter().map(|callsite| {
         format!(
-            "callsite={} status={:?} kind={} enclosing={} file={} span={}",
+            "callsite={} status={:?} kind={} parameters={:?} enclosing={} file={} span={}",
             interner.resolve(callsite.stable_key),
             callsite.status,
             callsite.call_kind,
+            callsite.signature_parameters,
             callsite.enclosing.as_deref().unwrap_or(""),
             callsite.relative_file.as_deref().unwrap_or(""),
             option_span_part(callsite.span.as_ref())

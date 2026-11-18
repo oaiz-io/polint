@@ -121,6 +121,7 @@ fn lower_callable(
         file: location.file,
         span: location.span,
         name_span: location.name_span,
+        required_parameters: row.required_parameters,
     })
 }
 
@@ -137,6 +138,7 @@ fn lower_callsite(
         callsite: row.callsite.clone(),
         enclosing: non_empty(row.enclosing.as_str()),
         call_kind: row.call_kind.clone(),
+        signature_parameters: row.signature_parameters,
         status: call_status(row.status.as_str()),
         reason: non_empty(row.reason.as_str()),
         relative_file: location.relative_file,

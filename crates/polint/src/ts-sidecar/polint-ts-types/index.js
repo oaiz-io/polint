@@ -483,10 +483,11 @@ function dispatchExpression(ts, node) {
 
 class ProjectEmitter {
   /**
-   * @param {{ts: any, emitter: Emitter, root: string, scope: Set<string> | null, project: string, emittedCallables: Set<string>}} options
+   * @param {{ts: any, checker: any, emitter: Emitter, root: string, scope: Set<string> | null, project: string, emittedCallables: Set<string>}} options
    */
   constructor(options) {
     this.ts = options.ts;
+    this.checker = options.checker;
     this.emitter = options.emitter;
     this.root = options.root;
     this.scope = options.scope;
@@ -614,6 +615,7 @@ class ProjectEmitter {
           ? null
           : this.span(sourceFile, nameNode.getStart(sourceFile), nameNode.end),
       callable_kind: callableKind(ts, node),
+      required_parameters: requiredParameters(ts, this.checker, node, sourceFile),
       stable_key: stableKey(['callable', identity]),
     };
     this.callables.set(identity, row);
@@ -658,6 +660,76 @@ function isCallableDeclaration(ts, node) {
     ts.isGetAccessor(node) ||
     ts.isSetAccessor(node)
   );
+}
+
+/**
+ * The fewest arguments a call to `node` must pass, as its declared parameters
+ * say, or `null` where the count does not constrain the value: the checker
+ * reads every parameter of a JavaScript file as optional, a class is
+ * constructed through its constructor, and an accessor is never called.
+ *
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} node
+ * @param {any} sourceFile
+ * @returns {number | null}
+ */
+function requiredParameters(ts, checker, node, sourceFile) {
+  if ((sourceFile.flags & ts.NodeFlags.JavaScriptFile) !== 0) {
+    return null;
+  }
+  if (!isCallableDeclaration(ts, node) || ts.isGetAccessor(node) || ts.isSetAccessor(node)) {
+    return null;
+  }
+  let signature;
+  try {
+    signature = checker.getSignatureFromDeclaration(node);
+  } catch (error) {
+    signature = undefined;
+  }
+  if (signature === undefined || typeof signature.minArgumentCount !== 'number') {
+    return null;
+  }
+  return signature.minArgumentCount;
+}
+
+/**
+ * How many parameters the signature the checker resolved for a call declares,
+ * or `null` where the count does not bound the function the call may run: a
+ * signature with a rest parameter takes any number, one declared in a
+ * JavaScript file is not checked against its values, and a call with no
+ * resolved declaration has no declared signature.
+ *
+ * A function that requires more arguments than the call's declared signature
+ * has parameters is not assignable to that signature's type.
+ *
+ * @param {any} ts
+ * @param {any} checker
+ * @param {any} node
+ * @returns {number | null}
+ */
+function signatureParameters(ts, checker, node) {
+  let signature;
+  try {
+    signature = checker.getResolvedSignature(node);
+  } catch (error) {
+    signature = undefined;
+  }
+  if (signature === undefined || signature.declaration === undefined) {
+    return null;
+  }
+  const declarationFile = signature.declaration.getSourceFile();
+  if (declarationFile === undefined || (declarationFile.flags & ts.NodeFlags.JavaScriptFile) !== 0) {
+    return null;
+  }
+  const parameters = signature.parameters || [];
+  for (const parameter of parameters) {
+    const declaration = parameter.valueDeclaration;
+    if (declaration !== undefined && declaration.dotDotDotToken !== undefined) {
+      return null;
+    }
+  }
+  return parameters.length;
 }
 
 /**
@@ -1190,6 +1262,7 @@ function emitProject(options) {
   const checker = program.getTypeChecker();
   const project = new ProjectEmitter({
     ts,
+    checker,
     emitter,
     root,
     scope,
@@ -1979,6 +2052,7 @@ function emitCallsite(options) {
     file: relative,
     span: callsiteSpan,
     call_kind: callKind(ts, node),
+    signature_parameters: signatureParameters(ts, checker, node),
     status,
     reason,
     stable_key: callsiteKey,
