@@ -34,7 +34,7 @@ pub(crate) fn ts_types_provider_parameter_digest() -> String {
         "callable_v1",
         "callsite_v1",
         "callee_v1",
-        "receiver_v1",
+        "receiver_v2",
         "any_density_v1",
         &format!("any_density_degraded_percent={ANY_DENSITY_DEGRADED_PERCENT}"),
         &format!("any_density_defer_percent={ANY_DENSITY_DEFER_PERCENT}"),

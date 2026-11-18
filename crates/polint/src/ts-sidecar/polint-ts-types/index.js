@@ -1821,6 +1821,21 @@ function emitCallsite(options) {
     receiverType !== undefined && typeof receiverType.isUnion === 'function' && receiverType.isUnion()
       ? receiverType.types.length
       : 0;
+  // An intersection's members come from several declarations, and an object
+  // literal's type is its shape rather than a declaration: in both, the member
+  // the checker picks is matched by structure, not named by one type.
+  const isIntersection =
+    receiverType !== undefined &&
+    typeof receiverType.isIntersection === 'function' &&
+    receiverType.isIntersection();
+  // A widened literal type (the type of a `const` holding the literal) drops
+  // the type's object-literal flag but keeps its symbol's.
+  const isObjectLiteral =
+    receiverType !== undefined &&
+    (receiverType.flags & ts.TypeFlags.Object) !== 0 &&
+    (((receiverType.objectFlags || 0) & ts.ObjectFlags.ObjectLiteral) !== 0 ||
+      (receiverType.symbol !== undefined &&
+        (receiverType.symbol.flags & ts.SymbolFlags.ObjectLiteral) !== 0));
 
   if (receiverType !== undefined) {
     let printed = '';
@@ -1840,6 +1855,8 @@ function emitCallsite(options) {
       is_any: isAny,
       is_unknown: isUnknown,
       union_size: unionSize,
+      is_intersection: isIntersection,
+      is_object_literal: isObjectLiteral,
       stable_key: stableKey(['receiver', callsiteIdentity]),
     });
   }

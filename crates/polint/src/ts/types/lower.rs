@@ -180,6 +180,8 @@ fn lower_receiver(interner: &StableKeyInterner, row: &TsTypesRawFrame) -> TsType
         is_any: row.is_any,
         is_unknown: row.is_unknown,
         union_size: row.union_size,
+        is_intersection: row.is_intersection,
+        is_object_literal: row.is_object_literal,
     }
 }
 

@@ -137,6 +137,8 @@ pub(crate) struct TsTypeReceiverFact {
     pub(crate) is_any: bool,
     pub(crate) is_unknown: bool,
     pub(crate) union_size: u64,
+    pub(crate) is_intersection: bool,
+    pub(crate) is_object_literal: bool,
 }
 
 /// Per-file share of call sites whose receiver type is `any` or `unknown`.

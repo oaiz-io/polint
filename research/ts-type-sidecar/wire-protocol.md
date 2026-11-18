@@ -182,6 +182,8 @@ property calls) or of the callee expression (for value calls).
 | `is_any` | bool | the type is `any` |
 | `is_unknown` | bool | the type is `unknown` |
 | `union_size` | u64 | 0 when not a union, otherwise the constituent count |
+| `is_intersection` | bool | the type is an intersection |
+| `is_object_literal` | bool | the type is an object literal's own type |
 | `stable_key` | string | length-prefixed from the callsite key |
 
 ### `any_density`

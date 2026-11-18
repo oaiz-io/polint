@@ -104,6 +104,10 @@ pub(crate) struct TsTypesRawFrame {
     #[serde(default)]
     pub(crate) union_size: u64,
     #[serde(default)]
+    pub(crate) is_intersection: bool,
+    #[serde(default)]
+    pub(crate) is_object_literal: bool,
+    #[serde(default)]
     pub(crate) callsites: u64,
     #[serde(default)]
     pub(crate) any_receivers: u64,

@@ -584,13 +584,15 @@ fn ts_types_output_digest(
     }));
     parts.extend(output.receivers.iter().map(|receiver| {
         format!(
-            "receiver={} site={} printed={} any={} unknown={} union={}",
+            "receiver={} site={} printed={} any={} unknown={} union={} intersection={} object_literal={}",
             interner.resolve(receiver.stable_key),
             interner.resolve(receiver.callsite_stable_key),
             receiver.printed,
             receiver.is_any,
             receiver.is_unknown,
-            receiver.union_size
+            receiver.union_size,
+            receiver.is_intersection,
+            receiver.is_object_literal
         )
     }));
     // The density counts gate which typed edges survive, so a file whose `any`
