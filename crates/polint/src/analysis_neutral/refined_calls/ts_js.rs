@@ -13,7 +13,7 @@ use crate::analysis_neutral::calls::facts::{
     UnresolvedCallFact, UnresolvedCallReason,
 };
 use crate::analysis_neutral::ids::{CallSiteId, PlaceId, RefinedCallEdgeId, SemanticNodeId};
-use crate::analysis_neutral::points_to::facts::PointsToStatus;
+use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::internal_core::StableKeyId;
@@ -67,15 +67,19 @@ impl SiteIndex {
     }
 }
 
-/// Call sites the points-to solver resolved: a present solver edge derived
-/// from a call constraint lists, among its contributing facts, a call
-/// constraint on the site's callsite node. Keys are compared as text.
+/// Call sites the points-to solver resolved: a present, non-heuristic solver
+/// edge derived from a call constraint lists, among its contributing facts, a
+/// call constraint on the site's callsite node. Keys are compared as text.
+///
+/// A heuristic edge comes from a set that may hold values the solve could not
+/// see, so it does not resolve its site: the site keeps its unresolved marker.
 fn solver_resolved_sites(db: &impl AnalysisHost) -> HashSet<CallSiteId> {
     let contributing: HashSet<Arc<str>> = db
         .solver_derived_edges()
         .iter()
         .filter(|edge| {
             edge.status == PointsToStatus::Present
+                && edge.precision < PointsToPrecision::Heuristic
                 && edge.provenance.constraint_kind == "call_constraint"
         })
         .flat_map(|edge| edge.provenance.contributing_facts.iter())
