@@ -1,0 +1,58 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@126..187",
+      "name": "peek"
+    },
+    {
+      "function": "main.js@214..316",
+      "name": "next"
+    },
+    {
+      "function": "main.js@25..100",
+      "name": "Reader"
+    },
+    {
+      "function": "main.js@319..414",
+      "name": "createReader"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@257..268",
+      "syntax": "member",
+      "callee": "main.js@126..187",
+      "callee_name": "peek"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@378..394",
+      "syntax": "new",
+      "callee": "main.js@25..100",
+      "callee_name": "Reader"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@467..485",
+      "syntax": "identifier",
+      "callee": "main.js@319..414",
+      "callee_name": "createReader"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@510..523",
+      "syntax": "member",
+      "callee": "main.js@214..316",
+      "callee_name": "next"
+    }
+  ]
+}
