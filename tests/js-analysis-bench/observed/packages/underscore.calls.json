@@ -648,13 +648,6 @@
   "edges": [
     {
       "kind": "call",
-      "site": "underscore-umd.js@1..68870",
-      "syntax": "expression",
-      "callee": "underscore-umd.js@1..451",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "underscore-umd.js@10381..10394",
       "syntax": "identifier",
       "callee": "underscore-umd.js@3747..3866",
@@ -2391,13 +2384,6 @@
     },
     {
       "kind": "call",
-      "site": "underscore-umd.js@6882..7023",
-      "syntax": "expression",
-      "callee": "underscore-umd.js@6882..7021",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "underscore-umd.js@6904..6926",
       "syntax": "identifier",
       "callee": "underscore-umd.js@4470..4532",
@@ -2478,6 +2464,20 @@
       "site": "underscore-umd.js@54827..55240",
       "syntax": "member",
       "callee": "underscore-umd.js@54992..55239",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "underscore-umd.js@451",
+      "syntax": "implicit",
+      "callee": "underscore-umd.js@1..451",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "underscore-umd.js@7021",
+      "syntax": "implicit",
+      "callee": "underscore-umd.js@6882..7021",
       "callee_name": ""
     }
   ]

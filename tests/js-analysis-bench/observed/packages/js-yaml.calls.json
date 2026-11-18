@@ -713,13 +713,6 @@
     },
     {
       "kind": "call",
-      "site": "lib/dumper.js@13958..16106",
-      "syntax": "expression",
-      "callee": "lib/dumper.js@13958..16104",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "lib/dumper.js@15281..15317",
       "syntax": "identifier",
       "callee": "lib/dumper.js@5260..5534",
@@ -794,13 +787,6 @@
       "syntax": "identifier",
       "callee": "lib/dumper.js@10038..10148",
       "callee_name": "needIndentIndicator"
-    },
-    {
-      "kind": "call",
-      "site": "lib/dumper.js@17344..17539",
-      "syntax": "expression",
-      "callee": "lib/dumper.js@17344..17537",
-      "callee_name": ""
     },
     {
       "kind": "call",
@@ -2984,6 +2970,20 @@
       "site": "lib/type.js@624..851",
       "syntax": "member",
       "callee": "lib/type.js@653..850",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/dumper.js@16104",
+      "syntax": "implicit",
+      "callee": "lib/dumper.js@13958..16104",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "lib/dumper.js@17537",
+      "syntax": "implicit",
+      "callee": "lib/dumper.js@17344..17537",
       "callee_name": ""
     }
   ]
