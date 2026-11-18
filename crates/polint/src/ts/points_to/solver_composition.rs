@@ -965,7 +965,7 @@ fn escape_fixture() -> Fixture {
     ] {
         fixture.function(function);
     }
-    let mut call = |fixture: &mut Fixture, caller: &str, site: &str, callee: &str, arguments| {
+    let call = |fixture: &mut Fixture, caller: &str, site: &str, callee: &str, arguments| {
         fixture.call(
             caller,
             site,

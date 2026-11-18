@@ -181,19 +181,48 @@ mod tests {
         }
     }
 
+    /// Iteration, collections and callbacks of built-ins are callable models the
+    /// value flow does not describe: their edges stay heuristic. Destructuring
+    /// and a returned parameter are described by the value flow, which answers
+    /// them on the exact tier.
     #[test]
-    fn callable_models_reach_the_shared_solver_with_heuristic_precision() {
+    fn callable_models_reach_the_shared_solver_on_the_tier_that_describes_them() {
+        use CallPrecision::{Heuristic, SetupAware};
         let cases = [
-            "const list = [target]; for (const callable of list) { callable(); }",
-            "const box = { method: target }; const { method: callable } = box; callable();",
-            "function pass(fn) { return fn; } const callable = pass(target); callable();",
-            "const list = new Set([target]); for (const callable of list) { callable(); }",
-            "const list = [target]; list.forEach(callable => callable());",
-            "Promise.resolve(target).then(callable => callable());",
-            "const box = { nested: { method: target } }; const { nested: { method: callable } } = box; callable();",
-            "function* sequence() { yield target; } for (const callable of sequence()) { callable(); }",
+            (
+                "const list = [target]; for (const callable of list) { callable(); }",
+                Heuristic,
+            ),
+            (
+                "const box = { method: target }; const { method: callable } = box; callable();",
+                SetupAware,
+            ),
+            (
+                "function pass(fn) { return fn; } const callable = pass(target); callable();",
+                SetupAware,
+            ),
+            (
+                "const list = new Set([target]); for (const callable of list) { callable(); }",
+                Heuristic,
+            ),
+            (
+                "const list = [target]; list.forEach(callable => callable());",
+                Heuristic,
+            ),
+            (
+                "Promise.resolve(target).then(callable => callable());",
+                Heuristic,
+            ),
+            (
+                "const box = { nested: { method: target } }; const { nested: { method: callable } } = box; callable();",
+                SetupAware,
+            ),
+            (
+                "function* sequence() { yield target; } for (const callable of sequence()) { callable(); }",
+                Heuristic,
+            ),
         ];
-        for suffix in cases {
+        for (suffix, precision) in cases {
             let repo = tempfile::tempdir().unwrap();
             let source = format!("function target() {{}} function decoy() {{}} {suffix}");
             std::fs::write(repo.path().join("main.js"), &source).unwrap();
@@ -241,9 +270,7 @@ mod tests {
                 "{suffix}"
             );
             assert!(
-                edges
-                    .iter()
-                    .all(|edge| edge.precision == CallPrecision::Heuristic),
+                edges.iter().all(|edge| edge.precision == precision),
                 "{suffix}: {edges:?}"
             );
         }
@@ -1138,8 +1165,8 @@ mod tests {
             (
                 "function apply(fn) {\n  fn = fn || b;\n  return fn();\n}\napply(a);\n",
                 "fn();",
-                &["function a() {}"],
-                "a bound function is truthy, so an `||` default does not replace it",
+                &["function a() {}", "function b() {}"],
+                "an `||` joins both operands: the value flow does not follow truthiness, so the default joins the bound function",
             ),
             (
                 "function pick(k, fn) {\n  if (k) return a;\n  return lookup(fn);\n}\nconst f = pick(1, b);\nf();\n",
@@ -1150,8 +1177,8 @@ mod tests {
             (
                 "function pick(k, fn) {\n  switch (k) {\n    case 1:\n      return fn;\n  }\n  return a;\n}\nconst f = pick(1, b);\nf();\n",
                 "f();",
-                &[],
-                "a return inside a switch is not followed, so the later return is not the whole answer",
+                &["function a() {}", "function b() {}"],
+                "a return inside a switch joins the later return",
             ),
             (
                 "function pick(k, fn) {\n  if (k) return a;\n  return lookup(fn);\n}\nfunction main() {\n  const f = pick(1, b);\n  f();\n}\nmain();\n",
@@ -1162,8 +1189,8 @@ mod tests {
             (
                 "function pick(k, fn) {\n  switch (k) {\n    case 1:\n      return fn;\n  }\n  return a;\n}\nfunction main() {\n  const f = pick(1, b);\n  f();\n}\nmain();\n",
                 "f();",
-                &[],
-                "a returned parameter blocks the single returned value bound inside a function",
+                &["function a() {}", "function b() {}"],
+                "a returned parameter joins the other returns of the function, inside a caller too",
             ),
             (
                 "function make() {\n  let g = a;\n  g = wrap(g);\n  return g;\n}\nfunction main() {\n  const f = make();\n  f();\n}\nmain();\n",
@@ -1186,14 +1213,14 @@ mod tests {
             (
                 "function apply(fn) {\n  return fn();\n  function fn() {}\n}\napply(a);\n",
                 "fn();",
-                &[],
-                "a function declaration named like a parameter replaces it from the start of the body",
+                &["function a() {}", "function fn() {}"],
+                "a function declaration named like a parameter shares its binding; the value flow does not order the hoisted declaration after the argument, so the argument joins it",
             ),
             (
                 "function apply(fn) {\n  if (flag) {\n    function fn() {}\n  }\n  return fn();\n}\napply(a);\n",
                 "fn();",
-                &[],
-                "a function declaration in a block named like a parameter leaves calls through the name unresolved",
+                &["function a() {}"],
+                "a function declaration in a block named like a parameter binds the block's name, not the parameter",
             ),
             (
                 "function apply(fn, fns) {\n  for (var fn of fns) {}\n  return fn();\n}\napply(a, [lookup()]);\n",
@@ -1228,8 +1255,8 @@ mod tests {
             (
                 "function f1() {\n  if (flag) return b;\n  return f2();\n}\nfunction f2() {\n  return f3();\n}\nfunction f3() {\n  return f4();\n}\nfunction f4() {\n  return f5();\n}\nfunction f5() {\n  return f6();\n}\nfunction f6() {\n  return f7();\n}\nfunction f7() {\n  return f8();\n}\nfunction f8() {\n  return f9();\n}\nfunction f9() {\n  return f10();\n}\nfunction f10() {\n  return f11();\n}\nfunction f11() {\n  return f12();\n}\nfunction f12() {\n  return f13();\n}\nfunction f13() {\n  return f14();\n}\nfunction f14() {\n  return f15();\n}\nfunction f15() {\n  return f16();\n}\nfunction f16() {\n  return f17();\n}\nfunction f17() {\n  return f18();\n}\nfunction f18() {\n  return f19();\n}\nfunction f19() {\n  return f20();\n}\nfunction f20() {\n  return a;\n}\nf1()();\n",
                 "f1()();",
-                &[],
-                "a return chain deeper than the walk follows leaves the call unresolved",
+                &["function a() {}", "function b() {}"],
+                "the value flow follows a return chain of any depth",
             ),
             (
                 "function main() {\n  var o = {\n    m() {\n      return lookup();\n    },\n  };\n  var f = a;\n  {\n    let f = o.m();\n    f();\n  }\n}\nmain();\n",

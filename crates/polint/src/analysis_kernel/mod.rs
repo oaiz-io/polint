@@ -3234,8 +3234,8 @@ function cleanup(value: string) {{ return value.trim(); }}
 
     #[cfg(feature = "lang-typescript")]
     #[test]
-    fn ts_function_returns_copy_into_their_return_place_below_the_exact_tier() {
-        use crate::analysis_neutral::calls::facts::CallPrecision;
+    fn ts_function_returns_flow_through_their_return_place_to_the_consuming_call() {
+        use crate::analysis_neutral::calls::facts::ClaimTier;
         use crate::analysis_neutral::points_to::facts::PointsToPrecision;
         use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
         use crate::analysis_neutral::semantic_graph::facts::NodeKind;
@@ -3260,13 +3260,25 @@ function cleanup(value: string) {{ return value.trim(); }}
         })
         .expect("kernel should run");
 
-        let make = output
-            .db
-            .functions()
+        let functions = output.db.functions();
+        let function_named = |name: &str| {
+            functions
+                .iter()
+                .find(|function| function.name == name)
+                .unwrap_or_else(|| panic!("{name} is a function"))
+        };
+        let make = function_named("make");
+        let run = function_named("run").id;
+        let made = functions
             .iter()
-            .find(|function| function.name == "make")
-            .expect("make is a function")
+            .find(|function| {
+                function.id != make.id
+                    && function.span.start_byte > make.span.start_byte
+                    && function.span.end_byte < make.span.end_byte
+            })
+            .expect("the function expression in make is a function")
             .id;
+        let make = make.id;
         let nodes = output.db.semantic_nodes();
         let ret = nodes
             .iter()
@@ -3279,6 +3291,8 @@ function cleanup(value: string) {{ return value.trim(); }}
                 .any(|node| node.kind == NodeKind::FunctionThis(make)),
             "make has a this place"
         );
+        // The value flow of the file describes every value make returns, so it
+        // replaces the summary of make's returns.
         let returns = output
             .db
             .semantic_constraints()
@@ -3287,31 +3301,37 @@ function cleanup(value: string) {{ return value.trim(); }}
                 matches!(constraint.kind, ConstraintKind::CopyEdge { dst, .. } if dst == ret)
             })
             .collect::<Vec<_>>();
-        assert_eq!(
-            returns.len(),
-            1,
-            "one return copies into make's return place"
+        assert!(
+            !returns.is_empty(),
+            "make's returns copy into its return place"
         );
-        assert_eq!(returns[0].precision, PointsToPrecision::SummaryProjected);
-        let run = output
-            .db
-            .functions()
-            .iter()
-            .find(|function| function.name == "run")
-            .expect("run is a function")
-            .id;
-        for edge in output
+        assert!(
+            returns
+                .iter()
+                .all(|constraint| constraint.precision != PointsToPrecision::SummaryProjected),
+            "the value flow replaces the summary of make's returns: {returns:?}"
+        );
+        // The returned function is the only value `got` holds, and the value
+        // flow describes it completely: the call reaches it, and only it.
+        let from_run = output
             .db
             .refined_call_edges()
             .iter()
             .filter(|edge| edge.caller == run && edge.target_function != Some(make))
-        {
-            assert_ne!(
-                edge.precision,
-                CallPrecision::Exact,
-                "a call through a returned value is never exact: {edge:?}"
-            );
-        }
+            .collect::<Vec<_>>();
+        assert!(
+            from_run
+                .iter()
+                .any(|edge| edge.target_function == Some(made)
+                    && edge.precision.tier() == ClaimTier::Exact),
+            "the returned function is the exact target of the consuming call: {from_run:?}"
+        );
+        assert!(
+            from_run
+                .iter()
+                .all(|edge| edge.target_function == Some(made)),
+            "the consuming call reaches nothing but the returned function: {from_run:?}"
+        );
     }
 
     #[test]
