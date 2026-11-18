@@ -2046,7 +2046,23 @@ mod tests {
             copy("copy-5-6", 5, 6),
             copy("copy-6-7", 6, 7),
             copy("copy-7-3", 7, 3),
+            copy("copy-1-8", 1, 8),
+            copy("copy-3-9", 3, 9),
         ];
+        // Each copy out of the cycle reaches a variable that holds an object
+        // of its own; merging it into the cycle would carry that object back.
+        let constraints = constraints
+            .into_iter()
+            .chain([(4, 12), (8, 13), (9, 14)].map(|(var, object)| {
+                constraint(
+                    &format!("addr-{var}"),
+                    PointsToConstraintKind::AddressOf {
+                        dst: PtVarId(var),
+                        object: ObjectTokenId(object),
+                    },
+                )
+            }))
+            .collect::<Vec<_>>();
         let result = solve_points_to(
             &crate::internal_core::test_stable_key_interner(),
             &constraints,
@@ -2062,12 +2078,22 @@ mod tests {
                 .find(|set| set.variable == PtVarId(var))
                 .map(|set| (set.status, set.objects.clone()))
         };
-        for var in [1, 2, 3, 4] {
+        for var in [1, 2, 3] {
             assert_eq!(
                 objects(var),
                 Some((
                     PointsToStatus::Present,
                     vec![ObjectTokenId(10), ObjectTokenId(11)]
+                )),
+                "variable {var}"
+            );
+        }
+        for (var, own) in [(4, 12), (8, 13), (9, 14)] {
+            assert_eq!(
+                objects(var),
+                Some((
+                    PointsToStatus::Present,
+                    vec![ObjectTokenId(10), ObjectTokenId(11), ObjectTokenId(own)]
                 )),
                 "variable {var}"
             );
