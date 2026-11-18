@@ -1473,3 +1473,11 @@ fn repeated_calls_and_heap_updates_keep_their_callable_targets() {
         );
     }
 }
+
+#[test]
+fn an_unknown_computed_read_keeps_reachable_callback_parameters_open() {
+    let source = "function a() {} function b() {} function invoke(fn) { fn(); } const table = {run: invoke}; table[unknownKey](b); invoke(a);";
+    let files = [("main.js", source)];
+    assert!(resolved_targets_at(&files, "fn()").contains("function a() {}"));
+    assert!(claimed_targets_at(&files, "fn()").is_empty());
+}
