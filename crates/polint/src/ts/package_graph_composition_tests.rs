@@ -167,13 +167,53 @@ fn portable(
         .collect()
 }
 
-/// The package roots of the staged fixture, the root package first.
+/// The package roots of a tree laid out like npm lays one out: the root
+/// package `.` first, then each directory with a `package.json` under a
+/// `node_modules`, named the way [`package_of`] names its files.
 fn package_roots(root: &Path) -> Vec<(String, PathBuf)> {
-    vec![
-        (".".to_string(), root.to_path_buf()),
-        ("liba".to_string(), root.join("node_modules/liba")),
-        ("libb".to_string(), root.join("node_modules/libb")),
-    ]
+    let mut roots = vec![(".".to_string(), root.to_path_buf())];
+    collect_modules(root, root, &mut roots);
+    roots
+}
+
+fn collect_modules(root: &Path, package: &Path, roots: &mut Vec<(String, PathBuf)>) {
+    let sorted_entries = |dir: &Path| {
+        let mut entries = std::fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .map(|entry| entry.expect("tree entry").path())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        entries.sort();
+        entries
+    };
+    for entry in sorted_entries(&package.join("node_modules")) {
+        let scoped = entry
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with('@'));
+        let packages = if scoped {
+            sorted_entries(&entry)
+        } else {
+            vec![entry]
+        };
+        for module in packages {
+            if !module.join("package.json").is_file() {
+                continue;
+            }
+            let relative = module
+                .strip_prefix(root)
+                .expect("a module lies inside its tree")
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
+            let manifest = format!("{relative}/package.json");
+            let (name, _) = package_of(&manifest);
+            roots.push((name.to_string(), module.clone()));
+            collect_modules(root, &module, roots);
+        }
+    }
 }
 
 /// One package graph per package of the staged fixture, named and rooted.
@@ -458,4 +498,103 @@ fn the_stitch_reports_the_imports_it_cannot_link() {
             .iter()
             .any(|open| open.specifier == "liba")
     );
+}
+
+/// The stitched trees of the JS/TS analysis benchmark. Ignored, so a normal
+/// `cargo test` never runs it; `tests/js-analysis-bench/report.py` runs it by
+/// its exact filter path, with `POLINT_JS_BENCH_TREE_MANIFEST` naming a file
+/// of `<tree>\t<output directory>` lines.
+///
+/// For each tree it writes `graphs/<n>.json`, the package graph of each
+/// package analysed alone, and `answers.json`: the answer at every call site
+/// of the tree analysed whole and of the stored graphs stitched, the imports
+/// the stitch left open, and the wall time of each step. The stitch reads the
+/// graphs back from their stored text, as a reader of stored graphs does.
+#[test]
+#[ignore = "JS/TS benchmark trees: run explicitly with POLINT_JS_BENCH_TREE_MANIFEST set"]
+fn stitch_js_bench_trees() {
+    let manifest = std::env::var_os("POLINT_JS_BENCH_TREE_MANIFEST")
+        .expect("POLINT_JS_BENCH_TREE_MANIFEST names the manifest; it is required");
+    let manifest = std::fs::read_to_string(manifest).expect("read manifest");
+    for line in manifest.lines().filter(|line| !line.trim().is_empty()) {
+        let (tree, out) = line.split_once('\t').expect("<tree>\\t<output directory>");
+        let (tree, out) = (Path::new(tree), Path::new(out));
+        std::fs::create_dir_all(out.join("graphs")).expect("create output directory");
+
+        let started = std::time::Instant::now();
+        let whole = whole_program_answers(tree);
+        let whole_ms = started.elapsed().as_millis();
+
+        let mut packages = Vec::new();
+        for (index, (name, root)) in package_roots(tree).into_iter().enumerate() {
+            let started = std::time::Instant::now();
+            let graph = package_graph_of(&root).expect("package graph");
+            let build_ms = started.elapsed().as_millis();
+            let file = out.join("graphs").join(format!("{index}.json"));
+            let text = serde_json::to_string(&graph).expect("serialize package graph");
+            std::fs::write(&file, text).expect("write package graph");
+            packages.push((name, root, file, build_ms));
+        }
+
+        let started = std::time::Instant::now();
+        let stored = packages
+            .iter()
+            .map(|(name, root, file, _)| {
+                let text = std::fs::read_to_string(file).expect("read package graph");
+                let graph = serde_json::from_str(&text).expect("parse package graph");
+                (name.clone(), root.clone(), graph)
+            })
+            .collect::<Vec<(String, PathBuf, PackageGraph)>>();
+        let graphs = named(&stored);
+        let stitched = stitch(&graphs, &tree_of(&stored)).expect("stitch");
+        let stitch_ms = started.elapsed().as_millis();
+        let answers = stitched_portable(&stitched, &graphs);
+
+        let as_json = |answers: &BTreeMap<String, PortableAnswer>| {
+            answers
+                .iter()
+                .map(|(site, answer)| {
+                    let value = serde_json::json!({
+                        "claim": answer.claim,
+                        "targets": answer.targets,
+                    });
+                    (site.clone(), value)
+                })
+                .collect::<serde_json::Map<_, _>>()
+        };
+        let document = serde_json::json!({
+            "whole_ms": whole_ms,
+            "stitch_ms": stitch_ms,
+            "packages": packages
+                .iter()
+                .map(|(name, root, file, build_ms)| serde_json::json!({
+                    "name": name,
+                    "root": root
+                        .strip_prefix(tree)
+                        .expect("a package lies inside its tree")
+                        .components()
+                        .map(|part| part.as_os_str().to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join("/"),
+                    "graph": file.file_name().map(|name| name.to_string_lossy()),
+                    "build_ms": build_ms,
+                }))
+                .collect::<Vec<_>>(),
+            "open_imports": stitched
+                .open_imports
+                .iter()
+                .map(|open| serde_json::json!({
+                    "package": open.package,
+                    "file": open.file,
+                    "specifier": open.specifier,
+                    "reason": open.reason,
+                }))
+                .collect::<Vec<_>>(),
+            "whole": as_json(&whole),
+            "stitched": as_json(&answers),
+        });
+        let mut text = serde_json::to_string(&document).expect("serialize answers");
+        text.push('\n');
+        std::fs::write(out.join("answers.json"), text).expect("write answers");
+    }
 }
