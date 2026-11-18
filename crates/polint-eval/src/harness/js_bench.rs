@@ -53,10 +53,16 @@ use crate::internal_core::{FileId, FunctionId, Language, Span, SymbolId};
 const MANIFEST_ENV: &str = "POLINT_JS_BENCH_MANIFEST";
 const CAPS_ENV: &str = "POLINT_JS_BENCH_CAPS";
 const CENSUS_ENV: &str = "POLINT_JS_BENCH_CENSUS";
+const SOLVER_INPUT_ENV: &str = "POLINT_JS_BENCH_SOLVER_INPUT";
 const SCHEMA: &str = "polint-js-bench-facts-3";
 
 /// Analyses `tree` with the named capabilities and returns its normalized dump.
-fn dump_tree(tree: &Path, capabilities: &[&str], with_census: bool) -> anyhow::Result<Value> {
+fn dump_tree(
+    tree: &Path,
+    capabilities: &[&str],
+    with_census: bool,
+    solver_input: Option<&Path>,
+) -> anyhow::Result<Value> {
     let loaded = crate::cli::load_config_for_check(tree, &[])?;
     let config_digest = crate::cache::keys::config_hash(&loaded);
     let rule_digest = crate::cache::keys::rule_hash(&[], None, &BTreeMap::new());
@@ -87,6 +93,13 @@ fn dump_tree(tree: &Path, capabilities: &[&str], with_census: bool) -> anyhow::R
     });
     if with_census {
         document["syntax_census"] = syntax_census(&output.db);
+    }
+    if let Some(path) = solver_input {
+        crate::ts::points_to::write_solver_input(
+            path,
+            &output.db.stable_key_interner(),
+            &crate::ts::points_to::TsPointsToInputs::from_db(&output.db),
+        )?;
     }
     Ok(document)
 }
@@ -578,9 +591,15 @@ mod tests {
             .filter(|name| !name.is_empty())
             .collect();
         let with_census = std::env::var_os(CENSUS_ENV).is_some_and(|value| value == "1");
+        // With `POLINT_JS_BENCH_SOLVER_INPUT=1` each tree's points-to solver
+        // input is written beside its dump as `<output>.solver.json`, for
+        // `stored::tests::solve_stored_inputs`.
+        let with_solver_input =
+            std::env::var_os(SOLVER_INPUT_ENV).is_some_and(|value| value == "1");
         let manifest = std::fs::read_to_string(&manifest).expect("read manifest");
         for (tree, out) in manifest_entries(&manifest) {
-            let document = dump_tree(&tree, &capabilities, with_census)
+            let solver_input = with_solver_input.then(|| out.with_extension("solver.json"));
+            let document = dump_tree(&tree, &capabilities, with_census, solver_input.as_deref())
                 .unwrap_or_else(|error| panic!("analyse {}: {error:#}", tree.display()));
             let mut text = serde_json::to_string_pretty(&document).expect("serialize dump");
             text.push('\n');
@@ -699,7 +718,7 @@ mod tests {
                     .replace('\\', "/");
                 let tree = scratch.path().join(&id);
                 copy_case(&case, &tree);
-                let document = dump_tree(&tree, &["syntax"], false)
+                let document = dump_tree(&tree, &["syntax"], false, None)
                     .unwrap_or_else(|error| panic!("analyse {id}: {error:#}"));
                 for function in document["functions"].as_array().expect("functions") {
                     let key = function["key"].as_str().expect("function key");

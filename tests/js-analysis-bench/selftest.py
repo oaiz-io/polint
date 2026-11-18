@@ -316,6 +316,26 @@ def check_stage_times(failures: list[str]) -> None:
     check(stages == expected, f"stage times: {stages}", failures)
 
 
+def check_solver_solves(failures: list[str]) -> None:
+    """Each `points_to solve` line is one row, constraint kinds split out, in log order."""
+    stderr = "\n".join([
+        '2026-01-01T00:00:00Z  INFO polint::kernel::stage: stage done provider="polint.solver" elapsed_ms=7',
+        '\x1b[2m2026-01-01T00:00:01Z\x1b[0m  INFO polint::points_to: points_to solve pass="type_value_alias" '
+        'constraints=copy:3,field_load:2 calls=0 variables=9 objects=4 slots=1 copy_edges=3 pops=12 largest_set=2 '
+        'sets_over_64=0 sets_over_1024=0 initialize_ms=1 run_ms=2 result_ms=3 rss_delta_mb=0 peak_rss_mb=50 '
+        'budget=WithinBudget',
+        '2026-01-01T00:00:02Z  INFO polint::points_to: points_to solve pass="call_graph" constraints= calls=5 '
+        'pops=1 budget=BudgetExceeded',
+    ])
+    solves = report.solver_solves(stderr)
+    check([solve["pass"] for solve in solves] == ["type_value_alias", "call_graph"], f"solve passes: {solves}", failures)
+    check(solves[0]["constraints"] == {"copy": 3, "field_load": 2}, f"constraint kinds: {solves[0]}", failures)
+    check(solves[0]["pops"] == 12 and solves[0]["run_ms"] == 2, f"solve counts: {solves[0]}", failures)
+    check(solves[1]["constraints"] == {} and solves[1]["calls"] == 5 and solves[1]["variables"] == 0,
+          f"sparse solve line: {solves[1]}", failures)
+    check(solves[1]["budget"] == "BudgetExceeded", f"budget: {solves[1]}", failures)
+
+
 def check_sequence_callee(failures: list[str]) -> None:
     """A comma-sequence callee reads as its last operand, nested ones too; other
     parenthesised text is left alone."""
@@ -402,6 +422,7 @@ def main() -> int:
     check_guard(failures)
     check_exports(failures)
     check_stage_times(failures)
+    check_solver_solves(failures)
     check_sequence_callee(failures)
     check_stripped_span(failures)
 
