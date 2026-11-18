@@ -6,6 +6,7 @@
 //! fields, and records the inherited slots the graph must also read.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::rc::Rc;
 
 use super::{FlowObject, FlowRow, FlowSpan, FlowVar, TsValueFlows};
 
@@ -82,11 +83,16 @@ struct Store {
     field: usize,
 }
 
-/// The state of one prototype walk for a load.
+/// What a prototype walk for one field finds from one object.
 #[derive(Default)]
-struct Walk {
-    path: HashSet<Token>,
-    done: HashSet<Token>,
+struct Found {
+    /// The objects on the chain that hold the field themselves.
+    holders: BTreeSet<Token>,
+    unknown: bool,
+    prim: bool,
+    /// Functions on the chain without the field: outside code may add it, so
+    /// they escape.
+    escaping: BTreeSet<Token>,
 }
 
 #[derive(Clone)]
@@ -111,11 +117,13 @@ struct Solve<'a> {
     stores_by_base: Vec<Vec<Store>>,
     calls_by_callee: Vec<Vec<Call>>,
     fields: HashMap<Box<str>, usize>,
+    internal: Vec<bool>,
     slots: HashMap<(Token, usize), usize>,
     slots_of: HashMap<Token, Vec<usize>>,
     stored: HashSet<(Token, usize)>,
     loads_of: HashMap<Token, Vec<usize>>,
     lookups: Vec<(Load, Token)>,
+    found: HashMap<(Token, usize), Rc<Found>>,
     escaped: HashSet<Token>,
     exported: HashSet<Token>,
     descriptions: Vec<Described>,
@@ -141,11 +149,13 @@ impl<'a> Solve<'a> {
             stores_by_base: Vec::new(),
             calls_by_callee: Vec::new(),
             fields: HashMap::new(),
+            internal: Vec::new(),
             slots: HashMap::new(),
             slots_of: HashMap::new(),
             stored: HashSet::new(),
             loads_of: HashMap::new(),
             lookups: Vec::new(),
+            found: HashMap::new(),
             escaped: HashSet::new(),
             exported: HashSet::new(),
             descriptions: files.iter().map(|_| Described::default()).collect(),
@@ -188,8 +198,15 @@ impl<'a> Solve<'a> {
     }
 
     fn field(&mut self, field: &str) -> usize {
-        let next = self.fields.len();
-        *self.fields.entry(field.into()).or_insert(next)
+        if let Some(&id) = self.fields.get(field) {
+            return id;
+        }
+        let id = self.fields.len();
+        self.fields.insert(field.into(), id);
+        // Internal slots other than the prototype link hold primitives only.
+        self.internal
+            .push(field.starts_with('$') && field != "$proto");
+        id
     }
 
     fn add(&mut self, node: usize, token: Token) {
@@ -412,12 +429,9 @@ impl<'a> Solve<'a> {
 
     fn load(&mut self, load: Load, token: Token) {
         if matches!(token, Token::Unknown | Token::Prim) {
-            let internal = self.fields.iter().any(|(field, &id)| {
-                id == load.field && field.starts_with('$') && &**field != "$proto"
-            });
             self.add(
                 load.dst,
-                if token == Token::Prim && internal {
+                if token == Token::Prim && self.internal[load.field] {
                     Token::Prim
                 } else {
                     Token::Unknown
@@ -505,59 +519,88 @@ impl<'a> Solve<'a> {
         }
     }
 
-    /// Follows `load` from `token` up its prototype chain. `walk.done` holds
-    /// the tokens already followed for this load: reaching one again through
-    /// another parent adds nothing new, so the walk stays linear in the
-    /// prototype graph. A token met again on the current path is a cycle, and
-    /// the load is left open there.
-    fn lookup(&mut self, load: Load, token: Token, depth: u8, walk: &mut Walk) {
-        if walk.done.contains(&token) {
-            return;
-        }
-        if depth >= 16 || !walk.path.insert(token) || matches!(token, Token::Unknown | Token::Prim)
-        {
-            self.add(load.dst, Token::Unknown);
-            return;
-        }
-        // Outside code may shadow any field of an escaped object, so the
-        // inherited value is a candidate beside an unknown one.
-        if self.escaped.contains(&token) {
-            self.add(load.dst, Token::Unknown);
-        }
-        if self.stored.contains(&(token, load.field)) {
-            let slot = self.slot(token, load.field);
+    /// Reads `load` from what `token` inherits through its prototype chain.
+    fn lookup(&mut self, load: Load, token: Token) {
+        let found = self.walk(token, load.field, 0, &mut HashSet::new());
+        for &holder in &found.holders {
+            let slot = self.slot(holder, load.field);
             self.edge(slot, load.dst);
             self.descriptions[load.file]
                 .lookups
-                .insert((load.row, token));
+                .insert((load.row, holder));
+        }
+        if found.unknown {
+            self.add(load.dst, Token::Unknown);
+        }
+        if found.prim {
+            self.add(load.dst, Token::Prim);
+        }
+        for &function in &found.escaping {
+            self.add(self.sink, function);
+        }
+    }
+
+    /// Walks `field` up the prototype chain from `token`. A result is kept for
+    /// the rest of the round, so every load of the field from an object shares
+    /// one walk and the work stays linear in the prototype graph. A token met
+    /// again on the current path is a cycle, and the walk is left open there,
+    /// as it is past the depth limit.
+    fn walk(
+        &mut self,
+        token: Token,
+        field: usize,
+        depth: u8,
+        path: &mut HashSet<Token>,
+    ) -> Rc<Found> {
+        if let Some(found) = self.found.get(&(token, field)) {
+            return Rc::clone(found);
+        }
+        if depth >= 16 || matches!(token, Token::Unknown | Token::Prim) || !path.insert(token) {
+            return Rc::new(Found {
+                unknown: true,
+                ..Found::default()
+            });
+        }
+        // Outside code may shadow any field of an escaped object, so the
+        // inherited value is a candidate beside an unknown one.
+        let mut found = Found {
+            unknown: self.escaped.contains(&token),
+            ..Found::default()
+        };
+        if self.stored.contains(&(token, field)) {
+            found.holders.insert(token);
         } else if let Some(&proto) = self.slots.get(&(token, self.proto))
             && !self.sets[proto].is_empty()
         {
             for parent in self.sets[proto].clone() {
-                self.lookup(load, parent, depth + 1, walk);
+                let inherited = self.walk(parent, field, depth + 1, path);
+                found.holders.extend(&inherited.holders);
+                found.unknown |= inherited.unknown;
+                found.prim |= inherited.prim;
+                found.escaping.extend(&inherited.escaping);
             }
-        } else if self
-            .fields
-            .iter()
-            .any(|(field, &id)| id == load.field && field.starts_with('$') && &**field != "$proto")
-        {
-            self.add(load.dst, Token::Prim);
+        } else if self.internal[field] {
+            found.prim = true;
         } else if !matches!(token, Token::Object(_, Obj::Namespace)) {
-            self.add(load.dst, Token::Unknown);
+            found.unknown = true;
             if matches!(token, Token::Function(..)) {
-                self.add(self.sink, token);
+                found.escaping.insert(token);
             }
         }
-        walk.path.remove(&token);
-        walk.done.insert(token);
+        path.remove(&token);
+        let found = Rc::new(found);
+        self.found.insert((token, field), Rc::clone(&found));
+        found
     }
 
     fn run(&mut self) {
         loop {
             self.propagate();
+            // Propagation may have changed any chain, so walks start afresh.
+            self.found.clear();
             for (load, token) in self.lookups.clone() {
                 if !self.stored.contains(&(token, load.field)) {
-                    self.lookup(load, token, 0, &mut Walk::default());
+                    self.lookup(load, token);
                 }
             }
             if self.queue.is_empty() {
