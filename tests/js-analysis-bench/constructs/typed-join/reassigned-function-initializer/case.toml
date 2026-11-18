@@ -1,0 +1,3 @@
+construct = "typed-join"
+held_out = true
+description = "A binding initialised with a function expression is replaced when a platform function exists; the call reaches the replacement."

@@ -1,0 +1,47 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@17..210",
+      "name": "defineError"
+    },
+    {
+      "function": "main.js@363..451",
+      "name": "fail"
+    },
+    {
+      "function": "main.js@67..149",
+      "name": "CustomError"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@313..338",
+      "syntax": "identifier",
+      "callee": "main.js@17..210",
+      "callee_name": "defineError"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@406..426",
+      "syntax": "new",
+      "callee": "main.js@67..149",
+      "callee_name": "CustomError"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@515..526",
+      "syntax": "identifier",
+      "callee": "main.js@363..451",
+      "callee_name": "fail"
+    }
+  ]
+}
