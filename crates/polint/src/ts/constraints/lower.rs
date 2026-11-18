@@ -2143,6 +2143,25 @@ mod tests {
     }
 
     #[test]
+    fn unknown_computed_reads_open_callbacks_reachable_from_the_base() {
+        let source = "function a() {} function invoke(fn) { fn(); } const table = {run: invoke}; const value = table[unknownKey]; invoke(a); value();";
+        let flows = lower(source);
+        let described = describe(&flows, |_| true);
+        let invoke = flows
+            .functions
+            .iter()
+            .find(|function| source[function.span.0 as usize..].starts_with("function invoke"))
+            .expect("callback")
+            .span;
+        assert!(described.open.contains(&FlowVar::Param(invoke, 0)));
+        assert!(
+            !described
+                .named
+                .contains_key(&site_of(&flows, source, "value()"))
+        );
+    }
+
+    #[test]
     fn an_exported_function_has_open_parameters() {
         let source = "export function run(task) { task(); }\n";
         let flows = lower(source);
