@@ -560,35 +560,37 @@ fn extract_alias_rows(
         let Some(init) = &declarator.init else {
             continue;
         };
-        let scope_key = scope_key_for_binding(
-            file,
-            scope_keys,
-            scoping,
-            identifier.name.as_str(),
-            identifier.span,
-        )
-        .unwrap_or_else(|| module_scope.clone());
+        let symbol = symbol_for_binding(scoping, identifier.name.as_str(), identifier.span);
+        if !keeps_declared_value(scoping, symbol) {
+            continue;
+        }
+        let scope_key = symbol.map_or_else(
+            || module_scope.clone(),
+            |symbol| scope_key_for_symbol(file, scope_keys, scoping, symbol),
+        );
         match init {
-            Expression::Identifier(target) => rows.push(binding_row(BindingRowDraft {
-                file,
-                source,
-                span: span_from_oxc(file, declarator.span),
-                scope_key: scope_key.clone(),
-                name: identifier.name.clone(),
-                declaration_kind: TsDeclarationKind::Alias,
-                binding_kind: TsBindingKind::Alias,
-                import_export_kind: TsImportExportKind::Alias,
-                module_source: None,
-                imported_name: Some(target.name.to_string()),
-                exported_name: None,
-                status: TsBindingStatus::present(),
-            })),
+            Expression::Identifier(target) if reads_declared_value(scoping, init) => {
+                rows.push(binding_row(BindingRowDraft {
+                    file,
+                    source,
+                    span: span_from_oxc(file, declarator.span),
+                    scope_key: scope_key.clone(),
+                    name: identifier.name.clone(),
+                    declaration_kind: TsDeclarationKind::Alias,
+                    binding_kind: TsBindingKind::Alias,
+                    import_export_kind: TsImportExportKind::Alias,
+                    module_source: None,
+                    imported_name: Some(target.name.to_string()),
+                    exported_name: None,
+                    status: TsBindingStatus::present(),
+                }))
+            }
             Expression::ObjectExpression(object) => {
                 rows.extend(object.properties.iter().filter_map(|property| {
                     let ObjectPropertyKind::ObjectProperty(property) = property else {
                         return None;
                     };
-                    if property.computed {
+                    if property.computed || !reads_declared_value(scoping, &property.value) {
                         return None;
                     }
                     let property_name = property_key_name(&property.key)?;
@@ -698,20 +700,20 @@ fn extract_destructuring_rows(
         let mut names = Vec::new();
         collect_pattern_bindings(&declarator.id, &mut names);
         for binding in names {
-            let imported_name = destructuring_aliases.get(&binding.name).cloned();
+            let symbol = symbol_for_binding(scoping, binding.name.as_str(), binding.span);
+            let imported_name = destructuring_aliases
+                .get(&binding.name)
+                .filter(|_| keeps_declared_value(scoping, symbol))
+                .cloned();
             let import_export_kind = if imported_name.is_some() {
                 TsImportExportKind::Alias
             } else {
                 TsImportExportKind::None
             };
-            let scope_key = scope_key_for_binding(
-                file,
-                scope_keys,
-                scoping,
-                binding.name.as_str(),
-                binding.span,
-            )
-            .unwrap_or_else(|| module_scope.clone());
+            let scope_key = symbol.map_or_else(
+                || module_scope.clone(),
+                |symbol| scope_key_for_symbol(file, scope_keys, scoping, symbol),
+            );
             rows.push(binding_row(BindingRowDraft {
                 file,
                 source,
@@ -1205,27 +1207,47 @@ fn binding_identifier(pattern: &BindingPattern<'_>) -> Option<PatternBinding> {
     }
 }
 
-fn scope_key_for_binding(
+fn scope_key_for_symbol(
     file: &SourceFile,
     scope_keys: &BTreeMap<OxcScopeId, String>,
     scoping: &Scoping,
-    name: &str,
-    span: oxc_span::Span,
-) -> Option<String> {
-    scoping.symbol_ids().find_map(|symbol| {
+    symbol: OxcSymbolId,
+) -> String {
+    scope_keys
+        .get(&scoping.symbol_scope_id(symbol))
+        .cloned()
+        .unwrap_or_else(|| module_scope_key(file))
+}
+
+fn symbol_for_binding(scoping: &Scoping, name: &str, span: oxc_span::Span) -> Option<OxcSymbolId> {
+    scoping.symbol_ids().find(|&symbol| {
         let symbol_span = scoping.symbol_span(symbol);
-        if scoping.symbol_name(symbol) != name
-            || symbol_span.start != span.start
-            || symbol_span.end != span.end
-        {
-            return None;
-        }
-        let scope_id = scoping.symbol_scope_id(symbol);
-        scope_keys
-            .get(&scope_id)
-            .cloned()
-            .or_else(|| Some(module_scope_key(file)))
+        scoping.symbol_name(symbol) == name
+            && symbol_span.start == span.start
+            && symbol_span.end == span.end
     })
+}
+
+/// Whether a declared name keeps the value it is declared with: no reference
+/// writes it and no second declaration redeclares it. A name that may hold
+/// another value is no alias of its initializer.
+fn keeps_declared_value(scoping: &Scoping, symbol: Option<OxcSymbolId>) -> bool {
+    symbol.is_some_and(|symbol| {
+        !scoping.symbol_is_mutated(symbol) && scoping.symbol_redeclarations(symbol).is_empty()
+    })
+}
+
+/// Whether the value an alias reads stays the declared one: the name it reads
+/// is not written anywhere. An unresolved name is left to the binding lookup.
+fn reads_declared_value(scoping: &Scoping, expression: &Expression<'_>) -> bool {
+    let Expression::Identifier(identifier) = expression else {
+        return true;
+    };
+    identifier
+        .reference_id
+        .get()
+        .and_then(|reference| scoping.get_reference(reference).symbol_id())
+        .is_none_or(|symbol| !scoping.symbol_is_mutated(symbol))
 }
 
 fn ts_scope_kind(kind: AstKind<'_>) -> TsScopeKind {
