@@ -15,6 +15,8 @@
 pub(crate) mod described;
 #[cfg(feature = "lang-typescript")]
 mod lower;
+#[cfg(test)]
+mod platform;
 
 #[cfg(feature = "lang-typescript")]
 pub(crate) use lower::{lower_ts_program_value_flows, lower_ts_source_value_flows};
