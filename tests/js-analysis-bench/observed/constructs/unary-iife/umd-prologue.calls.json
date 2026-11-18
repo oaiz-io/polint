@@ -39,13 +39,6 @@
     },
     {
       "kind": "call",
-      "site": "main.js@26..531",
-      "syntax": "expression",
-      "callee": "main.js@26..222",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "main.js@377..381",
       "syntax": "identifier",
       "callee": "main.js@305..341",
@@ -71,6 +64,13 @@
       "syntax": "member",
       "callee": "main.js@305..341",
       "callee_name": "n"
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@222",
+      "syntax": "implicit",
+      "callee": "main.js@26..222",
+      "callee_name": ""
     }
   ]
 }

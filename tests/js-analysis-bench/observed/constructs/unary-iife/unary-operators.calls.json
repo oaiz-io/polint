@@ -39,24 +39,10 @@
     },
     {
       "kind": "call",
-      "site": "main.js@179..262",
-      "syntax": "expression",
-      "callee": "main.js@179..260",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "main.js@231..242",
       "syntax": "identifier",
       "callee": "main.js@41..89",
       "callee_name": "step"
-    },
-    {
-      "kind": "call",
-      "site": "main.js@266..345",
-      "syntax": "expression",
-      "callee": "main.js@266..343",
-      "callee_name": ""
     },
     {
       "kind": "call",
@@ -67,23 +53,37 @@
     },
     {
       "kind": "call",
-      "site": "main.js@355..436",
-      "syntax": "expression",
-      "callee": "main.js@355..434",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "main.js@405..416",
       "syntax": "identifier",
       "callee": "main.js@41..89",
       "callee_name": "step"
     },
     {
-      "kind": "call",
-      "site": "main.js@92..171",
-      "syntax": "expression",
+      "kind": "implicit",
+      "site": "main.js@169",
+      "syntax": "implicit",
       "callee": "main.js@92..169",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@260",
+      "syntax": "implicit",
+      "callee": "main.js@179..260",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@343",
+      "syntax": "implicit",
+      "callee": "main.js@266..343",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@434",
+      "syntax": "implicit",
+      "callee": "main.js@355..434",
       "callee_name": ""
     }
   ]

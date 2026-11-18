@@ -2131,13 +2131,6 @@
     },
     {
       "kind": "call",
-      "site": "dist/pako.min.js@74..46857",
-      "syntax": "expression",
-      "callee": "dist/pako.min.js@74..277",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "dist/pako.min.js@749..753",
       "syntax": "identifier",
       "callee": "dist/pako.min.js@309..358",
@@ -2191,6 +2184,13 @@
       "syntax": "identifier",
       "callee": "dist/pako.min.js@8122..8271",
       "callee_name": "vt"
+    },
+    {
+      "kind": "implicit",
+      "site": "dist/pako.min.js@277",
+      "syntax": "implicit",
+      "callee": "dist/pako.min.js@74..277",
+      "callee_name": ""
     }
   ]
 }

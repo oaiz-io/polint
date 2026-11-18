@@ -457,7 +457,12 @@ function findCallSite(info, offset) {
         : node.type === "TaggedTemplateExpression"
           ? node.tag
           : null;
-    if (callee && offset >= node.start && offset <= calleeRegionEnd(info.original, callee.end)) {
+    if (
+      callee &&
+      offset >= node.start &&
+      offset <= calleeRegionEnd(info.original, callee.end) &&
+      !insideFunction(callee, offset)
+    ) {
       if (!best || node.end - node.start <= best.end - best.start) best = node;
     }
     for (const key of Object.keys(node)) {
@@ -469,6 +474,31 @@ function findCallSite(info, offset) {
   };
   visit(info.ast);
   return best;
+}
+
+// A position inside a function written in the callee, such as the body of an
+// immediately invoked function, belongs to a call in that body, never to the
+// call that invokes the function.
+function insideFunction(node, offset) {
+  if (!node || typeof node.type !== "string") return false;
+  if (offset < node.start || offset > node.end) return false;
+  if (
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "ClassExpression"
+  ) {
+    return true;
+  }
+  for (const key of Object.keys(node)) {
+    if (key === "type" || key === "start" || key === "end") continue;
+    const child = node[key];
+    if (Array.isArray(child)) {
+      if (child.some((item) => insideFunction(item, offset))) return true;
+    } else if (child && typeof child.type === "string" && insideFunction(child, offset)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function spanKey(info, start, end) {
