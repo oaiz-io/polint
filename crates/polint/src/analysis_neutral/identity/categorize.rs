@@ -103,6 +103,8 @@ pub fn category_for_unresolved(reason: UnresolvedCallReason) -> IdentityCategory
         UnresolvedCallReason::BudgetExceeded | UnresolvedCallReason::IndirectionBound => {
             IdentityCategory::UnresolvedEdge
         }
+        // Values from outside the package may reach the callee.
+        UnresolvedCallReason::Inflow(_) => IdentityCategory::UnresolvedEdge,
     }
 }
 

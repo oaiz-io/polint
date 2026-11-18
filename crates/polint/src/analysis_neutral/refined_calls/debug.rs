@@ -258,6 +258,7 @@ fn reason_label(reason: UnresolvedCallReason) -> &'static str {
         UnresolvedCallReason::UnsupportedSyntax => "unsupported_syntax",
         UnresolvedCallReason::BudgetExceeded => "budget_exceeded",
         UnresolvedCallReason::IndirectionBound => "indirection_bound",
+        UnresolvedCallReason::Inflow(inflow) => inflow.label(),
         UnresolvedCallReason::UnknownCallee => "unknown_callee",
         UnresolvedCallReason::Unknown => "unknown",
     }
