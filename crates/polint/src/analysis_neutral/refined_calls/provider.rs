@@ -51,8 +51,8 @@ pub struct GoSemanticCallsiteInput {
 }
 
 pub use crate::analysis_neutral::refined_calls::ts_types::{
-    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDispatchKind, TsTypeFileDensityInput,
-    TsTypeJoinReport, TsTypeSiteStatus,
+    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDeclarationKind, TsTypeDispatchKind,
+    TsTypeFileDensityInput, TsTypeJoinReport, TsTypeReceiverShape, TsTypeSiteStatus,
 };
 
 pub const REFINED_CALLS_PROVIDER_ID: &str = "polint.refined_calls";

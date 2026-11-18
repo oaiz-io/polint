@@ -10,19 +10,19 @@ Producers today (`crates/polint/src/`):
 
 | `CallPrecision` | produced by | tier |
 |---|---|---|
-| `Exact` | Go static calls (`go/typed_calls.rs:64`); the typed tier's `Declared` dispatch in a file under 25% `any` receivers (`refined_calls/ts_types.rs:321`); direct summaries (`analysis/summaries/provider.rs:398,416`). `refined_calls/validate.rs:104-128` refuses it on `Model` provenance, on extension-validated edges, and on the `PointsTo`, `FrameworkModel` and `RepoModel` algorithms. | **exact** |
-| `SetupAware` | the direct tier (`calls/direct.rs:116`: `DirectReference`, `ImportBinding`, `ConstructorBinding`, `StaticMember`, `DirectMember`), summary-assisted edges, solver edges from `FlowInsensitive`/`LocalFlowSensitive` sets (`refined_calls/provider.rs:664`), typed `Declared` in a degraded file and typed `Implementation`/`UnionMember` in a clean file (`ts_types.rs:322-323`) | **exact** for the direct tier and solver edges; **conservative** for typed `Implementation`/`UnionMember` (see the note) |
-| `Conservative` | typed candidates in a degraded file (`ts_types.rs:324`); framework and extension rows | conservative |
+| `Exact` | Go static calls (`go/typed_calls.rs:64`); the typed tier's `Declared` dispatch to a function, method or constructor in the analysed tree (a class only where the call constructs it), at a site that is not a union, on a receiver named by one declaration (not an intersection or an object literal), in a file under 25% `any` receivers (`refined_calls/ts_types.rs`, `TypedAnswer::names_the_target`); direct summaries (`analysis/summaries/provider.rs:398,416`). `refined_calls/validate.rs:104-128` refuses it on `Model` provenance, on extension-validated edges, and on the `PointsTo`, `FrameworkModel` and `RepoModel` algorithms. | **exact** |
+| `SetupAware` | the direct tier (`calls/direct.rs:116`: `DirectReference`, `ImportBinding`, `ConstructorBinding`, `StaticMember`, `DirectMember`), summary-assisted edges, solver edges from `FlowInsensitive`/`LocalFlowSensitive` sets (`refined_calls/provider.rs:664`) | **exact** |
+| `Conservative` | every other typed edge: `Declared` in a degraded file, at a union site, on an intersection or object-literal receiver, or to an accessor, a class called without `new`, a declaration outside the tree or one whose kind the sidecar did not send; and every `DeclaredSignature`, `Implementation`, `UnionMember` and `Inferred` candidate (`ts_types.rs`, `precision_for`); framework and extension rows | conservative |
 | `Ambiguous` | a reference that resolves to several symbols (`calls/extract.rs`, `unresolved.rs`) | conservative |
 | `Heuristic` | the walker's rows (`ts/semantic_graph_build.rs:663`, surfacing as solver edges with `Heuristic` sets); the lexical fallback `SyntaxOnly` (`direct.rs:67`) | **apart**: reported as its own column until the producer is gone |
 | `Unknown`, `Unsupported` | unresolved rows | no claim |
 
-Note on `SetupAware`: the value today mixes "exact given the setup" (the
-direct tier) with "a candidate narrowed by types" (typed `Implementation`
-and `UnionMember`). The bench's tier split must read the *algorithm* and
-*dispatch* beside the precision until WP4 gives the typed candidates their
-own value. Proposal for WP4: typed `Implementation`/`UnionMember` become
-`Conservative`, so that precision alone decides the tier.
+Note on `SetupAware`: it means "exact given the setup" only. The typed
+tier no longer produces it: a typed answer is `Exact` when the checker named
+the function the call runs, and `Conservative` otherwise, so precision alone
+decides the tier. A typed declaration whose native function cannot be found
+by span or by name gets no edge (never the function around it), and is
+counted as an unmatched callee in the `ts type tier join` log line.
 
 The site status is the second axis and is independent of precision: a site
 is **complete** when it has at least one resolved target and no unresolved
@@ -50,7 +50,7 @@ are re-checked at stitch and drop the claim to conservative when they fail.
 | `export_link(import, package, name)` | the import binding follows module links, at most 8 hops, to one exported declaration; namespace imports and multi-symbol links stop | `direct.rs:305-327` | **boundary**: the link is re-resolved against the stitched dependency tree (which version answers the name) |
 | `export_not_rewritten(package, path)` | nothing writes the exported access path after the module initialises; trivially true for an ESM named export written only by its module, not for `module.exports.x`, `exports.x` or a namespace object another package can patch | implied today, never recorded | **boundary**: a stitched package that writes the path breaks it |
 | `prototype_closed(class)` | no code outside the package writes the class's prototype or the prototype chain its instances inherit | implied by every method resolution; never recorded | **boundary** |
-| `declared_target(site)` | the type checker resolved the call to one declaration, the declaration is a function in the analysed tree (not a class, a variable or an external declaration), the receiver type is not a union or a structural pick, and the file is under 25% `any` receivers | `ts_types.rs:140-176, 319-326`; the first and second conditions are the fix in WP4 (DIAGNOSIS §4) | package-internal (types are compiled per package) |
+| `declared_target(site)` | the type checker resolved the call to one declaration, the declaration is a function, method or constructor in the analysed tree (a class only where the call constructs it; not an accessor, a variable or an external declaration), the receiver type is named by one declaration (not a union, an intersection or an object literal), and the file is under 25% `any` receivers | `ts_types.rs`, `TypedAnswer::names_the_target` | package-internal (types are compiled per package) |
 | `no_inward_flow(site)` | no value from the boundary reaches the site's callee expression: not a parameter of an exported function or method, not `this` of an exported method, not an imported value, not a property of an object that enters or leaves | the solver's exact tier, WP3 | **boundary**: stitching that adds inflow drops the site to open |
 | `no_outside_field_write(object, field)` | no stitched package stores into field `f` of an object that leaves this package | the solver's exact tier, WP3 | **boundary** |
 | `within_budget(package)` | the solve reached a fixed point with no budget event | `points_to/solver.rs`, `solver/engine.rs` | package-internal; a package graph with a budget event has no exact claims at all |
