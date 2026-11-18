@@ -1497,7 +1497,14 @@ mod linked_bindings {
         let re_export = graph.symbol(index_file, "handler", SymbolKind::Import, 9, 16);
         graph.reference(index_file, "handler", ReferenceKind::Import, 9, 16, binding);
         let import = graph.symbol(caller_file, "handler", SymbolKind::Import, 9, 16);
-        graph.reference(caller_file, "handler", ReferenceKind::Import, 9, 16, re_export);
+        graph.reference(
+            caller_file,
+            "handler",
+            ReferenceKind::Import,
+            9,
+            16,
+            re_export,
+        );
         let call = graph.reference(caller_file, "handler", ReferenceKind::Call, 50, 57, import);
 
         let targets = graph.resolve(caller_file, call, "handler", 50, 59);
