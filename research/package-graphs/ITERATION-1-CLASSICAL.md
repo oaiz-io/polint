@@ -254,6 +254,24 @@ fifteen as fixtures.
 Exit: the typed plan finds every edge the refined plan finds, and claims no
 wrong exact target.
 
+As built: types are a step after the solve rather than constraints inside
+it (`refined_calls/type_assignment.rs`; [TIERS.md](TIERS.md), note on
+types). Declared types say what a call may run, not which value flows to it,
+so the step claims nothing exact: it moves an exact edge the checker's
+declared kind or arity says cannot run to conservative (`type_mismatch`),
+adds methods of the receiver's declared class at an open site
+(`type_seed`), and lists the checker's targets at a site no tier answered,
+conservative and open. The fifteen wrong exact targets are gone because the
+typed tier no longer claims exact; the fixtures stay. The bench fails when
+the typed plan finds fewer observed edges than the refined plan in any tier
+(`report.py`, `types_never_lose`). That check found the native call kind
+guessing construction from a capitalised name; the step reads it from the
+checker's syntax instead. On the bench the typed plan equals the refined
+plan at exact (tune 47.5%, held-out 32.3%) and raises exact + conservative
+from 67.9% to 75.6% on the tune set and from 83.5% to 84.3% held out, with no
+wrong exact target. No mismatch or seed fires on the tune set; the gain is the
+checker's targets at sites no other tier answered.
+
 ### WP5. Package graph v0: export, stitch, composition test
 
 Follow [PACKAGE-GRAPH.md](PACKAGE-GRAPH.md), storage option A: the package's
