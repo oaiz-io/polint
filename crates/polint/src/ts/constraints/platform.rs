@@ -271,7 +271,6 @@ mod tests {
             "Array.from([1], cb)",
             "cb.call(null)",
             "cb.apply(null, [])",
-            "cb.bind(null)",
         ] {
             let source = format!("function cb() {{}} {call};");
             let found = edges(&source, call);
@@ -312,6 +311,50 @@ mod tests {
             assert!(
                 flows.calls.iter().all(|call| call.model.is_none()),
                 "{expression}"
+            );
+        }
+    }
+
+    #[test]
+    fn destructuring_a_spread_generator_keeps_element_flow() {
+        let source = "function target() {} function* values() { yield target; } const [fn] = [...values()]; fn();";
+        let found = edges(source, "fn()");
+        assert!(
+            found
+                .iter()
+                .any(|(target, _)| target == "function target() {}"),
+            "{found:?}"
+        );
+    }
+
+    #[test]
+    fn binding_only_forwards_when_the_returned_function_is_called() {
+        let source = "function target() {} const bound = target.bind(null); bound();";
+        assert!(
+            edges(source, "target.bind(null)")
+                .iter()
+                .all(|(target, _)| target != "function target() {}")
+        );
+        assert!(
+            edges(source, "bound()")
+                .contains(&("function target() {}".into(), CallPrecision::Conservative))
+        );
+    }
+
+    #[test]
+    fn partial_object_shapes_cannot_close_copied_fields() {
+        for expression in [
+            "Object.assign({}, condition ? {run: target} : unknown)",
+            "Object.defineProperty({}, 'run', condition ? {value: target} : unknown)",
+            "Object.defineProperties({}, condition ? {run: {value: target}} : unknown)",
+            "Object.create(null, condition ? {run: {value: target}} : unknown)",
+        ] {
+            let source = format!("function target() {{}} const o = {expression}; o.run();");
+            let found = edges(&source, "o.run()");
+            assert!(
+                found.iter().all(|(_, precision)| precision.tier()
+                    != crate::analysis_neutral::calls::facts::ClaimTier::Exact),
+                "{expression}: {found:?}"
             );
         }
     }
