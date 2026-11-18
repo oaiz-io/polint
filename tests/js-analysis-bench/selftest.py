@@ -22,6 +22,8 @@ The cases are the ones the tier rules exist for:
   flags a recording under the floor;
 - the held-out gate leaves a flagged package out of recall and keeps its wrong
   exact targets, and a held-out score keeps no cause and no missed-edge example;
+- a typed plan that finds fewer observed edges than refined in an exact or
+  conservative view, on a tune or a held-out package, is reported;
 - the authorship guard refuses analysis code and held-out files in one change,
   and accepts either alone and recorder or tune-set files that only share
   letters with a held-out name.
@@ -358,6 +360,25 @@ def check_stripped_span(failures: list[str]) -> None:
     check(got is None, f"js span with no end match: {got}", failures)
 
 
+def check_types_never_lose(failures: list[str]) -> None:
+    """The typed plan may move an observed edge between tiers only upward; a loss in any view fails the run."""
+
+    def plans(refined: dict, typed: dict) -> dict:
+        return {"refined": {"tiers": {"found": refined}}, report.TYPED_PLAN: {"tiers": {"found": typed}}}
+
+    even = {"exact_complete": 2, "exact": 3, "exact_conservative": 4, "apart_only": 1}
+    gained = {"exact_complete": 2, "exact": 3, "exact_conservative": 5, "apart_only": 0}
+    demoted = {"exact_complete": 1, "exact": 2, "exact_conservative": 4, "apart_only": 1}
+    check(report.types_never_lose({"tune": plans(even, gained)}, {"held": plans(even, even)}) == [],
+          "a typed plan that only gains was reported as losing", failures)
+    lost = report.types_never_lose({"tune": plans(even, even)}, {"held": plans(even, demoted)})
+    check(lost == ["held exact_complete: refined 2, typed 1", "held exact: refined 3, typed 2"],
+          f"a held-out loss in the exact views was not reported: {lost}", failures)
+    deleted = {**even, "exact_conservative": 3}
+    check(report.types_never_lose({"tune": plans(even, deleted)}, {}) == ["tune exact_conservative: refined 4, typed 3"],
+          "a deleted edge was not reported", failures)
+
+
 def check(condition: bool, message: str, failures: list[str]) -> None:
     if not condition:
         failures.append(message)
@@ -418,6 +439,7 @@ def main() -> int:
             pass
 
     check_outside(failures)
+    check_types_never_lose(failures)
     check_held_out(entry, failures)
     check_guard(failures)
     check_exports(failures)

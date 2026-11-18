@@ -54,6 +54,8 @@ PLANS = {
 # to `PLANS` only when a TypeScript compiler is available (see `run`), so every
 # per-plan score and total covers it without a second code path.
 TYPED_PLAN = "typed"
+# Evidence a refined edge carries when the type checker changed it (`type_effect` in the dump).
+TYPE_EFFECTS = ("type_mismatch", "type_seed")
 TYPED_TSCONFIG = {
     "compilerOptions": {
         "allowJs": True,
@@ -1843,6 +1845,7 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                 entry[plan]["ts_types"] = {
                     **{key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")},
                     "join": run.get("ts_type_join"),
+                    "effects": type_effects(run["dump"]),
                 }
         if "base" in plan_facts:
             for plan, facts in plan_facts.items():
@@ -1850,6 +1853,34 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                     entry[plan]["sites_gained"] = sites_gained(plan_facts["base"], facts, executed[plan])
         results[name] = entry
     return results
+
+
+def type_effects(dump: dict) -> dict:
+    """Refined rows the type checker changed: exact edges moved to conservative, candidates listed at open sites."""
+    counts = Counter(edge.get("type_effect") for edge in dump["refined_edges"])
+    return {effect: counts[effect] for effect in TYPE_EFFECTS}
+
+
+# Tier views in which the typed plan must find every observed edge the refined plan finds.
+TYPES_NEVER_LOSE_VIEWS = ("exact_complete", "exact", "exact_conservative")
+
+
+def types_never_lose(packages: dict, held_out: dict) -> list[str]:
+    """Every package, tune and held-out, where the typed plan finds fewer observed edges than the refined plan in a tier view.
+
+    Types only move an exact claim the checker contradicts to the conservative tier and add conservative
+    candidates, so a loss in the exact views is a type answer that contradicted a call the run made, and a loss
+    in exact + conservative is an edge the type step deleted."""
+    losses = []
+    for name, entry in {**packages, **held_out}.items():
+        refined, typed = entry.get("refined", {}), entry.get(TYPED_PLAN, {})
+        if "tiers" not in refined or "tiers" not in typed:
+            continue
+        for view in TYPES_NEVER_LOSE_VIEWS:
+            before, after = refined["tiers"]["found"].get(view, 0), typed["tiers"]["found"].get(view, 0)
+            if after < before:
+                losses.append(f"{name} {view}: refined {before}, {TYPED_PLAN} {after}")
+    return losses
 
 
 def withhold_miss_attribution(scored: dict) -> None:
@@ -2387,6 +2418,27 @@ def render_types(report: dict, add) -> None:
             f"| {join['matched_callees']:,} / {join['unmatched_callees']:,} |"
         )
     add("")
+    add("What the type step changed in the refined plan's answer: `type_mismatch` is an exact edge to a function "
+        "whose declared kind or arity the checker says the call cannot run, moved to the conservative tier and "
+        "kept; `type_seed` is a method of the receiver's declared class listed as a conservative candidate at an "
+        "open site.")
+    add("")
+    add("| package | type_mismatch | type_seed |")
+    add("|---|---|---|")
+    for name, entry in report["packages"].items():
+        effects = entry.get(TYPED_PLAN, {}).get("ts_types", {}).get("effects")
+        if effects is None:
+            add(f"| {name} | n/a | n/a |")
+            continue
+        add(f"| {name} | {effects['type_mismatch']:,} | {effects['type_seed']:,} |")
+    add("")
+    lost = report.get("types_never_lose")
+    if lost is not None:
+        add(
+            f"Typed against refined, every package and the held-out set, in {', '.join(TYPES_NEVER_LOSE_VIEWS)}: "
+            + ("no package loses an observed edge." if not lost else "losses: " + "; ".join(lost) + ".")
+        )
+        add("")
     fc = report["constructs"]["false_complete"]
     add(
         f"Constructs, typed: false-complete hidden paths {fc.get(TYPED_PLAN, 0)}, "
@@ -3206,6 +3258,7 @@ def run(args) -> int:
             "packages": packages,
             "held_out": held_out,
             "held_out_gate": held_out_gate(packages, held_out, list(PLANS)),
+            "types_never_lose": types_never_lose(packages, held_out),
             "dump_budgets_s": budgets,
             # One fact dump per package and plan, kept even without the cost runs.
             "dump_cost": {
@@ -3257,4 +3310,7 @@ def run(args) -> int:
         print("fact dumps that failed:\n" + "\n".join(failed), file=sys.stderr)
     if over_budget:
         print("fact dumps over their time budget:\n" + "\n".join(over_budget), file=sys.stderr)
-    return 1 if failed or over_budget else 0
+    lost = report.get("types_never_lose", [])
+    if lost:
+        print(f"the {TYPED_PLAN} plan found fewer observed edges than refined:\n" + "\n".join(lost), file=sys.stderr)
+    return 1 if failed or over_budget or lost else 0
