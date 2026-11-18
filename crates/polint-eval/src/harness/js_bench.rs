@@ -459,6 +459,7 @@ impl<'a> Dump<'a> {
                 "reason": edge.reason.as_ref().map(debug),
                 "precision": debug(&edge.precision),
                 "claim_tier": edge.precision.tier().as_str(),
+                "assumptions": edge.assumptions.iter().map(|a| a.id()).collect::<Vec<_>>(),
                 "dispatch": dispatch_evidence(&edge.evidence),
                 "validation": debug(&edge.validation),
                 "confidence": debug(&edge.confidence),

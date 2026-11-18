@@ -451,12 +451,19 @@ def tier_of(precision: str) -> str:
 
 def edge_tier(edge: dict) -> str:
     """The tier the bench counts an edge in: its precision's tier, checked
-    against the engine's, and never exact for a typed candidate."""
+    against the engine's, never exact for a typed candidate, and exact for a
+    points-to edge exactly when it names the assumptions it rests on."""
     tier = tier_of(edge["precision"])
     if edge.get("claim_tier") != tier:
         raise SystemExit(
             f"edge at {edge['site']}: the engine says {edge.get('claim_tier')!r} for {edge['precision']}, "
             f"the bench says {tier!r}"
+        )
+    points_to_exact = tier == "exact" and edge["algorithm"] == "PointsTo"
+    if points_to_exact != bool(edge.get("assumptions")):
+        raise SystemExit(
+            f"edge at {edge['site']}: a {edge['algorithm']} edge claiming {edge['precision']} records "
+            f"assumptions {edge.get('assumptions', [])}; only an exact points-to edge records them, and it must"
         )
     if tier == "exact" and edge["algorithm"] == "TypeHierarchy" and edge.get("dispatch") in TYPED_CANDIDATE_DISPATCH:
         raise SystemExit(
