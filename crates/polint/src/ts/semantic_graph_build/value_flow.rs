@@ -14,7 +14,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analysis_api::FunctionFact;
+use crate::analysis_api::{FunctionFact, ResolutionStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::ids::{PlaceId, SemanticNodeId};
 use crate::analysis_neutral::points_to::facts::PointsToPrecision;
@@ -22,7 +22,7 @@ use crate::analysis_neutral::semantic_graph::build::{function_node_key, node_key
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::internal_core::{FileId, StableKeyInterner};
-use crate::ts::constraints::described::{Described, describe};
+use crate::ts::constraints::described::{Described, Obj, Token, describe_program};
 use crate::ts::constraints::{
     FlowCall, FlowRow, FlowSpan, FlowVar, TsValueFlows, lower_ts_source_value_flows,
 };
@@ -124,6 +124,9 @@ impl GraphBuilder {
                     key,
                 });
         }
+        for &(file, _) in &flows {
+            nodes.entry(file).or_default();
+        }
         let mut sites = Vec::new();
         for site in db.call_sites() {
             if !site.language.is_ts_family() {
@@ -147,6 +150,86 @@ impl GraphBuilder {
             return;
         }
 
+        let file_ids = flows.iter().map(|(file, _)| *file).collect::<Vec<_>>();
+        let file_paths = file_ids
+            .iter()
+            .map(|&file| db.path_for(file))
+            .collect::<Vec<_>>();
+        let indices = file_ids
+            .iter()
+            .enumerate()
+            .map(|(index, &file)| (file, index))
+            .collect::<BTreeMap<_, _>>();
+        let module_files = db
+            .module_nodes()
+            .iter()
+            .filter_map(|node| Some((node.id, node.file?)))
+            .collect::<BTreeMap<_, _>>();
+        let resolved = db
+            .resolved_imports()
+            .iter()
+            .map(|import| {
+                (
+                    import.import,
+                    import
+                        .target_node
+                        .filter(|_| import.status == ResolutionStatus::Resolved),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut targets = BTreeMap::<(FileId, &str), BTreeSet<Option<usize>>>::new();
+        for import in db.imports() {
+            let target = resolved
+                .get(&import.id)
+                .copied()
+                .flatten()
+                .and_then(|node| module_files.get(&node))
+                .and_then(|file| indices.get(file))
+                .copied();
+            targets
+                .entry((import.file, &import.path))
+                .or_default()
+                .insert(target);
+        }
+        let requests = flows
+            .iter()
+            .map(|(file, file_flows)| {
+                file_flows
+                    .requests
+                    .iter()
+                    .map(|request| {
+                        let candidates = targets.get(&(*file, request.as_ref()))?;
+                        if candidates.len() != 1 {
+                            return None;
+                        }
+                        candidates
+                            .first()
+                            .copied()
+                            .flatten()
+                            .filter(|&target| flows[target].1.lowered)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let flow_refs = flows.iter().map(|(_, flows)| *flows).collect::<Vec<_>>();
+        let described = describe_program(
+            &flow_refs,
+            |file, span| nodes[&file_ids[file]].function(span).is_some(),
+            |file, request| requests[file].get(request as usize).copied().flatten(),
+        );
+        let earlier_callees = self
+            .inner
+            .constraints()
+            .iter()
+            .filter_map(|constraint| match constraint.kind {
+                ConstraintKind::CallConstraint {
+                    callsite,
+                    callee: Some(_),
+                    ..
+                } => Some(callsite),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
         let mut results_by_callsite = BTreeMap::<SemanticNodeId, Vec<SemanticNodeId>>::new();
         for constraint in self.inner.constraints() {
             if let ConstraintKind::CallConstraint {
@@ -170,7 +253,7 @@ impl GraphBuilder {
             .flat_map(|(_, flows)| flows.functions.iter().map(|function| function.params))
             .max()
             .unwrap_or(0);
-        for &(file, flows) in &flows {
+        for (file_index, &(file, flows)) in flows.iter().enumerate() {
             if !flows.lowered {
                 continue;
             }
@@ -178,18 +261,23 @@ impl GraphBuilder {
             let Some(file_nodes) = nodes.get(&file) else {
                 continue;
             };
-            let described = describe(flows, |span| file_nodes.function(span).is_some());
             let mut projection = FileProjection {
                 builder: self,
                 interner,
                 path: db.path_for(file),
                 nodes: file_nodes,
+                all_nodes: &nodes,
+                file_ids: &file_ids,
+                file_paths: &file_paths,
+                file_index,
+                requests: &requests[file_index],
+                earlier_callees: &earlier_callees,
                 places: BTreeMap::new(),
                 next_place: &mut next_place,
                 pending: &mut pending,
                 rows: 0,
             };
-            projection.project(flows, &described, &results_by_callsite);
+            projection.project(flows, &described[file_index], &results_by_callsite);
             described_sites.extend(flows.calls.iter().map(|call| (file, call.site)));
         }
 
@@ -261,6 +349,12 @@ struct FileProjection<'b, 'n> {
     interner: &'b StableKeyInterner,
     path: String,
     nodes: &'n FileNodes<'n>,
+    all_nodes: &'n BTreeMap<FileId, FileNodes<'n>>,
+    file_ids: &'n [FileId],
+    file_paths: &'n [String],
+    file_index: usize,
+    requests: &'n [Option<usize>],
+    earlier_callees: &'n BTreeSet<SemanticNodeId>,
     places: BTreeMap<(FlowVar, bool), SemanticNodeId>,
     next_place: &'b mut u64,
     pending: &'b mut Pending,
@@ -329,7 +423,7 @@ impl FileProjection<'_, '_> {
                 },
                 FlowRow::Alloc { dst, object } => ConstraintKind::Alloc {
                     dst: self.var(*dst, true),
-                    object: self.place(format!("object#{}:{}", object.0, object.1)),
+                    object: self.object_place(self.file_index, (*object).into()),
                 },
                 FlowRow::Load { dst, base, field } => ConstraintKind::FieldLoad {
                     dst: self.var(*dst, true),
@@ -343,6 +437,31 @@ impl FileProjection<'_, '_> {
                 },
             };
             self.push(kind);
+        }
+
+        for &span in &described.prototypes {
+            let Some(function) = nodes.function(span) else {
+                continue;
+            };
+            let prototype =
+                self.token_value(Token::Object(self.file_index as u32, Obj::Prototype(span)));
+            self.push(ConstraintKind::FieldStore {
+                base: function.node,
+                field: "exact:prototype".into(),
+                src: prototype,
+            });
+        }
+        for &(row, token) in &described.lookups {
+            let FlowRow::Load { dst, field, .. } = &flows.rows[row] else {
+                continue;
+            };
+            let base = self.token_value(token);
+            let dst = self.var(*dst, true);
+            self.push(ConstraintKind::FieldLoad {
+                dst,
+                base,
+                field: field.to_string(),
+            });
         }
 
         for (index, call) in flows.calls.iter().enumerate() {
@@ -369,7 +488,7 @@ impl FileProjection<'_, '_> {
             }
         }
         for object in &described.escaped_objects {
-            let src = self.place(format!("object#{}:{}", object.0, object.1));
+            let src = self.token_value(Token::Object(self.file_index as u32, *object));
             self.push(ConstraintKind::CopyEdge { dst: sink, src });
         }
     }
@@ -390,7 +509,20 @@ impl FileProjection<'_, '_> {
             .collect::<Vec<_>>();
         let result = self.var(call.result, true);
         let named = described.named.get(&call.site).copied();
-        let site = named.and_then(|_| self.nodes.callsite(call.site));
+        if named.is_none() {
+            // A non-callable object can occur beside a function without an
+            // unknown token. That alternative still prevents a complete answer.
+            let open = self.var(FlowVar::Open, false);
+            // The open source must stay unwritten, and Prim must stay closed.
+            if callee != open && call.callee != FlowVar::Prim {
+                self.push(ConstraintKind::CopyEdge {
+                    dst: callee,
+                    src: open,
+                });
+            }
+        }
+        let real_site = self.nodes.callsite(call.site);
+        let site = real_site.filter(|site| named.is_some() || !self.earlier_callees.contains(site));
         if let (Some(params), None) = (named, call.spread_from) {
             // A parameter the call leaves out is `undefined`.
             let prim = self.var(FlowVar::Prim, false);
@@ -398,7 +530,9 @@ impl FileProjection<'_, '_> {
         }
         let callsite = match site {
             Some(site) => {
-                self.pending.named.insert(site);
+                if named.is_some() {
+                    self.pending.named.insert(site);
+                }
                 for &earlier in results_by_callsite.get(&site).into_iter().flatten() {
                     self.push(ConstraintKind::CopyEdge {
                         dst: earlier,
@@ -432,6 +566,30 @@ impl FileProjection<'_, '_> {
         };
         let nodes = self.nodes;
         let node = match var {
+            FlowVar::Namespace => self.place("namespace".into()),
+            FlowVar::Module => self.place("module".into()),
+            FlowVar::Exports => self.place("exports".into()),
+            FlowVar::RequestNamespace(request) | FlowVar::RequestModule(request) => {
+                let namespace = matches!(var, FlowVar::RequestNamespace(_));
+                let dst = self.place(format!(
+                    "request#{}#{request}",
+                    if namespace { "namespace" } else { "module" }
+                ));
+                let src = match self.requests.get(request as usize).copied().flatten() {
+                    Some(target) => self.builder.value_flow_place(
+                        self.interner,
+                        self.next_place,
+                        format!(
+                            "{}#{}",
+                            self.file_paths[target],
+                            if namespace { "namespace" } else { "module" }
+                        ),
+                    ),
+                    None => self.var(FlowVar::Open, false),
+                };
+                self.push(ConstraintKind::CopyEdge { dst, src });
+                dst
+            }
             FlowVar::Local(symbol) => self.place(format!("local#{symbol}")),
             FlowVar::Temp(temp) => self.place(format!("temp#{temp}")),
             FlowVar::Open => self.place("open".to_string()),
@@ -479,6 +637,40 @@ impl FileProjection<'_, '_> {
             node_kind,
             node_key_from_identity(kind, &identity),
         )
+    }
+
+    fn object_place(&mut self, file: usize, object: Obj) -> SemanticNodeId {
+        let suffix = match object {
+            Obj::Site(span) => format!("{}:{}", span.0, span.1),
+            Obj::Prototype(span) => format!("prototype#{}:{}", span.0, span.1),
+            Obj::Namespace => "namespace".into(),
+            Obj::Module => "module".into(),
+            Obj::Exports => "exports".into(),
+        };
+        self.builder.value_flow_place(
+            self.interner,
+            self.next_place,
+            format!("{}#object#{suffix}", self.file_paths[file]),
+        )
+    }
+
+    fn token_value(&mut self, token: Token) -> SemanticNodeId {
+        let tmp = self.place(format!("lookup#{}", self.rows));
+        match token {
+            Token::Object(file, object) => {
+                let object = self.object_place(file as usize, object);
+                self.push(ConstraintKind::Alloc { dst: tmp, object });
+            }
+            Token::Function(file, span) => {
+                let src = self.all_nodes[&self.file_ids[file as usize]]
+                    .function(span)
+                    .map(|function| function.node);
+                let src = src.unwrap_or_else(|| self.var(FlowVar::Open, false));
+                self.push(ConstraintKind::CopyEdge { dst: tmp, src });
+            }
+            Token::Unknown | Token::Prim => {}
+        }
+        tmp
     }
 
     fn place(&mut self, local: String) -> SemanticNodeId {
