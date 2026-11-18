@@ -347,5 +347,8 @@ fn signature_places(
     places
 }
 
+mod stitch;
+pub(crate) use stitch::{OpenImport, StitchError, Stitched, Tree, stitch};
+
 #[cfg(test)]
 mod tests;

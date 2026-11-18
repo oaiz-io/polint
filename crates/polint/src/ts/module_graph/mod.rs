@@ -1864,6 +1864,26 @@ struct TsconfigCompilerOptionsWire {
 /// The `exports` conditions import resolution matches, in its order.
 pub(crate) const EXPORT_CONDITIONS: &[&str] = &["import", "require", "node", "default"];
 
+/// Resolves import specifiers against the files on disk with the options of
+/// import resolution, for callers that hold no fact database.
+#[cfg(feature = "lang-typescript")]
+pub(crate) struct DiskResolver(Resolver);
+
+#[cfg(feature = "lang-typescript")]
+impl DiskResolver {
+    pub(crate) fn new() -> Self {
+        Self(Resolver::new(resolve_options()))
+    }
+
+    /// The file `specifier` names when the file `importer` imports it.
+    pub(crate) fn resolve(&self, importer: &Path, specifier: &str) -> Option<PathBuf> {
+        self.0
+            .resolve_file(importer, specifier)
+            .ok()
+            .and_then(|resolution| normalize_path(resolution.path()))
+    }
+}
+
 #[cfg(feature = "lang-typescript")]
 fn resolve_options() -> ResolveOptions {
     ResolveOptions {
