@@ -13,6 +13,7 @@ use crate::analysis_neutral::calls::facts::{
     CallTargetFact, CallTargetStatus, ClaimTier, UnresolvedCallReason,
 };
 use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
+use crate::analysis_neutral::points_to::tiers::{Assumption, EdgeClaim, Inflow};
 use crate::analysis_neutral::refined_calls::cache_key::{
     refined_calls_provider_parameter_digest, refined_calls_provider_parameter_digest_for_snapshot,
 };
@@ -322,6 +323,7 @@ fn unclaimed_site_edges(
                         ("site", site_key.clone()),
                     ],
                 ),
+                assumptions: Vec::new(),
             })
         })
         .collect()
@@ -357,6 +359,7 @@ fn refined_edge_from_base_target(
         evidence: vec!["base_call_target".to_string()],
         input_stable_keys: vec![base_target_key.clone()],
         stable_key: stable_refined_call_key(interner, tier, &base_target_key, site_key),
+        assumptions: Vec::new(),
     }
 }
 
@@ -373,11 +376,19 @@ pub fn derive_solver_refinements_with_inputs(
     let interner = &interner_handle;
     let index = SolverProjectionIndex::new(db, go_semantic_functions, go_semantic_callsites);
     let mut output = RefinedCallOutput::empty();
-    output.edges.extend(
-        db.solver_derived_edges()
-            .iter()
-            .filter_map(|edge| refined_edge_from_solver_edge(interner, &index, edge)),
-    );
+    let mut open_sites = BTreeMap::new();
+    for edge in db.solver_derived_edges() {
+        let Some((refined, site)) = refined_edge_from_solver_edge(interner, &index, edge) else {
+            continue;
+        };
+        if let EdgeClaim::Open(inflow) = edge.claim {
+            open_sites.entry(site.id).or_insert((site, inflow));
+        }
+        output.edges.push(refined);
+    }
+    for (site, inflow) in open_sites.into_values() {
+        output.edges.push(open_site_row(interner, site, inflow));
+    }
     let modeled = db
         .semantic_constraints()
         .iter()
@@ -416,16 +427,54 @@ pub fn derive_solver_refinements_with_inputs(
                 FactFamily::RefinedCallEdge,
                 &[("platform_open", site_key)],
             ),
+            assumptions: Vec::new(),
         });
     }
     output
 }
 
-fn refined_edge_from_solver_edge(
+/// The row that says an open site may reach callees its edges do not list,
+/// and how values from outside reach its callee set.
+fn open_site_row(
     interner: &StableKeyInterner,
-    index: &SolverProjectionIndex<'_>,
+    site: &CallSiteFact,
+    inflow: Inflow,
+) -> RefinedCallEdgeFact {
+    let site_key = interner.resolve(site.stable_key).to_string();
+    RefinedCallEdgeFact {
+        id: crate::analysis_neutral::ids::RefinedCallEdgeId(0),
+        site: site.id,
+        base_target: None,
+        caller: site.caller,
+        target_function: None,
+        target_symbol: None,
+        synthetic_target: None,
+        language: site.language,
+        edge_kind: CallEdgeKind::Unknown,
+        algorithm: solver_algorithm_for_site(site),
+        tier: RefinedCallTier::PointsToAssisted,
+        status: CallTargetStatus::Unresolved,
+        reason: Some(UnresolvedCallReason::Inflow(inflow)),
+        provenance: CallProvenance::Model,
+        precision: CallPrecision::Unknown,
+        assumptions: Vec::new(),
+        validation: RefinedCallValidation::ReferentiallyValidated,
+        confidence: RefinedCallConfidence::Low,
+        evidence: vec!["solver_open".into(), format!("inflow:{}", inflow.label())],
+        input_stable_keys: vec![site_key.clone()],
+        stable_key: stable_key_from_parts(
+            interner,
+            FactFamily::RefinedCallEdge,
+            &[("solver_open", site_key)],
+        ),
+    }
+}
+
+fn refined_edge_from_solver_edge<'a>(
+    interner: &StableKeyInterner,
+    index: &SolverProjectionIndex<'a>,
     edge: &DerivedEdgeFact,
-) -> Option<RefinedCallEdgeFact> {
+) -> Option<(RefinedCallEdgeFact, &'a CallSiteFact)> {
     let modeled = edge.provenance.constraint_kind == "model_edge";
     if edge.provenance.constraint_kind != "call_constraint" && !modeled {
         return None;
@@ -445,8 +494,13 @@ fn refined_edge_from_solver_edge(
     if site.caller != caller {
         return None;
     }
+    let (precision, assumptions) = if modeled {
+        (CallPrecision::Conservative, Vec::new())
+    } else {
+        claimed_precision(edge)
+    };
 
-    Some(RefinedCallEdgeFact {
+    let refined = RefinedCallEdgeFact {
         id: crate::analysis_neutral::ids::RefinedCallEdgeId(0),
         site: site.id,
         base_target: None,
@@ -461,17 +515,15 @@ fn refined_edge_from_solver_edge(
         status: call_status_for_solver_edge(edge.status),
         reason: unresolved_reason_for_solver_edge(edge.status),
         provenance: CallProvenance::Model,
-        precision: if modeled {
-            CallPrecision::Conservative
-        } else {
-            call_precision_for_solver_edge(edge.precision)
-        },
+        precision,
+        assumptions,
         validation: RefinedCallValidation::ReferentiallyValidated,
         confidence: confidence_for_solver_edge(edge.status),
         evidence: solver_evidence(edge),
         input_stable_keys: solver_input_stable_keys(interner, edge),
         stable_key: stable_refined_call_key_from_solver_edge(interner, site, edge),
-    })
+    };
+    Some((refined, site))
 }
 
 struct SolverProjectionIndex<'a> {
@@ -813,10 +865,25 @@ fn unresolved_reason_for_solver_edge(status: PointsToStatus) -> Option<Unresolve
     }
 }
 
+/// The precision a solver edge states, and the assumptions an exact one
+/// rests on. Only an exact claim makes an edge exact; a set the solve did not
+/// claim a tier for may still miss values, so it is conservative.
+fn claimed_precision(edge: &DerivedEdgeFact) -> (CallPrecision, Vec<Assumption>) {
+    match &edge.claim {
+        EdgeClaim::Exact(assumptions) if !assumptions.is_empty() => {
+            (CallPrecision::Exact, assumptions.clone())
+        }
+        EdgeClaim::Exact(_) | EdgeClaim::Complete | EdgeClaim::Open(_) => {
+            (CallPrecision::Conservative, Vec::new())
+        }
+        EdgeClaim::Unassigned => (call_precision_for_solver_edge(edge.precision), Vec::new()),
+    }
+}
+
 fn call_precision_for_solver_edge(precision: PointsToPrecision) -> CallPrecision {
     match precision {
         PointsToPrecision::FlowInsensitive | PointsToPrecision::LocalFlowSensitive => {
-            CallPrecision::SetupAware
+            CallPrecision::Conservative
         }
         PointsToPrecision::SummaryProjected | PointsToPrecision::Heuristic => {
             CallPrecision::Heuristic

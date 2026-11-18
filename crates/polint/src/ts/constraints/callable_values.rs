@@ -151,22 +151,22 @@ fn class_constructor_bodies_are_owned_by_the_class_function() {
 /// Iteration, collections and callbacks of built-ins are callable models the
 /// value flow does not describe: their edges stay heuristic. Destructuring
 /// and a returned parameter are described by the value flow, which answers
-/// them on the exact tier.
+/// them on the exact tier, under the assumptions it names.
 #[test]
 fn callable_models_reach_the_shared_solver_on_the_tier_that_describes_them() {
-    use CallPrecision::{Heuristic, SetupAware};
+    use CallPrecision::{Exact, Heuristic};
     let cases = [
         (
             "const list = [target]; for (const callable of list) { callable(); }",
-            SetupAware,
+            Exact,
         ),
         (
             "const box = { method: target }; const { method: callable } = box; callable();",
-            SetupAware,
+            Exact,
         ),
         (
             "function pass(fn) { return fn; } const callable = pass(target); callable();",
-            SetupAware,
+            Exact,
         ),
         (
             "const list = new Set([target]); for (const callable of list) { callable(); }",
@@ -182,7 +182,7 @@ fn callable_models_reach_the_shared_solver_on_the_tier_that_describes_them() {
         ),
         (
             "const box = { nested: { method: target } }; const { nested: { method: callable } } = box; callable();",
-            SetupAware,
+            Exact,
         ),
         (
             "function* sequence() { yield target; } for (const callable of sequence()) { callable(); }",
@@ -224,6 +224,12 @@ fn callable_models_reach_the_shared_solver_on_the_tier_that_describes_them() {
         assert!(
             edges.iter().all(|edge| edge.precision == precision),
             "{suffix}: {edges:?}"
+        );
+        assert!(
+            edges
+                .iter()
+                .all(|edge| (edge.precision == Exact) != edge.assumptions.is_empty()),
+            "{suffix}: an exact edge names its assumptions: {edges:?}"
         );
     }
 }
@@ -448,11 +454,14 @@ fn resolved_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
     targets_at(files, call, false)
 }
 
-fn claimed_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
+/// The targets a site claims as its complete answer: its exact and
+/// conservative edges, or none when the solve marks the site open to values
+/// from outside.
+fn complete_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
     targets_at(files, call, true)
 }
 
-fn targets_at(files: &[(&str, &str)], call: &str, claimed_only: bool) -> BTreeSet<String> {
+fn targets_at(files: &[(&str, &str)], call: &str, complete_only: bool) -> BTreeSet<String> {
     let repo = tempfile::tempdir().unwrap();
     for (name, body) in files {
         std::fs::write(repo.path().join(name), body).unwrap();
@@ -502,13 +511,23 @@ fn targets_at(files: &[(&str, &str)], call: &str, claimed_only: bool) -> BTreeSe
         })
         .max_by_key(|site| site.span.end_byte)
         .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
+    let open = output.db.refined_call_edges().iter().any(|edge| {
+        edge.site == site.id
+            && matches!(
+                edge.reason,
+                Some(crate::analysis_neutral::calls::facts::UnresolvedCallReason::Inflow(_))
+            )
+    });
+    if complete_only && open {
+        return BTreeSet::new();
+    }
     output
         .db
         .refined_call_edges()
         .iter()
         .filter(|edge| edge.site == site.id && edge.status == CallTargetStatus::Resolved)
         .filter(|edge| {
-            !claimed_only
+            !complete_only
                 || matches!(
                     edge.precision.tier(),
                     crate::analysis_neutral::calls::facts::ClaimTier::Exact
@@ -988,10 +1007,10 @@ fn commonjs_interop_follows_the_es_module_marker() {
         let main = format!("{HELPERS}{tail}");
         assert_eq!(
             // Flow-insensitive rows retain both helper branches. A call
-            // that throws may therefore carry a heuristic candidate, but
-            // must never claim an exact or conservative target.
+            // that throws may therefore carry a candidate, but must never
+            // claim it as a complete answer.
             if expected.is_empty() {
-                claimed_targets_at(&[("main.js", &main), ("lib.js", lib)], call)
+                complete_targets_at(&[("main.js", &main), ("lib.js", lib)], call)
             } else {
                 resolved_targets_at(&[("main.js", &main), ("lib.js", lib)], call)
             },
@@ -1266,10 +1285,10 @@ fn returned_callables_are_complete_or_left_unresolved() {
     for (path, (body, call, expected, why)) in all_cases {
         let source = format!("{HEADER}{body}");
         assert_eq!(
-            // An open row call retains known operands as heuristic
-            // candidates; only claim tiers count as resolved answers here.
+            // A site the solve marks open keeps its known candidates as
+            // conservative edges; only a complete answer counts here.
             if expected.is_empty() {
-                claimed_targets_at(&[(path, &source)], call)
+                complete_targets_at(&[(path, &source)], call)
             } else {
                 resolved_targets_at(&[(path, &source)], call)
             },
@@ -1461,7 +1480,7 @@ fn repeated_calls_and_heap_updates_keep_their_callable_targets() {
         let source = format!("{PRELUDE}{body}");
         assert_eq!(
             if expected.is_empty() {
-                claimed_targets_at(&[("main.js", &source)], call)
+                complete_targets_at(&[("main.js", &source)], call)
             } else {
                 resolved_targets_at(&[("main.js", &source)], call)
             },
@@ -1479,5 +1498,5 @@ fn an_unknown_computed_read_keeps_reachable_callback_parameters_open() {
     let source = "function a() {} function b() {} function invoke(fn) { fn(); } const table = {run: invoke}; table[unknownKey](b); invoke(a);";
     let files = [("main.js", source)];
     assert!(resolved_targets_at(&files, "fn()").contains("function a() {}"));
-    assert!(claimed_targets_at(&files, "fn()").is_empty());
+    assert!(complete_targets_at(&files, "fn()").is_empty());
 }

@@ -101,7 +101,25 @@ fn validate_refined_call_edges(
                 "missing refined call input stable keys".to_string(),
             ));
         }
-        if edge.provenance == CallProvenance::Model && edge.precision == CallPrecision::Exact {
+        let points_to_exact =
+            edge.algorithm == CallAlgorithm::PointsTo && edge.precision == CallPrecision::Exact;
+        if points_to_exact && edge.assumptions.is_empty() {
+            diagnostics.push(invalid_refined_call_diagnostic(
+                stable_key.as_ref(),
+                "points-to refined call edge cannot claim exact precision without recorded assumptions"
+                    .to_string(),
+            ));
+        }
+        if !edge.assumptions.is_empty() && !points_to_exact {
+            diagnostics.push(invalid_refined_call_diagnostic(
+                stable_key.as_ref(),
+                "only an exact points-to refined call edge records assumptions".to_string(),
+            ));
+        }
+        if edge.provenance == CallProvenance::Model
+            && edge.precision == CallPrecision::Exact
+            && !points_to_exact
+        {
             diagnostics.push(invalid_refined_call_diagnostic(
                 stable_key.as_ref(),
                 "model refined call edge cannot claim exact precision".to_string(),
@@ -117,7 +135,7 @@ fn validate_refined_call_edges(
         }
         if matches!(
             edge.algorithm,
-            CallAlgorithm::PointsTo | CallAlgorithm::FrameworkModel | CallAlgorithm::RepoModel
+            CallAlgorithm::FrameworkModel | CallAlgorithm::RepoModel
         ) && edge.precision == CallPrecision::Exact
         {
             diagnostics.push(invalid_refined_call_diagnostic(
@@ -180,6 +198,7 @@ mod tests {
     };
     use crate::analysis_neutral::calls::store::CallOutput;
     use crate::analysis_neutral::ids::{CallSiteId, MirBodyId, MirOpId, RefinedCallEdgeId};
+    use crate::analysis_neutral::points_to::tiers::Assumption;
     use crate::analysis_neutral::refined_calls::facts::RefinedCallConfidence;
     use crate::analysis_neutral::refined_calls::facts::RefinedCallTier;
     use crate::internal_core::{FileId, FunctionId, Language, Span};
@@ -215,6 +234,43 @@ mod tests {
             diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.message.contains("cannot claim exact precision"))
+        );
+    }
+
+    #[test]
+    fn an_exact_points_to_edge_needs_recorded_assumptions() {
+        let db = db_with_call_site();
+        let mut refined = edge("family=RefinedCallEdge/points-to", CallSiteId(0));
+        refined.precision = CallPrecision::Exact;
+        refined.provenance = CallProvenance::Model;
+        refined.algorithm = CallAlgorithm::PointsTo;
+        refined.tier = RefinedCallTier::PointsToAssisted;
+        refined.validation = RefinedCallValidation::ReferentiallyValidated;
+        let mut diagnostics = Vec::new();
+
+        validate_refined_call_edges(&db, std::slice::from_ref(&refined), &mut diagnostics);
+
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("cannot claim exact precision without recorded assumptions")
+        }));
+
+        refined.assumptions = vec![Assumption::SealedBindings, Assumption::WithinBudget];
+        let mut diagnostics = Vec::new();
+        validate_refined_call_edges(&db, &[refined.clone()], &mut diagnostics);
+        assert!(
+            diagnostics.is_empty(),
+            "an exact points-to edge with assumptions is valid: {diagnostics:?}"
+        );
+
+        refined.precision = CallPrecision::Conservative;
+        let mut diagnostics = Vec::new();
+        validate_refined_call_edges(&db, &[refined], &mut diagnostics);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("records assumptions"))
         );
     }
 
@@ -339,6 +395,7 @@ mod tests {
             evidence: vec!["test".to_string()],
             input_stable_keys: vec!["input".to_string()],
             stable_key: crate::internal_core::stable_key_for_test(stable_key),
+            assumptions: Vec::new(),
         }
     }
 

@@ -252,6 +252,8 @@ mod solver_projection_tests {
     use crate::analysis::solver::store::SolverOutput;
     use crate::analysis_kernel::AnalysisKernel;
     use crate::analysis_kernel::incremental::InputSnapshot;
+    use crate::analysis_neutral::calls::facts::UnresolvedCallReason;
+    use crate::analysis_neutral::points_to::tiers::{Assumption, EdgeClaim, Inflow};
     use crate::analysis_plan::AnalysisPlan;
     use crate::config::load_config;
     use crate::core::{FileId, FunctionFact, FunctionId, Language, Span};
@@ -277,7 +279,12 @@ mod solver_projection_tests {
         assert_eq!(edge.target_function, Some(FunctionId::from_raw(1)));
         assert_eq!(edge.tier, RefinedCallTier::PointsToAssisted);
         assert_eq!(edge.status, CallTargetStatus::Resolved);
-        assert_eq!(edge.precision, CallPrecision::SetupAware);
+        assert_eq!(
+            edge.precision,
+            CallPrecision::Conservative,
+            "a solver edge with no claimed tier may miss values, so it is conservative"
+        );
+        assert!(edge.assumptions.is_empty());
         assert_eq!(
             edge.validation,
             RefinedCallValidation::ReferentiallyValidated
@@ -287,6 +294,67 @@ mod solver_projection_tests {
             edge.input_stable_keys
                 .iter()
                 .any(|key| key == "call-site:callee")
+        );
+    }
+
+    #[test]
+    fn a_claimed_tier_decides_the_precision_of_a_solver_edge() {
+        let assumptions = vec![
+            Assumption::SealedBindings,
+            Assumption::WithinBudget,
+            Assumption::NoInwardFlow,
+        ];
+        let output = derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Exact(
+            assumptions.clone(),
+        )));
+        assert_eq!(output.edges.len(), 1);
+        assert_eq!(output.edges[0].precision, CallPrecision::Exact);
+        assert_eq!(output.edges[0].assumptions, assumptions);
+
+        let output =
+            derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Exact(Vec::new())));
+        assert_eq!(
+            output.edges[0].precision,
+            CallPrecision::Conservative,
+            "an exact claim without assumptions is not trusted"
+        );
+
+        let output = derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Complete));
+        assert_eq!(output.edges.len(), 1);
+        assert_eq!(output.edges[0].precision, CallPrecision::Conservative);
+        assert!(output.edges[0].assumptions.is_empty());
+    }
+
+    #[test]
+    fn an_open_site_says_how_outside_values_reach_it() {
+        let output = derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Open(
+            Inflow::InwardParameter,
+        )));
+
+        assert_eq!(output.edges.len(), 2);
+        let resolved = output
+            .edges
+            .iter()
+            .find(|edge| edge.status == CallTargetStatus::Resolved)
+            .expect("the derived edge is kept");
+        assert_eq!(resolved.precision, CallPrecision::Conservative);
+        let open = output
+            .edges
+            .iter()
+            .find(|edge| edge.status == CallTargetStatus::Unresolved)
+            .expect("the site records that it is open");
+        assert_eq!(open.site, resolved.site);
+        assert_eq!(open.target_function, None);
+        assert_eq!(
+            open.reason,
+            Some(UnresolvedCallReason::Inflow(Inflow::InwardParameter))
+        );
+        assert_eq!(
+            open.evidence,
+            vec![
+                "solver_open".to_string(),
+                "inflow:inward_parameter".to_string()
+            ]
         );
     }
 
@@ -383,6 +451,10 @@ mod solver_projection_tests {
     }
 
     fn db_with_solver_edge() -> AnalysisDb {
+        db_with_claimed_solver_edge(EdgeClaim::Unassigned)
+    }
+
+    fn db_with_claimed_solver_edge(claim: EdgeClaim) -> AnalysisDb {
         let mut db = AnalysisDb::new();
         let interner = db.stable_key_interner();
         let file = db.add_file(
@@ -473,7 +545,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:caller-callee"),
                 provenance,
-                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
+                claim,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -1094,6 +1166,7 @@ mod tests {
             evidence: Vec::new(),
             input_stable_keys: Vec::new(),
             stable_key: crate::core::stable_key_for_test(stable_key),
+            assumptions: Vec::new(),
         }
     }
 }
