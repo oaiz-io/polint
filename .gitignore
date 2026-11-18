@@ -36,6 +36,8 @@ research/*/repos/
 node_modules/
 # Placeholder modules the JS analysis bench mounts for a package's imports; source.
 !tests/js-analysis-bench/observed/stubs/node_modules/
+# Dependency packages of the package-graph composition fixture; source.
+!tests/js-analysis-bench/composition/node_modules/
 
 # Benchmark reports written by `make eval-gate`; generated artifacts, not source.
 .context/
