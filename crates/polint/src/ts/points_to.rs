@@ -358,6 +358,57 @@ fn site_claim(
     }
 }
 
+/// What a solve answers at one call site: the claim its edges carry and the
+/// functions its callee set holds. A site the solve left no set for answers
+/// `Unknown` with no claim and no targets.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SiteAnswer {
+    pub(crate) callsite: SemanticNodeId,
+    pub(crate) status: PointsToStatus,
+    pub(crate) claim: EdgeClaim,
+    pub(crate) targets: std::collections::BTreeSet<SemanticNodeId>,
+}
+
+/// The answer of every call site of `inputs`, in the order of its call sites.
+#[cfg(test)]
+pub(crate) fn site_answers(
+    inputs: &TsPointsToInputs,
+    result: &TsPointsToSolveResult,
+) -> Vec<SiteAnswer> {
+    let sets = result
+        .points_to
+        .sets
+        .iter()
+        .map(|set| (set.variable, set))
+        .collect::<BTreeMap<_, _>>();
+    inputs
+        .callsites
+        .iter()
+        .map(|callsite| {
+            let Some(set) = sets.get(&var_for_node(callsite.callsite_node)) else {
+                return SiteAnswer {
+                    callsite: callsite.callsite_node,
+                    status: PointsToStatus::Unknown,
+                    claim: EdgeClaim::Unassigned,
+                    targets: Default::default(),
+                };
+            };
+            SiteAnswer {
+                callsite: callsite.callsite_node,
+                status: set.status,
+                claim: site_claim(inputs, &result.points_to, callsite, set),
+                targets: set
+                    .objects
+                    .iter()
+                    .filter_map(|object| inputs.callable_objects.get(object))
+                    .map(|(target, _)| *target)
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
 /// Writes the solver input `solve_ts_points_to` would solve, for the
 /// stored-input solver benchmark.
 #[cfg(test)]
