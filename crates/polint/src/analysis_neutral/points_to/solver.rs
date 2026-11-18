@@ -27,8 +27,15 @@
 //! dropped, and the sets they would have reached, with everything those can
 //! reach, are `IndirectionBound`: what they hold was derived, and they may
 //! hold more. Without a bound the solve is one level.
+//!
+//! Every variable on a cycle of copies ends with the same set, so the solve
+//! merges a cycle into one representative once it finds it: the cycle's set
+//! is kept and propagated once, along the edges of all its variables. A cycle
+//! is looked for when a copy ends at a set equal to its source's, and only
+//! over copies within a level. Merging changes how often objects are carried,
+//! not the sets the solve ends with.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use super::facts::{
     PointsToBudgetStatus, PointsToConstraintFact, PointsToConstraintKind, PointsToPrecision,
@@ -94,6 +101,8 @@ pub struct PointsToSolveStats {
     pub copy_edges: usize,
     /// Worklist pops.
     pub pops: usize,
+    /// Variables merged into another on a copy cycle.
+    pub collapsed: usize,
     pub largest_set: usize,
     pub sets_over_64: usize,
     pub sets_over_1024: usize,
@@ -203,6 +212,7 @@ pub fn solve_points_to_logged(
         slots = stats.slots,
         copy_edges = stats.copy_edges,
         pops = stats.pops,
+        collapsed = stats.collapsed,
         largest_set = stats.largest_set,
         sets_over_64 = stats.sets_over_64,
         sets_over_1024 = stats.sets_over_1024,
@@ -314,6 +324,8 @@ struct Var {
     interrupted: bool,
     /// The depth bound dropped objects the variable would have received.
     bounded: bool,
+    /// The variables merged into this one, when it represents a copy cycle.
+    merged: Vec<u32>,
 }
 
 #[derive(Debug)]
@@ -390,6 +402,18 @@ struct Solver<'a> {
     var_ids: Vec<PtVarId>,
     var_index: HashMap<PtVarId, u32>,
     vars: Vec<Var>,
+    /// The representative of each variable's copy cycle, the variable itself
+    /// when it is on none. A representative holds the set, the pending and
+    /// the deferred objects of its whole cycle.
+    reps: Vec<u32>,
+    /// Copy edges already queued for a cycle check.
+    checked: HashSet<(u32, u32)>,
+    /// Copy edges to check for a cycle at the next walk.
+    candidates: Vec<(u32, u32)>,
+    /// The step from which the next cycle walk may run: a walk waits for as
+    /// many steps as the last one visited variables, so walking never costs
+    /// more than the propagation between walks.
+    next_walk: usize,
     objects: Vec<Object>,
     object_index: HashMap<ObjectTokenId, u32>,
     fields: Vec<String>,
@@ -422,6 +446,10 @@ impl<'a> Solver<'a> {
             var_ids: Vec::new(),
             var_index: HashMap::new(),
             vars: Vec::new(),
+            reps: Vec::new(),
+            checked: HashSet::new(),
+            candidates: Vec::new(),
+            next_walk: 0,
             objects: Vec::new(),
             object_index: HashMap::new(),
             fields: Vec::new(),
@@ -449,6 +477,7 @@ impl<'a> Solver<'a> {
         self.var_ids.push(id);
         self.var_index.insert(id, index);
         self.vars.push(Var::default());
+        self.reps.push(index);
         index
     }
 
@@ -677,7 +706,10 @@ impl<'a> Solver<'a> {
                 .is_some_and(|depth| self.level > depth);
             let mut dropped = false;
             for var in std::mem::take(&mut self.deferred) {
-                let objects = self.vars[var as usize].deferred.take().unwrap_or_default();
+                let var = self.reps[var as usize];
+                let Some(objects) = self.vars[var as usize].deferred.take() else {
+                    continue;
+                };
                 if past_bound {
                     let mut missing = Vec::new();
                     self.vars[var as usize].set.missing(&objects, &mut missing);
@@ -711,6 +743,7 @@ impl<'a> Solver<'a> {
             }
             self.queue.pop_front();
             self.steps += 1;
+            let var = self.reps[var as usize];
             let mut delta = self.vars[var as usize].pending.take().unwrap_or_default();
             delta.sort_unstable();
             delta.dedup();
@@ -720,11 +753,12 @@ impl<'a> Solver<'a> {
             if self.halted {
                 break;
             }
+            self.collapse_cycles();
         }
     }
 
-    /// Adds `new` to the set of `var` and carries it along every edge out of
-    /// `var`: copies, the slots its loads and stores reach, and calls.
+    /// Adds `new` to the set of the representative `var` and carries it along
+    /// every edge out of `var` and the variables merged into it.
     fn process(&mut self, var: u32, new: &[u32]) {
         if new.is_empty() {
             return;
@@ -736,16 +770,32 @@ impl<'a> Solver<'a> {
             return;
         }
         self.vars[at].set.add_new(new);
+        for member in 0..=self.vars[at].merged.len() {
+            let member = member
+                .checked_sub(1)
+                .map_or(var, |index| self.vars[at].merged[index]);
+            if !self.carry(member, new) {
+                return;
+            }
+        }
+    }
+
+    /// Carries `new` along the edges out of `var`: copies, the slots its
+    /// loads and stores reach, and calls. False when a budget event stopped
+    /// it.
+    fn carry(&mut self, var: u32, new: &[u32]) -> bool {
+        let at = var as usize;
         for index in 0..self.vars[at].copies.len() {
             let dst = self.vars[at].copies[index].0;
             self.flow(var, dst, new);
+            self.watch_for_cycle(var, dst);
         }
         for index in 0..self.vars[at].loads.len() {
             let load = self.vars[at].loads[index];
             for object in new {
                 let Some(slot) = self.object_slot(*object, load.field) else {
                     self.vars[at].interrupted = true;
-                    return;
+                    return false;
                 };
                 self.add_copy_edge(slot, load.var, load.precision);
             }
@@ -755,7 +805,7 @@ impl<'a> Solver<'a> {
             for object in new {
                 let Some(slot) = self.object_slot(*object, store.field) else {
                     self.vars[at].interrupted = true;
-                    return;
+                    return false;
                 };
                 add_edge(
                     &self.var_ids,
@@ -767,6 +817,193 @@ impl<'a> Solver<'a> {
             }
         }
         self.apply_call_rule(var, new);
+        true
+    }
+
+    /// Queues the copy `src -> dst` for a cycle check the first time both
+    /// ends hold the same objects after `src` propagated: on a cycle every
+    /// set ends equal, and an edge back into a variable that already passed
+    /// its objects on is where a cycle closes.
+    fn watch_for_cycle(&mut self, src: u32, dst: u32) {
+        let (from, to) = (self.reps[src as usize], self.reps[dst as usize]);
+        if from == to || self.crosses_field(src, dst) {
+            return;
+        }
+        let (held, reached) = (&self.vars[from as usize].set, &self.vars[to as usize].set);
+        if held.len() == reached.len() && held == reached && self.checked.insert((src, dst)) {
+            self.candidates.push((src, dst));
+        }
+    }
+
+    /// Merges every copy cycle reachable from the queued candidates, in one
+    /// walk once enough steps have passed since the last.
+    fn collapse_cycles(&mut self) {
+        if self.candidates.is_empty() || self.steps < self.next_walk {
+            return;
+        }
+        let roots = self
+            .candidates
+            .drain(..)
+            .map(|(_, dst)| self.reps[dst as usize])
+            .collect::<Vec<_>>();
+        let (cycles, visited) = self.cycles_from(&roots);
+        self.next_walk = self.steps + visited;
+        for cycle in cycles {
+            self.merge(cycle);
+        }
+    }
+
+    /// The copy cycles among the representatives reachable from `roots`, each
+    /// of more than one representative, and how many representatives the walk
+    /// visited: Tarjan's strongly connected components over copies that stay
+    /// within a level. The components are disjoint, so each can be merged on
+    /// its own.
+    fn cycles_from(&self, roots: &[u32]) -> (Vec<Vec<u32>>, usize) {
+        struct Visit {
+            index: u32,
+            low: u32,
+            on_stack: bool,
+        }
+        let mut visits: HashMap<u32, Visit> = HashMap::new();
+        let mut stack = Vec::new();
+        let mut frames: Vec<(u32, Vec<u32>, usize)> = Vec::new();
+        let mut cycles = Vec::new();
+        let open = |var: u32, visits: &mut HashMap<u32, Visit>, stack: &mut Vec<u32>| {
+            let index = visits.len() as u32;
+            visits.insert(
+                var,
+                Visit {
+                    index,
+                    low: index,
+                    on_stack: true,
+                },
+            );
+            stack.push(var);
+            (var, self.successors(var), 0)
+        };
+        for root in roots {
+            if visits.contains_key(root) {
+                continue;
+            }
+            frames.push(open(*root, &mut visits, &mut stack));
+            while let Some((var, successors, next)) = frames.last_mut() {
+                let var = *var;
+                if let Some(&successor) = successors.get(*next) {
+                    *next += 1;
+                    match visits.get(&successor) {
+                        None => frames.push(open(successor, &mut visits, &mut stack)),
+                        Some(visit) if visit.on_stack => {
+                            let index = visit.index;
+                            let low = &mut visits.get_mut(&var).expect("visited").low;
+                            *low = (*low).min(index);
+                        }
+                        Some(_) => {}
+                    }
+                    continue;
+                }
+                frames.pop();
+                let (index, low) = {
+                    let visit = &visits[&var];
+                    (visit.index, visit.low)
+                };
+                if let Some((parent, _, _)) = frames.last() {
+                    let parent = &mut visits.get_mut(parent).expect("visited").low;
+                    *parent = (*parent).min(low);
+                }
+                if low == index {
+                    let mut cycle = Vec::new();
+                    while let Some(member) = stack.pop() {
+                        visits.get_mut(&member).expect("visited").on_stack = false;
+                        cycle.push(member);
+                        if member == var {
+                            break;
+                        }
+                    }
+                    if cycle.len() > 1 {
+                        cycles.push(cycle);
+                    }
+                }
+            }
+        }
+        (cycles, visits.len())
+    }
+
+    /// The representatives that the copies out of the representative `var`
+    /// and its merged variables reach within a level.
+    fn successors(&self, var: u32) -> Vec<u32> {
+        let members = std::iter::once(var).chain(self.vars[var as usize].merged.iter().copied());
+        let mut successors = Vec::new();
+        for member in members {
+            for (dst, _) in &self.vars[member as usize].copies {
+                let to = self.reps[*dst as usize];
+                if to != var && !self.crosses_field(member, *dst) {
+                    successors.push(to);
+                }
+            }
+        }
+        successors
+    }
+
+    /// Merges the representatives of `cycle` into the lowest of them. Every
+    /// variable of a cycle ends with the same set, so they share one. The
+    /// shared set keeps the objects every member has already carried along
+    /// its own edges; the rest are queued again so they reach every member's
+    /// edges. Carrying an object twice along an edge changes nothing.
+    fn merge(&mut self, cycle: Vec<u32>) {
+        let rep = *cycle.iter().min().expect("a cycle has members");
+        let smallest = *cycle
+            .iter()
+            .min_by_key(|var| self.vars[**var as usize].set.len())
+            .expect("a cycle has members");
+        let carried = self.vars[smallest as usize]
+            .set
+            .iter()
+            .filter(|object| {
+                cycle
+                    .iter()
+                    .all(|var| self.vars[*var as usize].set.contains(*object))
+            })
+            .collect::<Vec<_>>();
+        let queued = self.vars[rep as usize].pending.is_some();
+        let listed = self.vars[rep as usize].deferred.is_some();
+        let mut held = Vec::new();
+        let mut deferred: Option<Vec<u32>> = None;
+        for var in &cycle {
+            let data = &mut self.vars[*var as usize];
+            held.extend(data.set.iter());
+            held.extend(data.pending.take().into_iter().flatten());
+            if let Some(objects) = data.deferred.take() {
+                deferred.get_or_insert_default().extend(objects);
+            }
+        }
+        let mut set = ObjectSet::default();
+        set.add_new(&carried);
+        held.sort_unstable();
+        held.dedup();
+        held.retain(|object| !set.contains(*object));
+        for var in cycle.iter().copied().filter(|var| *var != rep) {
+            let data = &mut self.vars[var as usize];
+            data.set = ObjectSet::default();
+            let members = std::mem::take(&mut data.merged);
+            for member in std::iter::once(var).chain(members) {
+                self.reps[member as usize] = rep;
+                self.vars[rep as usize].merged.push(member);
+            }
+        }
+        let data = &mut self.vars[rep as usize];
+        data.set = set;
+        if !held.is_empty() {
+            data.pending = Some(held);
+            if !queued {
+                self.queue.push_back(rep);
+            }
+        }
+        if let Some(objects) = deferred {
+            data.deferred = Some(objects);
+            if !listed {
+                self.deferred.push(rep);
+            }
+        }
     }
 
     /// Connects every call whose callee is `callee` to the functions among
@@ -862,12 +1099,13 @@ impl<'a> Solver<'a> {
         ) {
             return;
         }
-        if self.vars[src as usize].set.is_empty() {
+        let held = &self.vars[self.reps[src as usize] as usize].set;
+        if held.is_empty() {
             return;
         }
         let mut objects = std::mem::take(&mut self.scratch);
         objects.clear();
-        objects.extend(self.vars[src as usize].set.iter());
+        objects.extend(held.iter());
         self.flow(src, dst, &objects);
         self.scratch = objects;
     }
@@ -876,24 +1114,36 @@ impl<'a> Solver<'a> {
     /// copy into or out of a heap slot crosses a field store or load, so the
     /// objects arrive at the next level.
     fn flow(&mut self, src: u32, dst: u32, objects: &[u32]) {
-        let crosses_field = self.budget.max_indirection_depth.is_some()
-            && (self.vars[src as usize].slot.is_some() || self.vars[dst as usize].slot.is_some());
-        if !crosses_field {
+        if !self.crosses_field(src, dst) {
             self.enqueue(dst, objects);
             return;
         }
+        let dst = self.reps[dst as usize];
         let Var { set, deferred, .. } = &mut self.vars[dst as usize];
         if hold_missing(set, deferred, objects) {
             self.deferred.push(dst);
         }
     }
 
+    /// True when a depth bound is set and the copy `src -> dst` reads or
+    /// writes a heap slot, so it carries objects to the next level.
+    fn crosses_field(&self, src: u32, dst: u32) -> bool {
+        self.budget.max_indirection_depth.is_some()
+            && (self.vars[src as usize].slot.is_some() || self.vars[dst as usize].slot.is_some())
+    }
+
     /// Queues the objects of `objects` that `dst` does not hold yet.
     fn enqueue(&mut self, dst: u32, objects: &[u32]) {
+        let dst = self.reps[dst as usize];
         let Var { set, pending, .. } = &mut self.vars[dst as usize];
         if hold_missing(set, pending, objects) {
             self.queue.push_back(dst);
         }
+    }
+
+    /// The set of `var`: its representative's.
+    fn set(&self, var: usize) -> &ObjectSet {
+        &self.vars[self.reps[var] as usize].set
     }
 
     fn halt(&mut self, reason: BudgetReason) {
@@ -1048,7 +1298,7 @@ impl<'a> Solver<'a> {
         let mut objects = Vec::new();
         loop {
             for var in escaping.drain(..) {
-                objects.extend(self.vars[var as usize].set.iter());
+                objects.extend(self.set(var as usize).iter());
             }
             if let Some(object) = objects.pop() {
                 if std::mem::replace(&mut escaped[object as usize], true) {
@@ -1092,7 +1342,7 @@ impl<'a> Solver<'a> {
     /// True when a call's callee set is empty or holds an object without a
     /// signature, so the call may run code the constraints do not describe.
     fn callees_unresolved(&self, call: &Call) -> bool {
-        let callees = &self.vars[call.callee as usize].set;
+        let callees = self.set(call.callee as usize);
         callees.is_empty()
             || callees
                 .iter()
@@ -1105,7 +1355,7 @@ impl<'a> Solver<'a> {
     /// `arguments`.
     fn unbound_arguments<'c>(&'c self, call: &'c Call) -> impl Iterator<Item = u32> + 'c {
         let bound = call.bound();
-        let callees = &self.vars[call.callee as usize].set;
+        let callees = self.set(call.callee as usize);
         call.arguments
             .iter()
             .enumerate()
@@ -1165,7 +1415,7 @@ impl<'a> Solver<'a> {
             let from = reached[var].clone();
             for (dst, _) in &self.vars[var].copies {
                 let dst = *dst as usize;
-                if self.vars[dst].set.is_empty() {
+                if self.set(dst).is_empty() {
                     continue;
                 }
                 if merge(&mut reached[dst], &from) {
@@ -1176,7 +1426,7 @@ impl<'a> Solver<'a> {
         reached
             .into_iter()
             .enumerate()
-            .filter(|(var, bindings)| !bindings.is_empty() && !self.vars[*var].set.is_empty())
+            .filter(|(var, bindings)| !bindings.is_empty() && !self.set(*var).is_empty())
             .map(|(var, bindings)| (self.var_ids[var], bindings))
             .collect()
     }
@@ -1184,20 +1434,19 @@ impl<'a> Solver<'a> {
     /// The weakest precision of the inputs that reached each set, carried
     /// along every edge from a non-empty set.
     fn precisions(&self) -> Vec<PointsToPrecision> {
-        let mut precision = self
-            .vars
-            .iter()
+        let mut precision = (0..self.vars.len())
             .map(|var| {
-                var.seed_precision
-                    .filter(|_| !var.set.is_empty())
+                self.vars[var]
+                    .seed_precision
+                    .filter(|_| !self.set(var).is_empty())
                     .unwrap_or(PointsToPrecision::FlowInsensitive)
             })
             .collect::<Vec<_>>();
         let mut work = (0..self.vars.len())
-            .filter(|var| !self.vars[*var].set.is_empty())
+            .filter(|var| !self.set(*var).is_empty())
             .collect::<VecDeque<_>>();
         while let Some(var) = work.pop_front() {
-            if self.vars[var].set.is_empty() {
+            if self.set(var).is_empty() {
                 continue;
             }
             let from = precision[var];
@@ -1277,14 +1526,14 @@ impl<'a> Solver<'a> {
         let bounded = self.bounded_variables();
         let mut precisions = self.precisions();
         let open = self.open_variables(&precisions);
-        for (var, data) in self.vars.iter().enumerate() {
-            if open[var] && !data.set.is_empty() {
+        for var in 0..self.vars.len() {
+            if open[var] && !self.set(var).is_empty() {
                 raise(&mut precisions[var], PointsToPrecision::Heuristic);
             }
         }
         let call_bindings = self.reached_bindings();
         let mut variables = (0..self.vars.len())
-            .filter(|var| incomplete[*var] || bounded[*var] || !self.vars[*var].set.is_empty())
+            .filter(|var| incomplete[*var] || bounded[*var] || !self.set(*var).is_empty())
             .collect::<Vec<_>>();
         variables.sort_by_key(|var| self.var_ids[*var]);
         let mut object_identities = HashMap::new();
@@ -1293,8 +1542,8 @@ impl<'a> Solver<'a> {
             .map(|var| PointsToSetFact {
                 id: PointsToSetId(0),
                 variable: self.var_ids[var],
-                objects: self.vars[var]
-                    .set
+                objects: self
+                    .set(var)
                     .iter()
                     .map(|object| self.objects[object as usize].id)
                     .collect(),
@@ -1323,10 +1572,8 @@ impl<'a> Solver<'a> {
                 ),
             })
             .collect();
-        let set_sizes = self
-            .vars
-            .iter()
-            .map(|var| var.set.len())
+        let set_sizes = (0..self.vars.len())
+            .map(|var| self.set(var).len())
             .filter(|size| *size > 0);
         let stats = PointsToSolveStats {
             variables: self.vars.len(),
@@ -1334,6 +1581,9 @@ impl<'a> Solver<'a> {
             slots: self.slots.len(),
             copy_edges: self.vars.iter().map(|var| var.copies.len()).sum(),
             pops: self.steps,
+            collapsed: (0..self.reps.len())
+                .filter(|var| self.reps[*var] as usize != *var)
+                .count(),
             largest_set: set_sizes.clone().max().unwrap_or(0),
             sets_over_64: set_sizes.clone().filter(|size| *size > 64).count(),
             sets_over_1024: set_sizes.filter(|size| *size > 1024).count(),
@@ -1676,6 +1926,71 @@ mod tests {
         assert_eq!(
             result.budget_reasons,
             BTreeSet::from(["solver.max_steps".to_string()])
+        );
+    }
+
+    #[test]
+    fn a_copy_cycle_is_merged_and_carries_later_objects_along_every_edge() {
+        let copy = |key: &str, src: u64, dst: u64| {
+            constraint(
+                key,
+                PointsToConstraintKind::Copy {
+                    dst: PtVarId(dst),
+                    src: PtVarId(src),
+                },
+            )
+        };
+        let constraints = vec![
+            constraint(
+                "addr-a",
+                PointsToConstraintKind::AddressOf {
+                    dst: PtVarId(1),
+                    object: ObjectTokenId(10),
+                },
+            ),
+            constraint(
+                "addr-b",
+                PointsToConstraintKind::AddressOf {
+                    dst: PtVarId(5),
+                    object: ObjectTokenId(11),
+                },
+            ),
+            copy("copy-1-2", 1, 2),
+            copy("copy-2-3", 2, 3),
+            copy("copy-3-1", 3, 1),
+            copy("copy-2-4", 2, 4),
+            copy("copy-5-6", 5, 6),
+            copy("copy-6-7", 6, 7),
+            copy("copy-7-3", 7, 3),
+        ];
+        let result = solve_points_to(
+            &crate::internal_core::test_stable_key_interner(),
+            &constraints,
+            PointsToBudget::default(),
+        );
+
+        assert_eq!(result.budget_status, PointsToBudgetStatus::WithinBudget);
+        assert_eq!(result.stats.collapsed, 2);
+        let objects = |var: u64| {
+            result
+                .sets
+                .iter()
+                .find(|set| set.variable == PtVarId(var))
+                .map(|set| (set.status, set.objects.clone()))
+        };
+        for var in [1, 2, 3, 4] {
+            assert_eq!(
+                objects(var),
+                Some((
+                    PointsToStatus::Present,
+                    vec![ObjectTokenId(10), ObjectTokenId(11)]
+                )),
+                "variable {var}"
+            );
+        }
+        assert_eq!(
+            objects(6),
+            Some((PointsToStatus::Present, vec![ObjectTokenId(11)]))
         );
     }
 

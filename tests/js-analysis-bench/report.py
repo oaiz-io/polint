@@ -341,7 +341,7 @@ STAGE_LOG = "polint::kernel::stage=info,polint::points_to=info"
 SOLVE_EVENT = "points_to solve"
 SOLVE_FIELD = re.compile(r'\b([a-z_0-9]+)=("[^"]*"|\S+)')
 SOLVE_COUNTS = (
-    "calls", "variables", "objects", "slots", "copy_edges", "pops", "largest_set", "sets_over_64",
+    "calls", "variables", "objects", "slots", "copy_edges", "pops", "collapsed", "largest_set", "sets_over_64",
     "sets_over_1024", "initialize_ms", "run_ms", "result_ms", "rss_delta_mb", "peak_rss_mb",
 )
 STAGE_FIELD = re.compile(r'\b(provider|elapsed_ms|peak_rss_mb)=("[^"]*"|\S+)')
@@ -2964,14 +2964,14 @@ def render_solver(report: dict, add) -> None:
     add("Every fact dump logs one `points_to solve` line per solve under `polint::points_to`. `alias` solves the "
         "constraints alone for the type, value and alias facts; `call graph` solves them with the call rule. "
         "Constraints are the input count (by kind in report.json); variables include heap slots; pops are worklist "
-        "pops. Time is per step: reading the input, the worklist, and building the result. Memory is the resident "
+        "pops; collapsed are variables merged into another on a copy cycle. Time is per step: reading the input, the worklist, and building the result. Memory is the resident "
         "growth across the solve and the process peak after it. Counts are the same in every run; time and memory "
         "are as noisy as the stage times above.")
     add("")
     add("| tree | plan | solve | constraints | calls | variables | objects | slots | copy edges | pops "
-        "| largest set | sets > 64 | sets > 1,024 | ms (input / worklist / result) | RSS growth MB | peak MB "
+        "| collapsed | largest set | sets > 64 | sets > 1,024 | ms (input / worklist / result) | RSS growth MB | peak MB "
         "| budget |")
-    add("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     labels = {"type_value_alias": "alias", "call_graph": "call graph"}
     for name, plans in report["dump_cost"].items():
         for plan, row in plans.items():
@@ -2980,7 +2980,7 @@ def render_solver(report: dict, add) -> None:
                     f"| {name} | {plan} | {labels.get(solve['pass'], solve['pass'])} "
                     f"| {sum(solve['constraints'].values()):,} | {solve['calls']:,} | {solve['variables']:,} "
                     f"| {solve['objects']:,} | {solve['slots']:,} | {solve['copy_edges']:,} | {solve['pops']:,} "
-                    f"| {solve['largest_set']:,} | {solve['sets_over_64']:,} | {solve['sets_over_1024']:,} "
+                    f"| {solve['collapsed']:,} | {solve['largest_set']:,} | {solve['sets_over_64']:,} | {solve['sets_over_1024']:,} "
                     f"| {solve['initialize_ms']} / {solve['run_ms']} / {solve['result_ms']} "
                     f"| {solve['rss_delta_mb']} | {solve['peak_rss_mb']} | {solve['budget']} |"
                 )
