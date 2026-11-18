@@ -106,6 +106,7 @@ fn ts_type_inputs(db: &AnalysisDb) -> TsTypeInputs {
                 .filter(|printed| !printed.is_empty())
                 .map(str::to_string),
             signature_parameters: callsite.signature_parameters,
+            constructs: matches!(callsite.call_kind.as_str(), "new" | "super"),
             // A site without a receiver row is judged by its status and its
             // callee alone.
             receiver_shape: match receivers_by_site.get(&callsite.stable_key) {

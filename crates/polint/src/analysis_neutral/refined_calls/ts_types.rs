@@ -105,6 +105,11 @@ pub struct TsTypeCallsiteInput {
     /// declares; `None` when it has a rest parameter, is declared in a
     /// JavaScript file or was not resolved.
     pub signature_parameters: Option<u32>,
+    /// The call constructs its callee — `new` or `super(...)` — as the
+    /// checker parsed it. The native call kind guesses construction from a
+    /// capitalised name, so a plain call of `OK` would count and `super`
+    /// would not.
+    pub constructs: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -276,7 +281,7 @@ pub(crate) fn typed_rows(
                 continue;
             }
             report.matched_callees += 1;
-            let answer = TypedAnswer::new(core_site, site, callee);
+            let answer = TypedAnswer::new(site, callee);
             rows.push(TypedRow {
                 edge: typed_edge(db, core_site, site, callee, target, any_percent, rows.len()),
                 seeds: target.is_some() && answer.seeds(),
@@ -298,10 +303,7 @@ fn record_typed_site(
     let typed = TypedSite {
         status: site.status,
         signature_parameters: site.signature_parameters,
-        constructs: matches!(
-            core_site.kind,
-            CallSyntaxKind::Constructor | CallSyntaxKind::New | CallSyntaxKind::Super
-        ),
+        constructs: site.constructs,
     };
     let recorded = sites.entry(core_site.id).or_insert(typed);
     if *recorded != typed {
@@ -392,9 +394,9 @@ fn typed_edge(
         // `Model` is reserved for framework and extension recognizers, which
         // may never claim exact precision.
         provenance: CallProvenance::Native,
-        precision: precision_for(TypedAnswer::new(core_site, site, callee), degraded),
+        precision: precision_for(TypedAnswer::new(site, callee), degraded),
         validation: RefinedCallValidation::ReferentiallyValidated,
-        confidence: confidence_for(TypedAnswer::new(core_site, site, callee), degraded),
+        confidence: confidence_for(TypedAnswer::new(site, callee), degraded),
         evidence,
         input_stable_keys: vec![site_key.clone(), callee_key.clone()],
         stable_key: stable_key_from_parts(
@@ -490,20 +492,13 @@ struct TypedAnswer {
 }
 
 impl TypedAnswer {
-    fn new(
-        core_site: &CallSiteFact,
-        site: &TsTypeCallsiteInput,
-        callee: &TsTypeCalleeInput,
-    ) -> Self {
+    fn new(site: &TsTypeCallsiteInput, callee: &TsTypeCalleeInput) -> Self {
         Self {
             dispatch: callee.dispatch,
             status: site.status,
             shape: site.receiver_shape,
             kind: callee.kind,
-            constructs: matches!(
-                core_site.kind,
-                CallSyntaxKind::Constructor | CallSyntaxKind::New
-            ),
+            constructs: site.constructs,
         }
     }
 
@@ -920,6 +915,7 @@ mod tests {
             receiver_shape: TsTypeReceiverShape::Named,
             receiver_printed: Some("Greeter".to_string()),
             signature_parameters: None,
+            constructs: false,
         }
     }
 
@@ -1762,6 +1758,7 @@ mod tests {
             receiver_shape: TsTypeReceiverShape::Named,
             receiver_printed: Some("Loud".to_string()),
             signature_parameters: None,
+            constructs: false,
         };
         let typed_callee = |key: &str, site: &str, start: u32, end: u32| TsTypeCalleeInput {
             stable_key: interner.intern(key),

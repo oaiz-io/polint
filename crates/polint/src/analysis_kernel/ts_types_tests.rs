@@ -502,15 +502,14 @@ fn the_checker_leaves_an_answer_it_agrees_with_where_it_was() {
     let claims = |needle: &str| claims_at(&output, answers, temp.path(), "src/cases.js", needle);
 
     // Each call keeps the tier value flow gave it: the checker agrees with
-    // these answers, so it neither moves nor adds to them. Where no value-flow
-    // tier answers, as at `super(1)`, the checker's target is listed at the
-    // conservative tier, since a type answer alone never claims a site.
+    // these answers, so it neither moves nor adds to them. `super(1)` runs the
+    // parent class's constructor, so the class it names is no mismatch.
     for (needle, exact, conservative) in [
         ("new Kid()", Some("Kid"), None),
         ("new Quiet()", Some("Quiet"), None),
         ("kid.run()", None, Some("Kid.run")),
         ("kid.hello()", None, Some("Base.hello")),
-        ("super(1)", None, Some("Base")),
+        ("super(1)", Some("Base"), None),
     ] {
         let names = |name: Option<&str>| {
             name.into_iter()
@@ -543,6 +542,62 @@ fn the_checker_leaves_an_answer_it_agrees_with_where_it_was() {
         )]),
         "a function called where it is written runs exactly that function"
     );
+}
+
+fn write_runnable_repo(root: &Path) {
+    std::fs::write(
+        root.join("tsconfig.json"),
+        "{\"compilerOptions\":{\"strict\":true,\"target\":\"ES2022\",\
+         \"module\":\"commonjs\",\"noEmit\":true},\"include\":[\"src/**/*\"]}",
+    )
+    .expect("write tsconfig");
+    std::fs::create_dir_all(root.join("src")).expect("create src");
+    std::fs::write(
+        root.join("src/base.ts"),
+        "export class BaseError {\n  constructor(public message: string, public code: number) {}\n}\n\
+         export const OK = <T>(value: T): { value: T } => ({ value });\n",
+    )
+    .expect("write base");
+    std::fs::write(
+        root.join("src/cases.ts"),
+        "import { BaseError, OK } from './base';\n\
+         export class KidError extends BaseError {\n  \
+         constructor(message: string) { super(message, 1); }\n}\n\
+         export function wrap(fn: (...args: number[]) => number) {\n  \
+         return OK(async function (this: unknown, ...args: number[]) { return fn(...args); });\n}\n\
+         export function run() { new KidError('x'); return wrap(() => 1); }\n",
+    )
+    .expect("write cases");
+}
+
+#[test]
+fn the_checker_never_moves_an_answer_the_call_can_run() {
+    let Some(typescript) =
+        skip_without_typescript("the_checker_never_moves_an_answer_the_call_can_run")
+    else {
+        return;
+    };
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_runnable_repo(temp.path());
+
+    let output = run_dispatch_repo(temp.path(), &typescript);
+    // `super(...)` runs the parent class's constructor, and a generic arrow
+    // runs at a call that passes its one argument: the checker's declarations
+    // agree with both, so neither answer is moved off the exact tier.
+    for (needle, target) in [
+        ("super(message, 1)", "BaseError"),
+        (
+            "OK(async function (this: unknown, ...args: number[]) { return fn(...args); })",
+            "OK",
+        ),
+    ] {
+        let (exact, _) = claims_at(&output, answers, temp.path(), "src/cases.ts", needle);
+        assert_eq!(
+            exact,
+            std::collections::BTreeSet::from([target.to_string()]),
+            "`{needle}` keeps its exact answer"
+        );
+    }
 }
 
 /// Whether `edge` hangs off the native call site the sidecar span describes.

@@ -447,6 +447,9 @@ function callKind(ts, node) {
     return 'decorator';
   }
   const callee = node.expression;
+  if (callee !== undefined && callee.kind === ts.SyntaxKind.SuperKeyword) {
+    return 'super';
+  }
   if (
     callee !== undefined &&
     (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee))
