@@ -5,9 +5,7 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-use crate::analysis_api::{Digest, DigestKind};
-
-pub(crate) const SOURCE: &str = include_str!("../../../models/platform/javascript.toml");
+pub(crate) use crate::analysis_neutral::adaptation::platform::{SOURCE, digest};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,14 +74,6 @@ pub(crate) enum Operation {
 pub(crate) fn embedded() -> Option<&'static Platform> {
     static MODEL: OnceLock<Option<Platform>> = OnceLock::new();
     MODEL.get_or_init(|| parse(SOURCE).ok()).as_ref()
-}
-
-pub(crate) fn digest(source: &str) -> Digest {
-    Digest::from_parts(
-        DigestKind::ProviderParameters,
-        "javascript_platform",
-        &[source],
-    )
 }
 
 fn valid_value(value: &str, calls: usize) -> bool {
