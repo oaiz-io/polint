@@ -233,6 +233,7 @@ mod tests {
             callsite: key.to_string(),
             enclosing: None,
             call_kind: "call".to_string(),
+            signature_parameters: None,
             status: TsTypeCallStatus::Resolved,
             reason: None,
             relative_file: Some("src/app.ts".to_string()),

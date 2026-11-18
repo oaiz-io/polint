@@ -10,19 +10,36 @@ Producers today (`crates/polint/src/`):
 
 | `CallPrecision` | produced by | tier |
 |---|---|---|
-| `Exact` | Go static calls (`go/typed_calls.rs:64`); the typed tier's `Declared` dispatch in a file under 25% `any` receivers (`refined_calls/ts_types.rs:321`); direct summaries (`analysis/summaries/provider.rs:398,416`). `refined_calls/validate.rs:104-128` refuses it on `Model` provenance, on extension-validated edges, and on the `PointsTo`, `FrameworkModel` and `RepoModel` algorithms. | **exact** |
-| `SetupAware` | the direct tier (`calls/direct.rs:116`: `DirectReference`, `ImportBinding`, `ConstructorBinding`, `StaticMember`, `DirectMember`), summary-assisted edges, solver edges from `FlowInsensitive`/`LocalFlowSensitive` sets (`refined_calls/provider.rs:664`), typed `Declared` in a degraded file and typed `Implementation`/`UnionMember` in a clean file (`ts_types.rs:322-323`) | **exact** for the direct tier and solver edges; **conservative** for typed `Implementation`/`UnionMember` (see the note) |
-| `Conservative` | typed candidates in a degraded file (`ts_types.rs:324`); framework and extension rows | conservative |
+| `Exact` | Go static calls (`go/typed_calls.rs:64`); direct summaries (`analysis/summaries/provider.rs:398,416`). `refined_calls/validate.rs:104-128` refuses it on `Model` provenance, on extension-validated edges, and on the `PointsTo`, `FrameworkModel` and `RepoModel` algorithms. | **exact** |
+| `SetupAware` | the direct tier (`calls/direct.rs:116`: `DirectReference`, `ImportBinding`, `ConstructorBinding`, `StaticMember`, `DirectMember`), summary-assisted edges, solver edges from `FlowInsensitive`/`LocalFlowSensitive` sets (`refined_calls/provider.rs:664`) | **exact** |
+| `Conservative` | every typed edge the type step keeps (`refined_calls/type_assignment.rs`): the checker's targets at a site no other tier answered, and `type_seed` candidates at an open site; an exact edge the checker's declared kind or arity says the call cannot run (`type_mismatch`); framework and extension rows | conservative |
 | `Ambiguous` | a reference that resolves to several symbols (`calls/extract.rs`, `unresolved.rs`) | conservative |
 | `Heuristic` | the walker's rows (`ts/semantic_graph_build.rs:663`, surfacing as solver edges with `Heuristic` sets); the lexical fallback `SyntaxOnly` (`direct.rs:67`) | **apart**: reported as its own column until the producer is gone |
 | `Unknown`, `Unsupported` | unresolved rows | no claim |
 
-Note on `SetupAware`: the value today mixes "exact given the setup" (the
-direct tier) with "a candidate narrowed by types" (typed `Implementation`
-and `UnionMember`). The bench's tier split must read the *algorithm* and
-*dispatch* beside the precision until WP4 gives the typed candidates their
-own value. Proposal for WP4: typed `Implementation`/`UnionMember` become
-`Conservative`, so that precision alone decides the tier.
+Note on `SetupAware`: it means "exact given the setup" only.
+
+Note on types: declared types say what a call may run, not which value
+flows to it, so no typed edge is exact. The type step runs after the solve
+and every other tier and does three things (`type_assignment.rs`):
+
+- at a complete site, an exact edge to a function the call cannot run by
+  the checker's declared kind (constructing a non-constructor, calling a
+  class; a call constructs when the checker parsed `new` or `super(...)`,
+  never by the spelling of its callee) or arity (fewer arguments than the target requires, at a site the
+  checker resolved to one signature with no rest parameter) moves to
+  `Conservative` with `type_mismatch` and is kept;
+- at an open site the solver answered, a method the checker found on the
+  class naming the receiver is added at `Conservative` with `type_seed`;
+- at a site no tier answered, the checker's targets are listed at
+  `Conservative` and the site stays open.
+
+Every other typed row is dropped, so the typed plan finds at least what the
+refined plan finds at exact plus conservative, and finds less exact only
+where a mismatch moved an edge. The bench fails when it does not
+(`report.py`, `types_never_lose`). A typed declaration whose native function
+cannot be found by span gets no edge (never the function around it), and is
+counted as an unmatched callee in the `ts type tier join` log line.
 
 The site status is the second axis and is independent of precision: a site
 is **complete** when it has at least one resolved target and no unresolved
@@ -35,7 +52,7 @@ variant to one of `exact | conservative | apart | none`.
 ## (b) Assumptions an exact claim may carry
 
 From the resolvers that produce the exact tier today (`calls/direct.rs`,
-the value-function rows of `ts/symbol_graph.rs:465-560`, `ts_types.rs`), and
+the value-function rows of `ts/symbol_graph.rs:465-560`), and
 from the assumptions the solver's exact tier will need once it exists (WP3).
 Each assumption has a scope: *package-internal* assumptions cannot be
 broken by stitching and are recorded for audit only; *boundary* assumptions
@@ -50,7 +67,7 @@ are re-checked at stitch and drop the claim to conservative when they fail.
 | `export_link(import, package, name)` | the import binding follows module links, at most 8 hops, to one exported declaration; namespace imports and multi-symbol links stop | `direct.rs:305-327` | **boundary**: the link is re-resolved against the stitched dependency tree (which version answers the name) |
 | `export_not_rewritten(package, path)` | nothing writes the exported access path after the module initialises; trivially true for an ESM named export written only by its module, not for `module.exports.x`, `exports.x` or a namespace object another package can patch | implied today, never recorded | **boundary**: a stitched package that writes the path breaks it |
 | `prototype_closed(class)` | no code outside the package writes the class's prototype or the prototype chain its instances inherit | implied by every method resolution; never recorded | **boundary** |
-| `declared_target(site)` | the type checker resolved the call to one declaration, the declaration is a function in the analysed tree (not a class, a variable or an external declaration), the receiver type is not a union or a structural pick, and the file is under 25% `any` receivers | `ts_types.rs:140-176, 319-326`; the first and second conditions are the fix in WP4 (DIAGNOSIS §4) | package-internal (types are compiled per package) |
+| `declared_target(site)` | the type checker resolved the call to one declaration the call can run | no edge carries it: the type step never claims exact (`type_assignment.rs`); kept in the closed list because `points_to/tiers.rs` still names it | package-internal (types are compiled per package) |
 | `no_inward_flow(site)` | no value from the boundary reaches the site's callee expression: not a parameter of an exported function or method, not `this` of an exported method, not an imported value, not a property of an object that enters or leaves | the solver's exact tier, WP3 | **boundary**: stitching that adds inflow drops the site to open |
 | `no_outside_field_write(object, field)` | no stitched package stores into field `f` of an object that leaves this package | the solver's exact tier, WP3 | **boundary** |
 | `within_budget(package)` | the solve reached a fixed point with no budget event | `points_to/solver.rs`, `solver/engine.rs` | package-internal; a package graph with a budget event has no exact claims at all |

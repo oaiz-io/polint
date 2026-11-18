@@ -54,6 +54,8 @@ PLANS = {
 # to `PLANS` only when a TypeScript compiler is available (see `run`), so every
 # per-plan score and total covers it without a second code path.
 TYPED_PLAN = "typed"
+# Evidence a refined edge carries when the type checker changed it (`type_effect` in the dump).
+TYPE_EFFECTS = ("type_mismatch", "type_seed")
 TYPED_TSCONFIG = {
     "compilerOptions": {
         "allowJs": True,
@@ -329,10 +331,12 @@ def run_dump(
         return {"dump": None, "cost": cost, "error": f"timed out after {timeout} s"}
     if result.exit_code != 0 or not out.exists():
         tail = [
-            line for line in result.stderr.splitlines() if "stage done" not in line and SOLVE_EVENT not in line
+            line
+            for line in result.stderr.splitlines()
+            if "stage done" not in line and SOLVE_EVENT not in line and TYPE_JOIN_EVENT not in line
         ][-8:]
         return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
-    return {"dump": out, "cost": cost, "error": None}
+    return {"dump": out, "cost": cost, "error": None, "ts_type_join": ts_type_join(result.stderr)}
 
 
 # The kernel's per-provider stage log: one `stage done` line per provider run,
@@ -343,6 +347,10 @@ SOLVE_FIELD = re.compile(r'\b([a-z_0-9]+)=("[^"]*"|\S+)')
 SOLVE_COUNTS = (
     "calls", "variables", "objects", "slots", "copy_edges", "pops", "collapsed", "largest_set", "sets_over_64",
     "sets_over_1024", "initialize_ms", "run_ms", "result_ms", "rss_delta_mb", "peak_rss_mb",
+)
+TYPE_JOIN_EVENT = "ts type tier join"
+TYPE_JOIN_COUNTS = (
+    "matched_callsites", "unmatched_callsites", "matched_callees", "unmatched_callees", "deferred_callsites",
 )
 STAGE_FIELD = re.compile(r'\b(provider|elapsed_ms|peak_rss_mb)=("[^"]*"|\S+)')
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
@@ -389,6 +397,20 @@ def solver_solves(stderr: str) -> list:
         }
         solves.append(row)
     return solves
+
+
+def ts_type_join(stderr: str) -> dict | None:
+    """How the type tier's rows joined the syntax facts, from its one log line.
+
+    None when the tier logged nothing: it did not run, or every count was zero.
+    The counts are deterministic, unlike the stage times beside them."""
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if TYPE_JOIN_EVENT not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in SOLVE_FIELD.findall(line)}
+        return {key: int(fields.get(key, 0)) for key in TYPE_JOIN_COUNTS}
+    return None
 
 
 def load_dump(run: dict) -> None:
@@ -1821,7 +1843,9 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                 entry[plan]["refined_edge_census"] = refined_edge_census(run["dump"])
             if plan == TYPED_PLAN:
                 entry[plan]["ts_types"] = {
-                    key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")
+                    **{key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")},
+                    "join": run.get("ts_type_join"),
+                    "effects": type_effects(run["dump"]),
                 }
         if "base" in plan_facts:
             for plan, facts in plan_facts.items():
@@ -1829,6 +1853,34 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                     entry[plan]["sites_gained"] = sites_gained(plan_facts["base"], facts, executed[plan])
         results[name] = entry
     return results
+
+
+def type_effects(dump: dict) -> dict:
+    """Refined rows the type checker changed: exact edges moved to conservative, candidates listed at open sites."""
+    counts = Counter(edge.get("type_effect") for edge in dump["refined_edges"])
+    return {effect: counts[effect] for effect in TYPE_EFFECTS}
+
+
+# Tier views in which the typed plan must find every observed edge the refined plan finds.
+TYPES_NEVER_LOSE_VIEWS = ("exact_complete", "exact", "exact_conservative")
+
+
+def types_never_lose(packages: dict, held_out: dict) -> list[str]:
+    """Every package, tune and held-out, where the typed plan finds fewer observed edges than the refined plan in a tier view.
+
+    Types only move an exact claim the checker contradicts to the conservative tier and add conservative
+    candidates, so a loss in the exact views is a type answer that contradicted a call the run made, and a loss
+    in exact + conservative is an edge the type step deleted."""
+    losses = []
+    for name, entry in {**packages, **held_out}.items():
+        refined, typed = entry.get("refined", {}), entry.get(TYPED_PLAN, {})
+        if "tiers" not in refined or "tiers" not in typed:
+            continue
+        for view in TYPES_NEVER_LOSE_VIEWS:
+            before, after = refined["tiers"]["found"].get(view, 0), typed["tiers"]["found"].get(view, 0)
+            if after < before:
+                losses.append(f"{name} {view}: refined {before}, {TYPED_PLAN} {after}")
+    return losses
 
 
 def withhold_miss_attribution(scored: dict) -> None:
@@ -2348,6 +2400,45 @@ def render_types(report: dict, add) -> None:
             f"| {cost('refined', 'peak_rss_bytes', MB)} / {cost(TYPED_PLAN, 'peak_rss_bytes', MB)} |"
         )
     add("")
+    add("How the type rows joined the syntax facts. A callsite row joins a call site by span and adds nothing when "
+        "it does not. A deferred callsite joined but sits in a file dense with `any` and is not resolved, so it "
+        "adds nothing either. A callee row joins a function by span, then by name for the kinds a call runs (an "
+        "accessor joins by span only); a callee outside the tree counts as matched. An unmatched callee is a "
+        "declaration in the tree that names no function polint extracted, and adds no edge.")
+    add("")
+    add("| package | callsites matched / unmatched / deferred | callees matched / unmatched |")
+    add("|---|---|---|")
+    for name, entry in report["packages"].items():
+        join = entry.get(TYPED_PLAN, {}).get("ts_types", {}).get("join")
+        if not join:
+            add(f"| {name} | n/a | n/a |")
+            continue
+        add(
+            f"| {name} | {join['matched_callsites']:,} / {join['unmatched_callsites']:,} / {join['deferred_callsites']:,} "
+            f"| {join['matched_callees']:,} / {join['unmatched_callees']:,} |"
+        )
+    add("")
+    add("What the type step changed in the refined plan's answer: `type_mismatch` is an exact edge to a function "
+        "whose declared kind or arity the checker says the call cannot run, moved to the conservative tier and "
+        "kept; `type_seed` is a method of the receiver's declared class listed as a conservative candidate at an "
+        "open site.")
+    add("")
+    add("| package | type_mismatch | type_seed |")
+    add("|---|---|---|")
+    for name, entry in report["packages"].items():
+        effects = entry.get(TYPED_PLAN, {}).get("ts_types", {}).get("effects")
+        if effects is None:
+            add(f"| {name} | n/a | n/a |")
+            continue
+        add(f"| {name} | {effects['type_mismatch']:,} | {effects['type_seed']:,} |")
+    add("")
+    lost = report.get("types_never_lose")
+    if lost is not None:
+        add(
+            f"Typed against refined, every package and the held-out set, in {', '.join(TYPES_NEVER_LOSE_VIEWS)}: "
+            + ("no package loses an observed edge." if not lost else "losses: " + "; ".join(lost) + ".")
+        )
+        add("")
     fc = report["constructs"]["false_complete"]
     add(
         f"Constructs, typed: false-complete hidden paths {fc.get(TYPED_PLAN, 0)}, "
@@ -3167,6 +3258,7 @@ def run(args) -> int:
             "packages": packages,
             "held_out": held_out,
             "held_out_gate": held_out_gate(packages, held_out, list(PLANS)),
+            "types_never_lose": types_never_lose(packages, held_out),
             "dump_budgets_s": budgets,
             # One fact dump per package and plan, kept even without the cost runs.
             "dump_cost": {
@@ -3218,4 +3310,7 @@ def run(args) -> int:
         print("fact dumps that failed:\n" + "\n".join(failed), file=sys.stderr)
     if over_budget:
         print("fact dumps over their time budget:\n" + "\n".join(over_budget), file=sys.stderr)
-    return 1 if failed or over_budget else 0
+    lost = report.get("types_never_lose", [])
+    if lost:
+        print(f"the {TYPED_PLAN} plan found fewer observed edges than refined:\n" + "\n".join(lost), file=sys.stderr)
+    return 1 if failed or over_budget or lost else 0

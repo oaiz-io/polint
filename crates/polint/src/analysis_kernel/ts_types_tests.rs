@@ -1,5 +1,9 @@
 //! End-to-end checks for the TypeScript type-directed call-graph tier.
 //!
+//! The type step weighs the other tiers' answer last, so a check of what a
+//! site resolves to reads every edge that answers it; a check of what the
+//! checker alone claims reads the type tier's rows.
+//!
 //! These run the real Node sidecar against a real TypeScript compiler, so they
 //! skip when neither is present. Set `POLINT_REQUIRE_TS_TYPESCRIPT=1` to make a
 //! skip a failure instead, which is how the gated CI job runs them.
@@ -13,6 +17,13 @@ use crate::cache::Cache;
 use crate::config::load_config;
 
 const REQUIRE_ENV: &str = "POLINT_REQUIRE_TS_TYPESCRIPT";
+
+/// Whether `edge` is part of the refined answer at its site: a resolved edge
+/// in the exact or the conservative tier.
+fn answers(edge: &crate::analysis_neutral::refined_calls::facts::RefinedCallEdgeFact) -> bool {
+    use crate::analysis_neutral::calls::facts::{CallTargetStatus, ClaimTier};
+    edge.status == CallTargetStatus::Resolved && edge.precision.tier() <= ClaimTier::Conservative
+}
 
 /// A TypeScript package directory this host can hand to the sidecar, or `None`
 /// when the host has no compiler.
@@ -153,11 +164,11 @@ fn interface_dispatch_resolves_to_every_instantiated_implementation() {
         .db
         .refined_call_edges()
         .iter()
-        .filter(|edge| edge.tier == RefinedCallTier::TypeDirected)
+        .filter(|edge| answers(edge))
         .collect::<Vec<_>>();
     assert!(
         !typed.is_empty(),
-        "no type-directed edges from {callsites} sidecar call sites"
+        "no answering edges with {callsites} sidecar call sites"
     );
 
     let functions = output
@@ -274,7 +285,7 @@ fn a_chained_call_does_not_inherit_the_inner_call_s_target() {
         .db
         .refined_call_edges()
         .iter()
-        .filter(|edge| edge.tier == RefinedCallTier::TypeDirected)
+        .filter(|edge| answers(edge))
         .filter(|edge| {
             outer
                 .span
@@ -378,10 +389,11 @@ fn write_binding_repo(root: &Path) {
     .expect("write cases");
 }
 
-/// The names of the targets typed edges claim at the native call whose span
-/// is exactly `needle` in `file`, split into exact and weaker claims.
-fn typed_claims_at(
+/// The names of the targets the edges `counts` selects claim at the native call
+/// whose span is exactly `needle` in `file`, split into exact and weaker claims.
+fn claims_at(
     output: &crate::analysis_kernel::KernelOutput,
+    counts: fn(&crate::analysis_neutral::refined_calls::facts::RefinedCallEdgeFact) -> bool,
     root: &Path,
     file: &str,
     needle: &str,
@@ -410,7 +422,7 @@ fn typed_claims_at(
     let mut exact = std::collections::BTreeSet::new();
     let mut weaker = std::collections::BTreeSet::new();
     for edge in output.db.refined_call_edges() {
-        if edge.tier != RefinedCallTier::TypeDirected || edge.site != site.id {
+        if !counts(edge) || edge.site != site.id {
             continue;
         }
         let Some(name) = edge
@@ -442,7 +454,15 @@ fn a_binding_that_can_hold_another_value_is_never_an_exact_answer() {
     write_binding_repo(temp.path());
 
     let output = run_dispatch_repo(temp.path(), &typescript);
-    let claims = |needle: &str| typed_claims_at(&output, temp.path(), "src/cases.js", needle);
+    let claims = |needle: &str| {
+        claims_at(
+            &output,
+            |edge| edge.tier == RefinedCallTier::TypeDirected,
+            temp.path(),
+            "src/cases.js",
+            needle,
+        )
+    };
 
     for needle in [
         "reb()",
@@ -469,9 +489,9 @@ fn a_binding_that_can_hold_another_value_is_never_an_exact_answer() {
 }
 
 #[test]
-fn a_call_the_checker_answers_keeps_its_exact_target() {
+fn the_checker_leaves_an_answer_it_agrees_with_where_it_was() {
     let Some(typescript) =
-        skip_without_typescript("a_call_the_checker_answers_keeps_its_exact_target")
+        skip_without_typescript("the_checker_leaves_an_answer_it_agrees_with_where_it_was")
     else {
         return;
     };
@@ -479,24 +499,32 @@ fn a_call_the_checker_answers_keeps_its_exact_target() {
     write_binding_repo(temp.path());
 
     let output = run_dispatch_repo(temp.path(), &typescript);
-    let claims = |needle: &str| typed_claims_at(&output, temp.path(), "src/cases.js", needle);
+    let claims = |needle: &str| claims_at(&output, answers, temp.path(), "src/cases.js", needle);
 
-    for (needle, target) in [
-        ("new Kid()", "Kid"),
-        ("new Quiet()", "Quiet"),
-        ("super(1)", "Base"),
-        ("kid.run()", "Kid.run"),
-        ("kid.hello()", "Base.hello"),
+    // Each call keeps the tier value flow gave it: the checker agrees with
+    // these answers, so it neither moves nor adds to them. `super(1)` runs the
+    // parent class's constructor, so the class it names is no mismatch.
+    for (needle, exact, conservative) in [
+        ("new Kid()", Some("Kid"), None),
+        ("new Quiet()", Some("Quiet"), None),
+        ("kid.run()", None, Some("Kid.run")),
+        ("kid.hello()", None, Some("Base.hello")),
+        ("super(1)", Some("Base"), None),
     ] {
-        let (exact, _) = claims(needle);
+        let names = |name: Option<&str>| {
+            name.into_iter()
+                .map(str::to_string)
+                .collect::<std::collections::BTreeSet<_>>()
+        };
         assert_eq!(
-            exact,
-            std::collections::BTreeSet::from([target.to_string()]),
-            "`{needle}` is answered by the checker"
+            claims(needle),
+            (names(exact), names(conservative)),
+            "`{needle}` keeps its answer"
         );
     }
-    let (exact, _) = typed_claims_at(
+    let (exact, _) = claims_at(
         &output,
+        answers,
         temp.path(),
         "src/cases.js",
         "function iife() { return 3; })()",
@@ -514,6 +542,62 @@ fn a_call_the_checker_answers_keeps_its_exact_target() {
         )]),
         "a function called where it is written runs exactly that function"
     );
+}
+
+fn write_runnable_repo(root: &Path) {
+    std::fs::write(
+        root.join("tsconfig.json"),
+        "{\"compilerOptions\":{\"strict\":true,\"target\":\"ES2022\",\
+         \"module\":\"commonjs\",\"noEmit\":true},\"include\":[\"src/**/*\"]}",
+    )
+    .expect("write tsconfig");
+    std::fs::create_dir_all(root.join("src")).expect("create src");
+    std::fs::write(
+        root.join("src/base.ts"),
+        "export class BaseError {\n  constructor(public message: string, public code: number) {}\n}\n\
+         export const OK = <T>(value: T): { value: T } => ({ value });\n",
+    )
+    .expect("write base");
+    std::fs::write(
+        root.join("src/cases.ts"),
+        "import { BaseError, OK } from './base';\n\
+         export class KidError extends BaseError {\n  \
+         constructor(message: string) { super(message, 1); }\n}\n\
+         export function wrap(fn: (...args: number[]) => number) {\n  \
+         return OK(async function (this: unknown, ...args: number[]) { return fn(...args); });\n}\n\
+         export function run() { new KidError('x'); return wrap(() => 1); }\n",
+    )
+    .expect("write cases");
+}
+
+#[test]
+fn the_checker_never_moves_an_answer_the_call_can_run() {
+    let Some(typescript) =
+        skip_without_typescript("the_checker_never_moves_an_answer_the_call_can_run")
+    else {
+        return;
+    };
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_runnable_repo(temp.path());
+
+    let output = run_dispatch_repo(temp.path(), &typescript);
+    // `super(...)` runs the parent class's constructor, and a generic arrow
+    // runs at a call that passes its one argument: the checker's declarations
+    // agree with both, so neither answer is moved off the exact tier.
+    for (needle, target) in [
+        ("super(message, 1)", "BaseError"),
+        (
+            "OK(async function (this: unknown, ...args: number[]) { return fn(...args); })",
+            "OK",
+        ),
+    ] {
+        let (exact, _) = claims_at(&output, answers, temp.path(), "src/cases.ts", needle);
+        assert_eq!(
+            exact,
+            std::collections::BTreeSet::from([target.to_string()]),
+            "`{needle}` keeps its exact answer"
+        );
+    }
 }
 
 /// Whether `edge` hangs off the native call site the sidecar span describes.

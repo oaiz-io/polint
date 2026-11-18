@@ -90,6 +90,7 @@ in scope.
 | `span` | span | declaration span |
 | `callable_kind` | string | `function`, `method`, `constructor`, `arrow`, `getter`, `setter`, `class` |
 | `name_span` | span | span of the declaration's own name, or `null` for an anonymous callable |
+| `required_parameters` | number or null | the fewest arguments a call must pass, as the declared parameters say; `null` for a class, an accessor and a declaration in a JavaScript file, whose parameters the checker reads as optional |
 | `stable_key` | string | length-prefixed from `callable` |
 
 `name_span` exists because the two parsers disagree about where a declaration
@@ -108,6 +109,7 @@ join when the spans differ.
 | `file` | string | repo-relative path |
 | `span` | span | the whole call expression |
 | `call_kind` | string | `call`, `method`, `new`, `tagged_template`, `decorator` |
+| `signature_parameters` | number or null | parameter count of the signature the checker resolved for the call; `null` when it has a rest parameter, is declared in a JavaScript file, or has no declaration |
 | `status` | string | `resolved`, `unresolved`, `any_receiver`, `union`, `external` |
 | `reason` | string | present when `status` is not `resolved` |
 | `stable_key` | string | length-prefixed from `callsite` |
@@ -182,6 +184,8 @@ property calls) or of the callee expression (for value calls).
 | `is_any` | bool | the type is `any` |
 | `is_unknown` | bool | the type is `unknown` |
 | `union_size` | u64 | 0 when not a union, otherwise the constituent count |
+| `is_intersection` | bool | the type is an intersection |
+| `is_object_literal` | bool | the type is an object literal's own type |
 | `stable_key` | string | length-prefixed from the callsite key |
 
 ### `any_density`

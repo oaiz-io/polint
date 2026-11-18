@@ -461,6 +461,7 @@ impl<'a> Dump<'a> {
                 "claim_tier": edge.precision.tier().as_str(),
                 "assumptions": edge.assumptions.iter().map(|a| a.id()).collect::<Vec<_>>(),
                 "dispatch": dispatch_evidence(&edge.evidence),
+                "type_effect": type_effect(&edge.evidence),
                 "validation": debug(&edge.validation),
                 "confidence": debug(&edge.confidence),
                 "algorithm": debug(&edge.algorithm),
@@ -540,6 +541,15 @@ fn dispatch_evidence(evidence: &[String]) -> Option<&str> {
     evidence
         .iter()
         .find_map(|entry| entry.strip_prefix("dispatch="))
+}
+
+/// What the type checker did to an edge another tier produced: moved it to
+/// the conservative tier, or listed it as a candidate at an open site.
+fn type_effect(evidence: &[String]) -> Option<&str> {
+    evidence
+        .iter()
+        .map(String::as_str)
+        .find(|entry| matches!(*entry, "type_mismatch" | "type_seed"))
 }
 
 fn debug<T: std::fmt::Debug>(value: &T) -> String {

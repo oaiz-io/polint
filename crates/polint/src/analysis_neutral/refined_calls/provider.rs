@@ -51,8 +51,9 @@ pub struct GoSemanticCallsiteInput {
 }
 
 pub use crate::analysis_neutral::refined_calls::ts_types::{
-    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDispatchKind, TsTypeFileDensityInput,
-    TsTypeJoinReport, TsTypeSiteStatus,
+    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDeclarationKind, TsTypeDispatchKind,
+    TsTypeFileDensityInput, TsTypeFunctionInput, TsTypeJoinReport, TsTypeReceiverShape,
+    TsTypeSiteStatus,
 };
 
 pub const REFINED_CALLS_PROVIDER_ID: &str = "polint.refined_calls";
@@ -80,6 +81,7 @@ pub fn derive_refined_calls_with_cache_stats(
     go_semantic_callsites: &[GoSemanticCallsiteInput],
     ts_type_callsites: &[TsTypeCallsiteInput],
     ts_type_callees: &[TsTypeCalleeInput],
+    ts_type_functions: &[TsTypeFunctionInput],
     ts_type_file_densities: &[TsTypeFileDensityInput],
 ) -> RefinedCallsProviderOutput {
     let mut started = std::time::Instant::now();
@@ -163,31 +165,6 @@ pub fn derive_refined_calls_with_cache_stats(
         .extend(crate::analysis_neutral::refined_calls::ts_js::derive_ts_js_refinements(db).edges);
     checkpoint("ts_js");
     tier_edges("ts_js", &output.edges);
-    // The typed tier runs alongside the points-to tier rather than replacing
-    // it: both describe the same call sites, and a consumer picks by tier. The
-    // heap tier is the fallback whenever the sidecar produced nothing.
-    let (ts_typed, ts_typed_join) =
-        crate::analysis_neutral::refined_calls::ts_types::derive_ts_type_refinements(
-            db,
-            ts_type_callsites,
-            ts_type_callees,
-            ts_type_file_densities,
-        );
-    if ts_typed_join != TsTypeJoinReport::default() {
-        tracing::debug!(
-            target: "polint::kernel::stage",
-            provider = REFINED_CALLS_PROVIDER_ID,
-            matched_callsites = ts_typed_join.matched_callsites,
-            unmatched_callsites = ts_typed_join.unmatched_callsites,
-            matched_callees = ts_typed_join.matched_callees,
-            unmatched_callees = ts_typed_join.unmatched_callees,
-            deferred_callsites = ts_typed_join.deferred_callsites,
-            "ts type tier join"
-        );
-    }
-    output.edges.extend(ts_typed.edges);
-    checkpoint("ts_types");
-    tier_edges("ts_types", &output.edges);
     output.edges.extend(
         crate::analysis_neutral::refined_calls::summaries::derive_summary_assisted_refinements(db)
             .edges,
@@ -207,6 +184,43 @@ pub fn derive_refined_calls_with_cache_stats(
     tier_edges("solver", &output.edges);
     let unclaimed = unclaimed_site_edges(db, interner, &output.edges, &call_sites);
     output.edges.extend(unclaimed);
+    // Types weigh the other tiers' answer last, once it is whole: they move an
+    // exact claim the checker's declarations contradict to the conservative
+    // tier, list candidates at open sites, and answer sites no tier reached.
+    let typed = crate::analysis_neutral::refined_calls::ts_types::typed_rows(
+        db,
+        ts_type_callsites,
+        ts_type_callees,
+        ts_type_functions,
+        ts_type_file_densities,
+    );
+    if typed.report != TsTypeJoinReport::default() {
+        tracing::info!(
+            target: "polint::kernel::stage",
+            provider = REFINED_CALLS_PROVIDER_ID,
+            matched_callsites = typed.report.matched_callsites,
+            unmatched_callsites = typed.report.unmatched_callsites,
+            matched_callees = typed.report.matched_callees,
+            unmatched_callees = typed.report.unmatched_callees,
+            deferred_callsites = typed.report.deferred_callsites,
+            "ts type tier join"
+        );
+    }
+    let effects = crate::analysis_neutral::refined_calls::type_assignment::assign_type_tiers(
+        interner,
+        &mut output.edges,
+        typed,
+    );
+    tracing::debug!(
+        target: "polint::kernel::stage",
+        provider = REFINED_CALLS_PROVIDER_ID,
+        mismatched = effects.mismatched,
+        seeded = effects.seeded,
+        typed_only_sites = effects.typed_only_sites,
+        "ts type tier effects"
+    );
+    checkpoint("ts_types");
+    tier_edges("ts_types", &output.edges);
     output = finalized_output(interner, output);
     checkpoint("normalize");
 
@@ -1525,6 +1539,7 @@ mod tests {
             upstream.clone(),
             upstream.clone(),
             upstream,
+            &[],
             &[],
             &[],
             &[],

@@ -73,8 +73,9 @@ is stitched with.
 The list also names `single_literal`, `declaration_only`, `unique_reference`,
 `declared_target`, `export_link` and `export_not_rewritten`. The solve does not
 record them on its edges: its exact claim rests on closed sets rather than on
-how a binding was declared or imported, and the direct and typed tiers that do
-rely on them do not record assumptions yet.
+how a binding was declared or imported, and the direct tier that does rely on
+them does not record assumptions yet. The type step claims nothing exact, so
+no edge carries `declared_target`.
 
 ## Limits
 

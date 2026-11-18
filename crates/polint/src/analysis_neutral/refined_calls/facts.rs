@@ -41,9 +41,9 @@ pub enum RefinedCallTier {
     DirectOnly,
     DirectPlusFramework,
     /// An edge a language type checker resolved, or a rapid-type candidate it
-    /// narrowed. Ranked above the token and points-to tiers because it is
-    /// derived from declared types rather than from value flow, and its
-    /// ordering is what lets a consumer prefer it for the same call site.
+    /// narrowed, at a site no value-flow tier answered. Declared types do not
+    /// say which values flow, so these edges claim at most the conservative
+    /// tier and their site stays open.
     TypeDirected,
     TypeValueFunctionToken,
     SummaryAssisted,
