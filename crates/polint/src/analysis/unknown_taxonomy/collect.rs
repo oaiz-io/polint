@@ -397,7 +397,9 @@ fn solver_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
             .filter(|edge| edge.status != PointsToStatus::Present)
             .map(|edge| {
                 let category = match edge.status {
-                    PointsToStatus::BudgetExceeded => UnknownCategory::BudgetExceeded,
+                    PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+                        UnknownCategory::BudgetExceeded
+                    }
                     PointsToStatus::SetupMissing => UnknownCategory::SetupMissing,
                     PointsToStatus::Unsupported => UnknownCategory::UnsupportedSemantic,
                     PointsToStatus::Unknown => UnknownCategory::MissingFact,

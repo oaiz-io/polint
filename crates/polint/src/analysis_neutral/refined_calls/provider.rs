@@ -796,13 +796,16 @@ fn call_status_for_solver_edge(status: PointsToStatus) -> CallTargetStatus {
         PointsToStatus::Unknown => CallTargetStatus::Unresolved,
         PointsToStatus::Unsupported => CallTargetStatus::Unsupported,
         PointsToStatus::SetupMissing => CallTargetStatus::SetupMissing,
-        PointsToStatus::BudgetExceeded => CallTargetStatus::BudgetExceeded,
+        PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+            CallTargetStatus::BudgetExceeded
+        }
     }
 }
 
 fn unresolved_reason_for_solver_edge(status: PointsToStatus) -> Option<UnresolvedCallReason> {
     match status {
         PointsToStatus::BudgetExceeded => Some(UnresolvedCallReason::BudgetExceeded),
+        PointsToStatus::IndirectionBound => Some(UnresolvedCallReason::IndirectionBound),
         PointsToStatus::SetupMissing => Some(UnresolvedCallReason::SetupMissing),
         PointsToStatus::Unsupported => Some(UnresolvedCallReason::UnsupportedSyntax),
         PointsToStatus::Unknown => Some(UnresolvedCallReason::Unknown),
@@ -826,7 +829,9 @@ fn call_precision_for_solver_edge(precision: PointsToPrecision) -> CallPrecision
 fn confidence_for_solver_edge(status: PointsToStatus) -> RefinedCallConfidence {
     match status {
         PointsToStatus::Present => RefinedCallConfidence::Medium,
-        PointsToStatus::BudgetExceeded => RefinedCallConfidence::Low,
+        PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+            RefinedCallConfidence::Low
+        }
         PointsToStatus::Unknown | PointsToStatus::Unsupported | PointsToStatus::SetupMissing => {
             RefinedCallConfidence::Low
         }

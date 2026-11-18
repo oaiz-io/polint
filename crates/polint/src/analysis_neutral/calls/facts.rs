@@ -176,6 +176,9 @@ pub enum UnresolvedCallReason {
     SetupMissing,
     UnsupportedSyntax,
     BudgetExceeded,
+    /// The callee set may lack values that cross more field loads and stores
+    /// than the points-to solve's indirection bound lets through.
+    IndirectionBound,
     UnknownCallee,
     Unknown,
 }

@@ -2480,6 +2480,7 @@ fn call_unresolved_reason_label(reason: UnresolvedCallReason) -> &'static str {
         UnresolvedCallReason::SetupMissing => "SetupMissing",
         UnresolvedCallReason::UnsupportedSyntax => "UnsupportedSyntax",
         UnresolvedCallReason::BudgetExceeded => "BudgetExceeded",
+        UnresolvedCallReason::IndirectionBound => "IndirectionBound",
         UnresolvedCallReason::UnknownCallee => "UnknownCallee",
         UnresolvedCallReason::Unknown => "Unknown",
     }

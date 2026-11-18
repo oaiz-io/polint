@@ -164,7 +164,8 @@ impl TsPointsToInputs {
 pub struct TsPointsToSolveResult {
     pub points_to: PointsToSolveResult,
     pub derived_edges: Vec<DerivedEdgeFact>,
-    /// Call sites whose callee set the solve left incomplete under its budget.
+    /// Call sites whose callee set the solve left incomplete under its budget
+    /// or indirection bound.
     pub incomplete_sites: u64,
 }
 
@@ -200,7 +201,9 @@ pub fn solve_ts_points_to(
         // object in it was derived, and the site is reported as incomplete.
         match set.status {
             PointsToStatus::Present => {}
-            PointsToStatus::BudgetExceeded => incomplete_sites += 1,
+            PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+                incomplete_sites += 1
+            }
             PointsToStatus::Unknown
             | PointsToStatus::Unsupported
             | PointsToStatus::SetupMissing => {

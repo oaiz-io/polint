@@ -85,7 +85,9 @@ pub(super) fn points_to_metadata_precision(
         PointsToStatus::SetupMissing => FactPrecision::SetupMissing,
         PointsToStatus::Unsupported => FactPrecision::Unsupported,
         PointsToStatus::Unknown => FactPrecision::Unresolved,
-        PointsToStatus::BudgetExceeded => FactPrecision::Heuristic,
+        PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+            FactPrecision::Heuristic
+        }
         PointsToStatus::Present => match precision {
             PointsToPrecision::LocalFlowSensitive => FactPrecision::SetupAware,
             PointsToPrecision::FlowInsensitive
@@ -263,6 +265,7 @@ pub(super) fn call_unresolved_reason_label(reason: UnresolvedCallReason) -> &'st
         UnresolvedCallReason::SetupMissing => "setup_missing",
         UnresolvedCallReason::UnsupportedSyntax => "unsupported_syntax",
         UnresolvedCallReason::BudgetExceeded => "budget_exceeded",
+        UnresolvedCallReason::IndirectionBound => "indirection_bound",
         UnresolvedCallReason::UnknownCallee => "unknown_callee",
         UnresolvedCallReason::Unknown => "unknown",
     }

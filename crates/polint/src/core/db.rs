@@ -6420,7 +6420,9 @@ impl AnalysisDb {
             crate::analysis_neutral::solver::facts::derived_edge_precision_ceiling(edge.precision);
         let confidence = match edge.status {
             PointsToStatus::Present => FactConfidence::High,
-            PointsToStatus::BudgetExceeded => FactConfidence::Medium,
+            PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+                FactConfidence::Medium
+            }
             PointsToStatus::Unknown
             | PointsToStatus::Unsupported
             | PointsToStatus::SetupMissing => FactConfidence::Low,

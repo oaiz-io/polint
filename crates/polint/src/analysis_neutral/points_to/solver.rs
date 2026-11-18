@@ -19,6 +19,14 @@
 //! the parameter at its position, the receiver into `this` and the return into
 //! the call's result. Those copies enter the same worklist, so the solve stays
 //! the least fixed point of constraints and calls together.
+//!
+//! A depth bound limits how many field loads and stores a value may cross.
+//! The bounded solve runs in levels: a copy into or out of a heap slot
+//! carries its objects to the next level, and every other edge carries them
+//! within the level. Objects that would reach a level past the bound are
+//! dropped, and the sets they would have reached, with everything those can
+//! reach, are `IndirectionBound`: what they hold was derived, and they may
+//! hold more. Without a bound the solve is one level.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
@@ -43,6 +51,8 @@ pub struct PointsToBudget {
     pub max_objects_per_var: usize,
     /// Heap slots the solve may create.
     pub max_dynamic_vars: usize,
+    /// Field loads and stores a value may cross; `None` for no bound.
+    pub max_indirection_depth: Option<usize>,
 }
 
 impl Default for PointsToBudget {
@@ -51,6 +61,7 @@ impl Default for PointsToBudget {
             max_steps: 50_000_000,
             max_objects_per_var: 4_096,
             max_dynamic_vars: 4_000_000,
+            max_indirection_depth: None,
         }
     }
 }
@@ -280,6 +291,9 @@ struct Var {
     /// Objects received and not yet propagated; `Some` exactly while the
     /// variable is on the queue.
     pending: Option<Vec<u32>>,
+    /// Objects received for the next level; `Some` exactly while the
+    /// variable is on the deferred list.
+    deferred: Option<Vec<u32>>,
     /// Inclusion edges, `self -> target`.
     copies: Vec<Edge>,
     /// Edges that carry precision and incompleteness but no objects: a base
@@ -298,6 +312,8 @@ struct Var {
     bindings: BTreeSet<CallBinding>,
     /// A budget event cut the variable's propagation short.
     interrupted: bool,
+    /// The depth bound dropped objects the variable would have received.
+    bounded: bool,
 }
 
 #[derive(Debug)]
@@ -385,6 +401,12 @@ struct Solver<'a> {
     /// In object-id order.
     signatures: Vec<Signature>,
     queue: VecDeque<u32>,
+    /// Variables holding objects for the next level, in the order they
+    /// received them.
+    deferred: Vec<u32>,
+    /// The level the queue is at: the field loads and stores its objects
+    /// crossed.
+    level: usize,
     /// Reused to carry a set's objects along a new edge.
     scratch: Vec<u32>,
     steps: usize,
@@ -409,6 +431,8 @@ impl<'a> Solver<'a> {
             calls: Vec::new(),
             signatures: Vec::new(),
             queue: VecDeque::new(),
+            deferred: Vec::new(),
+            level: 0,
             scratch: Vec::new(),
             steps: 0,
             halted: false,
@@ -638,7 +662,47 @@ impl<'a> Solver<'a> {
         insert_projection(&self.var_ids, &mut self.vars[base as usize].stores, store);
     }
 
+    /// Drains the queue level by level until no level is left or the depth
+    /// bound is reached.
     fn run(&mut self) {
+        loop {
+            self.drain();
+            if self.halted || self.deferred.is_empty() {
+                return;
+            }
+            self.level += 1;
+            let past_bound = self
+                .budget
+                .max_indirection_depth
+                .is_some_and(|depth| self.level > depth);
+            let mut dropped = false;
+            for var in std::mem::take(&mut self.deferred) {
+                let objects = self.vars[var as usize].deferred.take().unwrap_or_default();
+                if past_bound {
+                    let mut missing = Vec::new();
+                    self.vars[var as usize].set.missing(&objects, &mut missing);
+                    if !missing.is_empty() {
+                        self.vars[var as usize].bounded = true;
+                        dropped = true;
+                    }
+                } else {
+                    self.enqueue(var, &objects);
+                }
+            }
+            if past_bound {
+                if dropped {
+                    self.budget_reasons.insert(
+                        BudgetReason::PointsToMaxIndirectionDepth
+                            .as_str()
+                            .to_string(),
+                    );
+                }
+                return;
+            }
+        }
+    }
+
+    fn drain(&mut self) {
         let mut new = Vec::new();
         while let Some(&var) = self.queue.front() {
             if self.steps >= self.budget.max_steps {
@@ -674,7 +738,7 @@ impl<'a> Solver<'a> {
         self.vars[at].set.add_new(new);
         for index in 0..self.vars[at].copies.len() {
             let dst = self.vars[at].copies[index].0;
-            self.enqueue(dst, new);
+            self.flow(var, dst, new);
         }
         for index in 0..self.vars[at].loads.len() {
             let load = self.vars[at].loads[index];
@@ -804,23 +868,31 @@ impl<'a> Solver<'a> {
         let mut objects = std::mem::take(&mut self.scratch);
         objects.clear();
         objects.extend(self.vars[src as usize].set.iter());
-        self.enqueue(dst, &objects);
+        self.flow(src, dst, &objects);
         self.scratch = objects;
+    }
+
+    /// Carries `objects` along the copy `src -> dst`. Under a depth bound a
+    /// copy into or out of a heap slot crosses a field store or load, so the
+    /// objects arrive at the next level.
+    fn flow(&mut self, src: u32, dst: u32, objects: &[u32]) {
+        let crosses_field = self.budget.max_indirection_depth.is_some()
+            && (self.vars[src as usize].slot.is_some() || self.vars[dst as usize].slot.is_some());
+        if !crosses_field {
+            self.enqueue(dst, objects);
+            return;
+        }
+        let Var { set, deferred, .. } = &mut self.vars[dst as usize];
+        if hold_missing(set, deferred, objects) {
+            self.deferred.push(dst);
+        }
     }
 
     /// Queues the objects of `objects` that `dst` does not hold yet.
     fn enqueue(&mut self, dst: u32, objects: &[u32]) {
         let Var { set, pending, .. } = &mut self.vars[dst as usize];
-        match pending {
-            Some(pending) => set.missing(objects, pending),
-            None => {
-                let mut missing = Vec::new();
-                set.missing(objects, &mut missing);
-                if !missing.is_empty() {
-                    *pending = Some(missing);
-                    self.queue.push_back(dst);
-                }
-            }
+        if hold_missing(set, pending, objects) {
+            self.queue.push_back(dst);
         }
     }
 
@@ -865,18 +937,29 @@ impl<'a> Solver<'a> {
     }
 
     /// Variables whose sets may still be missing objects: the ones left on
-    /// the queue or cut short, and everything they can reach. A store through
-    /// an incomplete base may write a field of any object, so every slot of
-    /// that field is incomplete too; likewise a call through an incomplete
-    /// callee that passes values may reach any function, so every parameter
-    /// and `this` is incomplete.
+    /// the queue, holding objects for a later level, or cut short, and
+    /// everything they can reach. A store through an incomplete base may
+    /// write a field of any object, so every slot of that field is incomplete
+    /// too; likewise a call through an incomplete callee that passes values
+    /// may reach any function, so every parameter and `this` is incomplete.
     fn incomplete_variables(&self) -> Vec<bool> {
+        self.reach(|var| var.pending.is_some() || var.deferred.is_some() || var.interrupted)
+    }
+
+    /// Variables that may lack values the depth bound stopped: the ones it
+    /// dropped objects for, and everything they can reach as
+    /// [`Self::incomplete_variables`] spreads.
+    fn bounded_variables(&self) -> Vec<bool> {
+        self.reach(|var| var.bounded)
+    }
+
+    /// The variables `root` selects and everything they can reach: along
+    /// copies and dependencies, from a store to every slot of its field, and
+    /// from a callee that passes values to every signature input.
+    fn reach(&self, root: impl Fn(&Var) -> bool) -> Vec<bool> {
         let mut incomplete = vec![false; self.vars.len()];
         let mut work = (0..self.vars.len() as u32)
-            .filter(|var| {
-                let var = &self.vars[*var as usize];
-                var.pending.is_some() || var.interrupted
-            })
+            .filter(|var| root(&self.vars[*var as usize]))
             .collect::<Vec<_>>();
         let mut passed_values = false;
         while let Some(var) = work.pop() {
@@ -1191,6 +1274,7 @@ impl<'a> Solver<'a> {
             PointsToBudgetStatus::WithinBudget
         };
         let incomplete = self.incomplete_variables();
+        let bounded = self.bounded_variables();
         let mut precisions = self.precisions();
         let open = self.open_variables(&precisions);
         for (var, data) in self.vars.iter().enumerate() {
@@ -1200,7 +1284,7 @@ impl<'a> Solver<'a> {
         }
         let call_bindings = self.reached_bindings();
         let mut variables = (0..self.vars.len())
-            .filter(|var| incomplete[*var] || !self.vars[*var].set.is_empty())
+            .filter(|var| incomplete[*var] || bounded[*var] || !self.vars[*var].set.is_empty())
             .collect::<Vec<_>>();
         variables.sort_by_key(|var| self.var_ids[*var]);
         let mut object_identities = HashMap::new();
@@ -1216,6 +1300,8 @@ impl<'a> Solver<'a> {
                     .collect(),
                 status: if incomplete[var] {
                     PointsToStatus::BudgetExceeded
+                } else if bounded[var] {
+                    PointsToStatus::IndirectionBound
                 } else {
                     PointsToStatus::Present
                 },
@@ -1309,6 +1395,26 @@ fn insert_projection(var_ids: &[PtVarId], projections: &mut Vec<Projection>, new
     };
     if let Err(at) = projections.binary_search_by_key(&key(&new), key) {
         projections.insert(at, new);
+    }
+}
+
+/// Adds the members of `objects` that `set` lacks to `held`. True when
+/// `held` was empty and now holds some, so its variable is to be listed.
+fn hold_missing(set: &ObjectSet, held: &mut Option<Vec<u32>>, objects: &[u32]) -> bool {
+    match held {
+        Some(held) => {
+            set.missing(objects, held);
+            false
+        }
+        None => {
+            let mut missing = Vec::new();
+            set.missing(objects, &mut missing);
+            if missing.is_empty() {
+                return false;
+            }
+            *held = Some(missing);
+            true
+        }
     }
 }
 

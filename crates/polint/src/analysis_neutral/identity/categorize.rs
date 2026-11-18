@@ -99,8 +99,10 @@ pub fn category_for_unresolved(reason: UnresolvedCallReason) -> IdentityCategory
         UnresolvedCallReason::InterfaceDispatch | UnresolvedCallReason::FrameworkDispatch => {
             IdentityCategory::ModelMissing
         }
-        // Couldn't finish resolving within budget — conservatively unresolved.
-        UnresolvedCallReason::BudgetExceeded => IdentityCategory::UnresolvedEdge,
+        // Couldn't finish resolving within budget or depth bound — conservatively unresolved.
+        UnresolvedCallReason::BudgetExceeded | UnresolvedCallReason::IndirectionBound => {
+            IdentityCategory::UnresolvedEdge
+        }
     }
 }
 

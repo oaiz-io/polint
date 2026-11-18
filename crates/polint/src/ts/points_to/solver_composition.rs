@@ -1334,3 +1334,81 @@ fn a_slot_keeps_its_variable_when_other_slots_are_added() {
         "p.f changed its variable when other slots were added"
     );
 }
+
+/// `g` holds `h` directly and `fnf` two field hops away: stored into `o.f`
+/// and loaded back out of it.
+fn indirection_fixture() -> Fixture {
+    let mut fixture = Fixture::new();
+    fixture.function("main");
+    fixture.function("h");
+    fixture.function("fnf");
+    fixture.copy("g", "h");
+    fixture.alloc("o", "o:object");
+    fixture.store("o", "f", "fnf");
+    fixture.load("g", "o", "f");
+    fixture.call(
+        "main",
+        "g()",
+        Call {
+            callee: "g",
+            ..Call::default()
+        },
+    );
+    fixture
+}
+
+/// A depth bound below the hops a value needs keeps the edges found within
+/// it, marks the site's set as cut by the bound and says so in the reasons,
+/// without calling the run a budget event.
+#[test]
+fn an_indirection_bound_keeps_nearer_edges_and_marks_the_set() {
+    let fixture = indirection_fixture();
+    let result = fixture.solve(&budget(|budget| {
+        budget.points_to.max_indirection_depth = Some(1);
+    }));
+    assert_eq!(
+        result.points_to.budget_status,
+        PointsToBudgetStatus::WithinBudget
+    );
+    assert_eq!(
+        result.points_to.budget_reasons,
+        BTreeSet::from([BudgetReason::PointsToMaxIndirectionDepth
+            .as_str()
+            .to_string()])
+    );
+    assert_eq!(
+        fixture.objects(fixture.set(&result, "o")),
+        BTreeSet::from(["o:object".to_string()])
+    );
+    let set = fixture.set(&result, "g");
+    assert_eq!(set.status, PointsToStatus::IndirectionBound);
+    assert_eq!(fixture.objects(set), BTreeSet::from(["h".to_string()]));
+    assert_eq!(
+        fixture.targets(&result, "g()"),
+        BTreeMap::from([(
+            "h".to_string(),
+            (
+                PointsToStatus::IndirectionBound,
+                PointsToPrecision::FlowInsensitive
+            )
+        )])
+    );
+    assert_eq!(result.incomplete_sites, 1);
+}
+
+/// A bound that covers every hop gives the unbounded solve.
+#[test]
+fn an_indirection_bound_covering_every_hop_changes_nothing() {
+    let fixture = indirection_fixture();
+    let unbounded = fixture.solve(&SolverBudget::default());
+    let bounded = fixture.solve(&budget(|budget| {
+        budget.points_to.max_indirection_depth = Some(2);
+    }));
+    assert_eq!(bounded, unbounded);
+    assert!(bounded.points_to.budget_reasons.is_empty());
+    assert_eq!(
+        fixture.targets(&bounded, "g()"),
+        BTreeMap::from([("fnf".to_string(), EXACT), ("h".to_string(), EXACT)])
+    );
+    assert_eq!(bounded.incomplete_sites, 0);
+}

@@ -612,6 +612,7 @@ pub fn status_rank(status: PointsToStatus) -> u8 {
         PointsToStatus::Unsupported => 2,
         PointsToStatus::SetupMissing => 3,
         PointsToStatus::BudgetExceeded => 4,
+        PointsToStatus::IndirectionBound => 5,
     }
 }
 
