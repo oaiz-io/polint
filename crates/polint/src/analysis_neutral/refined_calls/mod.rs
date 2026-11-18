@@ -10,4 +10,5 @@ pub mod go;
 pub mod summaries;
 pub mod ts_js;
 pub mod ts_types;
+mod type_assignment;
 pub mod validate;
