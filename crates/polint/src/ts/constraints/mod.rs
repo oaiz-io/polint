@@ -127,3 +127,6 @@ pub(crate) struct TsValueFlows {
 pub(crate) fn lower_ts_source_value_flows(_file: &crate::analysis_api::SourceFile) -> TsValueFlows {
     TsValueFlows::default()
 }
+
+#[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
+mod callable_values;
