@@ -366,6 +366,7 @@ mod tests {
             evidence: vec![],
             input_stable_keys: vec![],
             stable_key: crate::internal_core::stable_key_for_test(stable_key),
+            assumptions: Vec::new(),
         }
     }
 }

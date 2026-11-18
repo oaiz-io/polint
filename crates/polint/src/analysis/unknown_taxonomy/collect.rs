@@ -1443,6 +1443,7 @@ mod tests {
             evidence: vec!["solver_derived_edge".to_string()],
             input_stable_keys: vec!["solver:budget".to_string()],
             stable_key: crate::core::stable_key_for_test("refined:budget"),
+            assumptions: Vec::new(),
         }
     }
 

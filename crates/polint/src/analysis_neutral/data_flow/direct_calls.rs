@@ -1362,6 +1362,7 @@ mod tests {
             evidence: vec!["test".to_string()],
             input_stable_keys: vec!["call-site".into()],
             stable_key: crate::internal_core::stable_key_for_test("refined:edge"),
+            assumptions: Vec::new(),
         }
     }
 

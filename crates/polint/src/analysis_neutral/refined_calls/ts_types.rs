@@ -248,6 +248,7 @@ fn typed_edge(
                 ("callee", callee_key),
             ],
         ),
+        assumptions: Vec::new(),
     }
 }
 
@@ -304,6 +305,7 @@ fn untyped_site_edge(
                 ("callsite", site_key),
             ],
         ),
+        assumptions: Vec::new(),
     }
 }
 

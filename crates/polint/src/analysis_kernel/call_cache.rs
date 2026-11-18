@@ -41,7 +41,7 @@ use crate::analysis_neutral::refined_calls::store::RefinedCallOutput;
 use crate::core::AnalysisDb;
 use crate::internal_core::{Language, StableKeyId};
 
-const CALL_CACHE_SCHEMA: &str = "polint-call-resolution-cache-1";
+const CALL_CACHE_SCHEMA: &str = "polint-call-resolution-cache-2";
 
 /// Entries kept on disk; older ones are removed when a new one is written.
 const ENTRIES_KEPT: usize = 2;

@@ -163,6 +163,7 @@ fn unresolved_edge(
                 ("status", format!("{status:?}")),
             ],
         ),
+        assumptions: Vec::new(),
     })
 }
 
