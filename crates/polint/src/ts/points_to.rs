@@ -16,7 +16,7 @@ use crate::analysis_neutral::points_to::facts::{
 };
 use crate::analysis_neutral::points_to::solver::{
     PointsToCall, PointsToCallInputs, PointsToSignature, PointsToSolveResult, SignaturePlace,
-    solve_points_to_with_calls,
+    solve_points_to_logged,
 };
 use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
@@ -175,8 +175,13 @@ pub fn solve_ts_points_to(
 ) -> TsPointsToSolveResult {
     let constraints = project_constraints(interner, inputs);
     let calls = project_calls(inputs);
-    let points_to =
-        solve_points_to_with_calls(interner, &constraints, &calls, budget.points_to_budget());
+    let points_to = solve_points_to_logged(
+        "call_graph",
+        interner,
+        &constraints,
+        &calls,
+        budget.points_to_budget(),
+    );
     let sets = points_to
         .sets
         .iter()
@@ -284,6 +289,22 @@ pub fn solve_ts_points_to(
         derived_edges,
         incomplete_sites,
     }
+}
+
+/// Writes the solver input `solve_ts_points_to` would solve, for the
+/// stored-input solver benchmark.
+#[cfg(test)]
+pub(crate) fn write_solver_input(
+    path: &std::path::Path,
+    interner: &crate::internal_core::StableKeyInterner,
+    inputs: &TsPointsToInputs,
+) -> anyhow::Result<()> {
+    crate::analysis_neutral::points_to::stored::write(
+        path,
+        interner,
+        &project_constraints(interner, inputs),
+        &project_calls(inputs),
+    )
 }
 
 fn project_constraints(

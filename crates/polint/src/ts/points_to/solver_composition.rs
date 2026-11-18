@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::*;
 use crate::analysis_neutral::ids::SemanticConstraintId;
 use crate::analysis_neutral::points_to::facts::{PointsToBudgetStatus, PointsToSetFact};
+use crate::analysis_neutral::points_to::solver::solve_points_to_with_calls;
 use crate::analysis_neutral::solver::budget::BudgetReason;
 use crate::internal_core::StableKeyInterner;
 

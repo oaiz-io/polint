@@ -63,6 +63,28 @@ pub struct PointsToSolveResult {
     /// values to it: the call's stable key and the signature place it bound.
     /// At most [`MAX_BINDINGS_PER_VAR`] per variable, the first by key text.
     pub call_bindings: BTreeMap<PtVarId, Vec<CallBinding>>,
+    pub stats: PointsToSolveStats,
+}
+
+/// The size of one solve: what went in and how much work it took. Counts
+/// only, so two solves of the same input compare equal; time and memory are
+/// logged beside them by [`solve_points_to_logged`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PointsToSolveStats {
+    /// Input constraints by kind name.
+    pub constraints: BTreeMap<&'static str, usize>,
+    pub calls: usize,
+    /// Variables the constraints and calls name, and heap slots.
+    pub variables: usize,
+    /// Objects the constraints name.
+    pub objects: usize,
+    pub slots: usize,
+    pub copy_edges: usize,
+    /// Worklist pops.
+    pub pops: usize,
+    pub largest_set: usize,
+    pub sets_over_64: usize,
+    pub sets_over_1024: usize,
 }
 
 /// One call-rule copy: the call that made it and the signature place it
@@ -136,11 +158,94 @@ pub fn solve_points_to_with_calls(
     calls: &PointsToCallInputs,
     budget: PointsToBudget,
 ) -> PointsToSolveResult {
+    solve_timed(interner, constraints, calls, budget).0
+}
+
+/// Solves like [`solve_points_to_with_calls`] and logs the solve's
+/// [`PointsToSolveStats`], its time per step and its memory under the
+/// `polint::points_to` tracing target, named by `pass`.
+pub fn solve_points_to_logged(
+    pass: &'static str,
+    interner: &crate::internal_core::StableKeyInterner,
+    constraints: &[PointsToConstraintFact],
+    calls: &PointsToCallInputs,
+    budget: PointsToBudget,
+) -> PointsToSolveResult {
+    let rss_before = crate::measure::current_rss_bytes();
+    let (result, timings) = solve_timed(interner, constraints, calls, budget);
+    let stats = &result.stats;
+    let rss_after = crate::measure::current_rss_bytes();
+    let constraint_counts = stats
+        .constraints
+        .iter()
+        .map(|(kind, count)| format!("{kind}:{count}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    tracing::info!(
+        target: "polint::points_to",
+        pass,
+        constraints = %constraint_counts,
+        calls = stats.calls,
+        variables = stats.variables,
+        objects = stats.objects,
+        slots = stats.slots,
+        copy_edges = stats.copy_edges,
+        pops = stats.pops,
+        largest_set = stats.largest_set,
+        sets_over_64 = stats.sets_over_64,
+        sets_over_1024 = stats.sets_over_1024,
+        initialize_ms = timings[0].as_millis() as u64,
+        run_ms = timings[1].as_millis() as u64,
+        result_ms = timings[2].as_millis() as u64,
+        rss_delta_mb = rss_after.saturating_sub(rss_before) / (1024 * 1024),
+        peak_rss_mb = crate::measure::peak_rss_bytes() / (1024 * 1024),
+        budget = ?result.budget_status,
+        "points_to solve"
+    );
+    result
+}
+
+/// The solve and the wall time of its three steps: reading the input,
+/// the worklist, and building the result.
+fn solve_timed(
+    interner: &crate::internal_core::StableKeyInterner,
+    constraints: &[PointsToConstraintFact],
+    calls: &PointsToCallInputs,
+    budget: PointsToBudget,
+) -> (PointsToSolveResult, [std::time::Duration; 3]) {
+    let started = std::time::Instant::now();
     let mut solver = Solver::new(interner, budget);
     solver.initialize(constraints);
     solver.initialize_calls(calls);
+    let initialized = started.elapsed();
     solver.run();
-    solver.into_result()
+    let ran = started.elapsed();
+    let mut result = solver.into_result();
+    let finished = started.elapsed();
+    result.stats.constraints = constraint_counts(constraints);
+    result.stats.calls = calls.calls.len();
+    (result, [initialized, ran - initialized, finished - ran])
+}
+
+fn constraint_counts(constraints: &[PointsToConstraintFact]) -> BTreeMap<&'static str, usize> {
+    use PointsToConstraintKind as Kind;
+    let mut counts = BTreeMap::new();
+    for constraint in constraints {
+        let kind = match constraint.kind {
+            Kind::AddressOf { .. } => "address_of",
+            Kind::Copy { .. } => "copy",
+            Kind::Load { .. } => "load",
+            Kind::Store { .. } => "store",
+            Kind::FieldLoad { .. } => "field_load",
+            Kind::FieldStore { .. } => "field_store",
+            Kind::ElementLoad { .. } => "element_load",
+            Kind::ElementStore { .. } => "element_store",
+            Kind::CallReturn { .. } => "call_return",
+            Kind::SummaryFlow { .. } => "summary_flow",
+        };
+        *counts.entry(kind).or_insert(0) += 1;
+    }
+    counts
 }
 
 const CONTENTS_SLOT: &str = "$contents";
@@ -1007,11 +1112,30 @@ impl<'a> Solver<'a> {
                 ),
             })
             .collect();
+        let set_sizes = self.sets.values().map(BTreeSet::len);
+        let stats = PointsToSolveStats {
+            variables: self
+                .variable_identities
+                .keys()
+                .chain(self.slot_keys.keys())
+                .chain(self.sets.keys())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            objects: self.object_identities.len(),
+            slots: self.slot_keys.len(),
+            copy_edges: self.copy_edges.values().map(BTreeMap::len).sum(),
+            pops: self.steps,
+            largest_set: set_sizes.clone().max().unwrap_or(0),
+            sets_over_64: set_sizes.clone().filter(|size| *size > 64).count(),
+            sets_over_1024: set_sizes.filter(|size| *size > 1024).count(),
+            ..PointsToSolveStats::default()
+        };
         PointsToSolveResult {
             sets,
             budget_status,
             budget_reasons: self.budget_reasons,
             call_bindings,
+            stats,
         }
     }
 }
@@ -1092,7 +1216,13 @@ pub fn output_with_solved_sets(
     constraints: Vec<PointsToConstraintFact>,
     budget: PointsToBudget,
 ) -> PointsToOutput {
-    let solve = solve_points_to(interner, &constraints, budget);
+    let solve = solve_points_to_logged(
+        "type_value_alias",
+        interner,
+        &constraints,
+        &PointsToCallInputs::default(),
+        budget,
+    );
     PointsToOutput {
         constraints,
         sets: solve.sets,
