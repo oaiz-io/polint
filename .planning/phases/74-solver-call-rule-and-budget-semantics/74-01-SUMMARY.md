@@ -216,8 +216,7 @@ in the new and changed tests. The baseline was regenerated with
 in the commit message. After that the sweep passes. The baseline file was the
 only change.
 
-CI may not start for a pull request whose base is not `main`. The pull
-request stays on its stacked base.
+CI runs on this pull request against its stacked base.
 
 ## Deviations from the plan
 
