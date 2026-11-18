@@ -473,6 +473,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:caller-callee"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -582,6 +583,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:go-caller-callee"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -657,6 +659,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:go-semantic-caller-callee"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -829,6 +832,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:method-dispatch"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()

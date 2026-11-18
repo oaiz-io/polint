@@ -1206,6 +1206,7 @@ mod tests {
                     &ConstraintKind::call_at(SemanticNodeId(2)),
                     1,
                 ),
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::BudgetExceeded,
             budget_reasons: BTreeSet::from(["solver.max_steps".to_string()]),

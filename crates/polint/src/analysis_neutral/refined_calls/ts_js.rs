@@ -415,6 +415,7 @@ mod tests {
                 precision,
                 stable_key: interner.intern("solver-edge:callable"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()

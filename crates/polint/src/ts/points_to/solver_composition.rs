@@ -18,6 +18,7 @@ use super::*;
 use crate::analysis_neutral::ids::SemanticConstraintId;
 use crate::analysis_neutral::points_to::facts::{PointsToBudgetStatus, PointsToSetFact};
 use crate::analysis_neutral::points_to::solver::solve_points_to_with_calls;
+use crate::analysis_neutral::points_to::tiers::Inflow;
 use crate::analysis_neutral::solver::budget::BudgetReason;
 use crate::internal_core::StableKeyInterner;
 
@@ -305,6 +306,42 @@ impl Fixture {
             })
             .collect()
     }
+
+    /// The claims of the edges derived at a site; one per site, so a set.
+    fn claims(&self, result: &TsPointsToSolveResult, site: &str) -> BTreeSet<EdgeClaim> {
+        let site_key = self.node_key(self.sites[site].node);
+        result
+            .derived_edges
+            .iter()
+            .filter(|edge| {
+                edge.provenance
+                    .contributing_facts
+                    .iter()
+                    .any(|fact| fact.stable_key == site_key)
+            })
+            .map(|edge| edge.claim.clone())
+            .collect()
+    }
+}
+
+/// The assumptions of an exact claim read from a local binding.
+fn exact_local() -> EdgeClaim {
+    EdgeClaim::Exact(vec![
+        Assumption::SealedBindings,
+        Assumption::WithinBudget,
+        Assumption::NoInwardFlow,
+    ])
+}
+
+/// The assumptions of an exact claim read through a heap slot.
+fn exact_through_slot() -> EdgeClaim {
+    EdgeClaim::Exact(vec![
+        Assumption::SealedBindings,
+        Assumption::WithinBudget,
+        Assumption::PrototypeClosed,
+        Assumption::NoInwardFlow,
+        Assumption::NoOutsideFieldWrite,
+    ])
 }
 
 fn budget(edit: impl FnOnce(&mut SolverBudget)) -> SolverBudget {
@@ -941,6 +978,32 @@ fn input_the_solve_cannot_see_keeps_edges_out_of_the_exact_tier() {
     );
 }
 
+/// A site an input the solve cannot see reaches is open, and says how the
+/// input reaches it; a site whose every input is described is exact.
+#[test]
+fn a_site_with_an_undescribed_input_is_open_with_its_kind() {
+    let fixture = open_input_fixture();
+    let result = fixture.solve(&SolverBudget::default());
+    let open = |inflow| BTreeSet::from([EdgeClaim::Open(inflow)]);
+    assert_eq!(
+        fixture.claims(&result, "o.f()"),
+        open(Inflow::EscapedObject),
+        "`o` is the receiver of a call that may run code outside, so `o` \
+         escapes, and an escaped object's field is the more specific kind"
+    );
+    assert_eq!(fixture.claims(&result, "v()"), open(Inflow::OutsideValue));
+    assert_eq!(
+        fixture.claims(&result, "q()"),
+        open(Inflow::OutsideValue),
+        "nothing binds `p`, so it is a place nothing defines"
+    );
+    assert_eq!(fixture.claims(&result, "s()"), open(Inflow::OpenResult));
+    assert_eq!(
+        fixture.claims(&result, "u()"),
+        BTreeSet::from([exact_local()])
+    );
+}
+
 /// Functions and objects handed to code the solve cannot see, beside one that
 /// stays inside the program. `w` has no input at all, so a call of it may run
 /// anything.
@@ -1054,6 +1117,75 @@ fn only_an_escaped_function_has_open_parameters() {
             fixture.targets(&result, site),
             BTreeMap::from([("h".to_string(), heuristic)]),
             "`{site}` reads a place that code the solve cannot see may fill"
+        );
+    }
+}
+
+/// A parameter of a function code outside can call holds an inward
+/// parameter; a field of an object code outside can write holds an escaped
+/// object's field.
+#[test]
+fn an_escaped_place_is_open_with_the_way_it_escaped() {
+    let fixture = escape_fixture();
+    let result = fixture.solve(&SolverBudget::default());
+    assert_eq!(
+        fixture.claims(&result, "p()"),
+        BTreeSet::from([exact_local()])
+    );
+    for site in ["c()", "a()", "b()", "e()", "t()", "d()"] {
+        assert_eq!(
+            fixture.claims(&result, site),
+            BTreeSet::from([EdgeClaim::Open(Inflow::InwardParameter)]),
+            "`{site}` reads a parameter code outside can fill"
+        );
+    }
+    assert_eq!(
+        fixture.claims(&result, "o.f()"),
+        BTreeSet::from([EdgeClaim::Open(Inflow::EscapedObject)])
+    );
+}
+
+/// A closed set of several functions is complete, not exact.
+#[test]
+fn a_closed_set_of_several_functions_is_complete() {
+    let fixture = copy_only_fixture();
+    let result = fixture.solve(&SolverBudget::default());
+    for site in ["b0()", "b1()", "b2()"] {
+        assert_eq!(
+            fixture.claims(&result, site),
+            BTreeSet::from([EdgeClaim::Complete]),
+            "`{site}` holds two functions and nothing from outside"
+        );
+    }
+}
+
+/// A function read through a field is exact only while no other package
+/// writes that field or the prototype the read goes through, and only while
+/// the solve stayed within its budget: a package graph with a budget event
+/// claims nothing exact, even for a set the event did not touch.
+#[test]
+fn an_exact_claim_names_its_assumptions_and_needs_the_whole_budget() {
+    let fixture = budget_fixture();
+    let unbounded = fixture.solve(&SolverBudget::default());
+    assert_eq!(
+        fixture.claims(&unbounded, "d()"),
+        BTreeSet::from([exact_through_slot()])
+    );
+    for budget in [
+        budget(|budget| budget.points_to.max_objects_per_var = 1),
+        budget(|budget| budget.points_to.max_steps = 10),
+    ] {
+        let result = fixture.solve(&budget);
+        assert_eq!(
+            result.points_to.budget_status,
+            PointsToBudgetStatus::BudgetExceeded
+        );
+        assert!(
+            result
+                .derived_edges
+                .iter()
+                .all(|edge| !matches!(edge.claim, EdgeClaim::Exact(_))),
+            "no exact claim survives a budget event"
         );
     }
 }

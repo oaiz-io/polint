@@ -379,6 +379,7 @@ mod tests {
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: crate::internal_core::stable_key_for_test(stable_key),
             provenance: provenance(),
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         }
     }
 

@@ -446,6 +446,7 @@ pub fn derive_edges(
                 precision: meta.precision,
                 stable_key,
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             });
         }
         // No `break`: every source is processed so budget exhaustion on one source
@@ -557,6 +558,7 @@ fn model_edges(
             precision: constraint.precision,
             stable_key,
             provenance,
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         });
     }
     (edges, budget_exceeded, budget_reasons)
@@ -831,6 +833,7 @@ mod tests {
             precision: PointsToPrecision::Heuristic,
             stable_key: crate::internal_core::stable_key_for_test(stable_key),
             provenance,
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         }
     }
 
