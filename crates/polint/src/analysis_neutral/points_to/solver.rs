@@ -43,6 +43,7 @@ use super::facts::{
 };
 use super::sets::ObjectSet;
 use super::store::PointsToOutput;
+use super::tiers::{Inflow, InflowSet};
 use super::vars;
 use crate::analysis_api::{FactFamily, stable_key_from_parts, stable_key_text_from_parts};
 use crate::analysis_neutral::ids::{ObjectTokenId, PointsToSetId, PtVarId};
@@ -82,7 +83,23 @@ pub struct PointsToSolveResult {
     /// values to it: the call's stable key and the signature place it bound.
     /// At most [`MAX_BINDINGS_PER_VAR`] per variable, the first by key text.
     pub call_bindings: BTreeMap<PtVarId, Vec<CallBinding>>,
+    /// How each non-empty set was reached, for the sets where that is not
+    /// the default: some value from outside may reach it, or some object
+    /// reached it through a heap slot.
+    pub grounds: BTreeMap<PtVarId, SetGrounds>,
     pub stats: PointsToSolveStats,
+}
+
+/// How a set was reached, beside the objects it holds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SetGrounds {
+    /// The most specific way a value from outside may reach the set. Named
+    /// only for a set whose inputs were otherwise at most local
+    /// flow-sensitive; a weaker set is heuristic on its own account.
+    pub inflow: Option<Inflow>,
+    /// Some object reached the set through a heap slot, so the set relies on
+    /// what the package stores in that field.
+    pub through_slot: bool,
 }
 
 /// The size of one solve: what went in and how much work it took. Counts
@@ -1234,14 +1251,16 @@ impl<'a> Solver<'a> {
         incomplete
     }
 
-    /// Variables whose sets may hold values the constraints do not describe,
-    /// given the precision of every set before openness is applied.
+    /// The ways values the constraints do not describe may reach each
+    /// variable's set, given the precision of every set before openness is
+    /// applied. A variable is open when its set is not empty.
     ///
     /// The roots are the variables read as a source that nothing defines (no
-    /// seed, no copy into them, no slot, no call binding), and the results of
-    /// calls whose callee set is unresolved. Openness spreads along copies and
-    /// dependencies, and from a store through an open base to every slot of
-    /// its field.
+    /// seed, no copy into them, no slot, no call binding), which hold an
+    /// outside value, and the results of calls whose callee set is
+    /// unresolved, which hold an open result. Openness spreads along copies
+    /// and dependencies, and from a store through an open base to every slot
+    /// of its field, keeping its kinds.
     ///
     /// Code the constraints do not describe can also read values: an object
     /// escapes when it is passed to a call whose callees are unresolved,
@@ -1249,9 +1268,10 @@ impl<'a> Solver<'a> {
     /// through an open base, or held by a slot of an escaped object or by the
     /// return of an escaped function. Such code may write every slot of an
     /// escaped object and call an escaped function with anything, so those
-    /// slots and that function's parameters, rest parameter and `this` are
-    /// open. Openness and escape feed each other until neither grows.
-    fn open_variables(&self, precisions: &[PointsToPrecision]) -> Vec<bool> {
+    /// slots hold an escaped object's field, the function's parameters and
+    /// rest parameter an inward parameter and its `this` an inward `this`.
+    /// Openness and escape feed each other until neither grows.
+    fn open_variables(&self, precisions: &[PointsToPrecision]) -> Vec<InflowSet> {
         let mut targets = vec![false; self.vars.len()];
         for var in &self.vars {
             for (dst, _) in var.copies.iter().chain(&var.dependencies) {
@@ -1278,11 +1298,17 @@ impl<'a> Solver<'a> {
             work.extend(var.stores.iter().map(|store| store.var));
         }
         work.retain(|var| undefined(*var));
+        let outside = InflowSet::of(Inflow::OutsideValue);
+        let mut work = work
+            .into_iter()
+            .map(|var| (var, outside))
+            .collect::<Vec<_>>();
         work.extend(
             self.calls
                 .iter()
                 .filter(|call| self.callees_unresolved(call))
-                .filter_map(|call| call.result),
+                .filter_map(|call| call.result)
+                .map(|var| (var, InflowSet::of(Inflow::OpenResult))),
         );
         let mut escaping = Vec::new();
         for call in &self.calls {
@@ -1293,7 +1319,7 @@ impl<'a> Solver<'a> {
                 escaping.extend(self.unbound_arguments(call));
             }
         }
-        let mut open = vec![false; self.vars.len()];
+        let mut open = vec![InflowSet::default(); self.vars.len()];
         let mut escaped = vec![false; self.objects.len()];
         let mut objects = Vec::new();
         loop {
@@ -1305,38 +1331,78 @@ impl<'a> Solver<'a> {
                     continue;
                 }
                 let slots = &self.objects[object as usize].slots;
-                work.extend(slots);
+                let field = InflowSet::of(Inflow::EscapedObject);
+                work.extend(slots.iter().map(|slot| (*slot, field)));
                 escaping.extend(slots);
                 if let Some(signature) = self.objects[object as usize].signature {
                     let signature = &self.signatures[signature as usize];
-                    work.extend(signature.inputs());
+                    let parameter = InflowSet::of(Inflow::InwardParameter);
+                    work.extend(
+                        signature
+                            .params
+                            .iter()
+                            .map(|(_, place)| place)
+                            .chain(signature.rest.iter())
+                            .map(|place| (place.var, parameter)),
+                    );
+                    work.extend(
+                        signature
+                            .this
+                            .iter()
+                            .map(|place| (place.var, InflowSet::of(Inflow::InwardThis))),
+                    );
                     escaping.extend(signature.ret.iter().map(|place| place.var));
                 }
                 continue;
             }
-            let Some(var) = work.pop() else {
+            let Some((var, inflow)) = work.pop() else {
                 break;
             };
-            if std::mem::replace(&mut open[var as usize], true) {
+            let added = open[var as usize].missing(inflow);
+            if added.is_empty() {
                 continue;
             }
+            let opened = open[var as usize].is_empty();
+            open[var as usize].insert_all(added);
             let data = &self.vars[var as usize];
             work.extend(
                 data.copies
                     .iter()
                     .chain(&data.dependencies)
-                    .map(|(dst, _)| *dst),
+                    .map(|(dst, _)| (*dst, added)),
             );
             for store in &data.stores {
-                escaping.push(store.var);
-                work.extend(&self.slots_by_field[store.field as usize]);
+                work.extend(
+                    self.slots_by_field[store.field as usize]
+                        .iter()
+                        .map(|slot| (*slot, added)),
+                );
             }
-            for index in &data.calls {
-                let call = &self.calls[*index as usize];
-                escaping.extend(call.receiver.iter().chain(&call.arguments).copied());
+            if opened {
+                escaping.extend(data.stores.iter().map(|store| store.var));
+                for index in &data.calls {
+                    let call = &self.calls[*index as usize];
+                    escaping.extend(call.receiver.iter().chain(&call.arguments).copied());
+                }
             }
         }
         open
+    }
+
+    /// The variables some object reached through a heap slot: the slots, and
+    /// every variable a copy reaches from one.
+    fn through_slot_variables(&self) -> Vec<bool> {
+        let mut reached = vec![false; self.vars.len()];
+        let mut work = (0..self.vars.len() as u32)
+            .filter(|var| self.vars[*var as usize].slot.is_some())
+            .collect::<Vec<_>>();
+        while let Some(var) = work.pop() {
+            if std::mem::replace(&mut reached[var as usize], true) {
+                continue;
+            }
+            work.extend(self.vars[var as usize].copies.iter().map(|(dst, _)| *dst));
+        }
+        reached
     }
 
     /// True when a call's callee set is empty or holds an object without a
@@ -1526,8 +1592,25 @@ impl<'a> Solver<'a> {
         let bounded = self.bounded_variables();
         let mut precisions = self.precisions();
         let open = self.open_variables(&precisions);
+        let through_slot = self.through_slot_variables();
+        let mut grounds = BTreeMap::new();
         for var in 0..self.vars.len() {
-            if open[var] && !self.set(var).is_empty() {
+            if self.set(var).is_empty() {
+                continue;
+            }
+            let inflow = open[var]
+                .first()
+                .filter(|_| precisions[var] <= PointsToPrecision::LocalFlowSensitive);
+            if inflow.is_some() || through_slot[var] {
+                grounds.insert(
+                    self.var_ids[var],
+                    SetGrounds {
+                        inflow,
+                        through_slot: through_slot[var],
+                    },
+                );
+            }
+            if !open[var].is_empty() {
                 raise(&mut precisions[var], PointsToPrecision::Heuristic);
             }
         }
@@ -1594,6 +1677,7 @@ impl<'a> Solver<'a> {
             budget_status,
             budget_reasons: self.budget_reasons,
             call_bindings,
+            grounds,
             stats,
         }
     }
