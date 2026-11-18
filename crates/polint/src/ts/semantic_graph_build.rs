@@ -62,7 +62,8 @@ use crate::ts::parse::parse_ts_file;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 use crate::ts::scope::extract::{extract_ts_scope_from_program, mark_scope_partial_ast};
 use crate::ts::scope::store::TsScopeOutput;
-pub(crate) use crate::ts::token_flow::{TsTokenSourceFlow, collect_ts_token_source_flows};
+
+mod value_flow;
 
 /// Projects a real-but-minimal semantic graph from already-stored v1.2 facts.
 ///
@@ -182,13 +183,13 @@ fn build_semantic_graph_with_inputs<H: AnalysisHost>(
     builder.project_call_edges_and_constraints(db);
     project_additional_facts(db, &mut builder.inner);
     builder.project_ts_direct_bindings(db, ts_direct_bindings);
-    builder.project_ts_token_source_flows(db, ts_analyses);
     builder.project_ts_callable_flows(db, callable_flows);
     builder.project_ts_object_model(db, object_model);
     builder.project_adaptation_models(interner, adaptation_models);
     builder.project_member_of_edges(db);
     builder.project_value_constraints(db);
     builder.project_ts_function_places(db);
+    builder.project_ts_value_flows(db, ts_analyses);
     // TypeConstraint intentionally emits zero rows in this pass (see module docs).
     // The base places for access-path projections are already projected as nodes
     // above.
@@ -560,59 +561,6 @@ impl GraphBuilder {
                 );
             }
         }
-    }
-
-    fn project_ts_token_source_flows(
-        &mut self,
-        db: &impl AnalysisHost,
-        ts_analyses: Option<&[TsFileAnalysis]>,
-    ) {
-        let interner_handle = db.stable_key_interner();
-        let interner = &interner_handle;
-        let context = TsDirectBindingNodeContext::new(interner, db, self);
-        if let Some(analyses) = ts_analyses {
-            for analysis in analyses {
-                for flow in &analysis.token_source_flows {
-                    self.project_ts_token_source_flow(interner, flow, &context);
-                }
-            }
-            return;
-        }
-
-        for file in db
-            .files()
-            .iter()
-            .filter(|file| file.language.is_ts_family())
-        {
-            for flow in collect_ts_token_source_flows(interner, file, None) {
-                self.project_ts_token_source_flow(interner, &flow, &context);
-            }
-        }
-    }
-
-    fn project_ts_token_source_flow(
-        &mut self,
-        interner: &StableKeyInterner,
-        flow: &TsTokenSourceFlow,
-        context: &TsDirectBindingNodeContext<'_>,
-    ) {
-        let Some(source_node) =
-            context.function_node_for_binding(&flow.source_function_stable_key_text)
-        else {
-            return;
-        };
-        let Some(callsite_node) = context.callsite_node_for_binding(&flow.callsite_stable_key_text)
-        else {
-            return;
-        };
-        self.push_constraint(
-            interner,
-            ConstraintKind::CopyEdge {
-                dst: callsite_node,
-                src: source_node,
-            },
-            &flow.stable_key_text,
-        );
     }
 
     fn project_ts_callable_flows(&mut self, db: &impl AnalysisHost, flows: &[TsCallableFlow]) {

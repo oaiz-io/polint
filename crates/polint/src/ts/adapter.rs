@@ -2467,7 +2467,10 @@ fn class_constructor<'ast>(class: &'ast Class<'ast>) -> Option<&'ast MethodDefin
     })
 }
 
-fn class_method_function_span(method: &MethodDefinition<'_>, source: &str) -> oxc_span::Span {
+pub(crate) fn class_method_function_span(
+    method: &MethodDefinition<'_>,
+    source: &str,
+) -> oxc_span::Span {
     if method.r#static && method.kind == MethodDefinitionKind::Method {
         // Drop the `static` modifier but keep the whole key syntax. For a
         // computed key (`static ["x"]() {}`) Jelly's function span starts at the
