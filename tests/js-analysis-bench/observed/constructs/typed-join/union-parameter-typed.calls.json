@@ -1,0 +1,54 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.ts"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.ts@103..156",
+      "name": "area"
+    },
+    {
+      "function": "main.ts@160..284",
+      "name": "measure"
+    },
+    {
+      "function": "main.ts@29..82",
+      "name": "area"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.ts@235..247",
+      "syntax": "member",
+      "callee": "main.ts@103..156",
+      "callee_name": "area"
+    },
+    {
+      "kind": "call",
+      "site": "main.ts@235..247",
+      "syntax": "member",
+      "callee": "main.ts@29..82",
+      "callee_name": "area"
+    },
+    {
+      "kind": "call",
+      "site": "main.ts@286..307",
+      "syntax": "identifier",
+      "callee": "main.ts@160..284",
+      "callee_name": "measure"
+    },
+    {
+      "kind": "call",
+      "site": "main.ts@327..348",
+      "syntax": "identifier",
+      "callee": "main.ts@160..284",
+      "callee_name": "measure"
+    }
+  ]
+}

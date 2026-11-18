@@ -1,0 +1,3 @@
+construct = "typed-join"
+held_out = false
+description = "A class extends an emitter declared only in a type declaration; this.emit runs the platform emitter, which calls the registered listener, and never a local function named emit."
