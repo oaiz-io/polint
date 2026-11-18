@@ -309,25 +309,10 @@ impl<'a> DirectBindingIndex<'a> {
         binding: Option<&TsBindingFact>,
     ) -> Option<&'a TsInventoryFunctionFact> {
         let functions = self.function_by_name.get(name)?;
-        if let Some(binding) = binding
-            && let Some(function) = functions.iter().copied().find(|function| {
-                function.file == binding.file && spans_overlap(&function.span, &binding.span)
-            })
-        {
-            return Some(function);
+        match binding {
+            Some(binding) => callable_for_binding(functions, binding),
+            None => functions.iter().copied().find(|function| function.has_body),
         }
-        if let Some(binding) = binding {
-            let mut same_file = functions
-                .iter()
-                .copied()
-                .filter(|function| function.file == binding.file);
-            let first = same_file.next()?;
-            if same_file.next().is_none() {
-                return Some(first);
-            }
-            return None;
-        }
-        functions.first().copied()
     }
 
     fn visible_any_binding(
@@ -575,11 +560,15 @@ impl<'a> ModuleBindingIndex<'a> {
         for binding in &module.scope.bindings {
             if binding.exported_name.as_deref() == Some(export_name)
                 && let Some(function_key) = binding.inventory_function_key
-                && let Some(function) = module
+                && let Some(declaration) = module
                     .inventory
                     .functions
                     .iter()
                     .find(|function| function.stable_key == function_key)
+                && let Some(function) = implementation_of(
+                    &module.inventory.functions.iter().collect::<Vec<_>>(),
+                    declaration,
+                )
             {
                 return Some(ModuleFunctionTarget {
                     module_node,
@@ -786,14 +775,18 @@ fn function_for_local_export<'a>(
         return Some(function);
     }
 
-    let mut overlapping = inventory
+    let named = inventory
         .functions
         .iter()
         .filter(|function| function.display_name.as_deref() == Some(local_name))
+        .collect::<Vec<_>>();
+    let mut overlapping = named
+        .iter()
+        .copied()
         .filter(|function| spans_overlap(&function.span, &export.span));
     let first = overlapping.next()?;
     if overlapping.next().is_none() {
-        Some(first)
+        implementation_of(&named, first)
     } else {
         None
     }
@@ -836,22 +829,57 @@ fn function_by_binding<'a>(
         .iter()
         .filter(|function| function.display_name.as_deref() == Some(name))
         .collect::<Vec<_>>();
+    callable_for_binding(&functions, binding)
+}
+
+/// The function a call through `binding` runs, among the same-named
+/// `functions`: the one whose declaration the binding names, else the only
+/// callable one in the binding's file.
+fn callable_for_binding<'a>(
+    functions: &[&'a TsInventoryFunctionFact],
+    binding: &TsBindingFact,
+) -> Option<&'a TsInventoryFunctionFact> {
     if let Some(function) = functions.iter().copied().find(|function| {
         function.file == binding.file && spans_overlap(&function.span, &binding.span)
     }) {
-        return Some(function);
+        return implementation_of(functions, function);
     }
 
     let mut same_file = functions
         .iter()
         .copied()
-        .filter(|function| function.file == binding.file);
+        .filter(|function| function.file == binding.file && function.has_body);
     let first = same_file.next()?;
     if same_file.next().is_none() {
         Some(first)
     } else {
         None
     }
+}
+
+/// The function that runs when `declaration` is called. A declaration with a
+/// body runs itself. A body-less one is an overload signature, whose
+/// implementation is the next same-named declaration with a body in the same
+/// file and lexical parent, or an ambient declaration with no implementation in
+/// the analysed code, which no call is claimed to reach.
+fn implementation_of<'a>(
+    functions: &[&'a TsInventoryFunctionFact],
+    declaration: &'a TsInventoryFunctionFact,
+) -> Option<&'a TsInventoryFunctionFact> {
+    if declaration.has_body {
+        return Some(declaration);
+    }
+    functions
+        .iter()
+        .copied()
+        .filter(|function| {
+            function.has_body
+                && function.file == declaration.file
+                && function.lexical_parent_key == declaration.lexical_parent_key
+                && function.display_name == declaration.display_name
+                && function.span.start_byte >= declaration.span.end_byte
+        })
+        .min_by_key(|function| (function.span.start_byte, function.span.end_byte))
 }
 
 fn resolved_row(

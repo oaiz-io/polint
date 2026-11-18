@@ -1559,7 +1559,7 @@ const TYPE_VALUE_ALIAS_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
 
 const SEMANTIC_GRAPH_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
     name: crate::analysis::semantic_graph::cache_key::SEMANTIC_GRAPH_SCHEMA_LABEL,
-    version: 1,
+    version: 2,
 }];
 
 const SOLVER_SCHEMA: &[SchemaVersion] = &[SchemaVersion {

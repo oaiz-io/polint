@@ -43,7 +43,7 @@ pub fn solver_provider_parameter_digest(budget: &SolverBudget) -> Digest {
         // reachability ⊗ instantiated-types ⊗ dispatch derivation bumps this and
         // deterministically invalidates the solver cache.
         "go_rta_fixpoint_v1",
-        "ts_points_to_projection_v2",
+        "ts_points_to_projection_v3",
         // Repo-local adaptation model facts (ADAPT-01): accepted facts and
         // budget knobs affect future model-derived solver edges.
         "adaptation_model_v1",
@@ -66,6 +66,7 @@ pub fn solver_budget_digest_parts(budget: &SolverBudget) -> Vec<String> {
             "budget.max_outer_iterations={}",
             budget.max_outer_iterations
         ),
+        format!("budget.points_to.max_steps={}", budget.points_to.max_steps),
         format!(
             "budget.points_to.max_objects_per_var={}",
             budget.points_to.max_objects_per_var
@@ -133,12 +134,13 @@ mod tests {
                     "provenance_projection_v1",
                     "precision_ceiling_v1",
                     "go_rta_fixpoint_v1",
-                    "ts_points_to_projection_v2",
+                    "ts_points_to_projection_v3",
                     "adaptation_model_v1",
                     "budget.max_steps=10000",
                     "budget.max_outer_iterations=64",
-                    "budget.points_to.max_objects_per_var=64",
-                    "budget.points_to.max_dynamic_vars=512",
+                    "budget.points_to.max_steps=50000000",
+                    "budget.points_to.max_objects_per_var=4096",
+                    "budget.points_to.max_dynamic_vars=4000000",
                     "budget.go.address_taken_threshold=256",
                     "budget.go.max_candidates_per_callsite=128",
                     "budget.go.max_rta_rounds=32",
@@ -170,12 +172,13 @@ mod tests {
                 "provenance_projection_v1",
                 "precision_ceiling_v1",
                 "go_rta_fixpoint_v1",
-                "ts_points_to_projection_v2",
+                "ts_points_to_projection_v3",
                 "adaptation_model_v1",
                 "budget.max_steps=10000",
                 "budget.max_outer_iterations=64",
-                "budget.points_to.max_objects_per_var=64",
-                "budget.points_to.max_dynamic_vars=512",
+                "budget.points_to.max_steps=50000000",
+                "budget.points_to.max_objects_per_var=4096",
+                "budget.points_to.max_dynamic_vars=4000000",
                 "budget.go.address_taken_threshold=256",
                 "budget.go.max_candidates_per_callsite=128",
                 "budget.go.max_rta_rounds=32",

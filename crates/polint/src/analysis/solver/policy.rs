@@ -48,6 +48,7 @@ impl SolverPolicy for GoRtaPolicy {
             points_to: None,
             derived_edges: output.derived_edges,
             budget_status: output.budget_status,
+            incomplete_sites: output.incomplete_sites,
             budget_reasons: output.budget_reasons,
             steps: 0,
         }
@@ -83,6 +84,7 @@ impl SolverPolicy for TsPointsToPolicy {
             budget_status: budget_status(&output.points_to),
             budget_reasons: output.points_to.budget_reasons,
             steps: 0,
+            incomplete_sites: output.incomplete_sites,
         }
     }
 }

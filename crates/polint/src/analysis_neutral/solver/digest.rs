@@ -26,6 +26,7 @@ pub fn solver_output_digest(
         format!("type_value_alias_output={type_value_alias_output_digest}"),
         format!("go_semantic_output={go_semantic_output_digest}"),
         format!("budget_status={}", output.budget_status.as_str()),
+        format!("incomplete_sites={}", output.incomplete_sites),
     ];
     parts.extend(solver_budget_digest_parts(budget));
     parts.extend(output.derived_edges.iter().map(|edge| {

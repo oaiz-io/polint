@@ -211,10 +211,18 @@ impl SolverEngine {
             combine_budget_status(points_to_output.budget_status, policy_budget_status),
             engine_budget_status,
         );
+        let incomplete_sites = run
+            .policy_outcomes
+            .iter()
+            .filter(|record| record.outcome.points_to.is_none())
+            .fold(points_to_output.incomplete_sites, |sum, record| {
+                sum.saturating_add(record.outcome.incomplete_sites)
+            });
         SolverOutput {
             derived_edges,
             budget_status,
             budget_reasons,
+            incomplete_sites,
         }
         .normalized(interner)
     }
@@ -454,6 +462,7 @@ pub fn derive_edges(
         derived_edges: edges,
         budget_status,
         budget_reasons,
+        incomplete_sites: 0,
     }
     .normalized(interner)
 }

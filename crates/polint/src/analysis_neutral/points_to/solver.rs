@@ -1,3 +1,25 @@
+//! Inclusion-based points-to solve over the language-neutral constraints.
+//!
+//! The solve is a difference-propagation worklist over constraints sorted by
+//! stable key and kind, and a heap slot's variable is a hash of its object and
+//! field, so the result does not depend on the order constraints arrive in.
+//!
+//! A budget event ends the solve and keeps what it derived. A set is
+//! `BudgetExceeded` when its variable still had objects to propagate, or can
+//! be reached from such a variable through a copy, a field load or store, or
+//! a call; every other set finished and is `Present`. Each set carries the
+//! weakest precision of the inputs that reached it, so a heuristic input
+//! never yields an exact set. A set that may also hold a value the
+//! constraints do not describe, such as a parameter nothing binds, a place
+//! nothing defines or the result of a call the solve could not resolve, is at
+//! most `Heuristic`: it keeps its objects, but they are not all it may hold.
+//!
+//! Calls are a second input beside the constraints. When a call's callee set
+//! gains a function with a signature, the call rule copies each argument into
+//! the parameter at its position, the receiver into `this` and the return into
+//! the call's result. Those copies enter the same worklist, so the solve stays
+//! the least fixed point of constraints and calls together.
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::facts::{
@@ -9,20 +31,25 @@ use super::vars;
 use crate::analysis_api::{FactFamily, stable_key_from_parts, stable_key_text_from_parts};
 use crate::analysis_neutral::ids::{ObjectTokenId, PointsToSetId, PtVarId};
 use crate::analysis_neutral::solver::budget::BudgetReason;
+use crate::internal_core::StableKeyId;
 
+/// Ceilings against runaway input, not precision knobs: a solve that reaches
+/// one stops, keeps what it derived and names the sets it left incomplete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PointsToBudget {
+    /// Worklist pops.
     pub max_steps: usize,
     pub max_objects_per_var: usize,
+    /// Heap slots the solve may create.
     pub max_dynamic_vars: usize,
 }
 
 impl Default for PointsToBudget {
     fn default() -> Self {
         Self {
-            max_steps: 10_000,
-            max_objects_per_var: 64,
-            max_dynamic_vars: 512,
+            max_steps: 50_000_000,
+            max_objects_per_var: 4_096,
+            max_dynamic_vars: 4_000_000,
         }
     }
 }
@@ -32,6 +59,62 @@ pub struct PointsToSolveResult {
     pub sets: Vec<PointsToSetFact>,
     pub budget_status: PointsToBudgetStatus,
     pub budget_reasons: BTreeSet<String>,
+    /// For each variable a call-rule copy reached, the bindings that brought
+    /// values to it: the call's stable key and the signature place it bound.
+    /// At most [`MAX_BINDINGS_PER_VAR`] per variable, the first by key text.
+    pub call_bindings: BTreeMap<PtVarId, Vec<CallBinding>>,
+}
+
+/// One call-rule copy: the call that made it and the signature place it
+/// bound (a parameter, `this`, or the return the result reads).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CallBinding {
+    pub call: StableKeyId,
+    pub place: StableKeyId,
+}
+
+/// Bindings named per variable; the bound keeps provenance small on long
+/// copy chains.
+pub const MAX_BINDINGS_PER_VAR: usize = 4;
+
+/// A call the solve connects to its callees. `callee` is the variable whose
+/// set is the site's callees.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PointsToCall {
+    pub stable_key: StableKeyId,
+    pub callee: PtVarId,
+    pub receiver: Option<PtVarId>,
+    pub arguments: Vec<PtVarId>,
+    /// Arguments from this position on are spread from an array and are not
+    /// bound by position.
+    pub spread_from: Option<usize>,
+    pub result: Option<PtVarId>,
+    pub precision: PointsToPrecision,
+}
+
+/// One place of a function's signature.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SignaturePlace {
+    pub var: PtVarId,
+    pub stable_key: StableKeyId,
+}
+
+/// The places of one function the call rule binds. A place the frontend does
+/// not model is absent and receives nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PointsToSignature {
+    pub params: BTreeMap<usize, SignaturePlace>,
+    pub rest: Option<SignaturePlace>,
+    pub this: Option<SignaturePlace>,
+    pub ret: Option<SignaturePlace>,
+}
+
+/// The calls of a solve and the signatures of the function objects they may
+/// reach, keyed by the function's object.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PointsToCallInputs {
+    pub calls: Vec<PointsToCall>,
+    pub signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
 }
 
 pub fn solve_points_to(
@@ -39,277 +122,700 @@ pub fn solve_points_to(
     constraints: &[PointsToConstraintFact],
     budget: PointsToBudget,
 ) -> PointsToSolveResult {
-    let mut solver = Solver::new(interner, constraints, budget);
-    solver.solve(interner)
+    solve_points_to_with_calls(
+        interner,
+        constraints,
+        &PointsToCallInputs::default(),
+        budget,
+    )
 }
+
+pub fn solve_points_to_with_calls(
+    interner: &crate::internal_core::StableKeyInterner,
+    constraints: &[PointsToConstraintFact],
+    calls: &PointsToCallInputs,
+    budget: PointsToBudget,
+) -> PointsToSolveResult {
+    let mut solver = Solver::new(interner, budget);
+    solver.initialize(constraints);
+    solver.initialize_calls(calls);
+    solver.run();
+    solver.into_result()
+}
+
+const CONTENTS_SLOT: &str = "$contents";
+
+/// A load from, or a store into, a field of the objects a base points to.
+/// `var` is the load's destination or the store's source.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Projection {
+    field: String,
+    var: PtVarId,
+    precision: PointsToPrecision,
+}
+
+type Edges = BTreeMap<PtVarId, BTreeMap<PtVarId, PointsToPrecision>>;
 
 struct Solver<'a> {
     interner: &'a crate::internal_core::StableKeyInterner,
-    constraints: &'a [PointsToConstraintFact],
     budget: PointsToBudget,
     sets: BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
-    copy_edges: BTreeMap<PtVarId, BTreeSet<PtVarId>>,
-    loads: BTreeMap<PtVarId, BTreeSet<PtVarId>>,
-    stores: BTreeMap<PtVarId, BTreeSet<PtVarId>>,
-    field_loads: BTreeMap<PtVarId, BTreeSet<(String, PtVarId)>>,
-    field_stores: BTreeMap<PtVarId, BTreeSet<(String, PtVarId)>>,
-    object_slots: BTreeMap<(ObjectTokenId, String), PtVarId>,
-    queue: VecDeque<(PtVarId, BTreeSet<ObjectTokenId>)>,
-    dynamic_vars: BTreeSet<PtVarId>,
+    /// Objects a variable has received and not yet propagated. A variable has
+    /// an entry exactly while it is on the queue.
+    pending: BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
+    queue: VecDeque<PtVarId>,
+    /// Inclusion edges, `src -> dst`, with the precision of the constraint
+    /// that made each one.
+    copy_edges: Edges,
+    /// Edges that carry precision and incompleteness but no objects: a base
+    /// to its loads' destinations and to the slots its stores write.
+    dependency_edges: Edges,
+    loads: BTreeMap<PtVarId, BTreeSet<Projection>>,
+    stores: BTreeMap<PtVarId, BTreeSet<Projection>>,
+    seed_precision: BTreeMap<PtVarId, PointsToPrecision>,
+    slots: BTreeMap<ObjectTokenId, BTreeMap<String, PtVarId>>,
+    slot_keys: BTreeMap<PtVarId, (ObjectTokenId, String)>,
+    slots_by_field: BTreeMap<String, BTreeSet<PtVarId>>,
     variable_identities: BTreeMap<PtVarId, BTreeSet<String>>,
     object_identities: BTreeMap<ObjectTokenId, BTreeSet<String>>,
+    /// Calls sorted by stable key text, and the calls of each callee variable.
+    calls: Vec<PointsToCall>,
+    calls_by_callee: BTreeMap<PtVarId, Vec<usize>>,
+    signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
+    /// The call-rule copies into each variable.
+    bindings: BTreeMap<PtVarId, BTreeSet<CallBinding>>,
     steps: usize,
-    budget_exceeded: bool,
+    halted: bool,
+    /// Variables whose propagation a budget event cut short.
+    interrupted: BTreeSet<PtVarId>,
     budget_reasons: BTreeSet<String>,
 }
 
 impl<'a> Solver<'a> {
-    fn new(
-        interner: &'a crate::internal_core::StableKeyInterner,
-        constraints: &'a [PointsToConstraintFact],
-        budget: PointsToBudget,
-    ) -> Self {
+    fn new(interner: &'a crate::internal_core::StableKeyInterner, budget: PointsToBudget) -> Self {
         Self {
             interner,
-            constraints,
             budget,
             sets: BTreeMap::new(),
+            pending: BTreeMap::new(),
+            queue: VecDeque::new(),
             copy_edges: BTreeMap::new(),
+            dependency_edges: BTreeMap::new(),
             loads: BTreeMap::new(),
             stores: BTreeMap::new(),
-            field_loads: BTreeMap::new(),
-            field_stores: BTreeMap::new(),
-            object_slots: BTreeMap::new(),
-            queue: VecDeque::new(),
-            dynamic_vars: BTreeSet::new(),
+            seed_precision: BTreeMap::new(),
+            slots: BTreeMap::new(),
+            slot_keys: BTreeMap::new(),
+            slots_by_field: BTreeMap::new(),
             variable_identities: BTreeMap::new(),
             object_identities: BTreeMap::new(),
+            calls: Vec::new(),
+            calls_by_callee: BTreeMap::new(),
+            signatures: BTreeMap::new(),
+            bindings: BTreeMap::new(),
             steps: 0,
-            budget_exceeded: false,
+            halted: false,
+            interrupted: BTreeSet::new(),
             budget_reasons: BTreeSet::new(),
         }
     }
 
-    fn solve(&mut self, interner: &crate::internal_core::StableKeyInterner) -> PointsToSolveResult {
-        self.initialize();
-        while let Some((var, delta)) = self.queue.pop_front() {
-            if !self.step_budget_ok() {
-                break;
-            }
-            self.propagate_copy(var, &delta);
-            self.propagate_load(var, &delta);
-            self.propagate_store(var, &delta);
-            self.propagate_field_load(var, &delta);
-            self.propagate_field_store(var, &delta);
-        }
-        self.to_result(interner)
-    }
-
-    fn initialize(&mut self) {
-        for constraint in self.constraints.iter().cloned() {
-            self.record_constraint_identities(&constraint);
+    fn initialize(&mut self, constraints: &[PointsToConstraintFact]) {
+        let mut sorted = constraints
+            .iter()
+            .map(|constraint| (self.interner.resolve(constraint.stable_key), constraint))
+            .collect::<Vec<_>>();
+        sorted.sort_by(|(left_key, left), (right_key, right)| {
+            left_key
+                .cmp(right_key)
+                .then_with(|| left.kind.cmp(&right.kind))
+                .then_with(|| left.precision.cmp(&right.precision))
+        });
+        for (key, constraint) in sorted {
+            self.record_constraint_identities(&key, &constraint.kind);
+            let precision = constraint.precision;
             match &constraint.kind {
                 PointsToConstraintKind::AddressOf { dst, object } => {
-                    self.add_object(*dst, *object);
+                    self.seed(*dst, *object, precision);
+                }
+                PointsToConstraintKind::CallReturn { dst, value } => {
+                    self.seed(*dst, vars::value_fact_object(*value), precision);
                 }
                 PointsToConstraintKind::Copy { dst, src }
                 | PointsToConstraintKind::SummaryFlow { dst, src, .. } => {
-                    self.add_copy_edge(*src, *dst);
+                    self.add_copy_edge(*src, *dst, precision);
                 }
                 PointsToConstraintKind::Load { dst, pointer } => {
-                    self.loads.entry(*pointer).or_default().insert(*dst);
-                }
-                PointsToConstraintKind::Store { pointer, src } => {
-                    self.stores.entry(*pointer).or_default().insert(*src);
+                    self.add_load(*pointer, CONTENTS_SLOT.to_string(), *dst, precision);
                 }
                 PointsToConstraintKind::FieldLoad { dst, base, field } => {
-                    self.field_loads
-                        .entry(*base)
-                        .or_default()
-                        .insert((field.clone(), *dst));
-                }
-                PointsToConstraintKind::FieldStore { base, field, src } => {
-                    self.field_stores
-                        .entry(*base)
-                        .or_default()
-                        .insert((field.clone(), *src));
+                    self.add_load(*base, field.clone(), *dst, precision);
                 }
                 PointsToConstraintKind::ElementLoad { dst, base, index } => {
-                    self.field_loads
-                        .entry(*base)
-                        .or_default()
-                        .insert((format!("[{index}]"), *dst));
+                    self.add_load(*base, format!("[{index}]"), *dst, precision);
+                }
+                PointsToConstraintKind::Store { pointer, src } => {
+                    self.add_store(*pointer, CONTENTS_SLOT.to_string(), *src, precision);
+                }
+                PointsToConstraintKind::FieldStore { base, field, src } => {
+                    self.add_store(*base, field.clone(), *src, precision);
                 }
                 PointsToConstraintKind::ElementStore { base, index, src } => {
-                    self.field_stores
-                        .entry(*base)
+                    self.add_store(*base, format!("[{index}]"), *src, precision);
+                }
+            }
+        }
+    }
+
+    fn initialize_calls(&mut self, inputs: &PointsToCallInputs) {
+        let mut calls = inputs
+            .calls
+            .iter()
+            .map(|call| (self.interner.resolve(call.stable_key), call))
+            .collect::<Vec<_>>();
+        calls.sort_by(|(left_key, left), (right_key, right)| {
+            left_key.cmp(right_key).then_with(|| left.cmp(right))
+        });
+        calls.dedup_by(|(_, left), (_, right)| left == right);
+        for (index, (key, call)) in calls.into_iter().enumerate() {
+            self.record_variable_identity(call.callee, &key, "call_callee");
+            if let Some(receiver) = call.receiver {
+                self.record_variable_identity(receiver, &key, "call_receiver");
+            }
+            for argument in &call.arguments {
+                self.record_variable_identity(*argument, &key, "call_argument");
+            }
+            if let Some(result) = call.result {
+                self.record_variable_identity(result, &key, "call_result");
+                // The result holds only what the callees return, so it is as
+                // weak and as incomplete as the callee set.
+                add_edge(
+                    &mut self.dependency_edges,
+                    call.callee,
+                    result,
+                    call.precision,
+                );
+            }
+            self.calls_by_callee
+                .entry(call.callee)
+                .or_default()
+                .push(index);
+            self.calls.push(call.clone());
+        }
+        for signature in inputs.signatures.values() {
+            let places = signature
+                .params
+                .values()
+                .map(|place| (place, "function_parameter"))
+                .chain(signature.rest.iter().map(|place| (place, "function_rest")))
+                .chain(signature.this.iter().map(|place| (place, "function_this")))
+                .chain(signature.ret.iter().map(|place| (place, "function_return")));
+            for (place, role) in places {
+                let key = self.interner.resolve(place.stable_key);
+                self.record_variable_identity(place.var, &key, role);
+            }
+        }
+        self.signatures = inputs.signatures.clone();
+    }
+
+    fn seed(&mut self, dst: PtVarId, object: ObjectTokenId, precision: PointsToPrecision) {
+        raise(
+            self.seed_precision.entry(dst).or_insert(precision),
+            precision,
+        );
+        enqueue(
+            &self.sets,
+            &mut self.pending,
+            &mut self.queue,
+            dst,
+            std::iter::once(object),
+        );
+    }
+
+    fn add_load(
+        &mut self,
+        base: PtVarId,
+        field: String,
+        dst: PtVarId,
+        precision: PointsToPrecision,
+    ) {
+        add_edge(&mut self.dependency_edges, base, dst, precision);
+        self.loads.entry(base).or_default().insert(Projection {
+            field,
+            var: dst,
+            precision,
+        });
+    }
+
+    fn add_store(
+        &mut self,
+        base: PtVarId,
+        field: String,
+        src: PtVarId,
+        precision: PointsToPrecision,
+    ) {
+        self.stores.entry(base).or_default().insert(Projection {
+            field,
+            var: src,
+            precision,
+        });
+    }
+
+    fn run(&mut self) {
+        while let Some(&var) = self.queue.front() {
+            if self.steps >= self.budget.max_steps {
+                self.halt(BudgetReason::SolverMaxSteps);
+                break;
+            }
+            self.queue.pop_front();
+            self.steps += 1;
+            let delta = self.pending.remove(&var).unwrap_or_default();
+            self.process(var, delta);
+            if self.halted {
+                break;
+            }
+        }
+    }
+
+    fn process(&mut self, var: PtVarId, delta: BTreeSet<ObjectTokenId>) {
+        let held = self.sets.get(&var);
+        let new = delta
+            .into_iter()
+            .filter(|object| held.is_none_or(|held| !held.contains(object)))
+            .collect::<BTreeSet<_>>();
+        if new.is_empty() {
+            return;
+        }
+        if held.map_or(0, BTreeSet::len) + new.len() > self.budget.max_objects_per_var {
+            self.interrupted.insert(var);
+            self.halt(BudgetReason::PointsToMaxObjectsPerVar);
+            return;
+        }
+        self.sets
+            .entry(var)
+            .or_default()
+            .extend(new.iter().copied());
+
+        if let Some(dsts) = self.copy_edges.get(&var) {
+            for dst in dsts.keys() {
+                enqueue(
+                    &self.sets,
+                    &mut self.pending,
+                    &mut self.queue,
+                    *dst,
+                    new.iter().copied(),
+                );
+            }
+        }
+        let loads = self.loads.get(&var).cloned().unwrap_or_default();
+        for load in &loads {
+            for object in &new {
+                let Some(slot) = self.object_slot(*object, &load.field) else {
+                    self.interrupted.insert(var);
+                    return;
+                };
+                self.add_copy_edge(slot, load.var, load.precision);
+            }
+        }
+        let stores = self.stores.get(&var).cloned().unwrap_or_default();
+        for store in &stores {
+            for object in &new {
+                let Some(slot) = self.object_slot(*object, &store.field) else {
+                    self.interrupted.insert(var);
+                    return;
+                };
+                add_edge(&mut self.dependency_edges, var, slot, store.precision);
+                self.add_copy_edge(store.var, slot, store.precision);
+            }
+        }
+        self.apply_call_rule(var, &new);
+    }
+
+    /// Connects every call whose callee is `callee` to the functions among
+    /// `new` that have a signature: argument to parameter by position,
+    /// receiver to `this`, return to result. A parameter the call fills from
+    /// a spread, and the rest parameter, receive values the solve does not
+    /// model, so they are made heuristic instead of bound.
+    fn apply_call_rule(&mut self, callee: PtVarId, new: &BTreeSet<ObjectTokenId>) {
+        let Some(indices) = self.calls_by_callee.get(&callee).cloned() else {
+            return;
+        };
+        for index in indices {
+            let call = self.calls[index].clone();
+            for object in new {
+                let Some(signature) = self.signatures.get(object).cloned() else {
+                    continue;
+                };
+                let bound = call.spread_from.map_or(call.arguments.len(), |spread| {
+                    spread.min(call.arguments.len())
+                });
+                for (position, argument) in call.arguments[..bound].iter().enumerate() {
+                    if let Some(param) = signature.params.get(&position) {
+                        self.bind(index, *argument, *param, call.precision);
+                    }
+                }
+                if call.spread_from.is_some() {
+                    for param in signature.params.range(bound..).map(|(_, param)| param) {
+                        add_edge(
+                            &mut self.dependency_edges,
+                            callee,
+                            param.var,
+                            PointsToPrecision::Heuristic,
+                        );
+                    }
+                }
+                if let Some(rest) = signature.rest
+                    && !call.arguments.is_empty()
+                {
+                    add_edge(
+                        &mut self.dependency_edges,
+                        callee,
+                        rest.var,
+                        PointsToPrecision::Heuristic,
+                    );
+                }
+                if let (Some(receiver), Some(this)) = (call.receiver, signature.this) {
+                    self.bind(index, receiver, this, call.precision);
+                }
+                if let (Some(result), Some(ret)) = (call.result, signature.ret) {
+                    self.add_copy_edge(ret.var, result, call.precision);
+                    self.bindings
+                        .entry(result)
                         .or_default()
-                        .insert((format!("[{index}]"), *src));
+                        .insert(CallBinding {
+                            call: call.stable_key,
+                            place: ret.stable_key,
+                        });
                 }
-                PointsToConstraintKind::CallReturn { dst, value } => {
-                    self.add_object(*dst, vars::value_fact_object(*value));
-                }
-            }
-        }
-        let copy_edges = self.copy_edges.clone();
-        for (src, dsts) in copy_edges {
-            let Some(objects) = self.sets.get(&src).cloned() else {
-                continue;
-            };
-            for dst in dsts {
-                self.add_all(dst, &objects);
             }
         }
     }
 
-    fn propagate_copy(&mut self, var: PtVarId, delta: &BTreeSet<ObjectTokenId>) {
-        let dsts = self.copy_edges.get(&var).cloned().unwrap_or_default();
-        for dst in dsts {
-            self.add_all(dst, delta);
-        }
+    /// Copies `src` into a signature place for a call, and makes the place as
+    /// weak and as incomplete as the callee set it was reached through.
+    fn bind(
+        &mut self,
+        index: usize,
+        src: PtVarId,
+        place: SignaturePlace,
+        precision: PointsToPrecision,
+    ) {
+        let call = &self.calls[index];
+        let (callee, key) = (call.callee, call.stable_key);
+        add_edge(&mut self.dependency_edges, callee, place.var, precision);
+        self.add_copy_edge(src, place.var, precision);
+        self.bindings
+            .entry(place.var)
+            .or_default()
+            .insert(CallBinding {
+                call: key,
+                place: place.stable_key,
+            });
     }
 
-    fn propagate_load(&mut self, var: PtVarId, delta: &BTreeSet<ObjectTokenId>) {
-        let dsts = self.loads.get(&var).cloned().unwrap_or_default();
-        for dst in dsts {
-            for object in delta {
-                let contents = self.object_slot(*object, "$contents");
-                self.add_copy_edge(contents, dst);
-            }
-        }
-    }
-
-    fn propagate_store(&mut self, var: PtVarId, delta: &BTreeSet<ObjectTokenId>) {
-        let srcs = self.stores.get(&var).cloned().unwrap_or_default();
-        for src in srcs {
-            for object in delta {
-                let contents = self.object_slot(*object, "$contents");
-                self.add_copy_edge(src, contents);
-            }
-        }
-    }
-
-    fn propagate_field_load(&mut self, var: PtVarId, delta: &BTreeSet<ObjectTokenId>) {
-        let loads = self.field_loads.get(&var).cloned().unwrap_or_default();
-        for (field, dst) in loads.into_iter() {
-            for object in delta {
-                let field_var = self.object_slot(*object, field.as_str());
-                self.add_copy_edge(field_var, dst);
-            }
-        }
-    }
-
-    fn propagate_field_store(&mut self, var: PtVarId, delta: &BTreeSet<ObjectTokenId>) {
-        let stores = self.field_stores.get(&var).cloned().unwrap_or_default();
-        for (field, src) in stores.into_iter() {
-            for object in delta {
-                let field_var = self.object_slot(*object, field.as_str());
-                self.add_copy_edge(src, field_var);
-            }
-        }
-    }
-
-    fn add_copy_edge(&mut self, src: PtVarId, dst: PtVarId) {
-        if !self.copy_edges.entry(src).or_default().insert(dst) {
+    fn add_copy_edge(&mut self, src: PtVarId, dst: PtVarId, precision: PointsToPrecision) {
+        if !add_edge(&mut self.copy_edges, src, dst, precision) {
             return;
         }
-        if let Some(objects) = self.sets.get(&src).cloned() {
-            self.add_all(dst, &objects);
+        if let Some(objects) = self.sets.get(&src) {
+            enqueue(
+                &self.sets,
+                &mut self.pending,
+                &mut self.queue,
+                dst,
+                objects.iter().copied(),
+            );
         }
     }
 
-    fn add_object(&mut self, dst: PtVarId, object: ObjectTokenId) {
-        let mut singleton = BTreeSet::new();
-        singleton.insert(object);
-        self.add_all(dst, &singleton);
+    fn halt(&mut self, reason: BudgetReason) {
+        self.halted = true;
+        self.budget_reasons.insert(reason.as_str().to_string());
     }
 
-    fn add_all(&mut self, dst: PtVarId, objects: &BTreeSet<ObjectTokenId>) {
-        if self.budget_exceeded {
-            return;
+    /// The variable of `object.field`, created on first use. `None` when the
+    /// slot ceiling is reached; the solve has then stopped.
+    fn object_slot(&mut self, object: ObjectTokenId, field: &str) -> Option<PtVarId> {
+        if let Some(var) = self.slots.get(&object).and_then(|slots| slots.get(field)) {
+            return Some(*var);
         }
-        let set = self.sets.entry(dst).or_default();
-        let mut delta = BTreeSet::new();
-        for object in objects {
-            if set.insert(*object) {
-                delta.insert(*object);
+        if self.slot_keys.len() >= self.budget.max_dynamic_vars {
+            self.halt(BudgetReason::PointsToMaxDynamicVars);
+            return None;
+        }
+        let mut hash = slot_hash(object, field);
+        let var = loop {
+            let candidate = vars::slot_var(hash);
+            if !self.slot_keys.contains_key(&candidate) {
+                break candidate;
             }
-        }
-        if set.len() > self.budget.max_objects_per_var {
-            self.budget_exceeded = true;
-            self.budget_reasons
-                .insert(BudgetReason::PointsToMaxObjectsPerVar.as_str().to_string());
-            return;
-        }
-        if !delta.is_empty() {
-            self.queue.push_back((dst, delta));
-        }
-    }
-
-    fn object_slot(&mut self, object: ObjectTokenId, slot: &str) -> PtVarId {
-        let key = (object, slot.to_string());
-        if let Some(var) = self.object_slots.get(&key) {
-            return *var;
-        }
-        let var = vars::dynamic_var(self.object_slots.len());
-        let object_identity = self.semantic_object_identity(object);
+            hash = hash.wrapping_add(1);
+        };
         let slot_identity = stable_key_text_from_parts(
             FactFamily::PointsToSet,
-            &[("object", object_identity), ("slot", slot.to_string())],
+            &[
+                ("object", self.semantic_object_identity(object)),
+                ("slot", field.to_string()),
+            ],
         );
         self.variable_identities
             .entry(var)
             .or_default()
             .insert(slot_identity);
-        self.object_slots.insert(key, var);
-        self.dynamic_vars.insert(var);
-        if self.dynamic_vars.len() > self.budget.max_dynamic_vars {
-            self.budget_exceeded = true;
-            self.budget_reasons
-                .insert(BudgetReason::PointsToMaxDynamicVars.as_str().to_string());
-        }
-        var
+        self.slots
+            .entry(object)
+            .or_default()
+            .insert(field.to_string(), var);
+        self.slot_keys.insert(var, (object, field.to_string()));
+        self.slots_by_field
+            .entry(field.to_string())
+            .or_default()
+            .insert(var);
+        Some(var)
     }
 
-    fn record_constraint_identities(&mut self, constraint: &PointsToConstraintFact) {
+    /// Variables whose sets may still be missing objects: the ones left on
+    /// the queue or cut short, and everything they can reach. A store through
+    /// an incomplete base may write a field of any object, so every slot of
+    /// that field is incomplete too; likewise a call through an incomplete
+    /// callee that passes values may reach any function, so every parameter
+    /// and `this` is incomplete.
+    fn incomplete_variables(&self) -> BTreeSet<PtVarId> {
+        let mut incomplete = BTreeSet::new();
+        let mut work = self
+            .pending
+            .keys()
+            .chain(self.interrupted.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        let mut passed_values = false;
+        while let Some(var) = work.pop() {
+            if !incomplete.insert(var) {
+                continue;
+            }
+            for edges in [&self.copy_edges, &self.dependency_edges] {
+                if let Some(dsts) = edges.get(&var) {
+                    work.extend(dsts.keys().copied());
+                }
+            }
+            for store in self.stores.get(&var).into_iter().flatten() {
+                if let Some(slots) = self.slots_by_field.get(&store.field) {
+                    work.extend(slots.iter().copied());
+                }
+            }
+            if !passed_values && self.passes_values(var) {
+                passed_values = true;
+                work.extend(self.signature_inputs());
+            }
+        }
+        incomplete
+    }
+
+    /// Variables whose sets may hold values the constraints do not describe.
+    /// The roots are the variables read as a source that nothing defines (no
+    /// seed, no copy into them, no slot, no call binding), and the results of
+    /// calls whose callee set is empty or holds an object without a
+    /// signature. Openness then spreads like incompleteness: along copies and
+    /// dependencies, from a store through an open base to every slot of its
+    /// field, and from a call through an open callee that passes values to
+    /// every parameter, rest parameter and `this`.
+    fn open_variables(&self) -> BTreeSet<PtVarId> {
+        let defined = |var: &PtVarId| {
+            self.seed_precision.contains_key(var)
+                || self.slot_keys.contains_key(var)
+                || self.bindings.contains_key(var)
+        };
+        let mut targets = BTreeSet::new();
+        for edges in [&self.copy_edges, &self.dependency_edges] {
+            for dsts in edges.values() {
+                targets.extend(dsts.keys().copied());
+            }
+        }
+        let read = self
+            .copy_edges
+            .keys()
+            .chain(self.dependency_edges.keys())
+            .chain(self.loads.keys())
+            .chain(self.stores.keys())
+            .chain(self.stores.values().flatten().map(|store| &store.var))
+            .chain(self.calls.iter().map(|call| &call.callee))
+            .copied()
+            .filter(|var| !defined(var) && !targets.contains(var));
+        let unresolved_results = self.calls.iter().filter_map(|call| {
+            let result = call.result?;
+            let callees = self.sets.get(&call.callee);
+            let unresolved = callees.is_none_or(|objects| {
+                objects
+                    .iter()
+                    .any(|object| !self.signatures.contains_key(object))
+            });
+            unresolved.then_some(result)
+        });
+        let mut work = read.chain(unresolved_results).collect::<Vec<_>>();
+        let mut open = BTreeSet::new();
+        let mut passed_values = false;
+        while let Some(var) = work.pop() {
+            if !open.insert(var) {
+                continue;
+            }
+            for edges in [&self.copy_edges, &self.dependency_edges] {
+                if let Some(dsts) = edges.get(&var) {
+                    work.extend(dsts.keys().copied());
+                }
+            }
+            for store in self.stores.get(&var).into_iter().flatten() {
+                if let Some(slots) = self.slots_by_field.get(&store.field) {
+                    work.extend(slots.iter().copied());
+                }
+            }
+            if !passed_values && self.passes_values(var) {
+                passed_values = true;
+                work.extend(self.signature_inputs());
+            }
+        }
+        open
+    }
+
+    /// True when a call through `callee` passes a receiver or an argument.
+    fn passes_values(&self, callee: PtVarId) -> bool {
+        self.calls_by_callee.get(&callee).is_some_and(|indices| {
+            indices.iter().any(|index| {
+                let call = &self.calls[*index];
+                call.receiver.is_some() || !call.arguments.is_empty()
+            })
+        })
+    }
+
+    /// Every place a call fills: parameters, rest parameters and `this`.
+    fn signature_inputs(&self) -> impl Iterator<Item = PtVarId> + '_ {
+        self.signatures.values().flat_map(|signature| {
+            signature
+                .params
+                .values()
+                .chain(signature.rest.iter())
+                .chain(signature.this.iter())
+                .map(|place| place.var)
+        })
+    }
+
+    /// The bindings that reached each variable along copy edges, the first
+    /// [`MAX_BINDINGS_PER_VAR`] by key text. Keeping the first few of a union
+    /// is a join, so the result does not depend on the order of the walk.
+    fn reached_bindings(&self) -> BTreeMap<PtVarId, Vec<CallBinding>> {
+        let text = |binding: &CallBinding| {
+            (
+                self.interner.resolve(binding.call),
+                self.interner.resolve(binding.place),
+            )
+        };
+        let merge = |held: &mut Vec<CallBinding>, incoming: &[CallBinding]| -> bool {
+            let before = held.clone();
+            held.extend(incoming.iter().copied());
+            held.sort_by_cached_key(text);
+            held.dedup();
+            held.truncate(MAX_BINDINGS_PER_VAR);
+            *held != before
+        };
+        let mut reached = BTreeMap::<PtVarId, Vec<CallBinding>>::new();
+        let mut work = VecDeque::new();
+        for (var, bindings) in &self.bindings {
+            let bindings = bindings.iter().copied().collect::<Vec<_>>();
+            if merge(reached.entry(*var).or_default(), &bindings) {
+                work.push_back(*var);
+            }
+        }
+        while let Some(var) = work.pop_front() {
+            let from = reached.get(&var).cloned().unwrap_or_default();
+            for dst in self
+                .copy_edges
+                .get(&var)
+                .into_iter()
+                .flat_map(BTreeMap::keys)
+            {
+                if !self.sets.contains_key(dst) {
+                    continue;
+                }
+                if merge(reached.entry(*dst).or_default(), &from) {
+                    work.push_back(*dst);
+                }
+            }
+        }
+        reached.retain(|var, _| self.sets.contains_key(var));
+        reached
+    }
+
+    /// The weakest precision of the inputs that reached each set, carried
+    /// along every edge from a non-empty set.
+    fn precisions(&self) -> BTreeMap<PtVarId, PointsToPrecision> {
+        let mut precision = self
+            .seed_precision
+            .iter()
+            .filter(|(var, _)| self.sets.contains_key(var))
+            .map(|(var, precision)| (*var, *precision))
+            .collect::<BTreeMap<_, _>>();
+        let mut work = self.sets.keys().copied().collect::<VecDeque<_>>();
+        while let Some(var) = work.pop_front() {
+            if !self.sets.contains_key(&var) {
+                continue;
+            }
+            let from = precision
+                .get(&var)
+                .copied()
+                .unwrap_or(PointsToPrecision::FlowInsensitive);
+            for edges in [&self.copy_edges, &self.dependency_edges] {
+                for (dst, edge) in edges.get(&var).into_iter().flatten() {
+                    let reached = from.max(*edge);
+                    let current = precision
+                        .entry(*dst)
+                        .or_insert(PointsToPrecision::FlowInsensitive);
+                    if reached > *current {
+                        *current = reached;
+                        work.push_back(*dst);
+                    }
+                }
+            }
+        }
+        precision
+    }
+
+    fn record_constraint_identities(&mut self, key: &str, kind: &PointsToConstraintKind) {
         use PointsToConstraintKind as Kind;
-        let key = self.interner.resolve(constraint.stable_key);
-        match &constraint.kind {
+        match kind {
             Kind::AddressOf { dst, object } => {
-                self.record_variable_identity(*dst, &key, "address_of_destination");
-                self.record_object_identity(*object, &key, "address_of_object");
+                self.record_variable_identity(*dst, key, "address_of_destination");
+                self.record_object_identity(*object, key, "address_of_object");
             }
             Kind::Copy { dst, src } => {
-                self.record_variable_identity(*dst, &key, "copy_destination");
-                self.record_variable_identity(*src, &key, "copy_source");
+                self.record_variable_identity(*dst, key, "copy_destination");
+                self.record_variable_identity(*src, key, "copy_source");
             }
             Kind::Load { dst, pointer } => {
-                self.record_variable_identity(*dst, &key, "load_destination");
-                self.record_variable_identity(*pointer, &key, "load_pointer");
+                self.record_variable_identity(*dst, key, "load_destination");
+                self.record_variable_identity(*pointer, key, "load_pointer");
             }
             Kind::Store { pointer, src } => {
-                self.record_variable_identity(*pointer, &key, "store_pointer");
-                self.record_variable_identity(*src, &key, "store_source");
+                self.record_variable_identity(*pointer, key, "store_pointer");
+                self.record_variable_identity(*src, key, "store_source");
             }
             Kind::FieldLoad { dst, base, .. } | Kind::ElementLoad { dst, base, .. } => {
-                self.record_variable_identity(*dst, &key, "projection_load_destination");
-                self.record_variable_identity(*base, &key, "projection_load_base");
+                self.record_variable_identity(*dst, key, "projection_load_destination");
+                self.record_variable_identity(*base, key, "projection_load_base");
             }
             Kind::FieldStore { base, src, .. } | Kind::ElementStore { base, src, .. } => {
-                self.record_variable_identity(*base, &key, "projection_store_base");
-                self.record_variable_identity(*src, &key, "projection_store_source");
+                self.record_variable_identity(*base, key, "projection_store_base");
+                self.record_variable_identity(*src, key, "projection_store_source");
             }
             Kind::CallReturn { dst, value } => {
-                self.record_variable_identity(*dst, &key, "call_return_destination");
+                self.record_variable_identity(*dst, key, "call_return_destination");
                 self.record_object_identity(
                     vars::value_fact_object(*value),
-                    &key,
+                    key,
                     "call_return_object",
                 );
             }
             Kind::SummaryFlow { dst, src, .. } => {
-                self.record_variable_identity(*dst, &key, "summary_destination");
-                self.record_variable_identity(*src, &key, "summary_source");
+                self.record_variable_identity(*dst, key, "summary_destination");
+                self.record_variable_identity(*src, key, "summary_source");
             }
         }
     }
@@ -352,48 +858,59 @@ impl<'a> Solver<'a> {
         )
     }
 
-    fn step_budget_ok(&mut self) -> bool {
-        self.steps += 1;
-        if self.steps > self.budget.max_steps {
-            self.budget_exceeded = true;
-            self.budget_reasons
-                .insert(BudgetReason::SolverMaxSteps.as_str().to_string());
-            return false;
-        }
-        true
-    }
-
-    fn to_result(&self, interner: &crate::internal_core::StableKeyInterner) -> PointsToSolveResult {
-        let budget_status = if self.budget_exceeded {
+    fn into_result(self) -> PointsToSolveResult {
+        let budget_status = if self.halted {
             PointsToBudgetStatus::BudgetExceeded
         } else {
             PointsToBudgetStatus::WithinBudget
         };
-        let status = if self.budget_exceeded {
-            PointsToStatus::BudgetExceeded
-        } else {
-            PointsToStatus::Present
-        };
-        let precision = if self.budget_exceeded {
-            PointsToPrecision::Unknown
-        } else {
-            PointsToPrecision::FlowInsensitive
-        };
-        let sets = self
+        let incomplete = self.incomplete_variables();
+        let mut precisions = self.precisions();
+        for variable in self.open_variables() {
+            if self.sets.contains_key(&variable) {
+                raise(
+                    precisions
+                        .entry(variable)
+                        .or_insert(PointsToPrecision::Heuristic),
+                    PointsToPrecision::Heuristic,
+                );
+            }
+        }
+        let call_bindings = self.reached_bindings();
+        let empty = BTreeSet::new();
+        let variables = self
             .sets
-            .iter()
-            .map(|(variable, objects)| PointsToSetFact {
+            .keys()
+            .chain(incomplete.iter())
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let sets = variables
+            .into_iter()
+            .map(|variable| PointsToSetFact {
                 id: PointsToSetId(0),
-                variable: *variable,
-                objects: objects.iter().copied().collect(),
-                status,
-                precision,
+                variable,
+                objects: self
+                    .sets
+                    .get(&variable)
+                    .unwrap_or(&empty)
+                    .iter()
+                    .copied()
+                    .collect(),
+                status: if incomplete.contains(&variable) {
+                    PointsToStatus::BudgetExceeded
+                } else {
+                    PointsToStatus::Present
+                },
+                precision: precisions
+                    .get(&variable)
+                    .copied()
+                    .unwrap_or(PointsToPrecision::FlowInsensitive),
                 budget: budget_status,
                 stable_key: stable_key_from_parts(
-                    interner,
+                    self.interner,
                     FactFamily::PointsToSet,
                     &[
-                        ("variable", self.semantic_variable_identity(*variable)),
+                        ("variable", self.semantic_variable_identity(variable)),
                         (
                             "budget",
                             points_to_budget_status_label(budget_status).to_string(),
@@ -405,9 +922,66 @@ impl<'a> Solver<'a> {
         PointsToSolveResult {
             sets,
             budget_status,
-            budget_reasons: self.budget_reasons.clone(),
+            budget_reasons: self.budget_reasons,
+            call_bindings,
         }
     }
+}
+
+/// Adds `src -> dst` or weakens its precision. True when the edge is new.
+fn add_edge(edges: &mut Edges, src: PtVarId, dst: PtVarId, precision: PointsToPrecision) -> bool {
+    match edges.entry(src).or_default().entry(dst) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(precision);
+            true
+        }
+        std::collections::btree_map::Entry::Occupied(mut entry) => {
+            raise(entry.get_mut(), precision);
+            false
+        }
+    }
+}
+
+fn raise(current: &mut PointsToPrecision, precision: PointsToPrecision) {
+    *current = (*current).max(precision);
+}
+
+/// Queues the objects of `objects` that `dst` does not hold yet.
+fn enqueue(
+    sets: &BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
+    pending: &mut BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
+    queue: &mut VecDeque<PtVarId>,
+    dst: PtVarId,
+    objects: impl Iterator<Item = ObjectTokenId>,
+) {
+    let held = sets.get(&dst);
+    let mut objects = objects
+        .filter(|object| held.is_none_or(|held| !held.contains(object)))
+        .peekable();
+    if objects.peek().is_none() {
+        return;
+    }
+    match pending.entry(dst) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(objects.collect());
+            queue.push_back(dst);
+        }
+        std::collections::btree_map::Entry::Occupied(mut entry) => entry.get_mut().extend(objects),
+    }
+}
+
+/// FNV-1a over the object id and the field name.
+fn slot_hash(object: ObjectTokenId, field: &str) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    object
+        .0
+        .to_le_bytes()
+        .iter()
+        .chain(field.as_bytes())
+        .fold(OFFSET, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(PRIME)
+        })
 }
 
 fn semantic_relation_identity(fragments: &BTreeSet<String>) -> String {

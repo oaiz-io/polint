@@ -132,7 +132,7 @@ pub fn detect_solver_summary_cycle(
             ConstraintKind::CopyEdge { dst, src } => {
                 adjacency.entry(*src).or_default().insert(*dst);
             }
-            ConstraintKind::CallConstraint { callsite } => {
+            ConstraintKind::CallConstraint { callsite, .. } => {
                 summary_nodes.insert(*callsite);
             }
             _ => {}
@@ -398,9 +398,7 @@ mod tests {
     fn call_constraint(callsite: u64, stable_key: &str) -> ConstraintFact {
         ConstraintFact {
             id: SemanticConstraintId(0),
-            kind: ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(callsite),
-            },
+            kind: ConstraintKind::call_at(SemanticNodeId(callsite)),
             status: PointsToStatus::Present,
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: crate::internal_core::stable_key_for_test(stable_key),

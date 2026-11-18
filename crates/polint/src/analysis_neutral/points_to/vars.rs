@@ -57,6 +57,12 @@ pub fn dynamic_var(slot_index: usize) -> PtVarId {
     tagged_var(DYNAMIC_VAR_TAG, slot_index as u64)
 }
 
+/// The variable of a solver-created heap slot, from a hash of the slot's
+/// object and field. The payload is truncated to the tagged-id capacity.
+pub(crate) fn slot_var(hash: u64) -> PtVarId {
+    tagged_var(DYNAMIC_VAR_TAG, hash & PAYLOAD_MAX)
+}
+
 pub(crate) fn semantic_node_var(id: SemanticNodeId) -> PtVarId {
     tagged_var(SEMANTIC_NODE_VAR_TAG, id.0)
 }

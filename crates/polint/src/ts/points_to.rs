@@ -14,7 +14,10 @@ use crate::analysis_neutral::ids::{
 use crate::analysis_neutral::points_to::facts::{
     PointsToConstraintFact, PointsToConstraintKind, PointsToPrecision, PointsToStatus,
 };
-use crate::analysis_neutral::points_to::solver::{PointsToSolveResult, solve_points_to};
+use crate::analysis_neutral::points_to::solver::{
+    PointsToCall, PointsToCallInputs, PointsToSignature, PointsToSolveResult, SignaturePlace,
+    solve_points_to_with_calls,
+};
 use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::analysis_neutral::solver::budget::{BudgetStatus, SolverBudget};
@@ -36,6 +39,9 @@ pub struct TsPointsToInputs {
     constraints: Vec<ConstraintFact>,
     callable_objects: BTreeMap<ObjectTokenId, (SemanticNodeId, StableKeyId)>,
     callsites: Vec<TsPointsToCallsite>,
+    /// The parameter, rest, `this` and return places of each function, keyed
+    /// by the function's object.
+    signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
 }
 
 impl TsPointsToInputs {
@@ -65,7 +71,7 @@ impl TsPointsToInputs {
             .semantic_constraints()
             .iter()
             .filter_map(|constraint| match constraint.kind {
-                ConstraintKind::CallConstraint { callsite } => {
+                ConstraintKind::CallConstraint { callsite, .. } => {
                     Some((callsite, constraint.stable_key))
                 }
                 _ => None,
@@ -74,7 +80,7 @@ impl TsPointsToInputs {
 
         let mut precision_by_callsite = BTreeMap::<SemanticNodeId, PointsToPrecision>::new();
         for constraint in db.semantic_constraints() {
-            if let ConstraintKind::CallConstraint { callsite } = constraint.kind {
+            if let ConstraintKind::CallConstraint { callsite, .. } = constraint.kind {
                 precision_by_callsite
                     .entry(callsite)
                     .and_modify(|precision| *precision = (*precision).max(constraint.precision))
@@ -115,10 +121,41 @@ impl TsPointsToInputs {
             })
             .collect();
 
+        let mut signatures = BTreeMap::<ObjectTokenId, PointsToSignature>::new();
+        for node in db.semantic_nodes() {
+            let function = match node.kind {
+                NodeKind::FunctionParam(function, _)
+                | NodeKind::FunctionRest(function)
+                | NodeKind::FunctionThis(function)
+                | NodeKind::FunctionReturn(function) => function,
+                _ => continue,
+            };
+            let Some(function_node) = function_node_by_id.get(&function) else {
+                continue;
+            };
+            let signature = signatures
+                .entry(object_for_node(*function_node))
+                .or_default();
+            let place = SignaturePlace {
+                var: var_for_node(node.id),
+                stable_key: node.stable_key,
+            };
+            match node.kind {
+                NodeKind::FunctionParam(_, position) => {
+                    signature.params.insert(usize::from(position), place);
+                }
+                NodeKind::FunctionRest(_) => signature.rest = Some(place),
+                NodeKind::FunctionThis(_) => signature.this = Some(place),
+                NodeKind::FunctionReturn(_) => signature.ret = Some(place),
+                _ => {}
+            }
+        }
+
         Self {
             constraints: db.semantic_constraints().to_vec(),
             callable_objects,
             callsites,
+            signatures,
         }
     }
 }
@@ -127,6 +164,8 @@ impl TsPointsToInputs {
 pub struct TsPointsToSolveResult {
     pub points_to: PointsToSolveResult,
     pub derived_edges: Vec<DerivedEdgeFact>,
+    /// Call sites whose callee set the solve left incomplete under its budget.
+    pub incomplete_sites: u64,
 }
 
 pub fn solve_ts_points_to(
@@ -135,7 +174,9 @@ pub fn solve_ts_points_to(
     budget: &SolverBudget,
 ) -> TsPointsToSolveResult {
     let constraints = project_constraints(interner, inputs);
-    let points_to = solve_points_to(interner, &constraints, budget.points_to_budget());
+    let calls = project_calls(inputs);
+    let points_to =
+        solve_points_to_with_calls(interner, &constraints, &calls, budget.points_to_budget());
     let sets = points_to
         .sets
         .iter()
@@ -144,13 +185,22 @@ pub fn solve_ts_points_to(
     // Membership-only dedup by StableKeyId; emission order is assigned below via
     // `SolverOutput::normalized` (resolved-text sort), never allocation order.
     let mut edges = std::collections::HashMap::new();
+    let mut incomplete_sites = 0_u64;
 
     for callsite in &inputs.callsites {
         let Some(set) = sets.get(&var_for_node(callsite.callsite_node)) else {
             continue;
         };
-        if set.status != PointsToStatus::Present {
-            continue;
+        // An incomplete set still derives its edges, with the set's status: every
+        // object in it was derived, and the site is reported as incomplete.
+        match set.status {
+            PointsToStatus::Present => {}
+            PointsToStatus::BudgetExceeded => incomplete_sites += 1,
+            PointsToStatus::Unknown
+            | PointsToStatus::Unsupported
+            | PointsToStatus::SetupMissing => {
+                continue;
+            }
         }
         for object in &set.objects {
             let Some((target, target_stable_key)) = inputs.callable_objects.get(object) else {
@@ -162,9 +212,26 @@ pub fn solve_ts_points_to(
             else {
                 continue;
             };
+            // The calls whose bindings carried values to the callee name the
+            // call and the signature place they bound.
+            let bindings = points_to
+                .call_bindings
+                .get(&var_for_node(callsite.callsite_node))
+                .into_iter()
+                .flatten()
+                .flat_map(|binding| {
+                    [
+                        ContributingFact {
+                            stable_key: binding.call,
+                        },
+                        ContributingFact {
+                            stable_key: binding.place,
+                        },
+                    ]
+                });
             let provenance = DerivedEdgeProvenance::new(
                 interner,
-                vec![
+                [
                     ContributingFact {
                         stable_key: callsite.constraint_stable_key,
                     },
@@ -177,10 +244,10 @@ pub fn solve_ts_points_to(
                     ContributingFact {
                         stable_key: set.stable_key,
                     },
-                ],
-                &ConstraintKind::CallConstraint {
-                    callsite: callsite.callsite_node,
-                },
+                ]
+                .into_iter()
+                .chain(bindings),
+                &ConstraintKind::call_at(callsite.callsite_node),
                 0,
             );
             let stable_key = stable_key_from_parts(
@@ -215,6 +282,7 @@ pub fn solve_ts_points_to(
     TsPointsToSolveResult {
         points_to,
         derived_edges,
+        incomplete_sites,
     }
 }
 
@@ -229,6 +297,7 @@ fn project_constraints(
             &mut projected,
             node_stable_key,
             "callable_object",
+            PointsToPrecision::FlowInsensitive,
             PointsToConstraintKind::AddressOf {
                 dst: var_for_node(node),
                 object,
@@ -246,6 +315,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "copy",
+                    constraint.precision,
                     PointsToConstraintKind::Copy {
                         dst: var_for_node(*dst),
                         src: var_for_node(*src),
@@ -259,6 +329,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "allocation_object",
+                    constraint.precision,
                     PointsToConstraintKind::AddressOf {
                         dst: var_for_node(*object),
                         object: object_token,
@@ -269,6 +340,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "allocation_destination",
+                    constraint.precision,
                     PointsToConstraintKind::AddressOf {
                         dst: var_for_node(*dst),
                         object: object_token,
@@ -281,6 +353,7 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "field_load",
+                    constraint.precision,
                     PointsToConstraintKind::FieldLoad {
                         dst: var_for_node(*dst),
                         base: var_for_node(*base),
@@ -294,10 +367,29 @@ fn project_constraints(
                     &mut projected,
                     constraint.stable_key,
                     "field_store",
+                    constraint.precision,
                     PointsToConstraintKind::FieldStore {
                         base: var_for_node(*base),
                         field: field.clone(),
                         src: var_for_node(*src),
+                    },
+                );
+            }
+            ConstraintKind::CallConstraint {
+                callsite,
+                callee: Some(callee),
+                ..
+            } if callsite != callee => {
+                // The callsite's set is the callees: what the callee value holds.
+                insert_projected_constraint(
+                    interner,
+                    &mut projected,
+                    constraint.stable_key,
+                    "call_callee",
+                    constraint.precision,
+                    PointsToConstraintKind::Copy {
+                        dst: var_for_node(*callsite),
+                        src: var_for_node(*callee),
                     },
                 );
             }
@@ -310,21 +402,61 @@ fn project_constraints(
     projected
         .into_iter()
         .enumerate()
-        .map(|(index, (_, (stable_key, kind)))| PointsToConstraintFact {
-            id: PointsToConstraintId(index as u64),
-            stable_key,
-            kind,
-            status: PointsToStatus::Present,
-            precision: PointsToPrecision::FlowInsensitive,
-        })
+        .map(
+            |(index, (_, (stable_key, kind, precision)))| PointsToConstraintFact {
+                id: PointsToConstraintId(index as u64),
+                stable_key,
+                kind,
+                status: PointsToStatus::Present,
+                precision,
+            },
+        )
         .collect()
+}
+
+/// The calls that pass values in or read a result, for the solver's call rule.
+/// A call that only names its callee adds nothing the constraints do not.
+fn project_calls(inputs: &TsPointsToInputs) -> PointsToCallInputs {
+    let calls = inputs
+        .constraints
+        .iter()
+        .filter(|constraint| constraint.status == PointsToStatus::Present)
+        .filter_map(|constraint| match &constraint.kind {
+            ConstraintKind::CallConstraint {
+                callsite,
+                receiver,
+                arguments,
+                spread_from,
+                result,
+                ..
+            } if receiver.is_some() || !arguments.is_empty() || result.is_some() => {
+                // The callsite's set is the site's callees: the callee place
+                // copies into it, and so do the walker and the object model.
+                Some(PointsToCall {
+                    stable_key: constraint.stable_key,
+                    callee: var_for_node(*callsite),
+                    receiver: receiver.map(var_for_node),
+                    arguments: arguments.iter().copied().map(var_for_node).collect(),
+                    spread_from: *spread_from,
+                    result: result.map(var_for_node),
+                    precision: constraint.precision,
+                })
+            }
+            _ => None,
+        })
+        .collect();
+    PointsToCallInputs {
+        calls,
+        signatures: inputs.signatures.clone(),
+    }
 }
 
 fn insert_projected_constraint(
     interner: &crate::internal_core::StableKeyInterner,
-    projected: &mut BTreeMap<String, (StableKeyId, PointsToConstraintKind)>,
+    projected: &mut BTreeMap<String, (StableKeyId, PointsToConstraintKind, PointsToPrecision)>,
     source_stable_key: StableKeyId,
     relation: &str,
+    precision: PointsToPrecision,
     kind: PointsToConstraintKind,
 ) {
     let stable_key = stable_key_from_parts(
@@ -335,9 +467,12 @@ fn insert_projected_constraint(
             ("relation", relation.to_string()),
         ],
     );
+    // A key seen twice keeps the weaker precision, so a heuristic source is
+    // never projected as exact.
     projected
         .entry(interner.resolve(stable_key).to_string())
-        .or_insert((stable_key, kind));
+        .and_modify(|(_, _, held)| *held = (*held).max(precision))
+        .or_insert((stable_key, kind, precision));
 }
 
 fn var_for_node(node: SemanticNodeId) -> PtVarId {
@@ -351,6 +486,9 @@ fn object_for_node(node: SemanticNodeId) -> ObjectTokenId {
 pub fn budget_status(result: &PointsToSolveResult) -> BudgetStatus {
     BudgetStatus::from_points_to(result.budget_status)
 }
+
+#[cfg(test)]
+mod solver_composition;
 
 #[cfg(test)]
 mod tests {
@@ -398,16 +536,8 @@ mod tests {
                     src: loaded,
                 },
             ),
-            (
-                "call:unrelated",
-                ConstraintKind::CallConstraint {
-                    callsite: unrelated,
-                },
-            ),
-            (
-                "call:invoked",
-                ConstraintKind::CallConstraint { callsite: invoked },
-            ),
+            ("call:unrelated", ConstraintKind::call_at(unrelated)),
+            ("call:invoked", ConstraintKind::call_at(invoked)),
         ]
         .into_iter()
         .enumerate()
@@ -441,6 +571,7 @@ mod tests {
                     constraint_stable_key: interner.intern(format!("constraint:{}", node.0)),
                 })
                 .collect(),
+            signatures: BTreeMap::new(),
         };
         let result = solve_ts_points_to(&interner, &inputs, &SolverBudget::default());
         assert_eq!(budget_status(&result.points_to), BudgetStatus::WithinBudget);
