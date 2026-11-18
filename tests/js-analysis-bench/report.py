@@ -136,11 +136,15 @@ def line_of(starts: list[int], offset: int) -> int:
 
 
 def parse_key(key: str) -> tuple[str, int, int]:
-    """`path@start..end[#name]` -> (path, start, end)."""
+    """`path@start..end[#name]` -> (path, start, end).
+
+    A recorded implicit call (an accessor, a coercion) has a position and no
+    call expression; its key is `path@offset` and reads as an empty span.
+    """
     path, _, span = key.rpartition("@")
     span = span.split("#", 1)[0]
     start, _, end = span.partition("..")
-    return path, int(start), int(end)
+    return path, int(start), int(end or start)
 
 
 # ---------------------------------------------------------------------------
