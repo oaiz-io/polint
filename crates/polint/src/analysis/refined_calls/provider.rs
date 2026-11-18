@@ -7,7 +7,7 @@ use crate::core::AnalysisDb;
 pub(crate) use crate::analysis_neutral::refined_calls::provider::RefinedCallsProviderOutput;
 use crate::analysis_neutral::refined_calls::provider::{
     TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDeclarationKind, TsTypeDispatchKind,
-    TsTypeFileDensityInput, TsTypeReceiverShape, TsTypeSiteStatus,
+    TsTypeFileDensityInput, TsTypeFunctionInput, TsTypeReceiverShape, TsTypeSiteStatus,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -46,7 +46,12 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
             },
         )
         .collect::<Vec<_>>();
-    let (ts_type_callsites, ts_type_callees, ts_type_file_densities) = ts_type_inputs(db);
+    let TsTypeInputs {
+        callsites: ts_type_callsites,
+        callees: ts_type_callees,
+        functions: ts_type_functions,
+        densities: ts_type_file_densities,
+    } = ts_type_inputs(db);
     crate::analysis_neutral::refined_calls::provider::derive_refined_calls_with_cache_stats(
         db,
         input_snapshot,
@@ -61,8 +66,16 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
         &go_semantic_callsites,
         &ts_type_callsites,
         &ts_type_callees,
+        &ts_type_functions,
         &ts_type_file_densities,
     )
+}
+
+struct TsTypeInputs {
+    callsites: Vec<TsTypeCallsiteInput>,
+    callees: Vec<TsTypeCalleeInput>,
+    functions: Vec<TsTypeFunctionInput>,
+    densities: Vec<TsTypeFileDensityInput>,
 }
 
 /// Projects the TS type-sidecar store into the neutral refinement's inputs.
@@ -71,14 +84,8 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
 /// composition root flattens the two rows it needs to join — a callee and the
 /// callable it names — into one input carrying the declaration's name and name
 /// span.
-fn ts_type_inputs(
-    db: &AnalysisDb,
-) -> (
-    Vec<TsTypeCallsiteInput>,
-    Vec<TsTypeCalleeInput>,
-    Vec<TsTypeFileDensityInput>,
-) {
-    use crate::ts::types::facts::{TsTypeCallStatus, TsTypeCallableKind, TsTypeDispatch};
+fn ts_type_inputs(db: &AnalysisDb) -> TsTypeInputs {
+    use crate::ts::types::facts::{TsTypeCallStatus, TsTypeDispatch};
 
     let receivers_by_site = db
         .ts_type_receivers()
@@ -98,6 +105,7 @@ fn ts_type_inputs(
                 .map(|receiver| receiver.printed.as_str())
                 .filter(|printed| !printed.is_empty())
                 .map(str::to_string),
+            signature_parameters: callsite.signature_parameters,
             // A site without a receiver row is judged by its status and its
             // callee alone.
             receiver_shape: match receivers_by_site.get(&callsite.stable_key) {
@@ -143,17 +151,7 @@ fn ts_type_inputs(
                 kind: match (callee.external.is_some(), declaration) {
                     (true, _) => TsTypeDeclarationKind::External,
                     (false, None) => TsTypeDeclarationKind::Unknown,
-                    (false, Some(callable)) => match callable.kind {
-                        TsTypeCallableKind::Function | TsTypeCallableKind::Arrow => {
-                            TsTypeDeclarationKind::Function
-                        }
-                        TsTypeCallableKind::Method => TsTypeDeclarationKind::Method,
-                        TsTypeCallableKind::Constructor => TsTypeDeclarationKind::Constructor,
-                        TsTypeCallableKind::Class => TsTypeDeclarationKind::Class,
-                        TsTypeCallableKind::Getter | TsTypeCallableKind::Setter => {
-                            TsTypeDeclarationKind::Accessor
-                        }
-                    },
+                    (false, Some(callable)) => declaration_kind(callable.kind),
                 },
                 name: declaration
                     .map(|callable| callable.name.clone())
@@ -166,6 +164,17 @@ fn ts_type_inputs(
         })
         .collect::<Vec<_>>();
 
+    let functions = db
+        .ts_type_callables()
+        .iter()
+        .map(|callable| TsTypeFunctionInput {
+            kind: declaration_kind(callable.kind),
+            required_parameters: callable.required_parameters,
+            file: callable.file,
+            span: callable.span.clone(),
+        })
+        .collect::<Vec<_>>();
+
     let densities = db
         .ts_type_file_densities()
         .iter()
@@ -175,7 +184,24 @@ fn ts_type_inputs(
         })
         .collect::<Vec<_>>();
 
-    (callsites, callees, densities)
+    TsTypeInputs {
+        callsites,
+        callees,
+        functions,
+        densities,
+    }
+}
+
+fn declaration_kind(kind: crate::ts::types::facts::TsTypeCallableKind) -> TsTypeDeclarationKind {
+    use crate::ts::types::facts::TsTypeCallableKind;
+    match kind {
+        TsTypeCallableKind::Function => TsTypeDeclarationKind::Function,
+        TsTypeCallableKind::Arrow => TsTypeDeclarationKind::Arrow,
+        TsTypeCallableKind::Method => TsTypeDeclarationKind::Method,
+        TsTypeCallableKind::Constructor => TsTypeDeclarationKind::Constructor,
+        TsTypeCallableKind::Class => TsTypeDeclarationKind::Class,
+        TsTypeCallableKind::Getter | TsTypeCallableKind::Setter => TsTypeDeclarationKind::Accessor,
+    }
 }
 
 #[cfg(test)]

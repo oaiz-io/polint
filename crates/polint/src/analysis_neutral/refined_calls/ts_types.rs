@@ -75,8 +75,10 @@ pub enum TsTypeReceiverShape {
 /// What kind of declaration a callee row names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TsTypeDeclarationKind {
-    /// A function declaration, function expression or arrow function.
+    /// A function declaration or function expression.
     Function,
+    /// An arrow function: it runs when called and cannot be constructed.
+    Arrow,
     Method,
     Constructor,
     Class,
@@ -99,6 +101,10 @@ pub struct TsTypeCallsiteInput {
     /// The receiver type the checker printed, carried onto the edge as
     /// evidence so a reader can see why the tier answered as it did.
     pub receiver_printed: Option<String>,
+    /// How many parameters the signature the checker resolved the call to
+    /// declares; `None` when it has a rest parameter, is declared in a
+    /// JavaScript file or was not resolved.
+    pub signature_parameters: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,6 +120,17 @@ pub struct TsTypeCalleeInput {
     pub file: Option<FileId>,
     pub span: Option<Span>,
     pub name_span: Option<Span>,
+}
+
+/// One callable declaration the checker saw, whether or not a call names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TsTypeFunctionInput {
+    pub kind: TsTypeDeclarationKind,
+    /// The fewest arguments a call must pass, as the declared parameters say;
+    /// `None` for a class, an accessor and a declaration in a JavaScript file.
+    pub required_parameters: Option<u32>,
+    pub file: Option<FileId>,
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,19 +153,69 @@ pub struct TsTypeJoinReport {
     pub deferred_callsites: usize,
 }
 
-pub fn derive_ts_type_refinements(
+/// What the checker said about one native call site, kept for the step that
+/// weighs the solver's answer at the site against the checker's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TypedSite {
+    pub(crate) status: TsTypeSiteStatus,
+    pub(crate) signature_parameters: Option<u32>,
+    /// The call constructs its callee: `new`, a constructor call or `super()`.
+    pub(crate) constructs: bool,
+}
+
+/// What the checker declared about one native function.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TypedFunction {
+    pub(crate) kind: TsTypeDeclarationKind,
+    pub(crate) required_parameters: Option<u32>,
+}
+
+/// One typed edge, and whether it may list a candidate at a site whose
+/// callee set the solver left open.
+#[derive(Debug, Clone)]
+pub(crate) struct TypedRow {
+    pub(crate) edge: RefinedCallEdgeFact,
+    /// A method the checker found on a receiver one declaration names, and so
+    /// a method of that receiver's class.
+    pub(crate) seeds: bool,
+}
+
+/// The type tier's rows and the declarations it joined to native facts.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TypedRows {
+    pub(crate) rows: Vec<TypedRow>,
+    pub(crate) sites: BTreeMap<CallSiteId, TypedSite>,
+    pub(crate) functions: BTreeMap<FunctionId, TypedFunction>,
+    pub(crate) report: TsTypeJoinReport,
+}
+
+#[cfg(test)]
+pub(crate) fn derive_ts_type_refinements(
     db: &impl AnalysisHost,
     callsites: &[TsTypeCallsiteInput],
     callees: &[TsTypeCalleeInput],
     densities: &[TsTypeFileDensityInput],
 ) -> (RefinedCallOutput, TsTypeJoinReport) {
-    let interner_handle = db.stable_key_interner();
-    let interner = &interner_handle;
-    let mut report = TsTypeJoinReport::default();
-    let mut edges = Vec::new();
+    let typed = typed_rows(db, callsites, callees, &[], densities);
+    let edges = typed.rows.into_iter().map(|row| row.edge).collect();
+    (
+        RefinedCallOutput { edges }.normalized(&db.stable_key_interner()),
+        typed.report,
+    )
+}
 
-    if callsites.is_empty() {
-        return (RefinedCallOutput { edges }, report);
+/// Joins the sidecar's rows to the native call sites and functions, and turns
+/// each callee row that joined into a typed edge.
+pub(crate) fn typed_rows(
+    db: &impl AnalysisHost,
+    callsites: &[TsTypeCallsiteInput],
+    callees: &[TsTypeCalleeInput],
+    functions: &[TsTypeFunctionInput],
+    densities: &[TsTypeFileDensityInput],
+) -> TypedRows {
+    let mut typed = TypedRows::default();
+    if callsites.is_empty() && functions.is_empty() {
+        return typed;
     }
 
     let density_by_file = densities
@@ -156,6 +223,7 @@ pub fn derive_ts_type_refinements(
         .filter_map(|density| density.file.map(|file| (file, density.any_percent)))
         .collect::<BTreeMap<_, _>>();
     let index = TsSiteIndex::new(db);
+    typed.functions = typed_functions(db, &index, functions);
     let mut callees_by_site: BTreeMap<StableKeyId, Vec<&TsTypeCalleeInput>> = BTreeMap::new();
     for callee in callees {
         callees_by_site
@@ -164,12 +232,15 @@ pub fn derive_ts_type_refinements(
             .push(callee);
     }
 
+    let report = &mut typed.report;
+    let rows = &mut typed.rows;
     for site in callsites {
         let Some(core_site) = index.core_site_for(db, site) else {
             report.unmatched_callsites += 1;
             continue;
         };
         report.matched_callsites += 1;
+        record_typed_site(&mut typed.sites, core_site, site);
         let any_percent = site
             .file
             .and_then(|file| density_by_file.get(&file).copied())
@@ -177,7 +248,10 @@ pub fn derive_ts_type_refinements(
         let exact = site.status == TsTypeSiteStatus::Resolved;
 
         if site.status == TsTypeSiteStatus::AnyReceiver {
-            edges.push(untyped_site_edge(db, core_site, site, edges.len()));
+            rows.push(TypedRow {
+                edge: untyped_site_edge(db, core_site, site, rows.len()),
+                seeds: false,
+            });
             continue;
         }
         if any_percent >= ANY_DENSITY_DEFER_PERCENT && !exact {
@@ -202,19 +276,70 @@ pub fn derive_ts_type_refinements(
                 continue;
             }
             report.matched_callees += 1;
-            edges.push(typed_edge(
-                db,
-                core_site,
-                site,
-                callee,
-                target,
-                any_percent,
-                edges.len(),
-            ));
+            let answer = TypedAnswer::new(core_site, site, callee);
+            rows.push(TypedRow {
+                edge: typed_edge(db, core_site, site, callee, target, any_percent, rows.len()),
+                seeds: target.is_some() && answer.seeds(),
+            });
         }
     }
 
-    (RefinedCallOutput { edges }.normalized(interner), report)
+    typed
+}
+
+/// Keeps what the checker said about a site. Two rows for one site, from two
+/// projects that both include its file, that disagree say nothing about its
+/// signature.
+fn record_typed_site(
+    sites: &mut BTreeMap<CallSiteId, TypedSite>,
+    core_site: &CallSiteFact,
+    site: &TsTypeCallsiteInput,
+) {
+    let typed = TypedSite {
+        status: site.status,
+        signature_parameters: site.signature_parameters,
+        constructs: matches!(
+            core_site.kind,
+            CallSyntaxKind::Constructor | CallSyntaxKind::New | CallSyntaxKind::Super
+        ),
+    };
+    let recorded = sites.entry(core_site.id).or_insert(typed);
+    if *recorded != typed {
+        recorded.status = TsTypeSiteStatus::Unresolved;
+        recorded.signature_parameters = None;
+    }
+}
+
+/// The checker's declarations joined to native functions by span alone: a
+/// declaration's kind and parameters describe the function it was joined to
+/// only when the two are the same text. A function two declarations joined
+/// with different answers keeps neither.
+fn typed_functions(
+    db: &impl AnalysisHost,
+    index: &TsSiteIndex,
+    functions: &[TsTypeFunctionInput],
+) -> BTreeMap<FunctionId, TypedFunction> {
+    let mut joined = BTreeMap::new();
+    let mut conflicting = BTreeSet::new();
+    for function in functions {
+        let (Some(file), Some(span)) = (function.file, function.span.as_ref()) else {
+            continue;
+        };
+        let Some(id) = index.core_function_by_span(db, file, span) else {
+            continue;
+        };
+        let typed = TypedFunction {
+            kind: function.kind,
+            required_parameters: function.required_parameters,
+        };
+        if *joined.entry(id).or_insert(typed) != typed {
+            conflicting.insert(id);
+        }
+    }
+    for id in conflicting {
+        joined.remove(&id);
+    }
+    joined
 }
 
 fn typed_edge(
@@ -393,6 +518,7 @@ impl TypedAnswer {
     fn names_the_target(self) -> bool {
         let runs = match self.kind {
             TsTypeDeclarationKind::Function
+            | TsTypeDeclarationKind::Arrow
             | TsTypeDeclarationKind::Method
             | TsTypeDeclarationKind::Constructor => true,
             TsTypeDeclarationKind::Class => self.constructs,
@@ -404,6 +530,21 @@ impl TypedAnswer {
             && self.status != TsTypeSiteStatus::Union
             && self.shape == TsTypeReceiverShape::Named
             && runs
+    }
+
+    /// Whether the answer is a method of the class that names the receiver:
+    /// the declared method, a binding read the checker typed, or an
+    /// instantiated implementation of it.
+    fn seeds(self) -> bool {
+        self.kind == TsTypeDeclarationKind::Method
+            && self.status != TsTypeSiteStatus::Union
+            && self.shape == TsTypeReceiverShape::Named
+            && matches!(
+                self.dispatch,
+                TsTypeDispatchKind::Declared
+                    | TsTypeDispatchKind::Inferred
+                    | TsTypeDispatchKind::Implementation
+            )
     }
 }
 
@@ -517,13 +658,14 @@ impl TsSiteIndex {
             })
     }
 
-    fn core_function_for(
+    /// The native function declared by the same text as `span`: the same
+    /// bytes, or the same end with a start inside it.
+    fn core_function_by_span(
         &self,
         db: &impl AnalysisHost,
-        callee: &TsTypeCalleeInput,
+        file: FileId,
+        span: &Span,
     ) -> Option<FunctionId> {
-        let file = callee.file?;
-        let span = callee.span.as_ref()?;
         let all = db.functions();
         let candidates = self
             .functions_by_file
@@ -538,14 +680,31 @@ impl TsSiteIndex {
         {
             return Some(exact.id);
         }
-        if let Some(same_end) = candidates
+        candidates
             .iter()
             .copied()
             .filter(|candidate| same_end_inside(&candidate.span, span))
             .min_by_key(|candidate| (candidate.span.start_byte, candidate.id))
-        {
-            return Some(same_end.id);
+            .map(|candidate| candidate.id)
+    }
+
+    fn core_function_for(
+        &self,
+        db: &impl AnalysisHost,
+        callee: &TsTypeCalleeInput,
+    ) -> Option<FunctionId> {
+        let file = callee.file?;
+        let span = callee.span.as_ref()?;
+        if let Some(by_span) = self.core_function_by_span(db, file, span) {
+            return Some(by_span);
         }
+        let all = db.functions();
+        let candidates = self
+            .functions_by_file
+            .get(&file)?
+            .iter()
+            .map(|position| &all[*position])
+            .collect::<Vec<_>>();
         // Names disagree between the two parsers as well: a class method is
         // `greet` to the type checker and `Loud.greet` to the syntax frontend,
         // so a suffix match on the declared name is the strongest name signal
@@ -760,6 +919,7 @@ mod tests {
             status,
             receiver_shape: TsTypeReceiverShape::Named,
             receiver_printed: Some("Greeter".to_string()),
+            signature_parameters: None,
         }
     }
 
@@ -1601,6 +1761,7 @@ mod tests {
             status: TsTypeSiteStatus::Resolved,
             receiver_shape: TsTypeReceiverShape::Named,
             receiver_printed: Some("Loud".to_string()),
+            signature_parameters: None,
         };
         let typed_callee = |key: &str, site: &str, start: u32, end: u32| TsTypeCalleeInput {
             stable_key: interner.intern(key),
