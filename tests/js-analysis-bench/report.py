@@ -23,6 +23,7 @@ write the same scores.
 from __future__ import annotations
 
 import functools
+import gzip
 import json
 import os
 import platform
@@ -292,12 +293,19 @@ def find_typescript(args) -> Path | None:
 
 
 def run_dump(
-    test_binary: Path, tree: Path, plan: str, out: Path, timeout: int, typescript: Path | None = None
+    test_binary: Path,
+    tree: Path,
+    plan: str,
+    out: Path,
+    timeout: int,
+    typescript: Path | None = None,
+    package_graph: bool = False,
 ) -> dict:
     """Dump one tree's facts; return where the dump is, its wall clock and peak RSS.
 
-    `plan` is a key of `PLANS`, or `census` for the syntax census run. The dump
-    is not loaded here: see `load_dump` and `run` for why."""
+    `plan` is a key of `PLANS`, or `census` for the syntax census run. With
+    `package_graph` the run also writes the tree's package graph beside the dump.
+    The dump is not loaded here: see `load_dump` and `run` for why."""
     manifest = out.with_suffix(".manifest")
     manifest.write_text(f"{tree}\t{out}\n")
     env = dict(os.environ)
@@ -313,6 +321,10 @@ def run_dump(
     else:
         # A compiler in the caller's environment must not reach the other plans.
         env.pop(TYPESCRIPT_ENV, None)
+    if package_graph:
+        env[PACKAGE_GRAPH_ENV] = "1"
+    else:
+        env.pop(PACKAGE_GRAPH_ENV, None)
     env["RUST_LOG"] = STAGE_LOG
     env["NO_COLOR"] = "1"
     result = bench_matrix.measure(
@@ -337,6 +349,54 @@ def run_dump(
         ][-8:]
         return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
     return {"dump": out, "cost": cost, "error": None, "ts_type_join": ts_type_join(result.stderr)}
+
+
+# With this set to 1, the refined dump of each tune-set package also writes its
+# package graph; the report stores it compressed beside the report and states
+# its size per MB of source.
+PACKAGE_GRAPH_ENV = "POLINT_JS_BENCH_PACKAGE_GRAPH"
+PACKAGE_GRAPH_PLAN = "refined"
+# The ceiling on a stored package graph, gzip bytes per MB of source.
+PACKAGE_GRAPH_CEILING_PER_MB = 2 * MB
+
+
+def package_graph_sizes(dumps: dict, names: list[str]) -> dict:
+    """Each written package graph, compressed, with its sizes.
+
+    The compressed bytes carry no timestamp, so they are the same on every run."""
+    graphs = {}
+    for name in names:
+        run_entry = dumps.get(("package", name, PACKAGE_GRAPH_PLAN))
+        if not run_entry or run_entry["dump"] is None:
+            continue
+        path = run_entry["dump"].with_suffix(".package-graph.json")
+        if not path.exists():
+            continue
+        raw = path.read_bytes()
+        graphs[name] = {"bytes": len(raw), "gzip": gzip.compress(raw, mtime=0)}
+    return graphs
+
+
+def render_package_graphs(report: dict, add) -> None:
+    graphs = report.get("package_graphs")
+    if not graphs:
+        return
+    add("## Package graphs")
+    add("")
+    add(
+        "The package graph of each tune-set package under the refined plan, the package taken as the tree: "
+        f"JSON and gzip bytes, and gzip bytes per MB of source against the ceiling of "
+        f"{PACKAGE_GRAPH_CEILING_PER_MB / MB:.0f} MB per MB."
+    )
+    add("")
+    add("| package | source KB | graph KB | gzip KB | gzip KB per MB | within the ceiling |")
+    add("|---|---|---|---|---|---|")
+    for name, row in sorted(graphs.items()):
+        add(
+            f"| {name} | {row['source_bytes'] / 1000:.0f} | {row['bytes'] / 1000:.0f} | {row['gzip_bytes'] / 1000:.0f} "
+            f"| {row['gzip_bytes_per_mb'] / 1000:.0f} | {'yes' if row['gzip_bytes_per_mb'] <= PACKAGE_GRAPH_CEILING_PER_MB else 'no'} |"
+        )
+    add("")
 
 
 # The kernel's per-provider stage log: one `stage done` line per provider run,
@@ -2966,6 +3026,8 @@ def render_markdown(report: dict) -> str:
         )
     add("")
 
+    render_package_graphs(report, add)
+
     add("## Cost")
     add("")
     cost = report.get("cost")
@@ -3176,6 +3238,8 @@ def run(args) -> int:
         trees = [("case", case_id, tree) for case_id, tree in case_trees.items()]
         trees += [("package", name, tree) for name, tree in package_trees.items()]
         trees += [(PREVIOUS_SET, name, tree) for name, tree in previous_trees.items()]
+        held_out_names = {package["name"] for package in inputs["package"] if package.get("held_out")}
+        with_package_graph = os.environ.get(PACKAGE_GRAPH_ENV) == "1"
         for kind, name, tree in trees:
             for plan in PLANS:
                 out = scratch / "dumps" / f"{kind}-{name.replace('/', '__')}-{plan}.json"
@@ -3185,7 +3249,15 @@ def run(args) -> int:
                         "typed": True,
                     }
                 else:
-                    dumps[(kind, name, plan)] = run_dump(test_binary, tree, plan, out, args.dump_timeout)
+                    package_graph = (
+                        with_package_graph
+                        and kind == "package"
+                        and plan == PACKAGE_GRAPH_PLAN
+                        and name not in held_out_names
+                    )
+                    dumps[(kind, name, plan)] = run_dump(
+                        test_binary, tree, plan, out, args.dump_timeout, package_graph=package_graph
+                    )
                 if dumps[(kind, name, plan)]["error"]:
                     print(f"{kind} {name} {plan}: {dumps[(kind, name, plan)]['error']}", file=sys.stderr)
             if kind == "package":
@@ -3216,6 +3288,7 @@ def run(args) -> int:
             cost_trees = {"constructs (all cases)": constructs_tree, **{name: package_trees[name] for name in tune_names}}
             check_cost = measure_cost(polint, cost_trees, scratch, args.cost_runs, args.dump_timeout)
         launcher_peak_rss_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+        package_graphs = package_graph_sizes(dumps, tune_names)
         if args.keep_dumps:
             shutil.copytree(scratch / "dumps", Path(args.keep_dumps), dirs_exist_ok=True)
         for run_entry in dumps.values():
@@ -3274,6 +3347,18 @@ def run(args) -> int:
             "decisions": DECISIONS,
             "cost": None,
         }
+        if package_graphs:
+            report["package_graphs"] = {
+                name: {
+                    "bytes": graph["bytes"],
+                    "gzip_bytes": len(graph["gzip"]),
+                    "source_bytes": report["packages"][name].get("source_bytes", 0),
+                    "gzip_bytes_per_mb": round(
+                        len(graph["gzip"]) / max(report["packages"][name].get("source_bytes", 0) / MB, 1e-9)
+                    ),
+                }
+                for name, graph in package_graphs.items()
+            }
 
         if check_cost is not None:
             add_per_mb(
@@ -3298,6 +3383,8 @@ def run(args) -> int:
 
     out_dir = Path(args.out) if args.out else bench.BASELINE
     out_dir.mkdir(parents=True, exist_ok=True)
+    for name, graph in package_graphs.items():
+        (out_dir / f"{name.replace('/', '__')}.package-graph.json.gz").write_bytes(graph["gzip"])
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     (out_dir / "report.md").write_text(render_markdown(report))
     print(f"wrote {out_dir / 'report.json'} and {out_dir / 'report.md'}", file=sys.stderr)

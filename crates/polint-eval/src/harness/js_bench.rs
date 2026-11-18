@@ -34,6 +34,10 @@
 //! say which kind of missing extraction an unmatched observed edge falls into.
 //! The census parses each file again on its own; it reads no analysis store and
 //! feeds nothing back into one.
+//!
+//! With `POLINT_JS_BENCH_PACKAGE_GRAPH=1` each tree's package graph is written
+//! beside its dump as `<output>.package-graph.json`: the tree is taken as one
+//! package, rooted at the tree. The report compresses it and records its size.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -54,6 +58,7 @@ const MANIFEST_ENV: &str = "POLINT_JS_BENCH_MANIFEST";
 const CAPS_ENV: &str = "POLINT_JS_BENCH_CAPS";
 const CENSUS_ENV: &str = "POLINT_JS_BENCH_CENSUS";
 const SOLVER_INPUT_ENV: &str = "POLINT_JS_BENCH_SOLVER_INPUT";
+const PACKAGE_GRAPH_ENV: &str = "POLINT_JS_BENCH_PACKAGE_GRAPH";
 const SCHEMA: &str = "polint-js-bench-facts-3";
 
 /// Analyses `tree` with the named capabilities and returns its normalized dump.
@@ -62,6 +67,7 @@ fn dump_tree(
     capabilities: &[&str],
     with_census: bool,
     solver_input: Option<&Path>,
+    package_graph: Option<&Path>,
 ) -> anyhow::Result<Value> {
     let loaded = crate::cli::load_config_for_check(tree, &[])?;
     let config_digest = crate::cache::keys::config_hash(&loaded);
@@ -100,6 +106,12 @@ fn dump_tree(
             &output.db.stable_key_interner(),
             &crate::ts::points_to::TsPointsToInputs::from_db(&output.db),
         )?;
+    }
+    if let Some(path) = package_graph {
+        let graph = crate::ts::points_to::package_graph::export(&output.db, tree, None)?;
+        let mut text = serde_json::to_string(&graph)?;
+        text.push('\n');
+        std::fs::write(path, text)?;
     }
     Ok(document)
 }
@@ -607,11 +619,21 @@ mod tests {
         // `stored::tests::solve_stored_inputs`.
         let with_solver_input =
             std::env::var_os(SOLVER_INPUT_ENV).is_some_and(|value| value == "1");
+        let with_package_graph =
+            std::env::var_os(PACKAGE_GRAPH_ENV).is_some_and(|value| value == "1");
         let manifest = std::fs::read_to_string(&manifest).expect("read manifest");
         for (tree, out) in manifest_entries(&manifest) {
             let solver_input = with_solver_input.then(|| out.with_extension("solver.json"));
-            let document = dump_tree(&tree, &capabilities, with_census, solver_input.as_deref())
-                .unwrap_or_else(|error| panic!("analyse {}: {error:#}", tree.display()));
+            let package_graph =
+                with_package_graph.then(|| out.with_extension("package-graph.json"));
+            let document = dump_tree(
+                &tree,
+                &capabilities,
+                with_census,
+                solver_input.as_deref(),
+                package_graph.as_deref(),
+            )
+            .unwrap_or_else(|error| panic!("analyse {}: {error:#}", tree.display()));
             let mut text = serde_json::to_string_pretty(&document).expect("serialize dump");
             text.push('\n');
             std::fs::write(&out, text)
@@ -729,7 +751,7 @@ mod tests {
                     .replace('\\', "/");
                 let tree = scratch.path().join(&id);
                 copy_case(&case, &tree);
-                let document = dump_tree(&tree, &["syntax"], false, None)
+                let document = dump_tree(&tree, &["syntax"], false, None, None)
                     .unwrap_or_else(|error| panic!("analyse {id}: {error:#}"));
                 for function in document["functions"].as_array().expect("functions") {
                     let key = function["key"].as_str().expect("function key");
