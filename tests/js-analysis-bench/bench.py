@@ -338,6 +338,14 @@ def main() -> int:
         default=600,
         help="seconds one tree's fact dump or check may take before it is recorded as timed out",
     )
+    report_parser.add_argument(
+        "--typescript",
+        default="",
+        help="TypeScript package directory for the typed plan (default: $POLINT_TS_TYPESCRIPT); "
+        "without one the typed plan is not run",
+    )
+    report_parser.add_argument("--keep-dumps", default="", help="directory to copy the raw fact dumps into")
+    report_parser.add_argument("--no-types", action="store_true", help="skip the typed plan even with a compiler")
     report_parser.set_defaults(run=run_report)
 
     args = parser.parse_args()

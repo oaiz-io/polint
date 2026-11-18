@@ -49,6 +49,27 @@ PLANS = {
     "base": "syntax,call_graph,symbols,references",
     "refined": "syntax,calls,control_flow,dataflow,call_graph,symbols,references",
 }
+# The typed plan is the refined plan run with the TypeScript type sidecar on,
+# over a copy of each tree that has a tsconfig and asks for the tier. It is added
+# to `PLANS` only when a TypeScript compiler is available (see `run`), so every
+# per-plan score and total covers it without a second code path.
+TYPED_PLAN = "typed"
+TYPED_TSCONFIG = {
+    "compilerOptions": {
+        "allowJs": True,
+        "checkJs": False,
+        "noEmit": True,
+        "skipLibCheck": True,
+        "target": "ES2022",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "jsx": "preserve",
+    },
+    "include": ["**/*"],
+}
+TYPED_SOURCE_SUFFIXES = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"}
+TYPED_CONFIG = "[languages.ts]\ntype_sidecar = true\n"
+TYPESCRIPT_ENV = "POLINT_TS_TYPESCRIPT"
 # The syntax census rides on the cheapest plan in its own run, so it never
 # adds to the timed base and refined dumps.
 CENSUS_CAPS = "syntax"
@@ -184,7 +205,49 @@ def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
     return case_trees, package_trees
 
 
-def run_dump(test_binary: Path, tree: Path, plan: str, out: Path, timeout: int) -> dict:
+def stage_typed(scratch: Path, trees: dict) -> dict:
+    """Copy each tree for the typed plan; return {key: typed tree}.
+
+    The copy gets a tsconfig (unless the tree brings its own) so the sidecar
+    has a project to load, and a `.polint.toml` that names the tier, so a
+    sidecar that cannot start is a reported setup failure, not a silent skip.
+    The plain trees stay untouched: the base and refined plans and the cost
+    runs must not see either file."""
+    typed = {}
+    for key, tree in trees.items():
+        dest = scratch / "typed" / tree.relative_to(scratch)
+        shutil.copytree(tree, dest)
+        if not (dest / "tsconfig.json").exists():
+            # TypeScript's wildcard `include` never matches `*.min.js`, so the
+            # sources are also listed by name: a minified bundle is still input.
+            sources = sorted(
+                path.relative_to(dest).as_posix()
+                for path in dest.rglob("*")
+                if path.is_file() and path.suffix in TYPED_SOURCE_SUFFIXES
+            )
+            config = {**TYPED_TSCONFIG, "files": sources}
+            (dest / "tsconfig.json").write_text(json.dumps(config, indent=2) + "\n")
+        (dest / ".polint.toml").write_text(TYPED_CONFIG)
+        typed[key] = dest
+    return typed
+
+
+def find_typescript(args) -> Path | None:
+    """The TypeScript package directory the typed plan hands to the sidecar."""
+    if args.no_types:
+        return None
+    configured = args.typescript or os.environ.get(TYPESCRIPT_ENV, "")
+    if not configured.strip():
+        return None
+    path = Path(configured.strip()).resolve()
+    if not (path / "package.json").is_file():
+        raise SystemExit(f"--typescript {path}: no package.json; point it at a `typescript` package directory")
+    return path
+
+
+def run_dump(
+    test_binary: Path, tree: Path, plan: str, out: Path, timeout: int, typescript: Path | None = None
+) -> dict:
     """Dump one tree's facts; return where the dump is, its wall clock and peak RSS.
 
     `plan` is a key of `PLANS`, or `census` for the syntax census run. The dump
@@ -199,6 +262,11 @@ def run_dump(test_binary: Path, tree: Path, plan: str, out: Path, timeout: int) 
     else:
         env["POLINT_JS_BENCH_CAPS"] = PLANS[plan]
         env.pop("POLINT_JS_BENCH_CENSUS", None)
+    if plan == TYPED_PLAN:
+        env[TYPESCRIPT_ENV] = str(typescript)
+    else:
+        # A compiler in the caller's environment must not reach the other plans.
+        env.pop(TYPESCRIPT_ENV, None)
     result = bench_matrix.measure(
         [str(test_binary), DUMP_FILTER, "--exact", "--ignored", "--test-threads", "1"],
         bench.REPO_ROOT,
@@ -226,6 +294,12 @@ def load_dump(run: dict) -> None:
         run["error"] = "dump discovered no files"
         return
     run["dump"] = dump
+    if run.get("typed") and not dump.get("ts_types", {}).get("callsites"):
+        # The tier ran nowhere, so the dump is the refined plan again and its
+        # scores would be read as what types add.
+        reasons = "; ".join(dump.get("ts_types", {}).get("diagnostics", [])) or "no type rows"
+        run["dump"] = None
+        run["error"] = f"type tier did not run: {reasons}"
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +323,8 @@ class Facts:
 
         # Edges this plan's answer gives: site -> {target function key}.
         self.targets: dict[str, set[str]] = defaultdict(set)
+        # The subset of `targets` the answer claims: resolved and not heuristic.
+        self.claimed_targets: dict[str, set[str]] = defaultdict(set)
         # Sites whose answer stops at an import binding (base edges only).
         self.import_stops: set[str] = set()
         # Sites this plan's answer itself marks as unresolved.
@@ -260,6 +336,8 @@ class Facts:
             for edge in dump["base_edges"]:
                 if edge["function"] is not None:
                     self.targets[edge["site"]].add(edge["function"])
+                    if edge["precision"] != "Heuristic":
+                        self.claimed_targets[edge["site"]].add(edge["function"])
             self.marked_unresolved = set(self.unresolved_sites)
         else:
             resolved_sites = set()
@@ -268,6 +346,8 @@ class Facts:
                     continue
                 if edge["function"] is not None:
                     self.targets[edge["site"]].add(edge["function"])
+                    if edge["status"] == "Resolved" and edge["precision"] != "Heuristic":
+                        self.claimed_targets[edge["site"]].add(edge["function"])
                 if edge["status"] == "Resolved":
                     resolved_sites.add(edge["site"])
                 else:
@@ -291,6 +371,11 @@ class Facts:
 
         The exact span comes first because a concise arrow returning another
         arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.
+        Without an exact span, a candidate that starts at or before the observed
+        start wins over one that starts inside it: the observed span of a
+        generic arrow `<T>(a: T) => (b) => ...` starts after its type
+        parameters, and the innermost function ending at the same byte is then
+        the arrow it returns, not the one that was called.
         Polint represents a class constructor by the class, so an observed
         `constructor` maps to the innermost polint function enclosing it.
         """
@@ -299,6 +384,9 @@ class Facts:
         exact = [f for f in candidates if f["start"] == start]
         if exact:
             return exact[0]
+        enclosing = [f for f in candidates if f["start"] <= start]
+        if enclosing:
+            return max(enclosing, key=lambda f: f["start"])
         if not candidates and name == "constructor":
             candidates = [
                 f
@@ -863,6 +951,150 @@ def attribute_gap(edge: dict, outcome: str, census: Census) -> tuple[str, set[st
     return "other", applies, inherited, shape
 
 
+# Why a missed edge was missed, read off the call's own source text: what the
+# callee expression is and what its receiver is bound to. Unlike `GAPS`, which
+# says which construct the callee is, a cause says what a resolver would have
+# to follow to reach it. The reading is heuristic (a lexical scan of the call
+# expression and its enclosing functions' parameter lists, not a parse), so a
+# cause count is an estimate to rank work by, never an exact census.
+CAUSES = {
+    "not_analysed": "site or callee in a file polint does not analyse (vendor, node_modules)",
+    "not_extracted": "site or callee not extracted by polint",
+    "import_binding": "call stops at an import binding",
+    "callback": "callback invoked by a built-in or library",
+    "constructor": "`new` / constructor",
+    "iife": "immediately invoked function",
+    "this_member": "method on `this`",
+    "super_member": "method on `super`",
+    "computed_key": "dynamic (computed) key",
+    "sequence_interop": "`(0, f)(...)` comma-sequence call",
+    "call_apply_bind": "`.call` / `.apply` / `.bind`",
+    "prototype_member": "member reached through `.prototype`",
+    "parameter_member": "method on a parameter",
+    "parameter_call": "call of a parameter (higher-order function)",
+    "module_member": "member of an import / require binding (namespace object)",
+    "object_literal_member": "member of a local object literal",
+    "call_result_member": "method on a call result (fluent chain)",
+    "local_member": "method on another local value",
+    "local_call": "call of a local identifier",
+    "other": "other",
+}
+IDENTIFIER_RE = re.compile(r"[A-Za-z_$][\w$]*")
+MODULE_BINDING_RES = (
+    r"import\s+\*\s+as\s+{name}\b",
+    r"import\s+{name}\b",
+    r"import\s*\{{[^}}]*\b{name}\b[^}}]*\}}",
+    r"\b{name}\s*=\s*(?:__importStar\(|__importDefault\(|_interopRequire\w*\()?require\(",
+    r"\b{name}\s*=\s*__webpack_require__\(",
+)
+KEYWORD_RECEIVERS = {"this", "super", "new", "typeof", "await", "void", "return"}
+
+
+def callee_text(call: str) -> str:
+    """The callee of a call expression's source text: the text before its last
+    top-level argument list, without a trailing `?.` or type arguments."""
+    text = call.strip()
+    if text.startswith("new "):
+        text = text[4:].lstrip()
+    if not text.endswith(")"):
+        return text
+    depth = 0
+    for index in range(len(text) - 1, -1, -1):
+        char = text[index]
+        if char == ")":
+            depth += 1
+        elif char == "(":
+            depth -= 1
+            if depth == 0:
+                head = text[:index].rstrip()
+                if head.endswith("?."):
+                    head = head[:-2]
+                if head.endswith(">") and "<" in head:
+                    head = head[: head.rfind("<")]
+                return head.rstrip()
+    return text
+
+
+def receiver_root(callee: str) -> str | None:
+    """The identifier a member callee's receiver chain starts at."""
+    match = IDENTIFIER_RE.match(callee.lstrip("(!"))
+    return match.group(0) if match else None
+
+
+def parameter_names(text: str) -> set[str]:
+    """Names in a function's parameter list, read from its source text."""
+    head = text.split("{", 1)[0] if "=>" not in text.split("{", 1)[0] else text.split("=>", 1)[0]
+    if "(" in head:
+        head = head[head.find("(") + 1 : head.rfind(")") if ")" in head else len(head)]
+    names = set()
+    for part in head.split(","):
+        part = part.split("=", 1)[0]
+        names.update(name for name in IDENTIFIER_RE.findall(part) if name not in ("async", "function"))
+    return names
+
+
+def classify_cause(
+    edge: dict, outcome: str, import_stop: bool, sources: Sources, census: "Census | None"
+) -> str:
+    if outcome == "site or callee in a file polint does not analyse":
+        return "not_analysed"
+    if outcome in EXTRACTION_OUTCOMES:
+        return "not_extracted"
+    # Only the base outcome names an import stop; a refined site that stops at
+    # the same binding is the same gap, so the cause reads the fact itself.
+    if import_stop:
+        return "import_binding"
+    if edge["kind"] == "callback":
+        return "callback"
+    if edge["syntax"] == "new":
+        return "constructor"
+    path, start, end = parse_key(edge["site"])
+    loaded = sources.load(path)
+    if loaded is None:
+        return "other"
+    data = loaded[0]
+    callee = callee_text(data[start:end].decode("utf-8", "replace"))
+    compact = re.sub(r"\s+", "", callee)
+    if compact.startswith(("function", "(function", "!function", "(()=>", "(async", "async(", "(()")):
+        return "iife"
+    if compact.startswith("(0,"):
+        return "sequence_interop"
+    if compact.startswith("this."):
+        return "this_member"
+    if compact.startswith("super."):
+        return "super_member"
+    if re.search(r"\.(call|apply|bind)$", compact):
+        return "call_apply_bind"
+    if edge["syntax"] == "computed-member" or compact.endswith("]"):
+        return "computed_key"
+    if ".prototype." in compact:
+        return "prototype_member"
+    root = receiver_root(compact)
+    parameters = set()
+    if census is not None:
+        for function in census.around(path, start, end):
+            parameters |= parameter_names(data[function["start"] : function["end"]].decode("utf-8", "replace"))
+    is_member = edge["syntax"] in ("member", "computed-member") or "." in compact
+    if not is_member:
+        return "parameter_call" if compact in parameters else "local_call"
+    if root is None or root in KEYWORD_RECEIVERS:
+        return "other"
+    if root in parameters:
+        return "parameter_member"
+    text = data.decode("utf-8", "replace")
+    escaped = re.escape(root)
+    if any(re.search(pattern.format(name=escaped), text) for pattern in MODULE_BINDING_RES):
+        return "module_member"
+    receiver = compact[: compact.rfind(".")] if "." in compact else compact
+    if "(" in receiver:
+        return "call_result_member"
+    if re.search(rf"\b(?:const|let|var)\s+{escaped}\s*=\s*\{{", text) or re.search(
+        rf"\b{escaped}\s*=\s*\{{", text
+    ):
+        return "object_literal_member"
+    return "local_member"
+
+
 def describe_function(facts: Facts, key: str, sources: Sources) -> str:
     function = facts.functions.get(key)
     name = (function or {}).get("name") or "<anonymous>"
@@ -913,16 +1145,55 @@ def polint_answer(example: dict) -> str:
     return answer
 
 
+def unobserved_claimed_targets(observed: dict, observed_at: dict, facts: Facts, sources: Sources) -> dict:
+    """Claimed targets at sites the run executed that the run never called there.
+
+    A site counts once the run was seen calling a polint function from it. A
+    claimed target (resolved, not heuristic) counts when it is in an
+    instrumented file, so the run would have recorded a call to it, and the run
+    never called it from that site. On a single-target answer that is a false
+    precise edge: polint names one callee and every execution of the site went
+    elsewhere. On a multi-target answer it is only an upper bound, because the
+    run may not have taken the path that reaches the other targets.
+    """
+    instrumented = set(observed["instrumented_files"])
+    counts = Counter({"single_target": 0, "multi_target": 0})
+    examples = []
+    for site_key, called in sorted(observed_at.items()):
+        claimed = facts.claimed_targets.get(site_key, set())
+        for target in sorted(claimed - called):
+            function = facts.functions.get(target)
+            if function is None or function["module"] or function["file"] not in instrumented:
+                continue
+            shape = "single_target" if len(claimed) == 1 else "multi_target"
+            counts[shape] += 1
+            if shape == "single_target" or len(examples) < EXAMPLES_PER_OUTCOME:
+                examples.append(
+                    {
+                        "answer": shape,
+                        "site": sources.at(site_key),
+                        "site_text": sources.excerpt(site_key),
+                        "target": describe_function(facts, target, sources),
+                        "observed_callees": [describe_function(facts, key, sources) for key in sorted(called)],
+                    }
+                )
+    return {**dict(sorted(counts.items())), "examples": examples}
+
+
 def score_package_calls(observed: dict, facts: Facts, census: Census | None, sources: Sources) -> dict:
     by_kind = defaultdict(Counter)
     by_syntax = defaultdict(Counter)
     outcomes = Counter()
     examples = defaultdict(list)
+    causes = Counter()
+    cause_examples = defaultdict(list)
     gaps_exclusive = Counter()
     gaps_applying = Counter()
     gap_examples = defaultdict(list)
     inherited = 0
     other_shapes = Counter()
+    # Polint site -> the polint functions the run was seen calling from it.
+    observed_at: dict[str, set[str]] = defaultdict(set)
     for edge in observed["edges"]:
         kind, syntax = edge["kind"], edge["syntax"]
         if kind == "implicit":
@@ -953,12 +1224,20 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             outcome = "no target, marked unresolved"
         else:
             outcome = "no target, no unresolved marker"
+        if site is not None and callee is not None:
+            observed_at[site["key"]].add(callee["key"])
         outcomes[outcome] += 1
         for bucket in (by_kind[kind], by_syntax[syntax]):
             bucket["observed"] += 1
             bucket["found"] += outcome == "found"
         if outcome == FALSE_COMPLETE or len(examples[outcome]) < EXAMPLES_PER_OUTCOME:
             examples[outcome].append(describe_edge(edge, outcome, facts, sources))
+        if outcome != "found":
+            import_stop = site is not None and site["key"] in facts.import_stops
+            cause = classify_cause(edge, outcome, import_stop, sources, census)
+            causes[cause] += 1
+            if len(cause_examples[cause]) < EXAMPLES_PER_GAP:
+                cause_examples[cause].append(describe_edge(edge, outcome, facts, sources))
         if outcome != "found" and census is not None:
             gap, applying, through_inheritance, shape = attribute_gap(edge, outcome, census)
             gaps_exclusive[gap] += 1
@@ -968,6 +1247,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             inherited += gap == "class_method" and through_inheritance
             if len(gap_examples[gap]) < EXAMPLES_PER_GAP:
                 gap_examples[gap].append(describe_edge(edge, outcome, facts, sources))
+    wrong = unobserved_claimed_targets(observed, observed_at, facts, sources)
     found = outcomes["found"]
     total = sum(outcomes.values())
     result = {
@@ -976,7 +1256,9 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
         "found": found,
         "recall": ratio(found, total),
         "outcomes": dict(sorted(outcomes.items())),
+        "wrong_targets": wrong,
         "outcome_examples": dict(sorted(examples.items())),
+        "causes": {"counts": dict(sorted(causes.items())), "examples": dict(sorted(cause_examples.items()))},
         "by_kind": {k: {**v, "recall": ratio(v["found"], v["observed"])} for k, v in sorted(by_kind.items())},
         "by_syntax": {k: {**v, "recall": ratio(v["found"], v["observed"])} for k, v in sorted(by_syntax.items())},
     }
@@ -1035,6 +1317,10 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                 "unresolved_calls": facts.unresolved_call_share(),
                 "references": facts.reference_share(),
             }
+            if plan == TYPED_PLAN:
+                entry[plan]["ts_types"] = {
+                    key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")
+                }
         results[name] = entry
     return results
 
@@ -1093,6 +1379,12 @@ def rank_gaps(packages: dict) -> dict:
 
 # ---------------------------------------------------------------------------
 # cost
+
+
+def typescript_version(typescript: Path | None) -> str | None:
+    if typescript is None:
+        return None
+    return json.loads((typescript / "package.json").read_text()).get("version")
 
 
 def gzip_bytes(root: Path) -> int:
@@ -1293,6 +1585,53 @@ def render_false_complete(report: dict, add) -> None:
     add("")
 
 
+def render_wrong_targets(report: dict, add) -> None:
+    plans = list(report["plans"])
+    add("### Claimed targets the run never called")
+    add("")
+    add("A claimed target is resolved and not heuristic. It counts here when the run executed the site, the target is")
+    add("in an instrumented file, and the run never called it from that site. On a **single-target** answer that is a")
+    add("false precise edge: every execution of the site went elsewhere. On a **multi-target** answer it is an upper")
+    add("bound only, since the run may not have taken the paths to the other targets. A site matched to a polint site")
+    add("by its end byte can also inflate both counts.")
+    add("")
+    add("| package | " + " | ".join(f"{plan}: single / multi" for plan in plans) + " |")
+    add("|---|" + "---|" * len(plans))
+    totals = {plan: Counter() for plan in plans}
+    for name, entry in report["packages"].items():
+        cells = []
+        for plan in plans:
+            wrong = entry.get(plan, {}).get("wrong_targets")
+            if wrong is None:
+                cells.append("n/a")
+                continue
+            totals[plan].update({key: wrong[key] for key in ("single_target", "multi_target")})
+            cells.append(f"{wrong['single_target']} / {wrong['multi_target']}")
+        add(f"| {name} | " + " | ".join(cells) + " |")
+    add(
+        "| **total** | "
+        + " | ".join(f"**{totals[plan]['single_target']} / {totals[plan]['multi_target']}**" for plan in plans)
+        + " |"
+    )
+    add("")
+    add("| package | plan | site | site text | single-target answer | the run called |")
+    add("|---|---|---|---|---|---|")
+    any_case = False
+    for name, entry in report["packages"].items():
+        for plan in plans:
+            for example in entry.get(plan, {}).get("wrong_targets", {}).get("examples", []):
+                if example["answer"] != "single_target":
+                    continue
+                any_case = True
+                add(
+                    f"| {name} | {plan} | {example['site']} | `{cell(example['site_text'])}` "
+                    f"| {cell(example['target'])} | {cell(', '.join(example['observed_callees']))} |"
+                )
+    if not any_case:
+        add("| none | | | | | |")
+    add("")
+
+
 def render_outcome_examples(report: dict, add) -> None:
     add("### One example per package, plan and outcome")
     add("")
@@ -1310,6 +1649,45 @@ def render_outcome_examples(report: dict, add) -> None:
                     f"| {example['syntax']} / {example['kind']} | {cell(example['observed_callee'])} "
                     f"| {cell(polint_answer(example))} |"
                 )
+    add("")
+
+
+def render_types(report: dict, add) -> None:
+    """What the TypeScript type tier adds to the refined plan, and what it costs."""
+    add(f"### What types add (refined vs typed, TypeScript {report.get('typescript')})")
+    add("")
+    add("**typed** is the refined plan with `[languages.ts] type_sidecar = true` over a copy of each tree with a")
+    add("tsconfig (`allowJs`, `nodenext`). The type tier only feeds the refined layer, so base is unchanged by it.")
+    add("Dump time and peak RSS are one fact dump each, sidecar included.")
+    add("")
+    add("| package | recall refined | recall typed | false-complete refined / typed | type callsite rows | dump s refined / typed | dump peak MB refined / typed |")
+    add("|---|---|---|---|---|---|---|")
+    dump_cost = report["dump_cost"]
+    for name, entry in report["packages"].items():
+        refined, typed = entry.get("refined", {}), entry.get(TYPED_PLAN, {})
+
+        def recall(scored):
+            if "error" in scored:
+                return scored["error"]
+            return frac(scored["found"], scored["observed_edges"])
+
+        def cost(plan, key, scale):
+            row = dump_cost.get(name, {}).get(plan)
+            return f"{row[key] / scale:.1f}" if row else "n/a"
+
+        add(
+            f"| {name} | {recall(refined)} | {recall(typed)} "
+            f"| {refined.get('outcomes', {}).get(FALSE_COMPLETE, 0)} / {typed.get('outcomes', {}).get(FALSE_COMPLETE, 0)} "
+            f"| {typed.get('ts_types', {}).get('callsites', 'n/a')} "
+            f"| {cost('refined', 'wall_ms', 1000)} / {cost(TYPED_PLAN, 'wall_ms', 1000)} "
+            f"| {cost('refined', 'peak_rss_bytes', MB)} / {cost(TYPED_PLAN, 'peak_rss_bytes', MB)} |"
+        )
+    add("")
+    fc = report["constructs"]["false_complete"]
+    add(
+        f"Constructs, typed: false-complete hidden paths {fc.get(TYPED_PLAN, 0)}, "
+        f"false-complete call lines {fc.get('call_lines_' + TYPED_PLAN, 0)}."
+    )
     add("")
 
 
@@ -1450,6 +1828,12 @@ def render_markdown(report: dict) -> str:
             f"| {pct(base.get('references', {}).get('not_resolved_share'))} |"
         )
     add("")
+    render_wrong_targets(report, add)
+    if TYPED_PLAN in report["plans"]:
+        render_types(report, add)
+    else:
+        add("The typed plan (refined with the TypeScript type sidecar) was not run: no TypeScript compiler was given.")
+        add("")
     add("### Package recall by observed call kind and syntax")
     add("")
     add("| package | kind / syntax | observed | base | refined |")
@@ -1575,8 +1959,8 @@ DECISIONS = [
     "A base edge whose target is an import binding rather than a function is a miss, counted as 'stops at import "
     "binding'.",
     "Observed package edges are mapped to polint by exact call-expression span (falling back to the polint call "
-    "site in the same file ending at the same byte) and by callee end byte (innermost polint function in the same "
-    "file ending there).",
+    "site in the same file ending at the same byte) and by callee span (the same span, else the innermost polint "
+    "function in the same file ending at the same byte that does not start inside the observed span).",
     "Observed edges whose site or callee has no polint counterpart stay in the denominator: recall is over every "
     "observed edge.",
     "Export accuracy compares exported names per file; star re-export rows and the CommonJS whole-value "
@@ -1619,6 +2003,9 @@ DECISIONS = [
 def run(args) -> int:
     inputs = bench.load_inputs()
     cases = bench.construct_cases()
+    typescript = find_typescript(args)
+    if typescript is not None:
+        PLANS[TYPED_PLAN] = PLANS["refined"]
     polint, test_binary = build(args)
     version = subprocess.run([str(polint), "--version"], capture_output=True, text=True, check=True).stdout.split()[-1]
 
@@ -1627,6 +2014,15 @@ def run(args) -> int:
     with tempfile.TemporaryDirectory(prefix="polint-js-bench-report-") as scratch_name:
         scratch = Path(scratch_name)
         case_trees, package_trees = stage(scratch, inputs, cases)
+        typed_trees = {}
+        if typescript is not None:
+            typed_trees = stage_typed(
+                scratch,
+                {
+                    **{("case", case_id): tree for case_id, tree in case_trees.items()},
+                    **{("package", name): tree for name, tree in package_trees.items()},
+                },
+            )
         (scratch / "dumps").mkdir()
         dumps = {}
         trees = [("case", case_id, tree) for case_id, tree in case_trees.items()]
@@ -1634,7 +2030,13 @@ def run(args) -> int:
         for kind, name, tree in trees:
             for plan in PLANS:
                 out = scratch / "dumps" / f"{kind}-{name.replace('/', '__')}-{plan}.json"
-                dumps[(kind, name, plan)] = run_dump(test_binary, tree, plan, out, args.dump_timeout)
+                if plan == TYPED_PLAN:
+                    dumps[(kind, name, plan)] = {
+                        **run_dump(test_binary, typed_trees[(kind, name)], plan, out, args.dump_timeout, typescript),
+                        "typed": True,
+                    }
+                else:
+                    dumps[(kind, name, plan)] = run_dump(test_binary, tree, plan, out, args.dump_timeout)
                 if dumps[(kind, name, plan)]["error"]:
                     print(f"{kind} {name} {plan}: {dumps[(kind, name, plan)]['error']}", file=sys.stderr)
             if kind == "package":
@@ -1663,6 +2065,8 @@ def run(args) -> int:
             cost_trees = {"constructs (all cases)": constructs_tree, **package_trees}
             check_cost = measure_cost(polint, cost_trees, scratch, args.cost_runs, args.dump_timeout)
         launcher_peak_rss_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+        if args.keep_dumps:
+            shutil.copytree(scratch / "dumps", Path(args.keep_dumps), dirs_exist_ok=True)
         for run_entry in dumps.values():
             load_dump(run_entry)
 
@@ -1673,6 +2077,7 @@ def run(args) -> int:
             "schema": REPORT_SCHEMA,
             "polint_version": version,
             "plans": {plan: caps.split(",") for plan, caps in PLANS.items()},
+            "typescript": typescript_version(typescript),
             "constructs": {
                 "summary": construct_summary(case_results),
                 "false_complete": {
@@ -1698,6 +2103,10 @@ def run(args) -> int:
             },
             "packages": packages,
             "dump_budgets_s": budgets,
+            # One fact dump per package and plan, kept even without the cost runs.
+            "dump_cost": {
+                name: {plan: dumps[("package", name, plan)]["cost"] for plan in PLANS} for name in package_trees
+            },
             "gap_ranking": rank_gaps(packages),
             "decisions": DECISIONS,
             "cost": None,

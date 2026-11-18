@@ -379,8 +379,15 @@ pub(crate) fn observe_kernel_fixture(fixture: &NativeFixture) -> anyhow::Result<
 pub(crate) fn copy_fixture_repo_for_test(
     fixture: &NativeFixture,
 ) -> anyhow::Result<tempfile::TempDir> {
+    copy_repo_dir_for_test(&fixture.repo_dir)
+}
+
+/// Copies a checked-in repo directory into a fresh temp dir, so a kernel run
+/// can write its cache there instead of into the source tree.
+#[cfg(test)]
+pub(crate) fn copy_repo_dir_for_test(repo_dir: &Path) -> anyhow::Result<tempfile::TempDir> {
     let temp = tempfile::tempdir().context("create temp fixture repo")?;
-    copy_dir_contents(&fixture.repo_dir, temp.path())?;
+    copy_dir_contents(repo_dir, temp.path())?;
     Ok(temp)
 }
 
@@ -470,6 +477,7 @@ pub(crate) fn run_kernel_for_repo_with_plan_for_test(
     repo_root: &Path,
     plan: &AnalysisPlan,
 ) -> anyhow::Result<crate::analysis_kernel::KernelOutput> {
+    ensure_outside_checked_in_tree(repo_root)?;
     let loaded = load_config(repo_root)?;
     let config_digest = config_hash(&loaded);
     let rule_digest = rule_hash(&[], None, &BTreeMap::new());
@@ -482,6 +490,30 @@ pub(crate) fn run_kernel_for_repo_with_plan_for_test(
         plan,
         parallel: true,
     })
+}
+
+/// A kernel run writes its analysis cache under the analysed repo. Run in place
+/// on a checked-in fixture, it writes generated state into the source tree, and
+/// a concurrent test copying the same fixture can read a cache file that is
+/// renamed away mid-copy. Tests analyse a temp copy instead.
+#[cfg(test)]
+fn ensure_outside_checked_in_tree(repo_root: &Path) -> anyhow::Result<()> {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .context("workspace root")?
+        .canonicalize()
+        .context("canonicalize workspace root")?;
+    let repo = repo_root
+        .canonicalize()
+        .with_context(|| format!("canonicalize analysed repo {}", repo_root.display()))?;
+    if repo.starts_with(&workspace) && !repo.starts_with(workspace.join("target")) {
+        bail!(
+            "kernel test runs must analyse a temp copy, not the checked-in tree: {}",
+            repo_root.display()
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -497,6 +529,14 @@ fn copy_dir_contents(source: &Path, destination: &Path) -> anyhow::Result<()> {
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
         let file_type = entry.file_type()?;
+        // `.polint/cache` is generated, git-ignored state. Copying it would make
+        // a cold fixture run start warm.
+        if file_type.is_dir()
+            && entry.file_name() == "cache"
+            && source.file_name().is_some_and(|name| name == ".polint")
+        {
+            continue;
+        }
         if file_type.is_symlink() {
             bail!(
                 "fixture repos must not contain symlinks: {}",
@@ -3528,6 +3568,44 @@ path = "repo"
             .and_then(Path::parent)
             .expect("workspace root")
             .to_path_buf()
+    }
+
+    #[test]
+    fn kernel_test_runs_refuse_the_checked_in_tree() {
+        let fixture_repo =
+            repo_root().join("tests/eval-fixtures/identity/crlf_normalization/repo-lf");
+        let error = run_kernel_for_repo_for_test(&fixture_repo)
+            .err()
+            .expect("an in-place run on a checked-in fixture is refused");
+        assert!(
+            error.to_string().contains("temp copy"),
+            "unexpected error: {error:#}"
+        );
+
+        let copy = copy_repo_dir_for_test(&fixture_repo).unwrap();
+        run_kernel_for_repo_for_test(copy.path()).expect("a temp copy is analysed");
+    }
+
+    #[test]
+    fn fixture_copies_leave_generated_cache_state_behind() {
+        let source = tempfile::tempdir().unwrap();
+        for path in [
+            "src/app.ts",
+            "src/cache/kept.ts",
+            ".polint/rules/kept.rs",
+            ".polint/cache/analysis/stale.bin",
+        ] {
+            let path = source.path().join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "x").unwrap();
+        }
+
+        let copy = copy_repo_dir_for_test(source.path()).unwrap();
+
+        assert!(copy.path().join("src/app.ts").is_file());
+        assert!(copy.path().join("src/cache/kept.ts").is_file());
+        assert!(copy.path().join(".polint/rules/kept.rs").is_file());
+        assert!(!copy.path().join(".polint/cache").exists());
     }
 
     #[test]

@@ -2062,7 +2062,7 @@ mod tests {
                 Digest::from_parts(DigestKind::ProviderOutput, "ts_syntax", &["base"]),
             );
             let mut changed_schema = base.clone();
-            changed_schema.schema_version = "symbol-graph-facts-3:3".to_string();
+            changed_schema.schema_version = "symbol-graph-facts-4:4".to_string();
 
             assert_ne!(base, changed_schema);
             assert!(base.extension_digests.contains(&Digest::absent(
@@ -2753,7 +2753,7 @@ mod symbol_graph_semantic_layer_key {
     fn tracks_schema_upstream_outputs_and_absent_extension_digest() {
         let base = key(semantic_provider_parameter_digest());
         let mut changed_schema = base.clone();
-        changed_schema.schema_version = "symbol-graph-facts-3:3".to_string();
+        changed_schema.schema_version = "symbol-graph-facts-4:4".to_string();
 
         assert_ne!(base, changed_schema);
         assert!(base.extension_digests.contains(&Digest::absent(

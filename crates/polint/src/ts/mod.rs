@@ -50,6 +50,9 @@ use crate::internal_core::{StableKeyId, StableKeyInterner};
 mod test_cache;
 #[cfg(all(test, feature = "lang-typescript"))]
 mod tests;
+// The kernel harness lives under `crate::eval`, which needs both languages.
+#[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
+mod direct_call_tests;
 
 thread_local! {
     static FRONTEND_STABLE_KEYS: RefCell<Option<StableKeyInterner>> = const { RefCell::new(None) };

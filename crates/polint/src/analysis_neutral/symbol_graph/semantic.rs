@@ -118,6 +118,45 @@ pub struct StableExportIdentity {
     pub status: SemanticStatus,
 }
 
+/// A function a binding may hold, keyed by the binding symbol's identity.
+///
+/// `binding` is the binding symbol's `primary_span` (its first declaration's
+/// name); `function` is the span of the function syntax fact the binding is
+/// declared with. A binding declared by several function declarations (an
+/// overload set, or a function merged with an interface) has one row per
+/// declaration. Rows exist only when no other value can reach the binding: a
+/// `const` or a never-written binding in a file without direct `eval`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValueFunctionFact {
+    pub binding: Span,
+    pub function: Span,
+    #[serde(default)]
+    pub kind: ValueFunctionKind,
+}
+
+/// How a [`ValueFunctionFact`] binding is declared with its function.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ValueFunctionKind {
+    /// A variable initialised with exactly this function or arrow expression.
+    #[default]
+    Literal,
+    /// A function declaration or named function expression with a body.
+    Implementation,
+    /// A body-less function declaration: an overload signature or an ambient
+    /// declaration.
+    Signature,
+}
+
+/// An `ns.name(...)` call whose `ns` resolves to a namespace import binding.
+///
+/// `call` is the call site's span and `property` the span of `name`, which is
+/// the `primary_span` of the module-linked call reference on that member.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NamespaceMemberCallFact {
+    pub call: Span,
+    pub property: Span,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SemanticIndexOutput {
     pub scopes: Vec<ScopeFact>,
@@ -127,6 +166,8 @@ pub struct SemanticIndexOutput {
     pub resolutions: Vec<ResolutionFact>,
     pub generated_symbols: Vec<GeneratedSymbolFact>,
     pub stable_exports: Vec<StableExportIdentity>,
+    pub value_functions: Vec<ValueFunctionFact>,
+    pub namespace_member_calls: Vec<NamespaceMemberCallFact>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -138,6 +179,10 @@ pub struct CachedSemanticIndexOutput {
     pub resolutions: Vec<CachedResolutionFact>,
     pub generated_symbols: Vec<CachedGeneratedSymbolFact>,
     pub stable_exports: Vec<CachedStableExportIdentity>,
+    #[serde(default)]
+    pub value_functions: Vec<ValueFunctionFact>,
+    #[serde(default)]
+    pub namespace_member_calls: Vec<NamespaceMemberCallFact>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -386,6 +431,8 @@ impl CachedSemanticIndexOutput {
                     status: row.status,
                 })
                 .collect(),
+            value_functions: output.value_functions.clone(),
+            namespace_member_calls: output.namespace_member_calls.clone(),
         }
     }
 
@@ -507,6 +554,8 @@ impl CachedSemanticIndexOutput {
                     status: row.status,
                 })
                 .collect(),
+            value_functions: self.value_functions,
+            namespace_member_calls: self.namespace_member_calls,
             stable_exports: self
                 .stable_exports
                 .into_iter()
@@ -550,6 +599,8 @@ pub struct SemanticIndexBuilder {
     resolutions: Vec<ResolutionFact>,
     generated_symbols: Vec<GeneratedSymbolFact>,
     stable_exports: Vec<StableExportIdentity>,
+    value_functions: Vec<ValueFunctionFact>,
+    namespace_member_calls: Vec<NamespaceMemberCallFact>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -729,6 +780,14 @@ impl SemanticIndexBuilder {
         id
     }
 
+    pub fn add_value_function(&mut self, fact: ValueFunctionFact) {
+        self.value_functions.push(fact);
+    }
+
+    pub fn add_namespace_member_call(&mut self, fact: NamespaceMemberCallFact) {
+        self.namespace_member_calls.push(fact);
+    }
+
     pub fn finish(self, interner: &crate::internal_core::StableKeyInterner) -> SemanticIndexOutput {
         SemanticIndexOutput {
             scopes: sort_rows(self.scopes, |row| scope_sort_key(interner, row)),
@@ -744,6 +803,25 @@ impl SemanticIndexBuilder {
             stable_exports: sort_rows(self.stable_exports, |row| {
                 stable_export_sort_key(interner, row)
             }),
+            value_functions: sort_rows(self.value_functions, |row| {
+                (
+                    row.binding.file,
+                    row.binding.start_byte,
+                    row.binding.end_byte,
+                    row.function.start_byte,
+                    row.function.end_byte,
+                    row.kind,
+                )
+            }),
+            namespace_member_calls: sort_rows(self.namespace_member_calls, |row| {
+                (
+                    row.call.file,
+                    row.call.start_byte,
+                    row.call.end_byte,
+                    row.property.start_byte,
+                    row.property.end_byte,
+                )
+            }),
         }
     }
 }
@@ -757,6 +835,9 @@ impl SemanticIndexOutput {
         self.resolutions.extend(other.resolutions);
         self.generated_symbols.extend(other.generated_symbols);
         self.stable_exports.extend(other.stable_exports);
+        self.value_functions.extend(other.value_functions);
+        self.namespace_member_calls
+            .extend(other.namespace_member_calls);
     }
 }
 

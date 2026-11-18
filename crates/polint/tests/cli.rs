@@ -5702,6 +5702,84 @@ func Wire() error { return HandleSave(NewRepo(&DB{}, "x"), "1") }
     );
 }
 
+fn write_ts_call_graph_rule_repo(root: &Path) {
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_phase41_rule_pack(
+        root,
+        r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::handlers_reach_admin_gate()])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
+
+#[polint::rule(id = "local/handlers-reach-admin-gate", description = "Handlers reach the admin gate", severity = "error")]
+pub(crate) fn handlers_reach_admin_gate(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    graph: CallGraph<'_>,
+) -> RuleResult {
+    let Some(gate) = functions.iter().find(|function| function.name == "requireAdmin") else {
+        return Ok(());
+    };
+    let walk = CallGraphWalk::new(4).with_min_precision(CallEdgePrecision::SetupAware);
+    for handler in functions.iter().filter(|function| function.name.starts_with("handle")) {
+        let reaches = graph.reachable(handler.id, walk).path_to(gate.id).is_some();
+        let verb = if reaches { "reaches" } else { "does not reach" };
+        ctx.report(Diagnostic::warning(
+            ctx.rule_id(),
+            ctx.file_path(handler.file),
+            handler.span.diagnostic_range(),
+            format!("{} {verb} requireAdmin", handler.name),
+        ));
+    }
+    Ok(())
+}
+"#,
+    );
+    write_file(
+        &root.join("src/gate.ts"),
+        "export const requireAdmin = (id: string): void => {\n  console.log(id);\n};\n",
+    );
+    write_file(
+        &root.join("src/index.ts"),
+        "export { requireAdmin } from \"./gate\";\n",
+    );
+    write_file(
+        &root.join("src/handlers.ts"),
+        r#"import { requireAdmin } from "./index";
+
+const audit = (id: string): void => {
+  requireAdmin(id);
+};
+
+export function handleSave(id: string): void {
+  requireAdmin(id);
+}
+
+export function handleAudit(id: string): void {
+  audit(id);
+}
+
+export function handleList(): string[] {
+  return [];
+}
+"#,
+    );
+}
+
 fn write_symbol_capability_rule_repo(root: &Path) {
     let polint_path = repo_root()
         .join("crates/polint")
@@ -10532,6 +10610,40 @@ mod capability_planning {
         assert!(
             diagnostics_for_rule(&json, "polint/capability").is_empty(),
             "both views should be available with a go.mod: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn call_graph_follows_ts_imports_and_const_function_literals_for_an_outside_rule() {
+        let temp = tempfile::tempdir().unwrap();
+        write_ts_call_graph_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let mut messages = diagnostics_for_rule(&json, "local/handlers-reach-admin-gate")
+            .iter()
+            .map(|diagnostic| {
+                diagnostic["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        messages.sort();
+        assert_eq!(
+            messages,
+            [
+                "handleAudit reaches requireAdmin",
+                "handleList does not reach requireAdmin",
+                "handleSave reaches requireAdmin",
+            ],
+            "{json:#?}"
         );
     }
 

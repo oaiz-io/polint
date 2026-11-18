@@ -882,13 +882,13 @@ mod tests {
         // loading BOTH repos and comparing rendered identity spans.
         use crate::analysis::identity::render::jelly_span;
 
+        use crate::eval::observed::{copy_repo_dir_for_test, run_kernel_for_repo_for_test};
+
         let fixture_root = repo_root().join("tests/eval-fixtures/identity/crlf_normalization");
-        let lf_output =
-            crate::eval::observed::run_kernel_for_repo_for_test(&fixture_root.join("repo-lf"))
-                .unwrap();
-        let crlf_output =
-            crate::eval::observed::run_kernel_for_repo_for_test(&fixture_root.join("repo-crlf"))
-                .unwrap();
+        let lf_repo = copy_repo_dir_for_test(&fixture_root.join("repo-lf")).unwrap();
+        let crlf_repo = copy_repo_dir_for_test(&fixture_root.join("repo-crlf")).unwrap();
+        let lf_output = run_kernel_for_repo_for_test(lf_repo.path()).unwrap();
+        let crlf_output = run_kernel_for_repo_for_test(crlf_repo.path()).unwrap();
 
         let render_by_relative_path = |output: &crate::analysis_kernel::KernelOutput| {
             let files = output

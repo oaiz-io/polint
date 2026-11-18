@@ -380,6 +380,10 @@ fn derive_requested_symbols_uncached_with_payload(
         semantic_output.generated_symbols,
         semantic_output.stable_exports,
     );
+    db.replace_callee_identity_facts(
+        semantic_output.value_functions,
+        semantic_output.namespace_member_calls,
+    );
     db.replace_symbol_graph_facts(output.symbols, output.definitions, output.references);
     derivation.diagnostics.extend(output.diagnostics);
     derivation
@@ -692,6 +696,7 @@ fn restore_symbol_graph_layer_payload(db: &mut AnalysisDb, payload: &SymbolGraph
         semantic.generated_symbols,
         semantic.stable_exports,
     );
+    db.replace_callee_identity_facts(semantic.value_functions, semantic.namespace_member_calls);
 }
 
 fn validate_symbol_graph_layer_payload(
@@ -730,6 +735,8 @@ fn semantic_index_payload(db: &AnalysisDb) -> SemanticIndexOutput {
         stable_exports: sorted_semantic_rows(db.stable_exports().to_vec(), |row| {
             stable_export_payload_sort_key(&interner, row)
         }),
+        value_functions: db.value_functions().to_vec(),
+        namespace_member_calls: db.namespace_member_calls().to_vec(),
     }
 }
 
@@ -2935,5 +2942,361 @@ export const used = missing;
                 && reference.status == SymbolResolutionStatus::Unresolved
                 && reference.precision == SymbolPrecision::Unresolved
         }));
+    }
+
+    fn resolved(import: ImportId, file: FileId, target: ModuleNodeId) -> ResolvedImportFact {
+        ResolvedImportFact::new(
+            crate::core::ResolvedImportId::from_raw(0),
+            import,
+            file,
+            Some(target),
+            ResolutionStatus::Resolved,
+            ResolutionPrecision::ExactFile,
+            None,
+        )
+    }
+
+    fn exported_symbol_in<'a>(
+        symbols: &'a [SymbolFact],
+        file: FileId,
+        name: &str,
+    ) -> &'a SymbolFact {
+        symbols
+            .iter()
+            .find(|symbol| symbol.name == name && symbol.is_exported && symbol.file == Some(file))
+            .unwrap_or_else(|| panic!("missing exported symbol `{name}` in {file:?}"))
+    }
+
+    #[test]
+    fn links_imports_through_barrel_re_exports_to_declaring_symbols() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let handlers = r#"
+import { requireAdmin, renamed, onlyStar, dup, missing } from "./index";
+
+export const used = [requireAdmin, renamed, onlyStar, dup, missing];
+"#;
+        let index = r#"
+export { requireAdmin } from "./gate";
+export { other as renamed } from "./gate";
+export * from "./c";
+export * from "./a";
+export * from "./b";
+"#;
+        let gate = "export function requireAdmin() {}\nexport function other() {}\n";
+        let only_star = "export function onlyStar() {}\n";
+        let a = "export function dup() {}\n";
+        let b = "export function dup() {}\n";
+        let handlers_file = add_file(&mut db, temp.path(), "src/handlers.ts", handlers);
+        let index_file = add_file(&mut db, temp.path(), "src/index.ts", index);
+        let gate_file = add_file(&mut db, temp.path(), "src/gate.ts", gate);
+        let c_file = add_file(&mut db, temp.path(), "src/c.ts", only_star);
+        let a_file = add_file(&mut db, temp.path(), "src/a.ts", a);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let nodes = [
+            (ModuleNodeId::from_raw(0), "src/handlers.ts", handlers_file),
+            (ModuleNodeId::from_raw(1), "src/index.ts", index_file),
+            (ModuleNodeId::from_raw(2), "src/gate.ts", gate_file),
+            (ModuleNodeId::from_raw(3), "src/c.ts", c_file),
+            (ModuleNodeId::from_raw(4), "src/a.ts", a_file),
+            (ModuleNodeId::from_raw(5), "src/b.ts", b_file),
+        ];
+        let imports = vec![
+            (
+                push_import(&mut db, handlers_file, handlers, "./index", 0),
+                handlers_file,
+                nodes[1].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./gate", 0),
+                index_file,
+                nodes[2].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./gate", 1),
+                index_file,
+                nodes[2].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./c", 0),
+                index_file,
+                nodes[3].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./a", 0),
+                index_file,
+                nodes[4].0,
+            ),
+            (
+                push_import(&mut db, index_file, index, "./b", 0),
+                index_file,
+                nodes[5].0,
+            ),
+        ];
+        db.replace_module_graph_facts(
+            imports
+                .into_iter()
+                .map(|(import, file, target)| resolved(import, file, target))
+                .collect(),
+            nodes
+                .iter()
+                .map(|(id, label, file)| file_node(*id, label, *file))
+                .collect(),
+            vec![],
+        );
+
+        let (symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+        let import_reference = |name: &str| {
+            references
+                .iter()
+                .find(|reference| {
+                    reference.name == name
+                        && reference.kind == ReferenceKind::Import
+                        && reference.file == Some(handlers_file)
+                })
+                .unwrap_or_else(|| panic!("missing import reference `{name}`"))
+        };
+        let linked = |name: &str, target: &SymbolFact| {
+            let reference = import_reference(name);
+            assert_eq!(reference.target, Some(target.id), "{name}: {reference:#?}");
+            assert_eq!(reference.status, SymbolResolutionStatus::Resolved);
+            assert_eq!(reference.precision, SymbolPrecision::ModuleLinked);
+        };
+
+        linked(
+            "requireAdmin",
+            exported_symbol_in(&symbols, gate_file, "requireAdmin"),
+        );
+        linked("renamed", exported_symbol_in(&symbols, gate_file, "other"));
+        linked("onlyStar", exported_symbol_in(&symbols, c_file, "onlyStar"));
+
+        let dup = import_reference("dup");
+        assert_eq!(dup.target, None);
+        assert_eq!(dup.status, SymbolResolutionStatus::Ambiguous);
+        assert!(
+            dup.candidates
+                .contains(&exported_symbol_in(&symbols, a_file, "dup").id)
+        );
+        assert!(
+            dup.candidates
+                .contains(&exported_symbol_in(&symbols, b_file, "dup").id)
+        );
+
+        let missing = import_reference("missing");
+        assert_eq!(missing.target, None);
+        assert_eq!(missing.status, SymbolResolutionStatus::Unresolved);
+    }
+
+    #[test]
+    fn re_export_cycles_stay_unresolved() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let user = "import { loop } from \"./a\";\nexport const used = loop;\n";
+        let a = "export { loop } from \"./b\";\n";
+        let b = "export { loop } from \"./a\";\n";
+        let user_file = add_file(&mut db, temp.path(), "src/user.ts", user);
+        let a_file = add_file(&mut db, temp.path(), "src/a.ts", a);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let (user_node, a_node, b_node) = (
+            ModuleNodeId::from_raw(0),
+            ModuleNodeId::from_raw(1),
+            ModuleNodeId::from_raw(2),
+        );
+        let user_import = push_import(&mut db, user_file, user, "./a", 0);
+        let a_import = push_import(&mut db, a_file, a, "./b", 0);
+        let b_import = push_import(&mut db, b_file, b, "./a", 0);
+        db.replace_module_graph_facts(
+            vec![
+                resolved(user_import, user_file, a_node),
+                resolved(a_import, a_file, b_node),
+                resolved(b_import, b_file, a_node),
+            ],
+            vec![
+                file_node(user_node, "src/user.ts", user_file),
+                file_node(a_node, "src/a.ts", a_file),
+                file_node(b_node, "src/b.ts", b_file),
+            ],
+            vec![],
+        );
+
+        let (_symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+
+        assert!(references.iter().any(|reference| {
+            reference.name == "loop"
+                && reference.kind == ReferenceKind::Import
+                && reference.file == Some(user_file)
+                && reference.target.is_none()
+                && reference.status == SymbolResolutionStatus::Unresolved
+        }));
+    }
+
+    #[test]
+    fn links_namespace_member_calls_through_star_re_exports() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let handlers = r#"
+import * as ns from "./index";
+
+export function run() {
+  ns.parse();
+  ns.dup();
+  ns.missing();
+  ns.merged();
+  const value = ns.parse;
+  return value;
+}
+"#;
+        let index = "export * from \"./core\";\nexport * from \"./a\";\nexport * from \"./b\";\n";
+        let core = "export function parse() {}\nexport interface merged { x: number }\nexport function merged() {}\n";
+        let a = "export function dup() {}\n";
+        let b = "export function dup() {}\n";
+        let handlers_file = add_file(&mut db, temp.path(), "src/handlers.ts", handlers);
+        let index_file = add_file(&mut db, temp.path(), "src/index.ts", index);
+        let core_file = add_file(&mut db, temp.path(), "src/core.ts", core);
+        let a_file = add_file(&mut db, temp.path(), "src/a.ts", a);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let nodes = [
+            (ModuleNodeId::from_raw(0), "src/handlers.ts", handlers_file),
+            (ModuleNodeId::from_raw(1), "src/index.ts", index_file),
+            (ModuleNodeId::from_raw(2), "src/core.ts", core_file),
+            (ModuleNodeId::from_raw(3), "src/a.ts", a_file),
+            (ModuleNodeId::from_raw(4), "src/b.ts", b_file),
+        ];
+        let imports = vec![
+            resolved(
+                push_import(&mut db, handlers_file, handlers, "./index", 0),
+                handlers_file,
+                nodes[1].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./core", 0),
+                index_file,
+                nodes[2].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./a", 0),
+                index_file,
+                nodes[3].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./b", 0),
+                index_file,
+                nodes[4].0,
+            ),
+        ];
+        db.replace_module_graph_facts(
+            imports,
+            nodes
+                .iter()
+                .map(|(id, label, file)| file_node(*id, label, *file))
+                .collect(),
+            vec![],
+        );
+
+        let (symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+        let member_calls = |name: &str| {
+            references
+                .iter()
+                .filter(|reference| {
+                    reference.name == name
+                        && reference.kind == ReferenceKind::Call
+                        && reference.file == Some(handlers_file)
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let parse = member_calls("parse");
+        assert_eq!(parse.len(), 1, "{parse:#?}");
+        let call_start = handlers.find("ns.parse()").expect("call") as u32;
+        let span = parse[0].primary_span.as_ref().expect("span");
+        assert_eq!(span.start_byte, call_start + "ns.".len() as u32);
+        assert_eq!(span.end_byte, span.start_byte + "parse".len() as u32);
+        assert_eq!(
+            parse[0].target,
+            Some(exported_symbol_in(&symbols, core_file, "parse").id)
+        );
+        assert_eq!(parse[0].status, SymbolResolutionStatus::Resolved);
+        assert_eq!(parse[0].precision, SymbolPrecision::ModuleLinked);
+
+        let merged = member_calls("merged");
+        assert_eq!(merged.len(), 1, "{merged:#?}");
+        assert!(
+            merged[0].target.is_some(),
+            "an interface merged with a function still calls the function: {merged:#?}"
+        );
+
+        assert!(
+            member_calls("dup")
+                .iter()
+                .all(|reference| reference.target.is_none()),
+            "an export bound by two star sources is not one target"
+        );
+        assert!(
+            member_calls("missing")
+                .iter()
+                .all(|reference| reference.target.is_none())
+        );
+    }
+
+    /// `export * as tools` binds `tools` to a module namespace object, which is
+    /// no declared symbol; it also shadows a same-named export a star source
+    /// provides, so the import stays unlinked rather than reaching that export.
+    #[test]
+    fn star_as_re_export_shadows_a_same_named_star_export() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut db = AnalysisDb::new();
+        let handlers = "import { tools } from \"./index\";\nexport const used = tools;\n";
+        let index = "export * as tools from \"./ns\";\nexport * from \"./b\";\n";
+        let ns = "export function parse() {}\n";
+        let b = "export function tools() {}\n";
+        let handlers_file = add_file(&mut db, temp.path(), "src/handlers.ts", handlers);
+        let index_file = add_file(&mut db, temp.path(), "src/index.ts", index);
+        let ns_file = add_file(&mut db, temp.path(), "src/ns.ts", ns);
+        let b_file = add_file(&mut db, temp.path(), "src/b.ts", b);
+        let nodes = [
+            (ModuleNodeId::from_raw(0), "src/handlers.ts", handlers_file),
+            (ModuleNodeId::from_raw(1), "src/index.ts", index_file),
+            (ModuleNodeId::from_raw(2), "src/ns.ts", ns_file),
+            (ModuleNodeId::from_raw(3), "src/b.ts", b_file),
+        ];
+        let imports = vec![
+            resolved(
+                push_import(&mut db, handlers_file, handlers, "./index", 0),
+                handlers_file,
+                nodes[1].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./ns", 0),
+                index_file,
+                nodes[2].0,
+            ),
+            resolved(
+                push_import(&mut db, index_file, index, "./b", 0),
+                index_file,
+                nodes[3].0,
+            ),
+        ];
+        db.replace_module_graph_facts(
+            imports,
+            nodes
+                .iter()
+                .map(|(id, label, file)| file_node(*id, label, *file))
+                .collect(),
+            vec![],
+        );
+
+        let (symbols, references) = derive_symbol_reference_facts(&db, temp.path());
+        let tools = references
+            .iter()
+            .find(|reference| {
+                reference.name == "tools"
+                    && reference.kind == ReferenceKind::Import
+                    && reference.file == Some(handlers_file)
+            })
+            .expect("import reference `tools`");
+        let star_tools = exported_symbol_in(&symbols, b_file, "tools").id;
+
+        assert_eq!(tools.target, None, "{tools:#?}");
+        assert!(!tools.candidates.contains(&star_tools), "{tools:#?}");
     }
 }
