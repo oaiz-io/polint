@@ -16,6 +16,7 @@ use oxc_span::GetSpan;
 use crate::analysis_api::{FunctionFact, ResolutionStatus, SourceFile, TS_JS_MODULE_FUNCTION_NAME};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{CallCallee, CallSiteFact};
+use crate::analysis_neutral::package_graph::package_of;
 use crate::internal_core::{FileId, FunctionId};
 
 use super::{TsCallableFlow, TsCallableFlowKind};
@@ -468,8 +469,14 @@ enum ParamPattern {
 }
 
 /// Join import specifiers to files through the canonical module graph. Unresolved
-/// or external targets cannot seed a local callable summary.
+/// or external targets cannot seed a local callable summary, and neither can a
+/// file of another package: each package is summarised as its own graph would
+/// summarise it, so the program answers as the stitch of its packages.
 fn module_resolution_map(db: &impl AnalysisHost) -> BTreeMap<(FileId, String), FileId> {
+    let package = |file: FileId| {
+        db.file(file)
+            .map(|file| package_of(&file.relative_path).0.to_string())
+    };
     let imports = db
         .imports()
         .iter()
@@ -488,7 +495,8 @@ fn module_resolution_map(db: &impl AnalysisHost) -> BTreeMap<(FileId, String), F
             }
             let import = imports.get(&resolution.import)?;
             let target = *files_by_node.get(&resolution.target_node?)?;
-            (target != import.file).then(|| ((import.file, import.path.clone()), target))
+            (target != import.file && package(target) == package(import.file))
+                .then(|| ((import.file, import.path.clone()), target))
         })
         .collect()
 }

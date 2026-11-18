@@ -28,6 +28,7 @@ use crate::analysis_api::SourceFile;
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::store::AdaptationModelStore;
 use crate::analysis_neutral::ids::{ObjectTokenId, PlaceId, SemanticNodeId};
+use crate::analysis_neutral::package_graph::package_of;
 use crate::analysis_neutral::semantic_graph::build::TS_DIRECT_BINDING_ORIGIN;
 use crate::analysis_neutral::semantic_graph::build::{
     function_node_key, node_key_from_identity, place_node_key,
@@ -38,7 +39,7 @@ use crate::analysis_neutral::semantic_graph::facts::SemanticPrecision;
 use crate::analysis_neutral::semantic_graph::facts::{EdgeKind, NodeKind};
 use crate::analysis_neutral::semantic_graph::store::SemanticGraphOutput;
 use crate::analysis_neutral::stable_key::semantic_stable_key;
-use crate::internal_core::{FileId, StableKeyInterner};
+use crate::internal_core::{FileId, ResolvedImportId, StableKeyInterner};
 use crate::ts::binding::direct::{
     TsDirectBindingModuleFile, TsDirectBindingModuleInput, resolve_direct_bindings_with_modules,
 };
@@ -403,6 +404,30 @@ fn analyze_ts_binding_file(
     }
 }
 
+/// The resolved imports whose target file belongs to another package than the
+/// importing file.
+fn imports_across_packages(db: &impl AnalysisHost) -> BTreeSet<ResolvedImportId> {
+    let package = |file: FileId| {
+        db.file(file)
+            .map(|file| package_of(&file.relative_path).0.to_string())
+    };
+    let module_files = db
+        .module_nodes()
+        .iter()
+        .filter_map(|node| Some((node.id, node.file?)))
+        .collect::<BTreeMap<_, _>>();
+    db.resolved_imports()
+        .iter()
+        .filter(|resolved| {
+            resolved
+                .target_node
+                .and_then(|node| module_files.get(&node))
+                .is_some_and(|&target| package(target) != package(resolved.from_file))
+        })
+        .map(|resolved| resolved.id)
+        .collect()
+}
+
 fn collect_ts_direct_bindings_from_analyses<A: TsDirectBindingAnalysis>(
     db: &impl AnalysisHost,
     analyses: &[A],
@@ -524,8 +549,17 @@ impl GraphBuilder {
         // The calls/refined-calls contract remains owned by analysis::calls; direct TS
         // bindings are not part of that fact family.
         let context = TsDirectBindingNodeContext::new(interner, db, self);
+        let across_packages = imports_across_packages(db);
         for binding in bindings {
             if binding.status != TsDirectBindingStatus::Resolved {
+                continue;
+            }
+            // A binding into another package is left to that package's
+            // graph, as the package's own analysis leaves it.
+            if binding
+                .resolved_import
+                .is_some_and(|import| across_packages.contains(&import))
+            {
                 continue;
             }
             let Some(callsite_node) =
