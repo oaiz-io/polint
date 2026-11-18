@@ -323,17 +323,27 @@ def run_dump(
         "wall_ms": round(result.wall_ms),
         "peak_rss_bytes": result.peak_rss_bytes,
         "stages": stage_times(result.stderr),
+        "solver": solver_solves(result.stderr),
     }
     if result.timed_out:
         return {"dump": None, "cost": cost, "error": f"timed out after {timeout} s"}
     if result.exit_code != 0 or not out.exists():
-        tail = [line for line in result.stderr.splitlines() if "stage done" not in line][-8:]
+        tail = [
+            line for line in result.stderr.splitlines() if "stage done" not in line and SOLVE_EVENT not in line
+        ][-8:]
         return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
     return {"dump": out, "cost": cost, "error": None}
 
 
-# The kernel's per-provider stage log: one `stage done` line per provider run.
-STAGE_LOG = "polint::kernel::stage=info"
+# The kernel's per-provider stage log: one `stage done` line per provider run,
+# and one `points_to solve` line per points-to solve.
+STAGE_LOG = "polint::kernel::stage=info,polint::points_to=info"
+SOLVE_EVENT = "points_to solve"
+SOLVE_FIELD = re.compile(r'\b([a-z_0-9]+)=("[^"]*"|\S+)')
+SOLVE_COUNTS = (
+    "calls", "variables", "objects", "slots", "copy_edges", "pops", "collapsed", "largest_set", "sets_over_64",
+    "sets_over_1024", "initialize_ms", "run_ms", "result_ms", "rss_delta_mb", "peak_rss_mb",
+)
 STAGE_FIELD = re.compile(r'\b(provider|elapsed_ms|peak_rss_mb)=("[^"]*"|\S+)')
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -355,6 +365,30 @@ def stage_times(stderr: str) -> dict:
         row["elapsed_ms"] += int(fields["elapsed_ms"])
         row["peak_rss_mb"] = max(row["peak_rss_mb"], int(fields.get("peak_rss_mb", 0)))
     return stages
+
+
+def solver_solves(stderr: str) -> list:
+    """One row per `points_to solve` line, in the order the solves ran.
+
+    `pass` names the solve: `type_value_alias` solves the constraints alone,
+    `call_graph` solves them with the call rule."""
+    solves = []
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if SOLVE_EVENT not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in SOLVE_FIELD.findall(line)}
+        if "pass" not in fields:
+            continue
+        row = {"pass": fields["pass"], "budget": fields.get("budget", "")}
+        row.update({key: int(fields.get(key, 0)) for key in SOLVE_COUNTS})
+        row["constraints"] = {
+            kind: int(count)
+            for kind, _, count in (part.partition(":") for part in fields.get("constraints", "").split(","))
+            if kind
+        }
+        solves.append(row)
+    return solves
 
 
 def load_dump(run: dict) -> None:
@@ -417,12 +451,19 @@ def tier_of(precision: str) -> str:
 
 def edge_tier(edge: dict) -> str:
     """The tier the bench counts an edge in: its precision's tier, checked
-    against the engine's, and never exact for a typed candidate."""
+    against the engine's, never exact for a typed candidate, and exact for a
+    points-to edge exactly when it names the assumptions it rests on."""
     tier = tier_of(edge["precision"])
     if edge.get("claim_tier") != tier:
         raise SystemExit(
             f"edge at {edge['site']}: the engine says {edge.get('claim_tier')!r} for {edge['precision']}, "
             f"the bench says {tier!r}"
+        )
+    points_to_exact = tier == "exact" and edge["algorithm"] == "PointsTo"
+    if points_to_exact != bool(edge.get("assumptions")):
+        raise SystemExit(
+            f"edge at {edge['site']}: a {edge['algorithm']} edge claiming {edge['precision']} records "
+            f"assumptions {edge.get('assumptions', [])}; only an exact points-to edge records them, and it must"
         )
     if tier == "exact" and edge["algorithm"] == "TypeHierarchy" and edge.get("dispatch") in TYPED_CANDIDATE_DISPATCH:
         raise SystemExit(
@@ -2880,6 +2921,7 @@ def render_markdown(report: dict) -> str:
             )
     add("")
     render_stage_times(report, add)
+    render_solver(report, add)
     add("## Decisions recorded by this run")
     add("")
     for decision in report["decisions"]:
@@ -2919,6 +2961,36 @@ def render_stage_times(report: dict, add) -> None:
             if plan == "refined" and total:
                 share = pct(stages.get(SEMANTIC_GRAPH_STAGE, {}).get("elapsed_ms", 0) / total)
             add(f"| {name} | {plan} | {total / 1000:.1f} | {listed} | {share} |")
+    add("")
+
+
+def render_solver(report: dict, add) -> None:
+    """Every points-to solve of every package's fact dump, from the solver's log."""
+    add("## Solver")
+    add("")
+    add("Every fact dump logs one `points_to solve` line per solve under `polint::points_to`. `alias` solves the "
+        "constraints alone for the type, value and alias facts; `call graph` solves them with the call rule. "
+        "Constraints are the input count (by kind in report.json); variables include heap slots; pops are worklist "
+        "pops; collapsed are variables merged into another on a copy cycle. Time is per step: reading the input, the worklist, and building the result. Memory is the resident "
+        "growth across the solve and the process peak after it. Counts are the same in every run; time and memory "
+        "are as noisy as the stage times above.")
+    add("")
+    add("| tree | plan | solve | constraints | calls | variables | objects | slots | copy edges | pops "
+        "| collapsed | largest set | sets > 64 | sets > 1,024 | ms (input / worklist / result) | RSS growth MB | peak MB "
+        "| budget |")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    labels = {"type_value_alias": "alias", "call_graph": "call graph"}
+    for name, plans in report["dump_cost"].items():
+        for plan, row in plans.items():
+            for solve in row.get("solver") or []:
+                add(
+                    f"| {name} | {plan} | {labels.get(solve['pass'], solve['pass'])} "
+                    f"| {sum(solve['constraints'].values()):,} | {solve['calls']:,} | {solve['variables']:,} "
+                    f"| {solve['objects']:,} | {solve['slots']:,} | {solve['copy_edges']:,} | {solve['pops']:,} "
+                    f"| {solve['collapsed']:,} | {solve['largest_set']:,} | {solve['sets_over_64']:,} | {solve['sets_over_1024']:,} "
+                    f"| {solve['initialize_ms']} / {solve['run_ms']} / {solve['result_ms']} "
+                    f"| {solve['rss_delta_mb']} | {solve['peak_rss_mb']} | {solve['budget']} |"
+                )
     add("")
 
 

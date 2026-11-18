@@ -446,6 +446,7 @@ pub fn derive_edges(
                 precision: meta.precision,
                 stable_key,
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             });
         }
         // No `break`: every source is processed so budget exhaustion on one source
@@ -475,13 +476,21 @@ fn model_edges(
     let mut edges = Vec::new();
     let mut budget_exceeded = false;
     let mut budget_reasons = BTreeSet::new();
-    let mut targets_by_source: BTreeMap<SemanticNodeRef, BTreeSet<SemanticNodeRef>> =
-        BTreeMap::new();
-    let mut expansions_by_model: BTreeMap<String, usize> = BTreeMap::new();
+    let mut caps = AdaptationCaps::new(budget);
     let mut model_constraints = constraints
         .iter()
         .filter_map(|constraint| match &constraint.kind {
-            ConstraintKind::ModelEdge { source, target, .. } => Some((constraint, source, target)),
+            ConstraintKind::ModelEdge {
+                source,
+                target,
+                evidence,
+                ..
+            } => Some((
+                constraint,
+                source,
+                target,
+                crate::analysis_neutral::adaptation::platform::is_platform_model_edge(evidence),
+            )),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -493,45 +502,17 @@ fn model_edges(
         ))
     });
 
-    for (constraint, source, target) in model_constraints {
-        if edges.len() >= budget.adaptation.max_model_derived_edges {
-            budget_exceeded = true;
-            budget_reasons.insert(
-                BudgetReason::AdaptationMaxModelDerivedEdges
-                    .as_str()
-                    .to_string(),
-            );
-            continue;
-        }
-
-        let expansions = expansions_by_model
-            .entry(interner.resolve(constraint.stable_key).to_string())
-            .or_default();
-        if *expansions >= budget.adaptation.max_expansions_per_model {
-            budget_exceeded = true;
-            budget_reasons.insert(
-                BudgetReason::AdaptationMaxExpansionsPerModel
-                    .as_str()
-                    .to_string(),
-            );
-            continue;
-        }
-
-        let source_targets = targets_by_source.entry(source.0).or_default();
-        if !source_targets.contains(&target.0)
-            && source_targets.len() >= budget.adaptation.max_targets_per_source
+    for (constraint, source, target, platform) in model_constraints {
+        // The adaptation caps bound repo-local model facts. Platform model
+        // edges follow points-to sets the solver budget already bounds.
+        if !platform
+            && let Err(reason) =
+                caps.admit(&interner.resolve(constraint.stable_key), source.0, target.0)
         {
             budget_exceeded = true;
-            budget_reasons.insert(
-                BudgetReason::AdaptationMaxTargetsPerSource
-                    .as_str()
-                    .to_string(),
-            );
+            budget_reasons.insert(reason.as_str().to_string());
             continue;
         }
-
-        *expansions += 1;
-        source_targets.insert(target.0);
         let provenance = DerivedEdgeProvenance::new(
             interner,
             [ContributingFact {
@@ -557,9 +538,58 @@ fn model_edges(
             precision: constraint.precision,
             stable_key,
             provenance,
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         });
     }
     (edges, budget_exceeded, budget_reasons)
+}
+
+/// Counters for the adaptation caps, which bound the edges repo-local model
+/// facts may add.
+struct AdaptationCaps<'a> {
+    budget: &'a SolverBudget,
+    edges: usize,
+    targets_by_source: BTreeMap<SemanticNodeRef, BTreeSet<SemanticNodeRef>>,
+    expansions_by_model: BTreeMap<String, usize>,
+}
+
+impl<'a> AdaptationCaps<'a> {
+    fn new(budget: &'a SolverBudget) -> Self {
+        Self {
+            budget,
+            edges: 0,
+            targets_by_source: BTreeMap::new(),
+            expansions_by_model: BTreeMap::new(),
+        }
+    }
+
+    /// Counts the edge against the caps, or names the cap it would exceed.
+    fn admit(
+        &mut self,
+        model: &str,
+        source: SemanticNodeRef,
+        target: SemanticNodeRef,
+    ) -> Result<(), BudgetReason> {
+        let caps = &self.budget.adaptation;
+        if self.edges >= caps.max_model_derived_edges {
+            return Err(BudgetReason::AdaptationMaxModelDerivedEdges);
+        }
+        let expansions = self
+            .expansions_by_model
+            .entry(model.to_string())
+            .or_default();
+        if *expansions >= caps.max_expansions_per_model {
+            return Err(BudgetReason::AdaptationMaxExpansionsPerModel);
+        }
+        let targets = self.targets_by_source.entry(source).or_default();
+        if !targets.contains(&target) && targets.len() >= caps.max_targets_per_source {
+            return Err(BudgetReason::AdaptationMaxTargetsPerSource);
+        }
+        *expansions += 1;
+        targets.insert(target);
+        self.edges += 1;
+        Ok(())
+    }
 }
 
 /// Run-local node handle (the `SemanticNodeId.0` value) used as a deterministic
@@ -612,6 +642,7 @@ pub fn status_rank(status: PointsToStatus) -> u8 {
         PointsToStatus::Unsupported => 2,
         PointsToStatus::SetupMissing => 3,
         PointsToStatus::BudgetExceeded => 4,
+        PointsToStatus::IndirectionBound => 5,
     }
 }
 
@@ -830,6 +861,7 @@ mod tests {
             precision: PointsToPrecision::Heuristic,
             stable_key: crate::internal_core::stable_key_for_test(stable_key),
             provenance,
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         }
     }
 
@@ -1012,6 +1044,73 @@ mod tests {
 
         assert_eq!(output.derived_edges.len(), 1);
         assert_eq!(output.derived_edges[0].source, SemanticNodeId(10));
+        assert_eq!(output.budget_status, BudgetStatus::BudgetExceeded);
+    }
+
+    fn platform_model_constraint(stable_key: &str, source: u64, target: u64) -> ConstraintFact {
+        let mut constraint = model_constraint(stable_key, source, target);
+        if let ConstraintKind::ModelEdge { evidence, .. } = &mut constraint.kind {
+            *evidence = vec![
+                format!(
+                    "{}Function.prototype.apply",
+                    crate::analysis_neutral::adaptation::platform::EVIDENCE_PREFIX
+                ),
+                crate::analysis_neutral::adaptation::platform::digest_evidence(),
+            ];
+        }
+        constraint
+    }
+
+    #[test]
+    fn solver_platform_model_edges_are_not_held_to_adaptation_caps() {
+        let budget = SolverBudget::default();
+        let fanout = budget.adaptation.max_targets_per_source as u64 + 4;
+        let mut constraints = (0..fanout)
+            .map(|index| platform_model_constraint(&format!("platform|{index}"), 10, 100 + index))
+            .collect::<Vec<_>>();
+        constraints.extend(
+            (0..fanout).map(|index| model_constraint(&format!("model|{index}"), 11, 200 + index)),
+        );
+        let output = derive_edges(
+            &crate::internal_core::test_stable_key_interner(),
+            &constraints,
+            &budget,
+        );
+
+        let from = |source| {
+            output
+                .derived_edges
+                .iter()
+                .filter(|edge| edge.source == SemanticNodeId(source))
+                .count()
+        };
+        assert_eq!(from(10), fanout as usize);
+        assert_eq!(from(11), budget.adaptation.max_targets_per_source);
+        assert_eq!(output.budget_status, BudgetStatus::BudgetExceeded);
+        assert_eq!(
+            output.budget_reasons.iter().collect::<Vec<_>>(),
+            [BudgetReason::AdaptationMaxTargetsPerSource.as_str()]
+        );
+    }
+
+    #[test]
+    fn solver_model_edge_with_a_foreign_platform_digest_keeps_adaptation_caps() {
+        let mut budget = SolverBudget::default();
+        budget.adaptation.max_targets_per_source = 1;
+        let forged = |key: &str, target| {
+            let mut constraint = platform_model_constraint(key, 10, target);
+            if let ConstraintKind::ModelEdge { evidence, .. } = &mut constraint.kind {
+                evidence[1] = "platform_digest:other".to_string();
+            }
+            constraint
+        };
+        let output = derive_edges(
+            &crate::internal_core::test_stable_key_interner(),
+            &[forged("model|a", 20), forged("model|b", 21)],
+            &budget,
+        );
+
+        assert_eq!(output.derived_edges.len(), 1);
         assert_eq!(output.budget_status, BudgetStatus::BudgetExceeded);
     }
 

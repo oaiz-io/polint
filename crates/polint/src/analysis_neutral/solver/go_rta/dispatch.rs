@@ -150,6 +150,7 @@ pub(crate) fn resolve_callsite(
             precision,
             stable_key,
             provenance,
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         });
     }
 

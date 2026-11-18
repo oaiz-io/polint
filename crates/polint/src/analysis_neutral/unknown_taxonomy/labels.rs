@@ -143,6 +143,7 @@ pub fn points_to_status_label(status: PointsToStatus) -> &'static str {
         PointsToStatus::Unsupported => "unsupported",
         PointsToStatus::SetupMissing => "setup_missing",
         PointsToStatus::BudgetExceeded => "budget_exceeded",
+        PointsToStatus::IndirectionBound => "indirection_bound",
     }
 }
 
@@ -278,6 +279,8 @@ pub fn unresolved_call_reason_label(reason: UnresolvedCallReason) -> &'static st
         UnresolvedCallReason::SetupMissing => "setup_missing",
         UnresolvedCallReason::UnsupportedSyntax => "unsupported_syntax",
         UnresolvedCallReason::BudgetExceeded => "budget_exceeded",
+        UnresolvedCallReason::IndirectionBound => "indirection_bound",
+        UnresolvedCallReason::Inflow(inflow) => inflow.label(),
         UnresolvedCallReason::UnknownCallee => "unknown_callee",
         UnresolvedCallReason::Unknown => "unknown",
     }

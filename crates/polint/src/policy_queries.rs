@@ -6200,6 +6200,7 @@ mod tests {
             evidence: Vec::new(),
             input_stable_keys: Vec::new(),
             stable_key: crate::core::stable_key_for_test(&format!("refined:{id}:{label}")),
+            assumptions: Vec::new(),
         }
     }
 
@@ -6232,6 +6233,7 @@ mod tests {
             stable_key: crate::core::stable_key_for_test(&format!(
                 "refined:{id}:{label}:unresolved"
             )),
+            assumptions: Vec::new(),
         }
     }
 }

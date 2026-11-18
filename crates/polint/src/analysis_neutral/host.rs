@@ -1887,6 +1887,8 @@ fn call_unresolved_reason_label(reason: UnresolvedCallReason) -> &'static str {
         UnresolvedCallReason::SetupMissing => "setup_missing",
         UnresolvedCallReason::UnsupportedSyntax => "unsupported_syntax",
         UnresolvedCallReason::BudgetExceeded => "budget_exceeded",
+        UnresolvedCallReason::IndirectionBound => "indirection_bound",
+        UnresolvedCallReason::Inflow(inflow) => inflow.label(),
         UnresolvedCallReason::UnknownCallee => "unknown_callee",
         UnresolvedCallReason::Unknown => "unknown",
     }

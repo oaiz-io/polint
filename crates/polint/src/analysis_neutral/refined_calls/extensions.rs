@@ -90,6 +90,7 @@ fn edge_from_extension_fact(
                 ("candidate", interner.resolve(fact.stable_key).to_string()),
             ],
         ),
+        assumptions: Vec::new(),
     })
 }
 

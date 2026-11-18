@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis_api::{FunctionFact, ResolutionStatus};
 use crate::analysis_neutral::AnalysisHost;
+use crate::analysis_neutral::adaptation::platform;
 use crate::analysis_neutral::ids::{PlaceId, SemanticNodeId};
 use crate::analysis_neutral::points_to::facts::PointsToPrecision;
 use crate::analysis_neutral::semantic_graph::build::{function_node_key, node_key_from_identity};
@@ -514,14 +515,8 @@ impl FileProjection<'_, '_> {
                             scope: self.path.clone(),
                             confidence: "conservative".into(),
                             evidence: vec![
-                                format!("platform:{model}"),
-                                format!(
-                                    "platform_digest:{}",
-                                    crate::ts::constraints::platform::digest(
-                                        crate::ts::constraints::platform::SOURCE
-                                    )
-                                    .value
-                                ),
+                                format!("{}{model}", platform::EVIDENCE_PREFIX),
+                                platform::digest_evidence(),
                             ],
                         });
                     }

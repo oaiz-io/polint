@@ -840,6 +840,7 @@ mod tests {
             evidence: Vec::new(),
             input_stable_keys: Vec::new(),
             stable_key: crate::internal_core::stable_key_for_test(&format!("refined:{id}")),
+            assumptions: Vec::new(),
         }
     }
 

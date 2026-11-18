@@ -111,6 +111,7 @@ fn edge_from_summary(
                 ("base_target", target_key),
             ],
         ),
+        assumptions: Vec::new(),
     }
 }
 

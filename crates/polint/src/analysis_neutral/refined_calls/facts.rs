@@ -5,6 +5,7 @@ use crate::analysis_neutral::calls::facts::{
     UnresolvedCallReason,
 };
 use crate::analysis_neutral::ids::{CallSiteId, CallTargetId, RefinedCallEdgeId};
+use crate::analysis_neutral::points_to::tiers::Assumption;
 use crate::internal_core::{FunctionId, Language, StableKeyId, SymbolId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,6 +25,10 @@ pub struct RefinedCallEdgeFact {
     pub reason: Option<UnresolvedCallReason>,
     pub provenance: CallProvenance,
     pub precision: CallPrecision,
+    /// What an exact edge relies on. A points-to edge may claim exact
+    /// precision only with at least one; other edges leave it empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assumptions: Vec<Assumption>,
     pub validation: RefinedCallValidation,
     pub confidence: RefinedCallConfidence,
     pub evidence: Vec<String>,
@@ -107,6 +112,7 @@ mod tests {
             evidence: vec!["value".to_string()],
             input_stable_keys: vec!["call-site".to_string()],
             stable_key: crate::internal_core::stable_key_for_test("refined:edge"),
+            assumptions: Vec::new(),
         };
 
         assert_eq!(edge.site, CallSiteId(2));
@@ -140,6 +146,7 @@ mod tests {
             evidence: vec!["b".to_string(), "a".to_string(), "a".to_string()],
             input_stable_keys: vec!["z".to_string(), "a".to_string()],
             stable_key: crate::internal_core::stable_key_for_test("refined:synthetic"),
+            assumptions: Vec::new(),
         }
         .normalized();
 

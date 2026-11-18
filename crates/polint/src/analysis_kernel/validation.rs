@@ -1232,7 +1232,9 @@ fn validate_points_to_status_precision(
                 PointsToPrecision::Unknown | PointsToPrecision::Unsupported
             )
         }
-        PointsToStatus::Unknown | PointsToStatus::BudgetExceeded => {
+        PointsToStatus::Unknown
+        | PointsToStatus::BudgetExceeded
+        | PointsToStatus::IndirectionBound => {
             matches!(
                 precision,
                 PointsToPrecision::FlowInsensitive

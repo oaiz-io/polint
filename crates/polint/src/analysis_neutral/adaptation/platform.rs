@@ -15,3 +15,23 @@ pub(crate) fn digest(source: &str) -> Digest {
         &[source],
     )
 }
+
+/// First evidence entry of a model edge derived from the embedded platform
+/// model, followed by the model's name.
+pub(crate) const EVIDENCE_PREFIX: &str = "platform:";
+
+/// Evidence entry naming the embedded platform model's digest.
+pub(crate) fn digest_evidence() -> String {
+    format!("platform_digest:{}", digest(SOURCE).value)
+}
+
+/// Whether a model edge was derived from the embedded platform model rather
+/// than from a repo-local adaptation fact. Platform edges follow points-to
+/// sets, so the solver budget bounds them; the adaptation caps on repo-local
+/// facts do not apply.
+pub(crate) fn is_platform_model_edge(evidence: &[String]) -> bool {
+    matches!(
+        evidence,
+        [model, digest] if model.starts_with(EVIDENCE_PREFIX) && *digest == digest_evidence()
+    )
+}

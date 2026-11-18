@@ -397,7 +397,9 @@ fn solver_unknowns(db: &AnalysisDb) -> Vec<UnknownRow> {
             .filter(|edge| edge.status != PointsToStatus::Present)
             .map(|edge| {
                 let category = match edge.status {
-                    PointsToStatus::BudgetExceeded => UnknownCategory::BudgetExceeded,
+                    PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+                        UnknownCategory::BudgetExceeded
+                    }
                     PointsToStatus::SetupMissing => UnknownCategory::SetupMissing,
                     PointsToStatus::Unsupported => UnknownCategory::UnsupportedSemantic,
                     PointsToStatus::Unknown => UnknownCategory::MissingFact,
@@ -1204,6 +1206,7 @@ mod tests {
                     &ConstraintKind::call_at(SemanticNodeId(2)),
                     1,
                 ),
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::BudgetExceeded,
             budget_reasons: BTreeSet::from(["solver.max_steps".to_string()]),
@@ -1440,6 +1443,7 @@ mod tests {
             evidence: vec!["solver_derived_edge".to_string()],
             input_stable_keys: vec!["solver:budget".to_string()],
             stable_key: crate::core::stable_key_for_test("refined:budget"),
+            assumptions: Vec::new(),
         }
     }
 

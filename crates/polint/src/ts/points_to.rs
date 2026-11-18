@@ -12,12 +12,14 @@ use crate::analysis_neutral::ids::{
     DerivedEdgeId, ObjectTokenId, PointsToConstraintId, PtVarId, SemanticNodeId,
 };
 use crate::analysis_neutral::points_to::facts::{
-    PointsToConstraintFact, PointsToConstraintKind, PointsToPrecision, PointsToStatus,
+    PointsToBudgetStatus, PointsToConstraintFact, PointsToConstraintKind, PointsToPrecision,
+    PointsToSetFact, PointsToStatus,
 };
 use crate::analysis_neutral::points_to::solver::{
     PointsToCall, PointsToCallInputs, PointsToSignature, PointsToSolveResult, SignaturePlace,
-    solve_points_to_with_calls,
+    solve_points_to_logged,
 };
+use crate::analysis_neutral::points_to::tiers::{Assumption, EdgeClaim};
 use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::analysis_neutral::solver::budget::{BudgetStatus, SolverBudget};
@@ -164,7 +166,8 @@ impl TsPointsToInputs {
 pub struct TsPointsToSolveResult {
     pub points_to: PointsToSolveResult,
     pub derived_edges: Vec<DerivedEdgeFact>,
-    /// Call sites whose callee set the solve left incomplete under its budget.
+    /// Call sites whose callee set the solve left incomplete under its budget
+    /// or indirection bound.
     pub incomplete_sites: u64,
 }
 
@@ -175,8 +178,13 @@ pub fn solve_ts_points_to(
 ) -> TsPointsToSolveResult {
     let constraints = project_constraints(interner, inputs);
     let calls = project_calls(inputs);
-    let points_to =
-        solve_points_to_with_calls(interner, &constraints, &calls, budget.points_to_budget());
+    let points_to = solve_points_to_logged(
+        "call_graph",
+        interner,
+        &constraints,
+        &calls,
+        budget.points_to_budget(),
+    );
     let sets = points_to
         .sets
         .iter()
@@ -195,13 +203,16 @@ pub fn solve_ts_points_to(
         // object in it was derived, and the site is reported as incomplete.
         match set.status {
             PointsToStatus::Present => {}
-            PointsToStatus::BudgetExceeded => incomplete_sites += 1,
+            PointsToStatus::BudgetExceeded | PointsToStatus::IndirectionBound => {
+                incomplete_sites += 1
+            }
             PointsToStatus::Unknown
             | PointsToStatus::Unsupported
             | PointsToStatus::SetupMissing => {
                 continue;
             }
         }
+        let claim = site_claim(inputs, &points_to, callsite, set);
         for object in &set.objects {
             let Some((target, target_stable_key)) = inputs.callable_objects.get(object) else {
                 continue;
@@ -267,6 +278,7 @@ pub fn solve_ts_points_to(
                 precision: set.precision.max(callsite.precision),
                 stable_key,
                 provenance,
+                claim: claim.clone(),
             });
         }
     }
@@ -284,6 +296,82 @@ pub fn solve_ts_points_to(
         derived_edges,
         incomplete_sites,
     }
+}
+
+/// What the edges derived at a call site claim.
+///
+/// A site is exact when the solve finished within its budget, the site's
+/// callee set is complete, no value from outside the package can reach it,
+/// its inputs were at most local flow-sensitive and it holds one function.
+/// The claim rests on the solve seeing every write of every binding, on no
+/// inward flow and on the budget, and, when the function was read from a
+/// heap slot, on no other package writing that field or a prototype the read
+/// went through. That the import links and the exported paths the site
+/// reads stay as they are is assumed too; the solve does not record it.
+///
+/// The same site holding several functions is complete: it reaches some of
+/// them and nothing else. A site values from outside can reach is open, with
+/// the most specific way they reach it. Any other site claims nothing beyond
+/// its precision.
+fn site_claim(
+    inputs: &TsPointsToInputs,
+    points_to: &PointsToSolveResult,
+    callsite: &TsPointsToCallsite,
+    set: &PointsToSetFact,
+) -> EdgeClaim {
+    if points_to.budget_status != PointsToBudgetStatus::WithinBudget
+        || set.status != PointsToStatus::Present
+        || callsite.precision > PointsToPrecision::LocalFlowSensitive
+    {
+        return EdgeClaim::Unassigned;
+    }
+    let grounds = points_to
+        .grounds
+        .get(&set.variable)
+        .copied()
+        .unwrap_or_default();
+    if let Some(inflow) = grounds.inflow {
+        return EdgeClaim::Open(inflow);
+    }
+    let callable = set
+        .objects
+        .iter()
+        .all(|object| inputs.callable_objects.contains_key(object));
+    if set.precision > PointsToPrecision::LocalFlowSensitive || !callable {
+        return EdgeClaim::Unassigned;
+    }
+    match set.objects.len() {
+        0 => EdgeClaim::Unassigned,
+        1 => {
+            let mut assumptions = vec![
+                Assumption::SealedBindings,
+                Assumption::NoInwardFlow,
+                Assumption::WithinBudget,
+            ];
+            if grounds.through_slot {
+                assumptions.extend([Assumption::PrototypeClosed, Assumption::NoOutsideFieldWrite]);
+            }
+            assumptions.sort();
+            EdgeClaim::Exact(assumptions)
+        }
+        _ => EdgeClaim::Complete,
+    }
+}
+
+/// Writes the solver input `solve_ts_points_to` would solve, for the
+/// stored-input solver benchmark.
+#[cfg(test)]
+pub(crate) fn write_solver_input(
+    path: &std::path::Path,
+    interner: &crate::internal_core::StableKeyInterner,
+    inputs: &TsPointsToInputs,
+) -> anyhow::Result<()> {
+    crate::analysis_neutral::points_to::stored::write(
+        path,
+        interner,
+        &project_constraints(interner, inputs),
+        &project_calls(inputs),
+    )
 }
 
 fn project_constraints(

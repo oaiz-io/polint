@@ -32,6 +32,9 @@ The research done before the iteration starts, 2026-11-17:
 - [TIERS.md](TIERS.md): the closed lists: `CallPrecision` to the two tiers,
   the assumptions an exact claim may carry, the constructs WP2 must lower
   against what MIR carries.
+- [CALL-EDGE-TIERS.md](CALL-EDGE-TIERS.md): what the points-to solve claims
+  per call site, the inflow kinds of an open site, and the assumptions it
+  records on an exact edge.
 - [STORAGE-A.md](STORAGE-A.md): the monotonicity argument against this
   solver's real behaviour, and what the stitch must re-derive.
 - [TARGETS.md](TARGETS.md): every target kept, replaced or added, with the

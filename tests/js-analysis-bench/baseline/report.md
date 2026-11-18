@@ -170,10 +170,10 @@ that the recording entered.
 
 | package | format | files analysed / selected | source KB | coverage | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| axios 1.21.1 | ESM source, Node and browser adapters | 72 / 72 | 282 | 300/534 (56%) | 675 | 273/675 (40%) | 602/675 (89%) | 1 | 0 | 67% | 74% / 47% | 9% |
+| axios 1.21.1 | ESM source, Node and browser adapters | 72 / 72 | 282 | 300/534 (56%) | 675 | 273/675 (40%) | 604/675 (89%) | 1 | 0 | 67% | 74% / 47% | 9% |
 | zod 4.6.7 | TypeScript ESM source | 125 / 125 | 1354 | 566/2469 (23%) (flagged) | 1308 | 721/1308 (55%) | 1181/1308 (90%) | 1 | 0 | 53% | 56% / 34% | 5% |
 | commander 14.0.3 | CommonJS only | 7 / 7 | 127 | 218/296 (74%) | 318 | 21/318 (7%) | 183/318 (58%) | 0 | 0 | 92% | 95% / 66% | 10% |
-| async 3.2.6 | CommonJS transpiled from ESM | 129 / 129 | 321 | 308/504 (61%) | 637 | 324/637 (51%) | 591/637 (93%) | 0 | 0 | 63% | 73% / 40% | 27% |
+| async 3.2.6 | CommonJS transpiled from ESM | 129 / 129 | 321 | 308/504 (61%) | 637 | 324/637 (51%) | 631/637 (99%) | 0 | 0 | 63% | 73% / 40% | 27% |
 | chalk 6.0.1 | ESM only, with subpath imports | 5 / 5 | 22 | 41/53 (77%) | 72 | 43/72 (60%) | 56/72 (78%) | 0 | 0 | 44% | 67% / 55% | 11% |
 | dayjs 1.11.23 | minified UMD | 1 / 1 | 7 | 55/57 (96%) | 112 | 32/112 (29%) | 88/112 (79%) | 0 | 0 | 76% | 79% / 48% | 7% |
 | underscore 1.13.8 | bundled UMD (Rollup) | 1 / 1 | 69 | 159/186 (85%) | 260 | 155/260 (60%) | 250/260 (96%) | 0 | 0 | 56% | 58% / 29% | 6% |
@@ -188,19 +188,18 @@ by its end byte can also inflate both counts.
 
 | package | base: single / multi | refined: single / multi |
 |---|---|---|
-| axios | 0 / 0 | 2 / 22 |
-| zod | 0 / 0 | 0 / 5 |
+| axios | 0 / 0 | 1 / 30 |
+| zod | 0 / 0 | 0 / 40 |
 | commander | 0 / 0 | 0 / 0 |
-| async | 0 / 0 | 0 / 27 |
+| async | 0 / 0 | 0 / 764 |
 | chalk | 0 / 0 | 0 / 0 |
 | dayjs | 0 / 0 | 0 / 0 |
-| underscore | 0 / 0 | 0 / 53 |
-| **total** | **0 / 0** | **2 / 107** |
+| underscore | 0 / 0 | 0 / 249 |
+| **total** | **0 / 0** | **1 / 1083** |
 
 | package | plan | site | site text | single-target answer | the run called |
 |---|---|---|---|---|---|
-| axios | refined | lib/core/Axios.js:222 | `this.interceptors.request.forEach(function unshiftRequestInterceptors(interceptor) { if (…` | lib/core/Axios.js:222 <polint:anonymous:7284:7986> | lib/core/InterceptorManager.js:159 InterceptorManager.forEach |
-| axios | refined | lib/core/Axios.js:241 | `this.interceptors.response.forEach(function pushResponseInterceptors(interceptor) { respo…` | lib/core/Axios.js:241 <polint:anonymous:8070:8206> | lib/core/InterceptorManager.js:159 InterceptorManager.forEach |
+| axios | refined | lib/core/mergeConfig.js:220 | `merge(a, b, prop, config1, config2)` | lib/core/mergeConfig.js:79 mergeDeepProperties | lib/core/mergeConfig.js:130 mergeDirectKeys |
 
 The typed plan (refined with the TypeScript type sidecar) was not run: no TypeScript compiler was given.
 
@@ -208,13 +207,13 @@ The typed plan (refined with the TypeScript type sidecar) was not run: no TypeSc
 
 | package | kind / syntax | observed | base | refined |
 |---|---|---|---|---|
-| axios | kind: call | 632 | 272/632 (43%) | 573/632 (91%) |
+| axios | kind: call | 632 | 272/632 (43%) | 575/632 (91%) |
 | axios | kind: callback | 43 | 1/43 (2%) | 29/43 (67%) |
 | axios | kind: implicit | 6 | 0/6 (0%) | 0/6 (0%) |
 | axios | syntax: computed-member | 2 | 0/2 (0%) | 1/2 (50%) |
 | axios | syntax: expression | 8 | 8/8 (100%) | 8/8 (100%) |
 | axios | syntax: identifier | 317 | 249/317 (79%) | 306/317 (97%) |
-| axios | syntax: member | 326 | 1/326 (0%) | 266/326 (82%) |
+| axios | syntax: member | 326 | 1/326 (0%) | 268/326 (82%) |
 | axios | syntax: new | 21 | 15/21 (71%) | 20/21 (95%) |
 | axios | syntax: super | 1 | 0/1 (0%) | 1/1 (100%) |
 | zod | kind: call | 1265 | 721/1265 (57%) | 1150/1265 (91%) |
@@ -231,12 +230,12 @@ The typed plan (refined with the TypeScript type sidecar) was not run: no TypeSc
 | commander | syntax: member | 274 | 0/274 (0%) | 140/274 (51%) |
 | commander | syntax: new | 8 | 1/8 (12%) | 8/8 (100%) |
 | commander | syntax: super | 1 | 0/1 (0%) | 1/1 (100%) |
-| async | kind: call | 622 | 324/622 (52%) | 577/622 (93%) |
-| async | kind: callback | 15 | 0/15 (0%) | 14/15 (93%) |
+| async | kind: call | 622 | 324/622 (52%) | 616/622 (99%) |
+| async | kind: callback | 15 | 0/15 (0%) | 15/15 (100%) |
 | async | kind: implicit | 4 | 0/4 (0%) | 0/4 (0%) |
 | async | syntax: expression | 157 | 0/157 (0%) | 157/157 (100%) |
 | async | syntax: identifier | 403 | 324/403 (80%) | 398/403 (99%) |
-| async | syntax: member | 73 | 0/73 (0%) | 32/73 (44%) |
+| async | syntax: member | 73 | 0/73 (0%) | 72/73 (99%) |
 | async | syntax: new | 4 | 0/4 (0%) | 4/4 (100%) |
 | chalk | kind: call | 71 | 43/71 (61%) | 55/71 (77%) |
 | chalk | kind: callback | 1 | 0/1 (0%) | 1/1 (100%) |
@@ -262,10 +261,10 @@ The typed plan (refined with the TypeScript type sidecar) was not run: no TypeSc
 
 | package | found | no target, marked unresolved | no target, no unresolved marker | other targets, marked unresolved | stops at import binding |
 |---|---|---|---|---|---|
-| axios | 273 / 602 | 392 / 49 | 9 / 0 | 0 / 24 | 1 / 0 |
+| axios | 273 / 604 | 392 / 49 | 9 / 0 | 0 / 22 | 1 / 0 |
 | zod | 721 / 1181 | 585 / 120 | 1 / 0 | 0 / 7 | 1 / 0 |
 | commander | 21 / 183 | 297 / 134 | 0 / 0 | 0 / 1 | 0 / 0 |
-| async | 324 / 591 | 313 / 4 | 0 / 0 | 0 / 42 | 0 / 0 |
+| async | 324 / 631 | 313 / 4 | 0 / 0 | 0 / 2 | 0 / 0 |
 | chalk | 43 / 56 | 29 / 16 | 0 / 0 | 0 / 0 | 0 / 0 |
 | dayjs | 32 / 88 | 80 / 24 | 0 / 0 | 0 / 0 | 0 / 0 |
 | underscore | 155 / 250 | 105 / 8 | 0 / 0 | 0 / 2 | 0 / 0 |
@@ -280,14 +279,14 @@ charged to the outermost function around it that polint does not extract. **attr
 once; **applying** counts every gap whose condition holds. The recall gain is an upper bound: it assumes
 every attributed edge is found once the gap is fixed. The syntax census behind this is described in the README.
 
-Base: 1813 missed of 3382 observed edges. Refined: 431 missed of 3382.
+Base: 1813 missed of 3382 observed edges. Refined: 389 missed of 3382.
 
 | rank | gap | attributed base | applying base | recall gain base (upper bound) | attributed refined | recall gain refined (upper bound) | base by package |
 |---|---|---|---|---|---|---|---|
-| 1 | _other member calls (object-literal functions, namespaces)_ | 730 | 0 | 21.6% | 204 | 6.0% | zod 306, axios 251, dayjs 73, async 52, underscore 20, chalk 18, commander 10 |
+| 1 | _other member calls (object-literal functions, namespaces)_ | 730 | 0 | 21.6% | 163 | 4.8% | zod 306, axios 251, dayjs 73, async 52, underscore 20, chalk 18, commander 10 |
 | 2 | _other resolution misses_ | 549 | 0 | 16.2% | 36 | 1.1% | async 236, zod 149, underscore 79, axios 67, commander 15, dayjs 3 |
 | 3 | prototype and class methods, incl. inheritance | 275 | 277 | 8.1% | 139 | 4.1% | commander 210, axios 36, zod 20, async 8, underscore 1 |
-| 4 | callbacks invoked by built-ins | 156 | 162 | 4.6% | 33 | 1.0% | commander 54, zod 43, axios 38, async 13, underscore 5, dayjs 2, chalk 1 |
+| 4 | callbacks invoked by built-ins | 156 | 162 | 4.6% | 32 | 0.9% | commander 54, zod 43, axios 38, async 13, underscore 5, dayjs 2, chalk 1 |
 | 5 | class constructors and `new` | 83 | 83 | 2.5% | 2 | 0.1% | zod 63, commander 8, axios 7, async 4, dayjs 1 |
 | 6 | computed-key member calls | 18 | 18 | 0.5% | 17 | 0.5% | chalk 10, zod 5, axios 2, dayjs 1 |
 | 7 | _identifier call stops at import binding_ | 2 | 0 | 0.1% | 0 | 0.0% | axios 1, zod 1 |
@@ -369,40 +368,40 @@ no unresolved row.
 | package | plan | observed edges | exact-complete | exact | exact + conservative | apart only | apart edges |
 |---|---|---|---|---|---|---|---|
 | axios | base | 675 | 262/675 (39%) | 262/675 (39%) | 262/675 (39%) | 11/675 (2%) | 67 |
-| axios | refined | 675 | 308/675 (46%) | 308/675 (46%) | 359/675 (53%) | 243/675 (36%) | 538 |
+| axios | refined | 675 | 302/675 (45%) | 302/675 (45%) | 569/675 (84%) | 35/675 (5%) | 186 |
 | zod | base | 1308 | 670/1308 (51%) | 670/1308 (51%) | 670/1308 (51%) | 51/1308 (4%) | 160 |
-| zod | refined | 1308 | 678/1308 (52%) | 678/1308 (52%) | 709/1308 (54%) | 472/1308 (36%) | 5143 |
+| zod | refined | 1308 | 502/1308 (38%) | 674/1308 (52%) | 763/1308 (58%) | 418/1308 (32%) | 3588 |
 | commander | base | 318 | 21/318 (7%) | 21/318 (7%) | 21/318 (7%) | 0/318 (0%) | 0 |
-| commander | refined | 318 | 36/318 (11%) | 36/318 (11%) | 85/318 (27%) | 98/318 (31%) | 146 |
+| commander | refined | 318 | 34/318 (11%) | 34/318 (11%) | 85/318 (27%) | 98/318 (31%) | 146 |
 | async | base | 637 | 324/637 (51%) | 324/637 (51%) | 324/637 (51%) | 0/637 (0%) | 0 |
-| async | refined | 637 | 328/637 (51%) | 328/637 (51%) | 348/637 (55%) | 243/637 (38%) | 46411 |
+| async | refined | 637 | 325/637 (51%) | 325/637 (51%) | 485/637 (76%) | 146/637 (23%) | 45951 |
 | chalk | base | 72 | 43/72 (60%) | 43/72 (60%) | 43/72 (60%) | 0/72 (0%) | 1 |
-| chalk | refined | 72 | 43/72 (60%) | 43/72 (60%) | 44/72 (61%) | 12/72 (17%) | 14 |
+| chalk | refined | 72 | 43/72 (60%) | 43/72 (60%) | 56/72 (78%) | 0/72 (0%) | 2 |
 | dayjs | base | 112 | 32/112 (29%) | 32/112 (29%) | 32/112 (29%) | 0/112 (0%) | 4 |
-| dayjs | refined | 112 | 34/112 (30%) | 34/112 (30%) | 36/112 (32%) | 52/112 (46%) | 60 |
+| dayjs | refined | 112 | 34/112 (30%) | 34/112 (30%) | 88/112 (79%) | 0/112 (0%) | 8 |
 | underscore | base | 260 | 154/260 (59%) | 154/260 (59%) | 154/260 (59%) | 1/260 (0%) | 4 |
-| underscore | refined | 260 | 213/260 (82%) | 213/260 (82%) | 229/260 (88%) | 21/260 (8%) | 424 |
+| underscore | refined | 260 | 196/260 (75%) | 196/260 (75%) | 250/260 (96%) | 0/260 (0%) | 8 |
 | **total** | base | 3382 | 1506/3382 (45%) | 1506/3382 (45%) | 1506/3382 (45%) | 63/3382 (2%) | 236 |
-| **total** | refined | 3382 | 1640/3382 (48%) | 1640/3382 (48%) | 1810/3382 (54%) | 1141/3382 (34%) | 52736 |
+| **total** | refined | 3382 | 1436/3382 (42%) | 1608/3382 (48%) | 2296/3382 (68%) | 697/3382 (21%) | 49889 |
 
 Targets per site that claims any in the tier: mean / p95 (nearest rank) / max.
 
 | package | plan | exact | conservative | exact + conservative | apart |
 |---|---|---|---|---|---|
 | axios | base | 1.0 / 1 / 1 (488 sites) | – | 1.0 / 1 / 1 (488 sites) | 1.0 / 1 / 1 (67 sites) |
-| axios | refined | 1.01 / 1 / 4 (621 sites) | 1.32 / 2 / 16 (113 sites) | 1.06 / 1 / 16 (734 sites) | 1.05 / 1 / 3 (447 sites) |
+| axios | refined | 1.0 / 1 / 1 (615 sites) | 1.17 / 2 / 19 (440 sites) | 1.07 / 1 / 19 (1055 sites) | 1.0 / 1 / 1 (118 sites) |
 | zod | base | 1.0 / 1 / 1 (2506 sites) | – | 1.0 / 1 / 1 (2506 sites) | 1.0 / 1 / 1 (160 sites) |
-| zod | refined | 1.0 / 1 / 4 (2554 sites) | 1.0 / 1 / 1 (239 sites) | 1.0 / 1 / 4 (2793 sites) | 2.07 / 1 / 252 (2338 sites) |
+| zod | refined | 1.0 / 1 / 1 (2547 sites) | 1.09 / 1 / 39 (1663 sites) | 1.04 / 1 / 39 (3362 sites) | 3.57 / 36 / 252 (921 sites) |
 | commander | base | 1.0 / 1 / 1 (42 sites) | – | 1.0 / 1 / 1 (42 sites) | – |
-| commander | refined | 1.02 / 1 / 2 (63 sites) | 1.0 / 1 / 1 (75 sites) | 1.01 / 1 / 2 (138 sites) | 1.04 / 1 / 3 (140 sites) |
+| commander | refined | 1.0 / 1 / 1 (62 sites) | 1.01 / 1 / 2 (76 sites) | 1.01 / 1 / 2 (138 sites) | 1.04 / 1 / 3 (140 sites) |
 | async | base | 1.0 / 1 / 1 (440 sites) | – | 1.0 / 1 / 1 (440 sites) | – |
-| async | refined | 1.01 / 1 / 2 (451 sites) | 4.67 / 16 / 16 (48 sites) | 1.36 / 1 / 16 (499 sites) | 100.02 / 167 / 180 (464 sites) |
+| async | refined | 1.0 / 1 / 1 (448 sites) | 10.95 / 166 / 183 (217 sites) | 4.25 / 4 / 183 (665 sites) | 154.2 / 169 / 180 (298 sites) |
 | chalk | base | 1.0 / 1 / 1 (46 sites) | – | 1.0 / 1 / 1 (46 sites) | 1.0 / 1 / 1 (1 sites) |
-| chalk | refined | 1.0 / 1 / 1 (47 sites) | 1.0 / 1 / 1 (6 sites) | 1.0 / 1 / 1 (53 sites) | 1.0 / 1 / 1 (13 sites) |
+| chalk | refined | 1.0 / 1 / 1 (47 sites) | 1.0 / 1 / 1 (18 sites) | 1.0 / 1 / 1 (65 sites) | 1.0 / 1 / 1 (1 sites) |
 | dayjs | base | 1.0 / 1 / 1 (34 sites) | – | 1.0 / 1 / 1 (34 sites) | 1.0 / 1 / 1 (4 sites) |
-| dayjs | refined | 1.0 / 1 / 1 (41 sites) | 1.0 / 1 / 1 (2 sites) | 1.0 / 1 / 1 (43 sites) | 1.0 / 1 / 1 (56 sites) |
+| dayjs | refined | 1.0 / 1 / 1 (41 sites) | 1.0 / 1 / 1 (54 sites) | 1.0 / 1 / 1 (95 sites) | 1.0 / 1 / 1 (4 sites) |
 | underscore | base | 1.0 / 1 / 1 (187 sites) | – | 1.0 / 1 / 1 (187 sites) | 1.0 / 1 / 1 (4 sites) |
-| underscore | refined | 1.1 / 2 / 4 (270 sites) | 8.67 / 16 / 16 (18 sites) | 1.57 / 2 / 16 (288 sites) | 10.5 / 21 / 21 (40 sites) |
+| underscore | refined | 1.0 / 1 / 1 (246 sites) | 8.37 / 21 / 22 (78 sites) | 2.77 / 21 / 22 (324 sites) | 1.0 / 1 / 1 (4 sites) |
 
 ## Precision by tier
 
@@ -414,21 +413,21 @@ called on a single-target answer in the exact tier is a **wrong exact target**; 
 | package | plan | exact: precision, single / multi not called | conservative: precision, single / multi not called | apart: precision, single / multi not called |
 |---|---|---|---|---|
 | axios | base | 262/262 (100%), 0 / 0 | – | 11/11 (100%), 0 / 0 |
-| axios | refined | 308/312 (99%), 0 / 4 | 51/71 (72%), 2 / 18 | 257/260 (99%), 1 / 2 |
+| axios | refined | 302/302 (100%), 0 / 0 | 267/298 (90%), 1 / 30 | 45/45 (100%), 0 / 0 |
 | zod | base | 670/670 (100%), 0 / 0 | – | 51/51 (100%), 0 / 0 |
-| zod | refined | 678/683 (99%), 0 / 5 | 31/31 (100%), 0 / 0 | 905/2167 (42%), 0 / 1262 |
+| zod | refined | 674/674 (100%), 0 / 0 | 261/301 (87%), 0 / 40 | 679/1906 (36%), 0 / 1227 |
 | commander | base | 21/21 (100%), 0 / 0 | – | – |
-| commander | refined | 36/36 (100%), 0 / 0 | 49/49 (100%), 0 / 0 | 98/98 (100%), 0 / 0 |
+| commander | refined | 34/34 (100%), 0 / 0 | 51/51 (100%), 0 / 0 | 98/98 (100%), 0 / 0 |
 | async | base | 324/324 (100%), 0 / 0 | – | – |
-| async | refined | 328/329 (100%), 0 / 1 | 20/46 (43%), 0 / 26 | 243/15065 (2%), 0 / 14822 |
+| async | refined | 325/325 (100%), 0 / 0 | 160/924 (17%), 0 / 764 | 146/14812 (1%), 0 / 14666 |
 | chalk | base | 43/43 (100%), 0 / 0 | – | – |
-| chalk | refined | 43/43 (100%), 0 / 0 | 1/1 (100%), 0 / 0 | 12/12 (100%), 0 / 0 |
+| chalk | refined | 43/43 (100%), 0 / 0 | 13/13 (100%), 0 / 0 | – |
 | dayjs | base | 32/32 (100%), 0 / 0 | – | – |
-| dayjs | refined | 34/34 (100%), 0 / 0 | 2/2 (100%), 0 / 0 | 52/52 (100%), 0 / 0 |
+| dayjs | refined | 34/34 (100%), 0 / 0 | 54/54 (100%), 0 / 0 | – |
 | underscore | base | 154/154 (100%), 0 / 0 | – | 1/1 (100%), 0 / 0 |
-| underscore | refined | 213/224 (95%), 0 / 11 | 16/58 (28%), 0 / 42 | 22/212 (10%), 0 / 190 |
+| underscore | refined | 196/196 (100%), 0 / 0 | 54/303 (18%), 0 / 249 | 1/1 (100%), 0 / 0 |
 | **total** | base | **1506/1506 (100%), 0 / 0** | – | **63/63 (100%), 0 / 0** |
-| **total** | refined | **1640/1661 (99%), 0 / 21** | **170/258 (66%), 2 / 86** | **1589/17866 (9%), 1 / 16276** |
+| **total** | refined | **1608/1608 (100%), 0 / 0** | **860/1944 (44%), 1 / 1083** | **969/16862 (6%), 0 / 15893** |
 
 | package | plan | wrong exact target at | site text | target | the run called |
 |---|---|---|---|---|---|
@@ -443,19 +442,19 @@ which the engine must not produce.
 | package | plan | call sites | complete | open | open with a claimed target | open by reason |
 |---|---|---|---|---|---|---|
 | axios | base | 2098 | 488/2098 (23%) | 1610 | 0 | DynamicProperty 857, MissingSemanticReference 521, none recorded 197, CallApplyBind 35 |
-| axios | refined | 2098 | 621/2098 (30%) | 1477 | 113 | DynamicProperty 853, MissingSemanticReference 396, none recorded 191, Unknown 113, CallApplyBind 35 |
+| axios | refined | 2098 | 621/2098 (30%) | 1477 | 434 | DynamicProperty 853, MissingSemanticReference 396, Inflow(EscapedObject) 269, none recorded 170, Unknown 113, Inflow(InwardParameter) 40, CallApplyBind 35, Inflow(OutsideValue) 15, Inflow(InwardThis) 3, Inflow(OpenResult) 2 |
 | zod | base | 6109 | 2506/6109 (41%) | 3603 | 0 | DynamicProperty 2269, MissingSemanticReference 949, none recorded 340, CallApplyBind 45, Reflection 1 |
-| zod | refined | 6109 | 2554/6109 (42%) | 3555 | 239 | DynamicProperty 2269, MissingSemanticReference 915, none recorded 314, Unknown 239, CallApplyBind 45, Reflection 1 |
+| zod | refined | 6109 | 1706/6109 (28%) | 4403 | 1656 | DynamicProperty 2269, Inflow(EscapedObject) 963, MissingSemanticReference 915, Inflow(InwardParameter) 335, none recorded 295, Unknown 239, Inflow(InwardThis) 117, CallApplyBind 45, Inflow(OutsideValue) 2, Reflection 1 |
 | commander | base | 814 | 42/814 (5%) | 772 | 0 | DynamicProperty 589, MissingSemanticReference 155, none recorded 27, CallApplyBind 1 |
 | commander | refined | 814 | 63/814 (8%) | 751 | 75 | DynamicProperty 588, MissingSemanticReference 135, Unknown 75, none recorded 27, CallApplyBind 1 |
 | async | base | 1605 | 440/1605 (27%) | 1165 | 0 | MissingSemanticReference 626, DynamicProperty 369, none recorded 156, CallApplyBind 14 |
-| async | refined | 1605 | 451/1605 (28%) | 1154 | 48 | MissingSemanticReference 622, DynamicProperty 362, none recorded 155, Unknown 48, CallApplyBind 14, UnsupportedSyntax 1 |
+| async | refined | 1605 | 451/1605 (28%) | 1154 | 214 | MissingSemanticReference 622, DynamicProperty 362, Inflow(EscapedObject) 159, none recorded 155, Unknown 48, CallApplyBind 14, Inflow(InwardParameter) 4, Inflow(OutsideValue) 3, UnsupportedSyntax 1 |
 | chalk | base | 144 | 46/144 (32%) | 98 | 0 | DynamicProperty 39, none recorded 35, MissingSemanticReference 24 |
-| chalk | refined | 144 | 47/144 (33%) | 97 | 6 | DynamicProperty 39, none recorded 33, MissingSemanticReference 23, Unknown 6 |
+| chalk | refined | 144 | 47/144 (33%) | 97 | 18 | DynamicProperty 39, none recorded 33, MissingSemanticReference 23, Inflow(EscapedObject) 12, Unknown 6 |
 | dayjs | base | 181 | 34/181 (19%) | 147 | 0 | DynamicProperty 89, MissingSemanticReference 48, none recorded 10 |
-| dayjs | refined | 181 | 41/181 (23%) | 140 | 2 | DynamicProperty 89, MissingSemanticReference 41, none recorded 10, Unknown 2 |
+| dayjs | refined | 181 | 41/181 (23%) | 140 | 54 | DynamicProperty 89, MissingSemanticReference 41, Inflow(InwardParameter) 28, Inflow(EscapedObject) 20, none recorded 10, Inflow(InwardThis) 4, Unknown 2 |
 | underscore | base | 455 | 187/455 (41%) | 268 | 0 | MissingSemanticReference 169, DynamicProperty 44, CallApplyBind 41, none recorded 14 |
-| underscore | refined | 455 | 270/455 (59%) | 185 | 18 | MissingSemanticReference 86, DynamicProperty 44, CallApplyBind 41, Unknown 18, none recorded 14 |
+| underscore | refined | 455 | 270/455 (59%) | 185 | 54 | MissingSemanticReference 86, DynamicProperty 44, CallApplyBind 41, Inflow(InwardParameter) 19, Unknown 18, none recorded 14, Inflow(OutsideValue) 10, Inflow(EscapedObject) 7 |
 
 ## Budget events
 
@@ -465,19 +464,19 @@ the tune set, and a budget event must never discard an edge already derived.
 | package | plan | status | reasons |
 |---|---|---|---|
 | axios | base | NotRun | – |
-| axios | refined | BudgetExceeded | adaptation.max_targets_per_source |
+| axios | refined | WithinBudget | – |
 | zod | base | NotRun | – |
 | zod | refined | WithinBudget | – |
 | commander | base | NotRun | – |
 | commander | refined | WithinBudget | – |
 | async | base | NotRun | – |
-| async | refined | BudgetExceeded | adaptation.max_targets_per_source |
+| async | refined | WithinBudget | – |
 | chalk | base | NotRun | – |
 | chalk | refined | WithinBudget | – |
 | dayjs | base | NotRun | – |
 | dayjs | refined | WithinBudget | – |
 | underscore | base | NotRun | – |
-| underscore | refined | BudgetExceeded | adaptation.max_targets_per_source |
+| underscore | refined | WithinBudget | – |
 
 ## Refined edges
 
@@ -486,25 +485,25 @@ names a function. Rows with a status other than `Resolved` or `Ambiguous` claim 
 
 | package | plan | tier | algorithm | status | precision | names a function | rows |
 |---|---|---|---|---|---|---|---|
-| axios | refined | none | PointsTo | Unresolved | Unknown | no | 1397 |
-| axios | refined | exact | PointsTo | Resolved | SetupAware | yes | 629 |
+| axios | refined | none | PointsTo | Unresolved | Unknown | no | 1726 |
+| axios | refined | exact | PointsTo | Resolved | Exact | yes | 615 |
+| axios | refined | conservative | PointsTo | Resolved | Conservative | yes | 521 |
 | axios | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 488 |
-| axios | refined | apart | PointsTo | Resolved | Heuristic | yes | 404 |
 | axios | refined | exact | DirectReference | Resolved | SetupAware | yes | 388 |
-| axios | refined | conservative | PointsTo | Resolved | Conservative | yes | 149 |
 | axios | refined | exact | ImportBinding | Resolved | SetupAware | yes | 94 |
 | axios | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 67 |
 | axios | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 67 |
+| axios | refined | apart | PointsTo | Resolved | Heuristic | yes | 52 |
 | axios | refined | exact | ImportBinding | Resolved | SetupAware | no | 8 |
 | axios | refined | exact | SummaryAssisted | Resolved | SetupAware | no | 8 |
 | axios | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 6 |
-| zod | refined | apart | PointsTo | Resolved | Heuristic | yes | 4823 |
-| zod | refined | none | PointsTo | Unresolved | Unknown | no | 3468 |
+| zod | refined | none | PointsTo | Unresolved | Unknown | no | 4885 |
+| zod | refined | apart | PointsTo | Resolved | Heuristic | yes | 3268 |
 | zod | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 2506 |
-| zod | refined | exact | PointsTo | Resolved | SetupAware | yes | 1456 |
+| zod | refined | conservative | PointsTo | Resolved | Conservative | yes | 1811 |
+| zod | refined | exact | PointsTo | Resolved | Exact | yes | 1439 |
 | zod | refined | exact | ImportBinding | Resolved | SetupAware | yes | 1300 |
 | zod | refined | exact | DirectReference | Resolved | SetupAware | yes | 1081 |
-| zod | refined | conservative | PointsTo | Resolved | Conservative | yes | 239 |
 | zod | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 160 |
 | zod | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 160 |
 | zod | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 125 |
@@ -513,42 +512,39 @@ names a function. Rows with a status other than `Resolved` or `Ambiguous` claim 
 | zod | refined | none | PointsTo | Unresolved | Unsupported | no | 1 |
 | commander | refined | none | PointsTo | Unresolved | Unknown | no | 799 |
 | commander | refined | apart | PointsTo | Resolved | Heuristic | yes | 146 |
-| commander | refined | conservative | PointsTo | Resolved | Conservative | yes | 75 |
-| commander | refined | exact | PointsTo | Resolved | SetupAware | yes | 64 |
+| commander | refined | conservative | PointsTo | Resolved | Conservative | yes | 77 |
+| commander | refined | exact | PointsTo | Resolved | Exact | yes | 62 |
 | commander | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 42 |
 | commander | refined | exact | DirectReference | Resolved | SetupAware | yes | 41 |
 | commander | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 1 |
-| async | refined | apart | PointsTo | Resolved | Heuristic | yes | 46411 |
-| async | refined | none | PointsTo | Unresolved | Unknown | no | 1046 |
-| async | refined | exact | PointsTo | Resolved | SetupAware | yes | 454 |
+| async | refined | apart | PointsTo | Resolved | Heuristic | yes | 45951 |
+| async | refined | conservative | PointsTo | Resolved | Conservative | yes | 2376 |
+| async | refined | none | PointsTo | Unresolved | Unknown | no | 1212 |
+| async | refined | exact | PointsTo | Resolved | Exact | yes | 448 |
 | async | refined | exact | DirectReference | Resolved | SetupAware | yes | 440 |
 | async | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 440 |
-| async | refined | conservative | PointsTo | Resolved | Conservative | yes | 224 |
 | async | refined | none | FrameworkModel | Unsupported | Conservative | no | 1 |
-| chalk | refined | none | PointsTo | Unresolved | Unknown | no | 68 |
-| chalk | refined | exact | PointsTo | Resolved | SetupAware | yes | 47 |
+| chalk | refined | none | PointsTo | Unresolved | Unknown | no | 80 |
+| chalk | refined | exact | PointsTo | Resolved | Exact | yes | 47 |
 | chalk | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 46 |
 | chalk | refined | exact | DirectReference | Resolved | SetupAware | yes | 44 |
-| chalk | refined | apart | PointsTo | Resolved | Heuristic | yes | 12 |
-| chalk | refined | conservative | PointsTo | Resolved | Conservative | yes | 6 |
+| chalk | refined | conservative | PointsTo | Resolved | Conservative | yes | 18 |
 | chalk | refined | exact | ImportBinding | Resolved | SetupAware | yes | 2 |
 | chalk | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 1 |
 | chalk | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 1 |
-| dayjs | refined | none | PointsTo | Unresolved | Unknown | no | 132 |
-| dayjs | refined | apart | PointsTo | Resolved | Heuristic | yes | 52 |
-| dayjs | refined | exact | PointsTo | Resolved | SetupAware | yes | 41 |
+| dayjs | refined | none | PointsTo | Unresolved | Unknown | no | 184 |
+| dayjs | refined | conservative | PointsTo | Resolved | Conservative | yes | 54 |
+| dayjs | refined | exact | PointsTo | Resolved | Exact | yes | 41 |
 | dayjs | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 34 |
 | dayjs | refined | exact | DirectReference | Resolved | SetupAware | yes | 23 |
 | dayjs | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 11 |
 | dayjs | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 4 |
 | dayjs | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 4 |
-| dayjs | refined | conservative | PointsTo | Resolved | Conservative | yes | 2 |
-| underscore | refined | apart | PointsTo | Resolved | Heuristic | yes | 416 |
-| underscore | refined | exact | PointsTo | Resolved | SetupAware | yes | 296 |
-| underscore | refined | none | PointsTo | Unresolved | Unknown | no | 189 |
+| underscore | refined | conservative | PointsTo | Resolved | Conservative | yes | 653 |
+| underscore | refined | exact | PointsTo | Resolved | Exact | yes | 246 |
+| underscore | refined | none | PointsTo | Unresolved | Unknown | no | 225 |
 | underscore | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 187 |
 | underscore | refined | exact | DirectReference | Resolved | SetupAware | yes | 186 |
-| underscore | refined | conservative | PointsTo | Resolved | Conservative | yes | 156 |
 | underscore | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 4 |
 | underscore | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 4 |
 | underscore | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 1 |
@@ -561,13 +557,13 @@ the gained sites the run called a polint function from, the only ones recall can
 
 | package | plan | sites gained | in test paths | executed | top files |
 |---|---|---|---|---|---|
-| axios | refined | 246 | 0 | 85 | lib/adapters/http.js 50, lib/utils.js 45, lib/adapters/fetch.js 21 |
-| zod | refined | 287 | 0 | 38 | src/v3/types.ts 77, src/v4/core/schemas.ts 76, src/v4/core/json-schema-processors.ts 20 |
+| axios | refined | 567 | 0 | 287 | lib/adapters/http.js 96, lib/adapters/fetch.js 62, lib/utils.js 48 |
+| zod | refined | 856 | 0 | 89 | src/v4/core/compile.ts 289, src/v3/types.ts 238, src/v4/core/schemas.ts 99 |
 | commander | refined | 96 | 0 | 63 | lib/command.js 56, lib/help.js 26, index.js 4 |
-| async | refined | 59 | 0 | 23 | internal/queue.js 10, auto.js 7, asyncify.js 3 |
-| chalk | refined | 7 | 0 | 1 | source/index.js 2, source/vendor/supports-color/browser.js 2, source/vendor/supports-color/index.js 2 |
-| dayjs | refined | 9 | 0 | 4 | dayjs.min.js 9 |
-| underscore | refined | 101 | 0 | 62 | underscore-umd.js 101 |
+| async | refined | 225 | 0 | 117 | internal/queue.js 20, auto.js 11, internal/eachOfLimit.js 8 |
+| chalk | refined | 19 | 0 | 13 | source/index.js 8, source/vendor/ansi-styles/index.js 7, source/vendor/supports-color/browser.js 2 |
+| dayjs | refined | 61 | 0 | 56 | dayjs.min.js 61 |
+| underscore | refined | 137 | 0 | 73 | underscore-umd.js 137 |
 
 ## Analysed set: globs alone against shipped source
 
@@ -577,10 +573,10 @@ scored both ways once, so this report reads against them. Every other table uses
 
 | package | set | files | source KB | plan | recall | exact / exact + conservative | wrong targets single / multi | wrong exact targets | call sites | dump s | dump peak MB |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| zod | globs alone | 332 | 3088 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 49016 | 28.2 | 1365 |
-| zod | globs alone | 332 | 3088 | refined | 1190/1308 (91%) | 678 / 709 | 0 / 5 | 0 | 49016 | 157.4 | 4753 |
-| zod | shipped | 125 | 1354 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 6109 | 17.7 | 535 |
-| zod | shipped | 125 | 1354 | refined | 1181/1308 (90%) | 678 / 709 | 0 / 5 | 0 | 6109 | 44.6 | 1305 |
+| zod | globs alone | 332 | 3088 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 49016 | 12.8 | 1367 |
+| zod | globs alone | 332 | 3088 | refined | 1190/1308 (91%) | 674 / 763 | 0 / 40 | 0 | 49016 | 77.7 | 4813 |
+| zod | shipped | 125 | 1354 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 6109 | 4.8 | 535 |
+| zod | shipped | 125 | 1354 | refined | 1181/1308 (90%) | 674 / 763 | 0 / 40 | 0 | 6109 | 18.5 | 1346 |
 
 ## Outside tools
 
@@ -591,14 +587,14 @@ sites that the run never called there, split by answers with one target and with
 
 | package | polint base | polint refined | jelly-static | jelly-approx |
 |---|---|---|---|---|
-| async | 50.9% | 92.8% | 55.7% | 55.7% |
-| axios | 40.4% | 89.2% | 89.2% | 89.3% |
+| async | 50.9% | 99.1% | 55.7% | 55.7% |
+| axios | 40.4% | 89.5% | 89.2% | 89.3% |
 | chalk | 59.7% | 77.8% | 86.1% | 86.1% |
 | commander | 6.6% | 57.6% | 96.5% | 96.5% |
 | dayjs | 28.6% | 78.6% | 77.7% | 87.5% |
 | underscore | 59.6% | 96.2% | 96.2% | 98.9% |
 | zod | 55.1% | 90.3% | 91.6% | 92.0% |
-| **total** | **46.4%** | **87.3%** | **84.6%** | **85.3%** |
+| **total** | **46.4%** | **88.5%** | **84.6%** | **85.3%** |
 
 ### jelly-static
 
@@ -664,9 +660,9 @@ unresolved marker.
 | base | exact-complete | 44.5% | 27.1% | 17.4 | no |
 | base | exact | 44.5% | 27.1% | 17.4 | no |
 | base | exact + conservative | 44.5% | 27.1% | 17.4 | no |
-| refined | exact-complete | 48.5% | 32.5% | 16.0 | no |
-| refined | exact | 48.5% | 32.5% | 16.0 | no |
-| refined | exact + conservative | 53.5% | 33.6% | 19.9 | no |
+| refined | exact-complete | 42.5% | 32.3% | 10.2 | no |
+| refined | exact | 47.5% | 32.3% | 15.3 | no |
+| refined | exact + conservative | 67.9% | 83.5% | -15.7 | yes |
 
 | plan | wrong exact targets | other targets, no unresolved marker |
 |---|---|---|
@@ -685,13 +681,13 @@ by its end byte can also inflate both counts.
 |---|---|---|
 | co | 0 / 0 | 0 / 0 |
 | pako | 0 / 0 | 0 / 0 |
-| nanostores | 0 / 0 | 0 / 0 |
+| nanostores | 0 / 0 | 0 / 4 |
 | express | 0 / 0 | 0 / 0 |
-| immer | 0 / 0 | 0 / 0 |
+| immer | 0 / 0 | 0 / 3 |
 | js-yaml | 0 / 0 | 0 / 0 |
 | acorn | 0 / 0 | 0 / 0 |
-| node-forge | 0 / 0 | 0 / 7 |
-| **total** | **0 / 0** | **0 / 7** |
+| node-forge | 0 / 0 | 0 / 64 |
+| **total** | **0 / 0** | **0 / 71** |
 
 | package | plan | site | site text | single-target answer | the run called |
 |---|---|---|---|---|---|
@@ -720,21 +716,21 @@ no unresolved row.
 | co | base | 22 | 12/22 (55%) | 12/22 (55%) | 12/22 (55%) | 0/22 (0%) | 0 |
 | co | refined | 22 | 12/22 (55%) | 12/22 (55%) | 22/22 (100%) | 0/22 (0%) | 0 |
 | pako | base | 257 | 215/257 (84%) | 215/257 (84%) | 215/257 (84%) | 8/257 (3%) | 11 |
-| pako | refined | 257 | 235/257 (91%) | 235/257 (91%) | 235/257 (91%) | 20/257 (8%) | 47 |
+| pako | refined | 257 | 235/257 (91%) | 235/257 (91%) | 255/257 (99%) | 0/257 (0%) | 22 |
 | nanostores | base | 103 | 32/103 (31%) | 32/103 (31%) | 32/103 (31%) | 0/103 (0%) | 0 |
-| nanostores | refined | 103 | 32/103 (31%) | 32/103 (31%) | 41/103 (40%) | 30/103 (29%) | 35 |
+| nanostores | refined | 103 | 32/103 (31%) | 32/103 (31%) | 71/103 (69%) | 0/103 (0%) | 0 |
 | express | base | 166 | 22/166 (13%) | 22/166 (13%) | 22/166 (13%) | 0/166 (0%) | 0 |
 | express | refined | 166 | 33/166 (20%) | 33/166 (20%) | 43/166 (26%) | 24/166 (14%) | 25 |
 | immer | base | 295 | 225/295 (76%) | 225/295 (76%) | 225/295 (76%) | 0/295 (0%) | 1 |
-| immer | refined | 295 | 226/295 (77%) | 226/295 (77%) | 237/295 (80%) | 16/295 (5%) | 26 |
+| immer | refined | 295 | 226/295 (77%) | 226/295 (77%) | 253/295 (86%) | 0/295 (0%) | 2 |
 | js-yaml | base | 338 | 227/338 (67%) | 227/338 (67%) | 227/338 (67%) | 0/338 (0%) | 2 |
-| js-yaml | refined | 338 | 265/338 (78%) | 265/338 (78%) | 273/338 (81%) | 3/338 (1%) | 7 |
+| js-yaml | refined | 338 | 265/338 (78%) | 265/338 (78%) | 276/338 (82%) | 0/338 (0%) | 4 |
 | acorn | base | 1141 | 176/1141 (15%) | 176/1141 (15%) | 176/1141 (15%) | 0/1141 (0%) | 3 |
-| acorn | refined | 1141 | 179/1141 (16%) | 179/1141 (16%) | 190/1141 (17%) | 929/1141 (81%) | 1316 |
+| acorn | refined | 1141 | 179/1141 (16%) | 179/1141 (16%) | 1113/1141 (98%) | 6/1141 (1%) | 12 |
 | node-forge | base | 3131 | 570/3131 (18%) | 570/3131 (18%) | 570/3131 (18%) | 7/3131 (0%) | 9 |
-| node-forge | refined | 3131 | 789/3131 (25%) | 789/3131 (25%) | 792/3131 (25%) | 1970/3131 (63%) | 2678 |
+| node-forge | refined | 3131 | 777/3131 (25%) | 777/3131 (25%) | 2523/3131 (81%) | 239/3131 (8%) | 407 |
 | **total** | base | 5453 | 1479/5453 (27%) | 1479/5453 (27%) | 1479/5453 (27%) | 15/5453 (0%) | 26 |
-| **total** | refined | 5453 | 1771/5453 (32%) | 1771/5453 (32%) | 1833/5453 (34%) | 2992/5453 (55%) | 4134 |
+| **total** | refined | 5453 | 1759/5453 (32%) | 1759/5453 (32%) | 4556/5453 (84%) | 269/5453 (5%) | 472 |
 
 Targets per site that claims any in the tier: mean / p95 (nearest rank) / max.
 
@@ -743,19 +739,19 @@ Targets per site that claims any in the tier: mean / p95 (nearest rank) / max.
 | co | base | 1.0 / 1 / 1 (12 sites) | – | 1.0 / 1 / 1 (12 sites) | – |
 | co | refined | 1.0 / 1 / 1 (12 sites) | 1.08 / 2 / 2 (13 sites) | 1.04 / 1 / 2 (25 sites) | – |
 | pako | base | 1.0 / 1 / 1 (249 sites) | – | 1.0 / 1 / 1 (249 sites) | 1.0 / 1 / 1 (11 sites) |
-| pako | refined | 1.0 / 1 / 1 (276 sites) | – | 1.0 / 1 / 1 (276 sites) | 1.0 / 1 / 1 (36 sites) |
+| pako | refined | 1.0 / 1 / 1 (276 sites) | 1.0 / 1 / 1 (25 sites) | 1.0 / 1 / 1 (301 sites) | 1.0 / 1 / 1 (11 sites) |
 | nanostores | base | 1.0 / 1 / 1 (36 sites) | – | 1.0 / 1 / 1 (36 sites) | – |
-| nanostores | refined | 1.0 / 1 / 1 (37 sites) | 1.0 / 1 / 1 (15 sites) | 1.0 / 1 / 1 (52 sites) | 1.52 / 2 / 5 (23 sites) |
+| nanostores | refined | 1.0 / 1 / 1 (37 sites) | 1.32 / 2 / 5 (38 sites) | 1.16 / 2 / 5 (75 sites) | – |
 | express | base | 1.0 / 1 / 1 (24 sites) | – | 1.0 / 1 / 1 (24 sites) | – |
 | express | refined | 1.0 / 1 / 1 (35 sites) | 1.0 / 1 / 1 (13 sites) | 1.0 / 1 / 1 (48 sites) | 1.0 / 1 / 1 (25 sites) |
 | immer | base | 1.0 / 1 / 1 (302 sites) | – | 1.0 / 1 / 1 (302 sites) | 1.0 / 1 / 1 (1 sites) |
-| immer | refined | 1.0 / 1 / 1 (303 sites) | 1.07 / 2 / 2 (15 sites) | 1.0 / 1 / 2 (318 sites) | 1.92 / 6 / 6 (13 sites) |
+| immer | refined | 1.0 / 1 / 1 (303 sites) | 1.48 / 6 / 6 (27 sites) | 1.04 / 1 / 6 (330 sites) | 1.0 / 1 / 1 (1 sites) |
 | js-yaml | base | 1.0 / 1 / 1 (254 sites) | – | 1.0 / 1 / 1 (254 sites) | 1.0 / 1 / 1 (2 sites) |
-| js-yaml | refined | 1.0 / 1 / 1 (305 sites) | 1.0 / 1 / 1 (8 sites) | 1.0 / 1 / 1 (313 sites) | 1.0 / 1 / 1 (5 sites) |
+| js-yaml | refined | 1.0 / 1 / 1 (305 sites) | 1.0 / 1 / 1 (11 sites) | 1.0 / 1 / 1 (316 sites) | 1.0 / 1 / 1 (2 sites) |
 | acorn | base | 1.0 / 1 / 1 (197 sites) | – | 1.0 / 1 / 1 (197 sites) | 1.0 / 1 / 1 (3 sites) |
-| acorn | refined | 1.0 / 1 / 2 (201 sites) | 2.75 / 8 / 8 (4 sites) | 1.04 / 1 / 8 (205 sites) | 1.0 / 1 / 2 (1312 sites) |
+| acorn | refined | 1.0 / 1 / 1 (200 sites) | 1.01 / 1 / 8 (1308 sites) | 1.01 / 1 / 8 (1508 sites) | 1.0 / 1 / 1 (9 sites) |
 | node-forge | base | 1.0 / 1 / 1 (664 sites) | – | 1.0 / 1 / 1 (664 sites) | 1.0 / 1 / 1 (9 sites) |
-| node-forge | refined | 1.01 / 1 / 5 (947 sites) | 1.74 / 4 / 4 (19 sites) | 1.02 / 1 / 5 (966 sites) | 1.12 / 2 / 6 (2389 sites) |
+| node-forge | refined | 1.0 / 1 / 1 (941 sites) | 1.11 / 2 / 6 (2086 sites) | 1.08 / 1 / 6 (3027 sites) | 1.21 / 3 / 6 (328 sites) |
 
 ## Precision by tier (held-out)
 
@@ -769,21 +765,21 @@ called on a single-target answer in the exact tier is a **wrong exact target**; 
 | co | base | 12/12 (100%), 0 / 0 | – | – |
 | co | refined | 12/12 (100%), 0 / 0 | 10/10 (100%), 0 / 0 | – |
 | pako | base | 215/215 (100%), 0 / 0 | – | 8/8 (100%), 0 / 0 |
-| pako | refined | 235/235 (100%), 0 / 0 | – | 28/28 (100%), 0 / 0 |
+| pako | refined | 235/235 (100%), 0 / 0 | 20/20 (100%), 0 / 0 | 8/8 (100%), 0 / 0 |
 | nanostores | base | 32/32 (100%), 0 / 0 | – | – |
-| nanostores | refined | 32/32 (100%), 0 / 0 | 9/9 (100%), 0 / 0 | 30/34 (88%), 0 / 4 |
+| nanostores | refined | 32/32 (100%), 0 / 0 | 39/43 (91%), 0 / 4 | – |
 | express | base | 22/22 (100%), 0 / 0 | – | – |
 | express | refined | 33/33 (100%), 0 / 0 | 10/10 (100%), 0 / 0 | 24/24 (100%), 0 / 0 |
 | immer | base | 225/225 (100%), 0 / 0 | – | – |
-| immer | refined | 226/226 (100%), 0 / 0 | 11/11 (100%), 0 / 0 | 16/19 (84%), 0 / 3 |
+| immer | refined | 226/226 (100%), 0 / 0 | 27/30 (90%), 0 / 3 | – |
 | js-yaml | base | 227/227 (100%), 0 / 0 | – | – |
-| js-yaml | refined | 265/265 (100%), 0 / 0 | 8/8 (100%), 0 / 0 | 3/3 (100%), 0 / 0 |
+| js-yaml | refined | 265/265 (100%), 0 / 0 | 11/11 (100%), 0 / 0 | – |
 | acorn | base | 176/176 (100%), 0 / 0 | – | 0/3 (0%), 3 / 0 |
-| acorn | refined | 179/179 (100%), 0 / 0 | 11/11 (100%), 0 / 0 | 929/932 (100%), 3 / 0 |
+| acorn | refined | 179/179 (100%), 0 / 0 | 934/934 (100%), 0 / 0 | 6/9 (67%), 3 / 0 |
 | node-forge | base | 570/570 (100%), 0 / 0 | – | 7/7 (100%), 0 / 0 |
-| node-forge | refined | 789/792 (100%), 0 / 3 | 3/7 (43%), 0 / 4 | 1977/2070 (96%), 0 / 93 |
+| node-forge | refined | 777/777 (100%), 0 / 0 | 1746/1810 (96%), 0 / 64 | 246/282 (87%), 0 / 36 |
 | **total** | base | **1479/1479 (100%), 0 / 0** | – | **15/18 (83%), 3 / 0** |
-| **total** | refined | **1771/1774 (100%), 0 / 3** | **62/66 (94%), 0 / 4** | **3007/3110 (97%), 3 / 100** |
+| **total** | refined | **1759/1759 (100%), 0 / 0** | **2797/2868 (98%), 0 / 71** | **284/323 (88%), 3 / 36** |
 
 | package | plan | wrong exact target at | site text | target | the run called |
 |---|---|---|---|---|---|
@@ -800,19 +796,19 @@ which the engine must not produce.
 | co | base | 46 | 12/46 (26%) | 34 | 0 | CallApplyBind 12, MissingSemanticReference 11, DynamicProperty 7, none recorded 4 |
 | co | refined | 46 | 12/46 (26%) | 34 | 13 | Unknown 13, CallApplyBind 12, MissingSemanticReference 11, DynamicProperty 7, none recorded 4 |
 | pako | base | 430 | 249/430 (58%) | 181 | 0 | MissingSemanticReference 91, DynamicProperty 73, none recorded 9, CallApplyBind 8 |
-| pako | refined | 430 | 276/430 (64%) | 154 | 0 | DynamicProperty 73, MissingSemanticReference 64, none recorded 9, CallApplyBind 8 |
+| pako | refined | 430 | 276/430 (64%) | 154 | 25 | DynamicProperty 73, MissingSemanticReference 64, Inflow(EscapedObject) 12, Inflow(InwardThis) 9, CallApplyBind 8, Inflow(InwardParameter) 4, none recorded 4 |
 | nanostores | base | 164 | 36/164 (22%) | 128 | 0 | MissingSemanticReference 62, DynamicProperty 56, none recorded 10 |
-| nanostores | refined | 164 | 37/164 (23%) | 127 | 15 | MissingSemanticReference 61, DynamicProperty 56, Unknown 15, none recorded 10 |
+| nanostores | refined | 164 | 37/164 (23%) | 127 | 38 | MissingSemanticReference 61, DynamicProperty 56, Inflow(EscapedObject) 15, Unknown 15, none recorded 9, Inflow(OutsideValue) 8 |
 | express | base | 466 | 24/466 (5%) | 442 | 0 | DynamicProperty 192, MissingSemanticReference 186, none recorded 53, CallApplyBind 11, UnknownCallee 1 |
 | express | refined | 466 | 35/466 (8%) | 431 | 13 | DynamicProperty 192, MissingSemanticReference 175, none recorded 51, Unknown 13, CallApplyBind 11, UnknownCallee 1 |
 | immer | base | 575 | 302/575 (53%) | 273 | 0 | MissingSemanticReference 112, DynamicProperty 110, none recorded 33, CallApplyBind 18 |
-| immer | refined | 575 | 303/575 (53%) | 272 | 15 | MissingSemanticReference 111, DynamicProperty 110, none recorded 33, CallApplyBind 18, Unknown 15 |
+| immer | refined | 575 | 303/575 (53%) | 272 | 27 | MissingSemanticReference 111, DynamicProperty 110, none recorded 33, CallApplyBind 18, Unknown 15, Inflow(EscapedObject) 6, Inflow(InwardParameter) 4, Inflow(OutsideValue) 2 |
 | js-yaml | base | 709 | 254/709 (36%) | 455 | 0 | DynamicProperty 212, MissingSemanticReference 159, none recorded 55, CallApplyBind 29 |
-| js-yaml | refined | 709 | 305/709 (43%) | 404 | 8 | DynamicProperty 193, MissingSemanticReference 127, none recorded 55, CallApplyBind 29, Unknown 8 |
+| js-yaml | refined | 709 | 305/709 (43%) | 404 | 11 | DynamicProperty 193, MissingSemanticReference 127, none recorded 55, CallApplyBind 29, Unknown 8, Inflow(EscapedObject) 3 |
 | acorn | base | 1809 | 197/1809 (11%) | 1612 | 0 | DynamicProperty 1539, MissingSemanticReference 47, none recorded 19, CallApplyBind 6, DynamicImport 1 |
-| acorn | refined | 1809 | 201/1809 (11%) | 1608 | 4 | DynamicProperty 1539, MissingSemanticReference 43, none recorded 19, CallApplyBind 6, Unknown 4, DynamicImport 1 |
+| acorn | refined | 1809 | 201/1809 (11%) | 1608 | 1307 | DynamicProperty 1539, Inflow(InwardThis) 1099, Inflow(InwardParameter) 185, MissingSemanticReference 43, none recorded 19, Inflow(OutsideValue) 11, Inflow(EscapedObject) 8, CallApplyBind 6, Unknown 4, DynamicImport 1 |
 | node-forge | base | 5283 | 664/5283 (13%) | 4619 | 0 | DynamicProperty 3293, MissingSemanticReference 1080, none recorded 231, CallApplyBind 15 |
-| node-forge | refined | 5283 | 947/5283 (18%) | 4336 | 19 | DynamicProperty 3152, MissingSemanticReference 938, none recorded 231, Unknown 19, CallApplyBind 15 |
+| node-forge | refined | 5283 | 947/5283 (18%) | 4336 | 2080 | DynamicProperty 3152, Inflow(EscapedObject) 1097, MissingSemanticReference 938, Inflow(InwardThis) 551, Inflow(InwardParameter) 411, none recorded 196, Unknown 19, CallApplyBind 15, Inflow(OutsideValue) 2 |
 
 ## Budget events (held-out)
 
@@ -848,64 +844,61 @@ names a function. Rows with a status other than `Resolved` or `Ambiguous` claim 
 | co | refined | none | PointsTo | Unresolved | Unknown | no | 43 |
 | co | refined | conservative | PointsTo | Resolved | Conservative | yes | 14 |
 | co | refined | exact | DirectReference | Resolved | SetupAware | yes | 12 |
-| co | refined | exact | PointsTo | Resolved | SetupAware | yes | 12 |
+| co | refined | exact | PointsTo | Resolved | Exact | yes | 12 |
 | co | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 12 |
-| pako | refined | exact | PointsTo | Resolved | SetupAware | yes | 276 |
+| pako | refined | exact | PointsTo | Resolved | Exact | yes | 276 |
 | pako | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 249 |
+| pako | refined | none | PointsTo | Unresolved | Unknown | no | 170 |
 | pako | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 148 |
-| pako | refined | none | PointsTo | Unresolved | Unknown | no | 145 |
 | pako | refined | exact | DirectReference | Resolved | SetupAware | yes | 101 |
-| pako | refined | apart | PointsTo | Resolved | Heuristic | yes | 25 |
+| pako | refined | conservative | PointsTo | Resolved | Conservative | yes | 25 |
 | pako | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 11 |
 | pako | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 11 |
-| nanostores | refined | none | PointsTo | Unresolved | Unknown | no | 132 |
-| nanostores | refined | exact | PointsTo | Resolved | SetupAware | yes | 37 |
+| nanostores | refined | none | PointsTo | Unresolved | Unknown | no | 155 |
+| nanostores | refined | conservative | PointsTo | Resolved | Conservative | yes | 50 |
+| nanostores | refined | exact | PointsTo | Resolved | Exact | yes | 37 |
 | nanostores | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 36 |
-| nanostores | refined | apart | PointsTo | Resolved | Heuristic | yes | 35 |
 | nanostores | refined | exact | DirectReference | Resolved | SetupAware | yes | 22 |
-| nanostores | refined | conservative | PointsTo | Resolved | Conservative | yes | 15 |
 | nanostores | refined | exact | ImportBinding | Resolved | SetupAware | yes | 14 |
 | express | refined | none | PointsTo | Unresolved | Unknown | no | 392 |
-| express | refined | exact | PointsTo | Resolved | SetupAware | yes | 35 |
+| express | refined | exact | PointsTo | Resolved | Exact | yes | 35 |
 | express | refined | apart | PointsTo | Resolved | Heuristic | yes | 25 |
 | express | refined | exact | DirectReference | Resolved | SetupAware | yes | 24 |
 | express | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 24 |
 | express | refined | conservative | PointsTo | Resolved | Conservative | yes | 13 |
-| immer | refined | exact | PointsTo | Resolved | SetupAware | yes | 303 |
+| immer | refined | exact | PointsTo | Resolved | Exact | yes | 303 |
 | immer | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 302 |
-| immer | refined | none | PointsTo | Unresolved | Unknown | no | 254 |
+| immer | refined | none | PointsTo | Unresolved | Unknown | no | 266 |
 | immer | refined | exact | ImportBinding | Resolved | SetupAware | yes | 173 |
 | immer | refined | exact | DirectReference | Resolved | SetupAware | yes | 127 |
-| immer | refined | apart | PointsTo | Resolved | Heuristic | yes | 24 |
-| immer | refined | conservative | PointsTo | Resolved | Conservative | yes | 16 |
+| immer | refined | conservative | PointsTo | Resolved | Conservative | yes | 40 |
 | immer | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 2 |
 | immer | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 1 |
 | immer | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 1 |
-| js-yaml | refined | none | PointsTo | Unresolved | Unknown | no | 357 |
-| js-yaml | refined | exact | PointsTo | Resolved | SetupAware | yes | 305 |
+| js-yaml | refined | none | PointsTo | Unresolved | Unknown | no | 360 |
+| js-yaml | refined | exact | PointsTo | Resolved | Exact | yes | 305 |
 | js-yaml | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 254 |
 | js-yaml | refined | exact | DirectReference | Resolved | SetupAware | yes | 252 |
-| js-yaml | refined | conservative | PointsTo | Resolved | Conservative | yes | 8 |
-| js-yaml | refined | apart | PointsTo | Resolved | Heuristic | yes | 3 |
+| js-yaml | refined | conservative | PointsTo | Resolved | Conservative | yes | 11 |
 | js-yaml | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 2 |
 | js-yaml | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 2 |
 | js-yaml | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 2 |
-| acorn | refined | none | PointsTo | Unresolved | Unknown | no | 1593 |
-| acorn | refined | apart | PointsTo | Resolved | Heuristic | yes | 1310 |
-| acorn | refined | exact | PointsTo | Resolved | SetupAware | yes | 202 |
+| acorn | refined | none | PointsTo | Unresolved | Unknown | no | 2896 |
+| acorn | refined | conservative | PointsTo | Resolved | Conservative | yes | 1317 |
+| acorn | refined | exact | PointsTo | Resolved | Exact | yes | 200 |
 | acorn | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 197 |
 | acorn | refined | exact | DirectReference | Resolved | SetupAware | yes | 136 |
 | acorn | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 61 |
-| acorn | refined | conservative | PointsTo | Resolved | Conservative | yes | 11 |
+| acorn | refined | apart | PointsTo | Resolved | Heuristic | yes | 6 |
 | acorn | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 3 |
 | acorn | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 3 |
-| node-forge | refined | none | PointsTo | Unresolved | Unknown | no | 4124 |
-| node-forge | refined | apart | PointsTo | Resolved | Heuristic | yes | 2660 |
-| node-forge | refined | exact | PointsTo | Resolved | SetupAware | yes | 956 |
+| node-forge | refined | none | PointsTo | Unresolved | Unknown | no | 6185 |
+| node-forge | refined | conservative | PointsTo | Resolved | Conservative | yes | 2319 |
+| node-forge | refined | exact | PointsTo | Resolved | Exact | yes | 941 |
 | node-forge | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 664 |
 | node-forge | refined | exact | DirectReference | Resolved | SetupAware | yes | 610 |
+| node-forge | refined | apart | PointsTo | Resolved | Heuristic | yes | 389 |
 | node-forge | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 54 |
-| node-forge | refined | conservative | PointsTo | Resolved | Conservative | yes | 33 |
 | node-forge | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 9 |
 | node-forge | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 9 |
 
@@ -918,13 +911,13 @@ the gained sites the run called a polint function from, the only ones recall can
 | package | plan | sites gained | in test paths | executed | top files |
 |---|---|---|---|---|---|
 | co | refined | 13 | 0 | 10 | index.js 13 |
-| pako | refined | 27 | 0 | 20 | dist/pako.min.js 27 |
-| nanostores | refined | 16 | 0 | 9 | computed/index.js 5, effect/index.js 3, task/index.js 3 |
+| pako | refined | 52 | 0 | 40 | dist/pako.min.js 52 |
+| nanostores | refined | 39 | 0 | 31 | lifecycle/index.js 12, computed/index.js 8, atom/index.js 6 |
 | express | refined | 24 | 0 | 21 | lib/response.js 14, lib/application.js 6, lib/utils.js 3 |
-| immer | refined | 16 | 0 | 12 | src/plugins/patches.ts 6, src/plugins/mapset.ts 3, src/core/proxy.ts 2 |
-| js-yaml | refined | 59 | 0 | 46 | lib/dumper.js 12, lib/loader.js 10, lib/schema.js 10 |
-| acorn | refined | 8 | 0 | 7 | dist/acorn.mjs 8 |
-| node-forge | refined | 302 | 0 | 218 | lib/x509.js 53, lib/rsa.js 41, lib/tls.js 41 |
+| immer | refined | 28 | 0 | 20 | src/core/immerClass.ts 10, src/plugins/patches.ts 6, src/utils/common.ts 4 |
+| js-yaml | refined | 62 | 0 | 49 | lib/dumper.js 12, lib/schema.js 11, lib/loader.js 10 |
+| acorn | refined | 1311 | 0 | 929 | dist/acorn.mjs 1311 |
+| node-forge | refined | 2363 | 0 | 1892 | lib/tls.js 411, lib/x509.js 322, lib/rsa.js 246 |
 
 ## Exports (against the loaded module's export keys)
 
@@ -987,72 +980,111 @@ on its own is left out of both and counted under `load errors`.
 
 ## Cost
 
-The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 6c3ba813eca4, load average 181.15 / 156.44 / 125.97 at the start and 47.05 / 69.43 / 94.77 at the end (1, 5, 15 minutes).
+The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 81f6abddbb2c, load average 26.58 / 61.49 / 67.03 at the start and 16.19 / 35.19 / 53.90 at the end (1, 5, 15 minutes).
 
-`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 26 MB; the analysis column has no such floor.
+`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 29 MB; the analysis column has no such floor.
 
 | tree | source KB | cold analysis ms (per MB) | cold process ms | warm analysis ms (per MB) | warm process ms | cold peak RSS MB (analysis / process) | warm peak RSS MB | stored bytes per MB (gzip) |
 |---|---|---|---|---|---|---|---|---|
-| constructs (all cases) | 36 | 322 (9067) | 539 | 211 (5941) | 414 | 73 / 73 | 72 / 72 | 105848032 (9984879) |
-| axios | 282 | 1155 (4096) | 1355 | 793 (2812) | 1018 | 103 / 103 | 103 / 103 | 75884595 (5415391) |
-| zod | 1354 | 7314 (5401) | 7503 | 4746 (3505) | 5005 | 525 / 525 | 667 / 667 | 127822333 (10464689) |
-| commander | 127 | 743 (5869) | 1015 | 547 (4321) | 793 | 73 / 73 | 73 / 73 | 44296772 (3204207) |
-| async | 321 | 1343 (4190) | 1647 | 899 (2805) | 1141 | 80 / 80 | 79 / 79 | 44447690 (3482290) |
-| chalk | 22 | 127 (5888) | 372 | 110 (5100) | 333 | 73 / 73 | 73 / 73 | 78773646 (5811805) |
-| dayjs | 7 | 135 (18852) | 367 | 99 (13825) | 326 | 74 / 74 | 73 / 73 | 228136294 (13651585) |
-| underscore | 69 | 326 (4730) | 520 | 263 (3816) | 479 | 73 / 73 | 74 / 74 | 91434297 (5881624) |
+| constructs (all cases) | 36 | 196 (5519) | 329 | 109 (3069) | 236 | 72 / 72 | 73 / 73 | 105848004 (9984879) |
+| axios | 282 | 703 (2493) | 839 | 487 (1727) | 616 | 102 / 102 | 103 / 103 | 75884595 (5415395) |
+| zod | 1354 | 4158 (3070) | 4313 | 2629 (1941) | 2780 | 524 / 524 | 667 / 667 | 127822333 (10464690) |
+| commander | 127 | 247 (1951) | 358 | 185 (1461) | 302 | 73 / 73 | 73 / 73 | 44296764 (3204199) |
+| async | 321 | 434 (1354) | 556 | 309 (964) | 428 | 78 / 79 | 79 / 79 | 44447687 (3482284) |
+| chalk | 22 | 69 (3199) | 191 | 43 (1994) | 157 | 73 / 73 | 73 / 73 | 78773646 (5811805) |
+| dayjs | 7 | 67 (9356) | 179 | 46 (6424) | 162 | 73 / 73 | 73 / 73 | 228136294 (13651445) |
+| underscore | 69 | 202 (2931) | 320 | 152 (2206) | 268 | 73 / 73 | 73 / 73 | 91434282 (5881609) |
 
 Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is
 the only way to time the refined plan, because no public view asks for it.
 
 | tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |
 |---|---|---|---|---|---|
-| axios | 2363 | 123 | 11706 | 408 | none |
-| zod | 17675 | 535 | 44592 | 1305 | 180 |
-| commander | 530 | 62 | 4409 | 184 | none |
-| async | 1455 | 96 | 29982 | 1557 | none |
-| chalk | 183 | 37 | 558 | 68 | none |
-| dayjs | 176 | 38 | 727 | 71 | none |
-| underscore | 592 | 57 | 2604 | 172 | none |
+| axios | 768 | 121 | 3339 | 387 | none |
+| zod | 4804 | 535 | 18498 | 1346 | 180 |
+| commander | 268 | 60 | 1964 | 177 | none |
+| async | 465 | 95 | 12476 | 1573 | none |
+| chalk | 74 | 37 | 260 | 64 | none |
+| dayjs | 86 | 36 | 295 | 67 | none |
+| underscore | 221 | 55 | 885 | 166 | none |
 
 ### Stage times
 
-Every fact dump runs with `RUST_LOG=polint::kernel::stage=info`; each provider's `stage done` lines are summed. Stage times are as noisy as the dump times above. `semantic_graph share` is the `polint.semantic_graph` stage's part of the refined plan's summed stage time. Peak MB is the process peak when the stage ended.
+Every fact dump runs with `RUST_LOG=polint::kernel::stage=info,polint::points_to=info`; each provider's `stage done` lines are summed. Stage times are as noisy as the dump times above. `semantic_graph share` is the `polint.semantic_graph` stage's part of the refined plan's summed stage time. Peak MB is the process peak when the stage ended.
 
 | tree | plan | stage total s | largest stages: s (peak MB) | semantic_graph share |
 |---|---|---|---|---|
-| axios | base | 2.1 | `semantic_mir` 0.8 (88), `symbol_graph` 0.7 (88), `cfg` 0.4 (107) | n/a |
-| axios | refined | 10.7 | `solver` 1.7 (292), `semantic_graph` 1.6 (256), `evidence` 1.6 (356) | 15% |
-| zod | base | 16.5 | `semantic_mir` 8.1 (510), `symbol_graph` 6.5 (510), `cfg` 1.0 (510) | n/a |
-| zod | refined | 41.7 | `semantic_graph` 9.2 (877), `solver` 8.4 (986), `symbol_graph` 7.0 (510) | 22% |
-| commander | base | 0.5 | `semantic_mir` 0.2 (47), `symbol_graph` 0.2 (43), `cfg` 0.1 (56) | n/a |
-| commander | refined | 4.0 | `semantic_graph` 1.8 (149), `cfg` 0.4 (84), `solver` 0.3 (149) | 45% |
-| async | base | 1.3 | `symbol_graph` 0.5 (68), `semantic_mir` 0.4 (68), `cfg` 0.2 (84) | n/a |
-| async | refined | 25.9 | `evidence` 10.0 (1257), `data_flow` 5.7 (1257), `solver` 3.8 (361) | 7% |
-| chalk | base | 0.1 | `semantic_mir` 0.1 (33), `symbol_graph` 0.0 (31), `cfg` 0.0 (34) | n/a |
-| chalk | refined | 0.5 | `cfg` 0.1 (40), `type_value_alias` 0.1 (55), `semantic_graph` 0.1 (57) | 11% |
-| dayjs | base | 0.1 | `cfg` 0.0 (34), `symbol_graph` 0.0 (31), `semantic_mir` 0.0 (33) | n/a |
-| dayjs | refined | 0.6 | `semantic_graph` 0.1 (56), `cfg` 0.1 (39), `type_value_alias` 0.1 (56) | 23% |
-| underscore | base | 0.5 | `semantic_mir` 0.2 (44), `symbol_graph` 0.2 (44), `cfg` 0.1 (51) | n/a |
-| underscore | refined | 2.4 | `cfg` 0.6 (82), `evidence` 0.3 (152), `semantic_mir` 0.3 (45) | 5% |
-| co | base | 0.0 | `semantic_mir` 0.0 (29), `calls` 0.0 (30), `symbol_graph` 0.0 (27) | n/a |
-| co | refined | 0.2 | `cfg` 0.1 (31), `solver` 0.0 (39), `type_value_alias` 0.0 (36) | 6% |
-| pako | base | 1.9 | `symbol_graph` 1.2 (58), `semantic_mir` 0.5 (58), `cfg` 0.2 (67) | n/a |
-| pako | refined | 11.3 | `semantic_graph` 6.3 (243), `type_value_alias` 1.3 (243), `symbol_graph` 1.0 (60) | 56% |
-| nanostores | base | 0.2 | `cfg` 0.1 (36), `semantic_mir` 0.1 (33), `symbol_graph` 0.0 (33) | n/a |
-| nanostores | refined | 0.9 | `cfg` 0.2 (40), `evidence` 0.2 (66), `type_value_alias` 0.1 (55) | 10% |
-| express | base | 0.5 | `cfg` 0.2 (44), `semantic_mir` 0.1 (39), `symbol_graph` 0.1 (36) | n/a |
-| express | refined | 1.9 | `type_value_alias` 0.3 (95), `evidence` 0.3 (103), `cfg` 0.3 (58) | 11% |
-| immer | base | 0.8 | `symbol_graph` 0.3 (55), `semantic_mir` 0.2 (55), `cfg` 0.2 (55) | n/a |
-| immer | refined | 2.2 | `evidence` 0.3 (145), `solver` 0.3 (127), `type_value_alias` 0.3 (126) | 9% |
-| js-yaml | base | 0.8 | `semantic_mir` 0.2 (54), `symbol_graph` 0.2 (54), `cfg` 0.2 (64) | n/a |
-| js-yaml | refined | 3.4 | `cfg` 0.5 (72), `abstract_domains` 0.5 (129), `type_value_alias` 0.5 (173) | 8% |
-| acorn | base | 1.5 | `semantic_mir` 0.8 (77), `symbol_graph` 0.4 (64), `cfg` 0.3 (98) | n/a |
-| acorn | refined | 9.5 | `solver` 1.8 (275), `type_value_alias` 1.7 (275), `semantic_graph` 1.6 (275) | 17% |
-| node-forge | base | 4.5 | `symbol_graph` 1.9 (193), `semantic_mir` 1.6 (193), `cfg` 0.7 (250) | n/a |
-| node-forge | refined | 19.8 | `solver` 4.0 (689), `type_value_alias` 3.1 (562), `semantic_graph` 2.9 (571) | 14% |
-| zod, globs alone | base | 24.4 | `semantic_mir` 9.2 (879), `symbol_graph` 8.6 (879), `calls` 3.5 (1016) | n/a |
-| zod, globs alone | refined | 145.3 | `semantic_graph` 34.8 (2847), `solver` 27.6 (3356), `type_value_alias` 22.5 (2379) | 24% |
+| axios | base | 0.7 | `symbol_graph` 0.3 (87), `semantic_mir` 0.2 (87), `cfg` 0.1 (105) | n/a |
+| axios | refined | 3.0 | `evidence` 0.5 (333), `semantic_graph` 0.5 (238), `solver` 0.4 (261) | 16% |
+| zod | base | 4.4 | `symbol_graph` 2.4 (510), `semantic_mir` 1.4 (510), `cfg` 0.3 (510) | n/a |
+| zod | refined | 17.4 | `semantic_graph` 4.9 (876), `evidence` 2.4 (1142), `symbol_graph` 2.4 (510) | 28% |
+| commander | base | 0.2 | `semantic_mir` 0.1 (46), `symbol_graph` 0.1 (41), `cfg` 0.0 (54) | n/a |
+| commander | refined | 1.9 | `semantic_graph` 1.0 (145), `abstract_domains` 0.1 (117), `cfg` 0.1 (82) | 54% |
+| async | base | 0.4 | `symbol_graph` 0.2 (66), `semantic_mir` 0.1 (66), `cfg` 0.1 (83) | n/a |
+| async | refined | 10.4 | `evidence` 4.1 (1254), `data_flow` 2.3 (1254), `solver` 1.5 (356) | 9% |
+| chalk | base | 0.1 | `symbol_graph` 0.0 (30), `module_graph` 0.0 (25), `cfg` 0.0 (33) | n/a |
+| chalk | refined | 0.2 | `cfg` 0.0 (39), `semantic_graph` 0.0 (53), `type_value_alias` 0.0 (52) | 14% |
+| dayjs | base | 0.1 | `symbol_graph` 0.0 (30), `semantic_mir` 0.0 (32), `cfg` 0.0 (33) | n/a |
+| dayjs | refined | 0.3 | `semantic_graph` 0.1 (53), `cfg` 0.0 (38), `symbol_graph` 0.0 (31) | 26% |
+| underscore | base | 0.2 | `symbol_graph` 0.1 (44), `semantic_mir` 0.1 (44), `cfg` 0.0 (50) | n/a |
+| underscore | refined | 0.8 | `cfg` 0.1 (74), `evidence` 0.1 (145), `solver` 0.1 (119) | 9% |
+| co | base | 0.0 | `symbol_graph` 0.0 (27), `cfg` 0.0 (29), `semantic_mir` 0.0 (28) | n/a |
+| co | refined | 0.1 | `cfg` 0.0 (31), `semantic_graph` 0.0 (38), `type_value_alias` 0.0 (35) | 17% |
+| pako | base | 0.8 | `symbol_graph` 0.5 (60), `semantic_mir` 0.2 (60), `cfg` 0.1 (67) | n/a |
+| pako | refined | 5.0 | `semantic_graph` 3.1 (232), `symbol_graph` 0.5 (61), `type_value_alias` 0.3 (232) | 63% |
+| nanostores | base | 0.1 | `symbol_graph` 0.0 (33), `module_graph` 0.0 (25), `cfg` 0.0 (37) | n/a |
+| nanostores | refined | 0.2 | `cfg` 0.0 (39), `semantic_graph` 0.0 (55), `evidence` 0.0 (63) | 13% |
+| express | base | 0.1 | `symbol_graph` 0.0 (35), `semantic_mir` 0.0 (38), `cfg` 0.0 (43) | n/a |
+| express | refined | 0.5 | `cfg` 0.1 (56), `type_value_alias` 0.1 (92), `abstract_domains` 0.1 (75) | 12% |
+| immer | base | 0.2 | `symbol_graph` 0.1 (54), `semantic_mir` 0.0 (54), `cfg` 0.0 (54) | n/a |
+| immer | refined | 0.8 | `symbol_graph` 0.1 (55), `cfg` 0.1 (73), `evidence` 0.1 (140) | 10% |
+| js-yaml | base | 0.3 | `symbol_graph` 0.1 (52), `semantic_mir` 0.1 (52), `cfg` 0.1 (63) | n/a |
+| js-yaml | refined | 1.2 | `abstract_domains` 0.2 (127), `evidence` 0.2 (167), `type_value_alias` 0.1 (167) | 11% |
+| acorn | base | 0.6 | `semantic_mir` 0.3 (77), `symbol_graph` 0.2 (65), `cfg` 0.1 (98) | n/a |
+| acorn | refined | 3.2 | `semantic_graph` 0.6 (255), `evidence` 0.5 (341), `type_value_alias` 0.5 (255) | 20% |
+| node-forge | base | 1.9 | `symbol_graph` 0.9 (193), `semantic_mir` 0.6 (193), `cfg` 0.2 (251) | n/a |
+| node-forge | refined | 8.3 | `solver` 1.4 (655), `semantic_graph` 1.3 (568), `type_value_alias` 1.3 (563) | 16% |
+| zod, globs alone | base | 11.3 | `symbol_graph` 4.5 (878), `semantic_mir` 4.1 (878), `calls` 1.6 (1018) | n/a |
+| zod, globs alone | refined | 66.9 | `semantic_graph` 16.5 (2860), `solver` 11.3 (3125), `evidence` 9.3 (3727) | 25% |
+
+## Solver
+
+Every fact dump logs one `points_to solve` line per solve under `polint::points_to`. `alias` solves the constraints alone for the type, value and alias facts; `call graph` solves them with the call rule. Constraints are the input count (by kind in report.json); variables include heap slots; pops are worklist pops; collapsed are variables merged into another on a copy cycle. Time is per step: reading the input, the worklist, and building the result. Memory is the resident growth across the solve and the process peak after it. Counts are the same in every run; time and memory are as noisy as the stage times above.
+
+| tree | plan | solve | constraints | calls | variables | objects | slots | copy edges | pops | collapsed | largest set | sets > 64 | sets > 1,024 | ms (input / worklist / result) | RSS growth MB | peak MB | budget |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| axios | refined | alias | 7,676 | 0 | 7,273 | 2,735 | 227 | 1,247 | 2,728 | 0 | 5 | 0 | 0 | 3 / 0 / 5 | 0 | 168 | WithinBudget |
+| axios | refined | call graph | 40,548 | 3,804 | 26,188 | 2,229 | 3,797 | 35,467 | 12,624 | 124 | 137 | 3 | 0 | 28 / 8 / 67 | 10 | 261 | WithinBudget |
+| zod | refined | alias | 32,608 | 0 | 26,996 | 8,514 | 465 | 3,004 | 8,495 | 0 | 23 | 0 | 0 | 31 / 1 / 26 | 7 | 521 | WithinBudget |
+| zod | refined | call graph | 162,839 | 11,265 | 126,934 | 10,123 | 41,007 | 358,325 | 80,330 | 2,862 | 920 | 6,090 | 0 | 148 / 130 / 377 | 32 | 897 | WithinBudget |
+| commander | refined | alias | 4,037 | 0 | 3,462 | 1,073 | 100 | 514 | 1,062 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 0 | 118 | WithinBudget |
+| commander | refined | call graph | 17,626 | 1,665 | 10,255 | 828 | 1,308 | 14,549 | 3,390 | 53 | 309 | 2 | 0 | 6 / 1 / 11 | 4 | 145 | WithinBudget |
+| async | refined | alias | 6,082 | 0 | 6,602 | 1,857 | 33 | 1,444 | 1,863 | 0 | 3 | 0 | 0 | 2 / 0 / 3 | 0 | 258 | WithinBudget |
+| async | refined | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 65,114 | 1,460 | 253 | 5,090 | 0 | 20 / 356 / 216 | 0 | 274 | WithinBudget |
+| chalk | refined | alias | 627 | 0 | 575 | 203 | 13 | 72 | 199 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 46 | WithinBudget |
+| chalk | refined | call graph | 4,467 | 249 | 2,864 | 374 | 773 | 2,972 | 1,420 | 0 | 90 | 1 | 0 | 1 / 0 / 3 | 0 | 54 | WithinBudget |
+| dayjs | refined | alias | 872 | 0 | 788 | 257 | 31 | 138 | 263 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 47 | WithinBudget |
+| dayjs | refined | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 1 / 0 / 2 | 1 | 54 | WithinBudget |
+| underscore | refined | alias | 1,661 | 0 | 1,721 | 626 | 49 | 391 | 630 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 100 | WithinBudget |
+| underscore | refined | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,319 | 177 | 227 | 1 | 0 | 5 / 1 / 13 | 1 | 119 | WithinBudget |
+| co | refined | alias | 174 | 0 | 172 | 60 | 0 | 14 | 60 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 34 | WithinBudget |
+| co | refined | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 286 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 38 | WithinBudget |
+| pako | refined | alias | 3,618 | 0 | 2,668 | 688 | 21 | 578 | 642 | 1 | 14 | 0 | 0 | 0 / 0 / 1 | 0 | 152 | WithinBudget |
+| pako | refined | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,947 | 5 | 136 | 1 | 0 | 6 / 1 / 15 | 0 | 232 | WithinBudget |
+| nanostores | refined | alias | 761 | 0 | 698 | 270 | 14 | 90 | 277 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 45 | WithinBudget |
+| nanostores | refined | call graph | 3,945 | 312 | 2,589 | 325 | 247 | 3,158 | 1,361 | 12 | 31 | 0 | 0 | 1 / 0 / 3 | 1 | 56 | WithinBudget |
+| express | refined | alias | 2,022 | 0 | 1,892 | 614 | 61 | 381 | 611 | 0 | 3 | 0 | 0 | 0 / 0 / 12 | 0 | 76 | WithinBudget |
+| express | refined | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 2 / 0 / 4 | 0 | 92 | WithinBudget |
+| immer | refined | alias | 2,267 | 0 | 2,006 | 727 | 61 | 336 | 721 | 0 | 3 | 0 | 0 | 1 / 0 / 1 | 0 | 92 | WithinBudget |
+| immer | refined | call graph | 11,476 | 890 | 7,256 | 571 | 888 | 9,502 | 3,056 | 77 | 59 | 0 | 0 | 4 / 1 / 9 | 0 | 123 | WithinBudget |
+| js-yaml | refined | alias | 3,230 | 0 | 2,822 | 933 | 92 | 612 | 914 | 0 | 16 | 0 | 0 | 0 / 0 / 1 | 0 | 128 | WithinBudget |
+| js-yaml | refined | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,267 | 39 | 41 | 0 | 0 | 4 / 1 / 13 | 0 | 167 | WithinBudget |
+| acorn | refined | alias | 10,718 | 0 | 8,202 | 2,263 | 111 | 1,191 | 2,264 | 2 | 3 | 0 | 0 | 6 / 0 / 6 | 0 | 165 | WithinBudget |
+| acorn | refined | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 30 / 10 / 107 | 13 | 255 | WithinBudget |
+| node-forge | refined | alias | 34,331 | 0 | 26,963 | 7,229 | 1,371 | 5,976 | 7,194 | 4 | 16 | 0 | 0 | 24 / 1 / 20 | 10 | 360 | WithinBudget |
+| node-forge | refined | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 43,245 | 514 | 412 | 1,715 | 0 | 105 / 73 / 237 | 34 | 655 | WithinBudget |
+| zod, globs alone | refined | alias | 157,403 | 0 | 139,918 | 60,145 | 2,430 | 10,863 | 60,170 | 1 | 23 | 0 | 0 | 147 / 6 / 188 | 43 | 1546 | WithinBudget |
+| zod, globs alone | refined | call graph | 693,639 | 96,148 | 469,440 | 43,112 | 95,800 | 1,057,363 | 237,788 | 3,701 | 1,417 | 14,092 | 2 | 1105 / 846 / 1923 | 168 | 3125 | WithinBudget |
 
 ## Decisions recorded by this run
 

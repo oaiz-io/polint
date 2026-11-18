@@ -30,6 +30,7 @@ pub struct PointsToSubBudget {
     pub max_steps: usize,
     pub max_objects_per_var: usize,
     pub max_dynamic_vars: usize,
+    pub max_indirection_depth: Option<usize>,
 }
 
 impl Default for PointsToSubBudget {
@@ -39,6 +40,7 @@ impl Default for PointsToSubBudget {
             max_steps: standalone.max_steps,
             max_objects_per_var: standalone.max_objects_per_var,
             max_dynamic_vars: standalone.max_dynamic_vars,
+            max_indirection_depth: standalone.max_indirection_depth,
         }
     }
 }
@@ -138,6 +140,7 @@ impl SolverBudget {
             max_steps: self.points_to.max_steps,
             max_objects_per_var: self.points_to.max_objects_per_var,
             max_dynamic_vars: self.points_to.max_dynamic_vars,
+            max_indirection_depth: self.points_to.max_indirection_depth,
         }
     }
 }
@@ -187,6 +190,7 @@ pub enum BudgetReason {
     SolverMaxOuterIterations,
     PointsToMaxObjectsPerVar,
     PointsToMaxDynamicVars,
+    PointsToMaxIndirectionDepth,
     GoAddressTakenThreshold,
     GoMaxCandidatesPerCallsite,
     GoMaxRtaRounds,
@@ -205,6 +209,7 @@ impl BudgetReason {
             Self::SolverMaxOuterIterations => "solver.max_outer_iterations",
             Self::PointsToMaxObjectsPerVar => "points_to.max_objects_per_var",
             Self::PointsToMaxDynamicVars => "points_to.max_dynamic_vars",
+            Self::PointsToMaxIndirectionDepth => "points_to.max_indirection_depth",
             Self::GoAddressTakenThreshold => "go.address_taken_threshold",
             Self::GoMaxCandidatesPerCallsite => "go.max_candidates_per_callsite",
             Self::GoMaxRtaRounds => "go.max_rta_rounds",
@@ -223,6 +228,7 @@ impl BudgetReason {
             Self::SolverMaxOuterIterations,
             Self::PointsToMaxObjectsPerVar,
             Self::PointsToMaxDynamicVars,
+            Self::PointsToMaxIndirectionDepth,
             Self::GoAddressTakenThreshold,
             Self::GoMaxCandidatesPerCallsite,
             Self::GoMaxRtaRounds,
@@ -359,6 +365,7 @@ mod tests {
                 "solver.max_outer_iterations",
                 "points_to.max_objects_per_var",
                 "points_to.max_dynamic_vars",
+                "points_to.max_indirection_depth",
                 "go.address_taken_threshold",
                 "go.max_candidates_per_callsite",
                 "go.max_rta_rounds",

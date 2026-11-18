@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::analysis_neutral::ids::{CallSiteId, CallTargetId, MirBodyId, MirOpId, PlaceId};
+use crate::analysis_neutral::points_to::tiers::Inflow;
 use crate::internal_core::{
     FileId, FunctionId, Language, ReferenceId, Span, StableKeyId, SymbolId,
 };
@@ -176,6 +177,12 @@ pub enum UnresolvedCallReason {
     SetupMissing,
     UnsupportedSyntax,
     BudgetExceeded,
+    /// The callee set may lack values that cross more field loads and stores
+    /// than the points-to solve's indirection bound lets through.
+    IndirectionBound,
+    /// Values the constraints do not describe reach the callee set, in the
+    /// way named, so the site may reach callees the graph does not list.
+    Inflow(Inflow),
     UnknownCallee,
     Unknown,
 }
