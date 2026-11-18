@@ -81,7 +81,7 @@ pub fn resolve_direct_call_targets(
         };
         let target_function = match index.function_for_symbol(symbol) {
             Some(function) => Some(function),
-            None if is_direct_callable_symbol(symbol) => None,
+            None if index.calls_bind_without_a_function(symbol) => None,
             None => continue,
         };
         if symbol.kind == SymbolKind::Class
@@ -305,11 +305,20 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
     /// The function a call through `symbol` reaches. Import bindings follow
     /// their module link (through re-exports) to the exported declaration;
     /// an import that cannot be followed to one function has no target.
-    fn function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
+    fn function_for_symbol(&self, symbol: &'db SymbolFact) -> Option<FunctionId> {
+        self.declared_symbol_for(symbol)
+            .and_then(|declared| self.declared_function_for_symbol(declared))
+    }
+
+    /// The declaration `symbol` names: itself unless it is an import binding,
+    /// else the declaration its module link (through re-exports) ends at.
+    /// `None` when the chain passes a namespace import, leaves the linked
+    /// files, cycles or runs past the hop limit.
+    fn declared_symbol_for(&self, symbol: &'db SymbolFact) -> Option<&'db SymbolFact> {
         let mut current = symbol;
         for _ in 0..MAX_IMPORT_HOPS {
             if current.kind != SymbolKind::Import {
-                return self.declared_function_for_symbol(current);
+                return Some(current);
             }
             let file = current.file?;
             if self
@@ -324,6 +333,17 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             current = self.symbols_by_id.get(target).copied()?;
         }
         None
+    }
+
+    /// Whether a call through `symbol` that reaches no one function still
+    /// resolves to the binding. An import answers for its declaration: one
+    /// linked to a variable without a single function (a `let` reassigned
+    /// elsewhere) resolves no more than a call through that variable would.
+    fn calls_bind_without_a_function(&self, symbol: &'db SymbolFact) -> bool {
+        is_direct_callable_symbol(symbol)
+            && self
+                .declared_symbol_for(symbol)
+                .is_none_or(is_direct_callable_symbol)
     }
 
     /// The function a call through a declared (non-import) symbol reaches.
@@ -1462,6 +1482,27 @@ mod linked_bindings {
 
         assert_eq!(targets.len(), 1, "{targets:#?}");
         assert_eq!(targets[0].target_function, Some(literal));
+    }
+
+    /// An import linked to an exported variable that the frontend gives no
+    /// single function (one reassigned after its declaration) answers like the
+    /// variable itself would: no resolved row, so the call stays open.
+    #[test]
+    fn imported_variable_without_a_function_row_resolves_nothing() {
+        let mut graph = Graph::new(&["src/caller.ts", "src/index.ts", "src/state.ts"]);
+        let (caller_file, index_file, state_file) =
+            (graph.files[0], graph.files[1], graph.files[2]);
+        graph.function(state_file, "initial", 20, 40);
+        let binding = graph.symbol(state_file, "handler", SymbolKind::Variable, 11, 18);
+        let re_export = graph.symbol(index_file, "handler", SymbolKind::Import, 9, 16);
+        graph.reference(index_file, "handler", ReferenceKind::Import, 9, 16, binding);
+        let import = graph.symbol(caller_file, "handler", SymbolKind::Import, 9, 16);
+        graph.reference(caller_file, "handler", ReferenceKind::Import, 9, 16, re_export);
+        let call = graph.reference(caller_file, "handler", ReferenceKind::Call, 50, 57, import);
+
+        let targets = graph.resolve(caller_file, call, "handler", 50, 59);
+
+        assert!(targets.is_empty(), "{targets:#?}");
     }
 
     #[test]
