@@ -29,6 +29,11 @@ pub(crate) enum FlowVar {
     /// A binding of the file, by oxc symbol index. Top-level bindings of a
     /// script are file-scoped, as in a CommonJS module.
     Local(u32),
+    Namespace,
+    Module,
+    Exports,
+    RequestNamespace(u32),
+    RequestModule(u32),
     /// The value of one expression.
     Temp(u32),
     /// The function object of the function with this span.
@@ -47,13 +52,22 @@ pub(crate) enum FlowVar {
     Prim,
 }
 
+/// An object allocated by a file's rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum FlowObject {
+    Site(FlowSpan),
+    Namespace,
+    Module,
+    Exports,
+}
+
 /// One flow row of a lowered file.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum FlowRow {
     /// `dst` holds every value of `src`.
     Copy { dst: FlowVar, src: FlowVar },
     /// `dst` holds the object allocated at `object`.
-    Alloc { dst: FlowVar, object: FlowSpan },
+    Alloc { dst: FlowVar, object: FlowObject },
     /// `dst` holds the values of `field` of the objects of `base`.
     Load {
         dst: FlowVar,
@@ -98,6 +112,8 @@ pub(crate) struct LoweredFunction {
 pub(crate) struct TsValueFlows {
     /// False when the file was not lowered; it then has no rows.
     pub(crate) lowered: bool,
+    pub(crate) requests: Vec<Box<str>>,
+    pub(crate) esm: bool,
     pub(crate) rows: Vec<FlowRow>,
     pub(crate) calls: Vec<FlowCall>,
     pub(crate) functions: Vec<LoweredFunction>,

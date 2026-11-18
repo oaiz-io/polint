@@ -1,475 +1,588 @@
-//! Which values of one lowered file its rows describe completely.
+//! Which values the lowered program describes completely.
 //!
-//! A small inclusion solve over the rows of a single file. Every value the
-//! rows cannot account for is the token `U`: what an import, a global, an
-//! unknown call or the parameter of an escaped function may hold. A call site
-//! whose callee set holds only functions of the file, and no `U`, is described
-//! completely; the graph then names the rows' callee there.
-//!
-//! The solve is conservative in the same direction as the points-to solver:
-//! a value that reaches a sink, an unknown callee or a slot the rows do not
-//! track escapes, and code the rows do not describe may then read every slot
-//! of an escaped object and call an escaped function with anything. The graph
-//! copies [`Described::open`] from an open place and passes
-//! [`Described::escaped_functions`] and [`Described::escaped_objects`] to a
-//! sink, so the points-to solve is never more certain than this one.
+//! Difference propagation follows copies, fields and calls across files. An
+//! unknown value opens the places it reaches; a value passed to unknown code
+//! escapes. Prototype lookup runs after ordinary propagation, respects own
+//! fields, and records the inherited slots the graph must also read.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
-use super::{FlowCall, FlowRow, FlowSpan, FlowVar, TsValueFlows};
+use super::{FlowObject, FlowRow, FlowSpan, FlowVar, TsValueFlows};
 
-/// A value of the solve.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Token {
-    /// A value the rows do not describe.
-    Unknown,
-    /// The function object of a lowered function that has a graph node.
-    Function(FlowSpan),
-    /// An object the rows allocate.
-    Object(FlowSpan),
-    /// A primitive value: its properties are the language's own, and calling
-    /// it throws.
-    Prim,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum Obj {
+    Site(FlowSpan),
+    Prototype(FlowSpan),
+    Namespace,
+    Module,
+    Exports,
 }
 
-/// What the rows of one file describe.
+impl From<FlowObject> for Obj {
+    fn from(object: FlowObject) -> Self {
+        match object {
+            FlowObject::Site(span) => Self::Site(span),
+            FlowObject::Namespace => Self::Namespace,
+            FlowObject::Module => Self::Module,
+            FlowObject::Exports => Self::Exports,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum Token {
+    Unknown,
+    Prim,
+    Function(u32, FlowSpan),
+    Object(u32, Obj),
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Described {
-    /// Call sites whose callee set the rows describe completely, with the
-    /// largest parameter count among those callees: arguments are padded to
-    /// it so every parameter a call fills is bound.
     pub(crate) named: BTreeMap<FlowSpan, u8>,
-    /// Variables that may hold a value the rows do not describe.
     pub(crate) open: BTreeSet<FlowVar>,
-    /// Functions that code the rows do not describe may call.
     pub(crate) escaped_functions: BTreeSet<FlowSpan>,
-    /// Objects that code the rows do not describe may read and write.
-    pub(crate) escaped_objects: BTreeSet<FlowSpan>,
+    pub(crate) escaped_objects: BTreeSet<Obj>,
+    pub(crate) lookups: BTreeSet<(usize, Token)>,
+    pub(crate) prototypes: BTreeSet<FlowSpan>,
 }
 
-/// Solves the rows of `flows`. `has_node` says whether the graph has a
-/// function node for a span; a function without one is not a value the graph
-/// can name, so it is `U` here.
-pub(crate) fn describe(flows: &TsValueFlows, has_node: impl Fn(FlowSpan) -> bool) -> Described {
-    if !flows.lowered {
-        return Described::default();
-    }
-    let mut solve = Solve::new(flows, has_node);
+/// Solves every file together. A request is linked only to a lowered file;
+/// imports whose target cannot be lowered remain unknown.
+pub(crate) fn describe_program(
+    files: &[&TsValueFlows],
+    has_node: impl Fn(usize, FlowSpan) -> bool,
+    request_target: impl Fn(usize, u32) -> Option<usize>,
+) -> Vec<Described> {
+    let mut solve = Solve::new(files);
+    solve.seed(has_node, request_target);
     solve.run();
     solve.finish()
 }
 
+#[cfg(test)]
+pub(crate) fn describe(flows: &TsValueFlows, has_node: impl Fn(FlowSpan) -> bool) -> Described {
+    describe_program(&[flows], |_, span| has_node(span), |_, _| None)
+        .pop()
+        .unwrap_or_default()
+}
+
+#[derive(Clone, Copy)]
+struct Load {
+    file: usize,
+    row: usize,
+    dst: usize,
+    field: usize,
+}
+
+#[derive(Clone, Copy)]
+struct Store {
+    src: usize,
+    field: usize,
+}
+
+#[derive(Clone)]
+struct Call {
+    result: usize,
+    receiver: Option<usize>,
+    arguments: Vec<usize>,
+    spread_from: Option<usize>,
+}
+
 struct Solve<'a> {
-    flows: &'a TsValueFlows,
-    /// Lowered functions with a graph node, by span, with their parameter
-    /// count.
-    functions: BTreeMap<FlowSpan, u8>,
-    index: HashMap<FlowVar, usize>,
-    vars: Vec<Option<FlowVar>>,
+    files: &'a [&'a TsValueFlows],
+    functions: HashMap<(u32, FlowSpan), u8>,
+    index: HashMap<(usize, FlowVar), usize>,
+    vars: Vec<Option<(usize, FlowVar)>>,
     sets: Vec<BTreeSet<Token>>,
-    slots: BTreeMap<(FlowSpan, Box<str>), usize>,
-    stored: BTreeSet<(FlowSpan, Box<str>)>,
-    escaped_functions: BTreeSet<FlowSpan>,
-    escaped_objects: BTreeSet<FlowSpan>,
-    changed: bool,
+    delta: Vec<Vec<Token>>,
+    queue: VecDeque<usize>,
+    successors: Vec<Vec<usize>>,
+    edges: HashSet<(usize, usize)>,
+    loads_by_base: Vec<Vec<Load>>,
+    stores_by_base: Vec<Vec<Store>>,
+    calls_by_callee: Vec<Vec<Call>>,
+    fields: HashMap<Box<str>, usize>,
+    slots: HashMap<(Token, usize), usize>,
+    slots_of: HashMap<Token, Vec<usize>>,
+    stored: HashSet<(Token, usize)>,
+    loads_of: HashMap<Token, Vec<usize>>,
+    lookups: Vec<(Load, Token)>,
+    escaped: HashSet<Token>,
+    exported: HashSet<Token>,
+    descriptions: Vec<Described>,
+    sink: usize,
+    export: usize,
+    prototype: usize,
+    proto: usize,
 }
 
 impl<'a> Solve<'a> {
-    fn new(flows: &'a TsValueFlows, has_node: impl Fn(FlowSpan) -> bool) -> Self {
-        let functions = flows
-            .functions
-            .iter()
-            .filter(|function| has_node(function.span))
-            .map(|function| (function.span, function.params))
-            .collect();
+    fn new(files: &'a [&'a TsValueFlows]) -> Self {
         let mut solve = Self {
-            flows,
-            functions,
+            files,
+            functions: HashMap::new(),
             index: HashMap::new(),
             vars: Vec::new(),
             sets: Vec::new(),
-            slots: BTreeMap::new(),
-            stored: BTreeSet::new(),
-            escaped_functions: BTreeSet::new(),
-            escaped_objects: BTreeSet::new(),
-            changed: false,
+            delta: Vec::new(),
+            queue: VecDeque::new(),
+            successors: Vec::new(),
+            edges: HashSet::new(),
+            loads_by_base: Vec::new(),
+            stores_by_base: Vec::new(),
+            calls_by_callee: Vec::new(),
+            fields: HashMap::new(),
+            slots: HashMap::new(),
+            slots_of: HashMap::new(),
+            stored: HashSet::new(),
+            loads_of: HashMap::new(),
+            lookups: Vec::new(),
+            escaped: HashSet::new(),
+            exported: HashSet::new(),
+            descriptions: files.iter().map(|_| Described::default()).collect(),
+            sink: 0,
+            export: 0,
+            prototype: 0,
+            proto: 0,
         };
-        solve.seed();
+        solve.sink = solve.var(0, FlowVar::Sink);
+        solve.export = solve.node(None);
+        solve.prototype = solve.field("exact:prototype");
+        solve.proto = solve.field("$proto");
         solve
     }
 
-    fn var(&mut self, var: FlowVar) -> usize {
-        if let Some(index) = self.index.get(&var) {
-            return *index;
-        }
-        let index = self.sets.len();
-        self.index.insert(var, index);
-        self.vars.push(Some(var));
+    fn node(&mut self, var: Option<(usize, FlowVar)>) -> usize {
+        let node = self.sets.len();
+        self.vars.push(var);
         self.sets.push(BTreeSet::new());
-        index
+        self.delta.push(Vec::new());
+        self.successors.push(Vec::new());
+        self.loads_by_base.push(Vec::new());
+        self.stores_by_base.push(Vec::new());
+        self.calls_by_callee.push(Vec::new());
+        node
     }
 
-    fn slot(&mut self, object: FlowSpan, field: &str) -> usize {
-        if let Some(index) = self.slots.get(&(object, Box::from(field))) {
-            return *index;
+    fn var(&mut self, file: usize, var: FlowVar) -> usize {
+        let file = if matches!(var, FlowVar::Open | FlowVar::Sink | FlowVar::Prim) {
+            usize::MAX
+        } else {
+            file
+        };
+        if let Some(&node) = self.index.get(&(file, var)) {
+            return node;
         }
-        let index = self.sets.len();
-        self.slots.insert((object, Box::from(field)), index);
-        self.vars.push(None);
-        self.sets.push(BTreeSet::new());
-        index
+        let node = self.node(Some((file, var)));
+        self.index.insert((file, var), node);
+        node
     }
 
-    fn add(&mut self, index: usize, token: Token) {
-        if self.sets[index].insert(token) {
-            self.changed = true;
-        }
+    fn field(&mut self, field: &str) -> usize {
+        let next = self.fields.len();
+        *self.fields.entry(field.into()).or_insert(next)
     }
 
-    fn union(&mut self, dst: usize, src: usize) {
-        if dst == src {
-            return;
-        }
-        let missing = self.sets[src]
-            .difference(&self.sets[dst])
-            .copied()
-            .collect::<Vec<_>>();
-        if !missing.is_empty() {
-            self.sets[dst].extend(missing);
-            self.changed = true;
+    fn add(&mut self, node: usize, token: Token) {
+        if self.sets[node].insert(token) {
+            if self.delta[node].is_empty() {
+                self.queue.push_back(node);
+            }
+            self.delta[node].push(token);
         }
     }
 
-    /// Seeds the open place, every function object, and every variable that
-    /// is read but that no row writes.
-    fn seed(&mut self) {
-        let open = self.var(FlowVar::Open);
+    fn edge(&mut self, src: usize, dst: usize) {
+        if src != dst && self.edges.insert((src, dst)) {
+            self.successors[src].push(dst);
+            for token in self.sets[src].clone() {
+                self.add(dst, token);
+            }
+        }
+    }
+
+    fn slot(&mut self, token: Token, field: usize) -> usize {
+        if let Some(&node) = self.slots.get(&(token, field)) {
+            return node;
+        }
+        let node = self.node(None);
+        self.slots.insert((token, field), node);
+        self.slots_of.entry(token).or_default().push(node);
+        if self.escaped.contains(&token) {
+            self.edge(node, self.sink);
+        }
+        if self.exported.contains(&token)
+            || matches!(
+                token,
+                Token::Object(_, Obj::Namespace | Obj::Module | Obj::Exports)
+            )
+        {
+            self.edge(node, self.export);
+        }
+        if field == self.prototype
+            && let Token::Function(file, span) = token
+        {
+            self.add(node, Token::Object(file, Obj::Prototype(span)));
+            self.stored.insert((token, field));
+            self.descriptions[file as usize].prototypes.insert(span);
+        }
+        node
+    }
+
+    fn seed(
+        &mut self,
+        has_node: impl Fn(usize, FlowSpan) -> bool,
+        request_target: impl Fn(usize, u32) -> Option<usize>,
+    ) {
+        let open = self.var(0, FlowVar::Open);
         self.add(open, Token::Unknown);
-        let prim = self.var(FlowVar::Prim);
+        let prim = self.var(0, FlowVar::Prim);
         self.add(prim, Token::Prim);
-        let mut written = BTreeSet::new();
-        let mut read = BTreeSet::new();
-        for row in &self.flows.rows {
-            match row {
-                FlowRow::Copy { dst, src } => {
-                    written.insert(*dst);
-                    read.insert(*src);
-                }
-                FlowRow::Alloc { dst, .. } => {
-                    written.insert(*dst);
-                }
-                FlowRow::Load { dst, base, .. } => {
-                    written.insert(*dst);
-                    read.insert(*base);
-                }
-                FlowRow::Store { base, src, .. } => {
-                    read.insert(*base);
-                    read.insert(*src);
+        for (file, flows) in self.files.iter().enumerate() {
+            if !flows.lowered {
+                continue;
+            }
+            for function in &flows.functions {
+                if has_node(file, function.span) {
+                    self.functions
+                        .insert((file as u32, function.span), function.params);
                 }
             }
         }
-        for call in &self.flows.calls {
-            written.insert(call.result);
-            read.insert(call.callee);
-            read.extend(call.receiver);
-            read.extend(call.arguments.iter().copied());
-        }
-        for var in read.iter().chain(&written) {
-            let index = self.var(*var);
-            if let FlowVar::Function(span) = var {
-                let token = if self.functions.contains_key(span) {
-                    Token::Function(*span)
-                } else {
-                    Token::Unknown
+        for (file, flows) in self.files.iter().enumerate() {
+            if !flows.lowered {
+                continue;
+            }
+            let mut written = BTreeSet::new();
+            let mut read = BTreeSet::new();
+            for (row, flow) in flows.rows.iter().enumerate() {
+                match flow {
+                    FlowRow::Copy { dst, src } => {
+                        written.insert(*dst);
+                        read.insert(*src);
+                        let (dst, src) = (self.var(file, *dst), self.var(file, *src));
+                        self.edge(src, dst);
+                    }
+                    FlowRow::Alloc { dst, object } => {
+                        written.insert(*dst);
+                        let dst = self.var(file, *dst);
+                        self.add(dst, Token::Object(file as u32, (*object).into()));
+                    }
+                    FlowRow::Load { dst, base, field } => {
+                        written.insert(*dst);
+                        read.insert(*base);
+                        let (dst, base, field) = (
+                            self.var(file, *dst),
+                            self.var(file, *base),
+                            self.field(field),
+                        );
+                        self.loads_by_base[base].push(Load {
+                            file,
+                            row,
+                            dst,
+                            field,
+                        });
+                    }
+                    FlowRow::Store { base, field, src } => {
+                        read.insert(*base);
+                        read.insert(*src);
+                        let (base, src, field) = (
+                            self.var(file, *base),
+                            self.var(file, *src),
+                            self.field(field),
+                        );
+                        self.stores_by_base[base].push(Store { src, field });
+                    }
+                }
+            }
+            for call in &flows.calls {
+                written.insert(call.result);
+                read.insert(call.callee);
+                read.extend(call.receiver);
+                read.extend(call.arguments.iter().copied());
+                let callee = self.var(file, call.callee);
+                let call = Call {
+                    result: self.var(file, call.result),
+                    receiver: call.receiver.map(|var| self.var(file, var)),
+                    arguments: call
+                        .arguments
+                        .iter()
+                        .map(|&var| self.var(file, var))
+                        .collect(),
+                    spread_from: call.spread_from,
                 };
-                self.add(index, token);
+                self.calls_by_callee[callee].push(call);
             }
-        }
-        for var in read.difference(&written) {
-            if matches!(var, FlowVar::Local(_) | FlowVar::Temp(_)) {
-                let index = self.var(*var);
-                self.add(index, Token::Unknown);
+            for &var in read.union(&written) {
+                let node = self.var(file, var);
+                match var {
+                    FlowVar::Function(span) => self.add(
+                        node,
+                        if self.functions.contains_key(&(file as u32, span)) {
+                            Token::Function(file as u32, span)
+                        } else {
+                            Token::Unknown
+                        },
+                    ),
+                    FlowVar::RequestNamespace(request) | FlowVar::RequestModule(request) => {
+                        if let Some(target) = request_target(file, request)
+                            .filter(|&target| self.files.get(target).is_some_and(|f| f.lowered))
+                        {
+                            let target_var = if matches!(var, FlowVar::RequestNamespace(_)) {
+                                FlowVar::Namespace
+                            } else {
+                                FlowVar::Module
+                            };
+                            let src = self.var(target, target_var);
+                            self.edge(src, node);
+                        } else {
+                            self.add(node, Token::Unknown);
+                        }
+                    }
+                    FlowVar::Local(_) | FlowVar::Temp(_) if !written.contains(&var) => {
+                        self.add(node, Token::Unknown)
+                    }
+                    _ => {}
+                }
             }
-        }
-        // A lowered function without a graph node is not named anywhere, so
-        // its parameters and `this` may hold anything and its return escapes.
-        for function in &self.flows.functions {
-            if !self.functions.contains_key(&function.span) {
-                self.open_signature(function.span, function.params);
+            for function in &flows.functions {
+                if !self.functions.contains_key(&(file as u32, function.span)) {
+                    self.open_signature(file as u32, function.span, function.params, self.sink);
+                }
             }
         }
     }
 
-    fn open_signature(&mut self, span: FlowSpan, params: u8) {
+    fn open_signature(&mut self, file: u32, span: FlowSpan, params: u8, boundary: usize) {
         for position in 0..params {
-            let param = self.var(FlowVar::Param(span, position));
+            let param = self.var(file as usize, FlowVar::Param(span, position));
             self.add(param, Token::Unknown);
         }
-        let this = self.var(FlowVar::This(span));
+        let this = self.var(file as usize, FlowVar::This(span));
         self.add(this, Token::Unknown);
-        let ret = self.var(FlowVar::Return(span));
-        let sink = self.var(FlowVar::Sink);
-        self.union(sink, ret);
+        let ret = self.var(file as usize, FlowVar::Return(span));
+        self.edge(ret, boundary);
     }
 
-    fn run(&mut self) {
-        loop {
-            self.inner_fixpoint();
-            self.changed = false;
-            self.unstored_loads();
-            self.unknown_constructors();
-            if !self.changed {
-                break;
-            }
+    fn boundary(&mut self, token: Token, escape: bool) {
+        let fresh = if escape {
+            self.escaped.insert(token)
+        } else {
+            self.exported.insert(token)
+        };
+        if !fresh {
+            return;
         }
-    }
-
-    fn inner_fixpoint(&mut self) {
-        loop {
-            self.changed = false;
-            for row in &self.flows.rows {
-                self.apply_row(row);
+        let boundary = if escape { self.sink } else { self.export };
+        if let Token::Function(file, span) = token {
+            let params = self.functions.get(&(file, span)).copied().unwrap_or(0);
+            self.open_signature(file, span, params, boundary);
+            if escape {
+                self.descriptions[file as usize]
+                    .escaped_functions
+                    .insert(span);
             }
-            for call in &self.flows.calls {
-                self.apply_call(call);
-            }
-            self.apply_escapes();
-            if !self.changed {
-                break;
-            }
+        } else if let Token::Object(file, object) = token
+            && escape
+        {
+            self.descriptions[file as usize]
+                .escaped_objects
+                .insert(object);
         }
-    }
-
-    fn apply_row(&mut self, row: &FlowRow) {
-        match row {
-            FlowRow::Copy { dst, src } => {
-                let (dst, src) = (self.var(*dst), self.var(*src));
-                self.union(dst, src);
-            }
-            FlowRow::Alloc { dst, object } => {
-                let dst = self.var(*dst);
-                self.add(dst, Token::Object(*object));
-            }
-            FlowRow::Load { dst, base, field } => {
-                let (dst, base) = (self.var(*dst), self.var(*base));
-                for token in self.sets[base].clone() {
-                    match token {
-                        Token::Object(object) if !self.escaped_objects.contains(&object) => {
-                            let slot = self.slot(object, field);
-                            self.union(dst, slot);
-                        }
-                        Token::Function(function) => {
-                            // A function's own properties are not tracked,
-                            // and `f.call` or `f.bind` hand it to code the
-                            // rows do not describe.
-                            self.add(dst, Token::Unknown);
-                            if self.escaped_functions.insert(function) {
-                                self.changed = true;
-                            }
-                        }
-                        Token::Unknown | Token::Object(_) | Token::Prim => {
-                            self.add(dst, Token::Unknown);
-                        }
-                    }
-                }
-            }
-            FlowRow::Store { base, field, src } => {
-                let (base, src) = (self.var(*base), self.var(*src));
-                let sink = self.var(FlowVar::Sink);
-                for token in self.sets[base].clone() {
-                    match token {
-                        Token::Object(object) if !self.escaped_objects.contains(&object) => {
-                            let slot = self.slot(object, field);
-                            self.union(slot, src);
-                            self.stored.insert((object, field.clone()));
-                        }
-                        Token::Unknown | Token::Function(_) | Token::Object(_) | Token::Prim => {
-                            self.union(sink, src);
-                        }
-                    }
-                }
-            }
+        // The module boundary allows outside calls but assumes outside code
+        // neither rewrites exports nor writes fields of exported objects.
+        for slot in self.slots_of.get(&token).cloned().unwrap_or_default() {
+            self.edge(slot, boundary);
         }
-    }
-
-    fn apply_call(&mut self, call: &FlowCall) {
-        let callee = self.var(call.callee);
-        let result = self.var(call.result);
-        let sink = self.var(FlowVar::Sink);
-        let receiver = call.receiver.map(|receiver| self.var(receiver));
-        let arguments = call
-            .arguments
-            .iter()
-            .map(|argument| self.var(*argument))
-            .collect::<Vec<_>>();
-        let bound = call
-            .spread_from
-            .map_or(arguments.len(), |spread| spread.min(arguments.len()));
-        for token in self.sets[callee].clone() {
-            let function = match token {
-                Token::Function(function) => function,
-                // Calling a primitive throws: nothing flows.
-                Token::Prim => continue,
-                Token::Unknown | Token::Object(_) => {
-                    for value in receiver.iter().chain(&arguments) {
-                        self.union(sink, *value);
-                    }
-                    self.add(result, Token::Unknown);
-                    continue;
-                }
-            };
-            let params = self.functions.get(&function).copied().unwrap_or(0);
-            let this = self.var(FlowVar::This(function));
-            match receiver {
-                Some(receiver) => self.union(this, receiver),
-                None => self.add(this, Token::Unknown),
-            }
-            for (position, argument) in arguments.iter().enumerate() {
-                match u8::try_from(position) {
-                    Ok(position) if usize::from(position) < bound && position < params => {
-                        let param = self.var(FlowVar::Param(function, position));
-                        self.union(param, *argument);
-                    }
-                    _ => self.union(sink, *argument),
-                }
-            }
-            if call.spread_from.is_some() {
-                for position in u8::try_from(bound).unwrap_or(u8::MAX)..params {
-                    let param = self.var(FlowVar::Param(function, position));
-                    self.add(param, Token::Unknown);
-                }
-            }
-            let ret = self.var(FlowVar::Return(function));
-            self.union(result, ret);
-        }
-    }
-
-    /// Escapes what reaches the sink, and opens what escaped values expose.
-    fn apply_escapes(&mut self) {
-        let sink = self.var(FlowVar::Sink);
-        for token in self.sets[sink].clone() {
-            let added = match token {
-                Token::Function(function) => self.escaped_functions.insert(function),
-                Token::Object(object) => self.escaped_objects.insert(object),
-                Token::Unknown | Token::Prim => false,
-            };
-            self.changed |= added;
-        }
-        for function in self.escaped_functions.clone() {
-            let params = self.functions.get(&function).copied().unwrap_or(0);
-            self.open_signature(function, params);
-        }
-        let escaped_slots = self
-            .slots
-            .iter()
-            .filter(|((object, _), _)| self.escaped_objects.contains(object))
-            .map(|(_, slot)| *slot)
-            .collect::<Vec<_>>();
-        for slot in escaped_slots {
-            self.union(sink, slot);
-        }
-    }
-
-    /// A field no row stores may still be found on the prototype, which the
-    /// rows do not describe.
-    fn unstored_loads(&mut self) {
-        for row in &self.flows.rows {
-            let FlowRow::Load { dst, base, field } = row else {
-                continue;
-            };
-            let (dst, base) = (self.var(*dst), self.var(*base));
-            let unstored = self.sets[base].iter().any(|token| {
-                matches!(token, Token::Object(object)
-                    if !self.escaped_objects.contains(object)
-                        && !self.stored.contains(&(*object, field.clone())))
-            });
-            if unstored {
+        if escape {
+            for dst in self.loads_of.get(&token).cloned().unwrap_or_default() {
                 self.add(dst, Token::Unknown);
             }
         }
     }
 
-    /// An object a `new` allocates for a callee the rows do not describe gets
-    /// its prototype, and so its methods, from that callee.
-    fn unknown_constructors(&mut self) {
-        for call in &self.flows.calls {
-            let Some(object) = call.constructs else {
-                continue;
-            };
-            let callee = self.var(call.callee);
-            let unknown = self.sets[callee].iter().any(|token| match token {
-                Token::Function(function) => self.escaped_functions.contains(function),
-                Token::Unknown | Token::Object(_) => true,
-                Token::Prim => false,
-            });
-            if unknown && self.escaped_objects.insert(object) {
-                self.changed = true;
-            }
+    fn load(&mut self, load: Load, token: Token) {
+        if matches!(token, Token::Unknown | Token::Prim) {
+            self.add(load.dst, Token::Unknown);
+            return;
+        }
+        let slot = self.slot(token, load.field);
+        self.edge(slot, load.dst);
+        self.loads_of.entry(token).or_default().push(load.dst);
+        self.lookups.push((load, token));
+        if self.escaped.contains(&token) {
+            self.add(load.dst, Token::Unknown);
         }
     }
 
-    /// The largest parameter count of a callee set the rows describe: one
-    /// that holds a lowered function and otherwise only primitives.
-    fn described_pad(&self, set: &BTreeSet<Token>) -> Option<u8> {
-        let mut pad = None::<u8>;
-        for token in set {
-            match token {
-                Token::Function(function) => {
-                    let params = self.functions.get(function).copied().unwrap_or(0);
-                    pad = Some(pad.map_or(params, |held| held.max(params)));
+    fn store(&mut self, store: Store, token: Token) {
+        if matches!(token, Token::Unknown | Token::Prim) {
+            self.edge(store.src, self.sink);
+        } else {
+            let slot = self.slot(token, store.field);
+            self.stored.insert((token, store.field));
+            self.edge(store.src, slot);
+        }
+    }
+
+    fn call(&mut self, call: &Call, token: Token) {
+        let Token::Function(file, span) = token else {
+            if token != Token::Prim {
+                for &src in call.receiver.iter().chain(&call.arguments) {
+                    self.edge(src, self.sink);
                 }
-                Token::Prim => {}
-                Token::Unknown | Token::Object(_) => return None,
+                self.add(call.result, Token::Unknown);
+            }
+            return;
+        };
+        let params = self.functions.get(&(file, span)).copied().unwrap_or(0);
+        let this = self.var(file as usize, FlowVar::This(span));
+        match call.receiver {
+            Some(receiver) => self.edge(receiver, this),
+            None => self.add(this, Token::Unknown),
+        }
+        let bound = call.spread_from.unwrap_or(call.arguments.len());
+        for (position, &arg) in call.arguments.iter().enumerate() {
+            if position < bound && position < usize::from(params) {
+                let param = self.var(file as usize, FlowVar::Param(span, position as u8));
+                self.edge(arg, param);
+            } else {
+                self.edge(arg, self.sink);
             }
         }
-        pad
+        if call.spread_from.is_some() {
+            for position in bound.min(usize::from(params))..usize::from(params) {
+                let param = self.var(file as usize, FlowVar::Param(span, position as u8));
+                self.add(param, Token::Unknown);
+            }
+        }
+        let ret = self.var(file as usize, FlowVar::Return(span));
+        self.edge(ret, call.result);
     }
 
-    fn finish(self) -> Described {
-        // A site lowered twice is named only when every lowering is described.
-        let mut sites = BTreeMap::<FlowSpan, Option<u8>>::new();
-        for call in &self.flows.calls {
-            let pad = self
-                .index
-                .get(&call.callee)
-                .and_then(|index| self.described_pad(&self.sets[*index]));
-            let entry = sites.entry(call.site).or_insert(Some(0));
-            *entry = entry.zip(pad).map(|(held, pad)| held.max(pad));
+    fn propagate(&mut self) {
+        while let Some(node) = self.queue.pop_front() {
+            let delta = std::mem::take(&mut self.delta[node]);
+            for token in delta {
+                for dst in self.successors[node].clone() {
+                    self.add(dst, token);
+                }
+                for load in self.loads_by_base[node].clone() {
+                    self.load(load, token);
+                }
+                for store in self.stores_by_base[node].clone() {
+                    self.store(store, token);
+                }
+                for call in self.calls_by_callee[node].clone() {
+                    self.call(&call, token);
+                }
+                if node == self.sink {
+                    self.boundary(token, true);
+                }
+                if node == self.export {
+                    self.boundary(token, false);
+                }
+            }
         }
-        let named = sites
-            .into_iter()
-            .filter_map(|(site, pad)| Some((site, pad?)))
-            .collect();
-        let open = self
-            .vars
-            .iter()
-            .zip(&self.sets)
-            .filter_map(|(var, set)| {
-                let var = (*var)?;
-                let tracked = matches!(
-                    var,
-                    FlowVar::Local(_)
-                        | FlowVar::Temp(_)
-                        | FlowVar::Param(..)
-                        | FlowVar::This(_)
-                        | FlowVar::Return(_)
-                );
-                (tracked && set.contains(&Token::Unknown)).then_some(var)
-            })
-            .collect();
-        Described {
-            named,
-            open,
-            escaped_functions: self.escaped_functions,
-            escaped_objects: self.escaped_objects,
+    }
+
+    fn lookup(&mut self, load: Load, token: Token, depth: u8, visited: &mut HashSet<Token>) {
+        if depth >= 16 || !visited.insert(token) || matches!(token, Token::Unknown | Token::Prim) {
+            self.add(load.dst, Token::Unknown);
+            return;
         }
+        // Outside code may shadow any field of an escaped object, so the
+        // inherited value is a candidate beside an unknown one.
+        if self.escaped.contains(&token) {
+            self.add(load.dst, Token::Unknown);
+        }
+        if self.stored.contains(&(token, load.field)) {
+            let slot = self.slot(token, load.field);
+            self.edge(slot, load.dst);
+            self.descriptions[load.file]
+                .lookups
+                .insert((load.row, token));
+        } else if let Some(&proto) = self.slots.get(&(token, self.proto))
+            && !self.sets[proto].is_empty()
+        {
+            for parent in self.sets[proto].clone() {
+                self.lookup(load, parent, depth + 1, visited);
+            }
+        } else if !matches!(token, Token::Object(_, Obj::Namespace)) {
+            self.add(load.dst, Token::Unknown);
+            if matches!(token, Token::Function(..)) {
+                self.add(self.sink, token);
+            }
+        }
+        visited.remove(&token);
+    }
+
+    fn run(&mut self) {
+        loop {
+            self.propagate();
+            for (load, token) in self.lookups.clone() {
+                if !self.stored.contains(&(token, load.field)) {
+                    self.lookup(load, token, 0, &mut HashSet::new());
+                }
+            }
+            if self.queue.is_empty() {
+                break;
+            }
+        }
+    }
+
+    fn finish(mut self) -> Vec<Described> {
+        for (file, flows) in self.files.iter().enumerate() {
+            if !flows.lowered {
+                continue;
+            }
+            let mut sites = BTreeMap::<FlowSpan, Option<u8>>::new();
+            for call in &flows.calls {
+                let callee_file =
+                    if matches!(call.callee, FlowVar::Open | FlowVar::Sink | FlowVar::Prim) {
+                        usize::MAX
+                    } else {
+                        file
+                    };
+                let set = &self.sets[self.index[&(callee_file, call.callee)]];
+                let mut pad = None::<u8>;
+                for token in set {
+                    match token {
+                        Token::Function(file, span) => {
+                            let params = self.functions.get(&(*file, *span)).copied().unwrap_or(0);
+                            pad = Some(pad.map_or(params, |held| held.max(params)));
+                        }
+                        Token::Prim => {}
+                        _ => {
+                            pad = None;
+                            break;
+                        }
+                    }
+                }
+                let entry = sites.entry(call.site).or_insert(Some(0));
+                *entry = entry.zip(pad).map(|(held, pad)| held.max(pad));
+            }
+            self.descriptions[file].named = sites
+                .into_iter()
+                .filter_map(|(site, pad)| Some((site, pad?)))
+                .collect();
+        }
+        for (var, set) in self.vars.iter().zip(&self.sets) {
+            if let Some((file, var)) = var
+                && *file != usize::MAX
+                && set.contains(&Token::Unknown)
+            {
+                self.descriptions[*file].open.insert(*var);
+            }
+        }
+        std::mem::take(&mut self.descriptions)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ts::constraints::LoweredFunction;
+    use crate::ts::constraints::{FlowCall, LoweredFunction};
 
     const F: FlowSpan = (10, 20);
     const G: FlowSpan = (30, 40);
@@ -485,6 +598,7 @@ mod tests {
                 LoweredFunction { span: F, params: 1 },
                 LoweredFunction { span: G, params: 0 },
             ],
+            ..TsValueFlows::default()
         }
     }
 
@@ -569,7 +683,7 @@ mod tests {
         let rows = vec![
             FlowRow::Alloc {
                 dst: FlowVar::Local(0),
-                object: OBJ,
+                object: FlowObject::Site(OBJ),
             },
             FlowRow::Store {
                 base: FlowVar::Local(0),
@@ -601,7 +715,7 @@ mod tests {
         let rows = vec![
             FlowRow::Alloc {
                 dst: FlowVar::Local(0),
-                object: OBJ,
+                object: FlowObject::Site(OBJ),
             },
             FlowRow::Store {
                 base: FlowVar::Local(0),
@@ -611,9 +725,51 @@ mod tests {
             copy(FlowVar::Sink, FlowVar::Local(0)),
         ];
         let described = describe(&flows(rows, Vec::new()), |_| true);
-        assert_eq!(described.escaped_objects, BTreeSet::from([OBJ]));
+        assert_eq!(described.escaped_objects, BTreeSet::from([Obj::Site(OBJ)]));
         assert_eq!(described.escaped_functions, BTreeSet::from([F]));
         assert!(described.open.contains(&FlowVar::Param(F, 0)));
+    }
+
+    #[test]
+    fn an_escaped_object_inherits_its_prototype_methods_beside_an_unknown_value() {
+        const PROTO: FlowSpan = (80, 90);
+        let rows = vec![
+            FlowRow::Alloc {
+                dst: FlowVar::Local(1),
+                object: FlowObject::Site(PROTO),
+            },
+            FlowRow::Store {
+                base: FlowVar::Local(1),
+                field: "exact:run".into(),
+                src: FlowVar::Function(G),
+            },
+            FlowRow::Alloc {
+                dst: FlowVar::Local(0),
+                object: FlowObject::Site(OBJ),
+            },
+            FlowRow::Store {
+                base: FlowVar::Local(0),
+                field: "$proto".into(),
+                src: FlowVar::Local(1),
+            },
+            copy(FlowVar::Sink, FlowVar::Local(0)),
+            FlowRow::Load {
+                dst: FlowVar::Temp(1),
+                base: FlowVar::Local(0),
+                field: "exact:run".into(),
+            },
+        ];
+        let described = describe(
+            &flows(rows, vec![call(FlowVar::Temp(1), Vec::new())]),
+            |_| true,
+        );
+        assert!(described.named.is_empty());
+        assert!(described.open.contains(&FlowVar::Temp(1)));
+        assert!(
+            described
+                .lookups
+                .contains(&(5, Token::Object(0, Obj::Site(PROTO))))
+        );
     }
 
     #[test]
@@ -659,10 +815,10 @@ mod tests {
         };
         let rows = vec![FlowRow::Alloc {
             dst: FlowVar::Temp(5),
-            object: OBJ,
+            object: FlowObject::Site(OBJ),
         }];
         let described = describe(&flows(rows, vec![construct]), |_| true);
-        assert_eq!(described.escaped_objects, BTreeSet::from([OBJ]));
+        assert_eq!(described.escaped_objects, BTreeSet::from([Obj::Site(OBJ)]));
     }
 
     #[test]

@@ -7,7 +7,7 @@
 //! (`with`, a direct `eval`) and syntax the walker does not know (JSX, V8
 //! intrinsics, auto-accessors) stop the walk, and the file is not lowered.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -20,13 +20,13 @@ use oxc_ast::ast::{
     MethodDefinitionKind, ModuleDeclaration, ModuleExportName, NewExpression, ObjectExpression,
     ObjectProperty, ObjectPropertyKind, Program, PropertyKey, PropertyKind, SimpleAssignmentTarget,
     Statement, TSModuleDeclaration, TSModuleDeclarationBody, TSModuleDeclarationName,
-    TaggedTemplateExpression, UnaryOperator, UpdateExpression, VariableDeclaration,
-    VariableDeclarationKind,
+    TSModuleReference, TaggedTemplateExpression, UnaryOperator, UpdateExpression,
+    VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_semantic::{Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
 
-use super::{FlowCall, FlowRow, FlowSpan, FlowVar, LoweredFunction, TsValueFlows};
+use super::{FlowCall, FlowObject, FlowRow, FlowSpan, FlowVar, LoweredFunction, TsValueFlows};
 use crate::analysis_api::SourceFile;
 use crate::ts::parse::parse_ts_file;
 use crate::ts::spans::{
@@ -62,7 +62,20 @@ pub(crate) fn lower_ts_program_value_flows(
         aborted: false,
         bodied: BTreeSet::new(),
         bodiless: BTreeSet::new(),
+        constants: BTreeMap::new(),
+        classes: Vec::new(),
     };
+    lowerer.flows.esm = program.body.iter().any(|statement| {
+        matches!(
+            statement.as_module_declaration(),
+            Some(
+                ModuleDeclaration::ImportDeclaration(_)
+                    | ModuleDeclaration::ExportAllDeclaration(_)
+                    | ModuleDeclaration::ExportDefaultDeclaration(_)
+                    | ModuleDeclaration::ExportNamedDeclaration(_)
+            )
+        )
+    });
     lowerer.statements(&program.body);
     lowerer.finish()
 }
@@ -92,11 +105,19 @@ enum Place {
     Global,
 }
 
+struct ClassFrame {
+    parent: FlowVar,
+    parent_prototype: FlowVar,
+    static_member: bool,
+}
+
 struct Lowerer<'s> {
     source: &'s str,
     scoping: &'s Scoping,
     flows: TsValueFlows,
     next_temp: u32,
+    constants: BTreeMap<u32, String>,
+    classes: Vec<ClassFrame>,
     frames: Vec<Frame>,
     aborted: bool,
     /// Function declarations with a body, by symbol.
@@ -111,6 +132,39 @@ fn flow_span(span: Span) -> FlowSpan {
 
 impl Lowerer<'_> {
     fn finish(mut self) -> TsValueFlows {
+        let mut preamble = vec![
+            FlowRow::Alloc {
+                dst: FlowVar::Namespace,
+                object: FlowObject::Namespace,
+            },
+            FlowRow::Alloc {
+                dst: FlowVar::Module,
+                object: FlowObject::Module,
+            },
+            FlowRow::Alloc {
+                dst: FlowVar::Exports,
+                object: FlowObject::Exports,
+            },
+        ];
+        let replaces_exports = self.flows.rows.iter().any(|row| matches!(row, FlowRow::Store {base: FlowVar::Module, field, ..} if field.as_ref() == "exact:exports"));
+        if self.flows.esm || !replaces_exports {
+            preamble.push(FlowRow::Store {
+                base: FlowVar::Module,
+                field: "exact:exports".into(),
+                src: if self.flows.esm {
+                    FlowVar::Namespace
+                } else {
+                    FlowVar::Exports
+                },
+            });
+        }
+        if !self.flows.esm {
+            let exported = self.load(FlowVar::Module, "exact:exports".into());
+            self.store(FlowVar::Namespace, "exact:default".into(), exported);
+            self.store(FlowVar::Namespace, "$proto".into(), exported);
+        }
+        preamble.append(&mut self.flows.rows);
+        self.flows.rows = preamble;
         let bodiless = std::mem::take(&mut self.bodiless);
         let bodied = std::mem::take(&mut self.bodied);
         for &symbol in bodiless.difference(&bodied) {
@@ -126,6 +180,23 @@ impl Lowerer<'_> {
     fn abort(&mut self) -> FlowVar {
         self.aborted = true;
         FlowVar::Open
+    }
+
+    fn request(&mut self, specifier: &str, namespace: bool) -> FlowVar {
+        let index = self
+            .flows
+            .requests
+            .iter()
+            .position(|request| request.as_ref() == specifier)
+            .unwrap_or_else(|| {
+                self.flows.requests.push(specifier.into());
+                self.flows.requests.len() - 1
+            }) as u32;
+        if namespace {
+            FlowVar::RequestNamespace(index)
+        } else {
+            FlowVar::RequestModule(index)
+        }
     }
 
     fn temp(&mut self) -> FlowVar {
@@ -342,70 +413,118 @@ impl Lowerer<'_> {
         self.flows
             .functions
             .push(LoweredFunction { span, params: 0 });
-        self.sink(FlowVar::Function(span));
     }
 
-    // Classes. A class's value, its prototype and its instances are not
-    // modelled: the class is open, and every member function escapes.
+    // Classes.
 
     fn class(&mut self, class: &Class<'_>) -> FlowVar {
         if class.declare {
             return FlowVar::Open;
         }
-        if let Some(local) = self.binding_local(
-            class
-                .id
-                .as_ref()
-                .and_then(|identifier| identifier.symbol_id.get()),
-        ) {
-            self.copy(local, FlowVar::Open);
+        let span = flow_span(class.span);
+        let value = FlowVar::Function(span);
+        if let Some(local) = self.binding_local(class.id.as_ref().and_then(|id| id.symbol_id.get()))
+        {
+            self.copy(local, value);
         }
+        let prototype = self.load(value, "exact:prototype".into());
+        let parent = class
+            .super_class
+            .as_ref()
+            .map_or(FlowVar::Prim, |parent| self.expression(parent));
+        let parent_prototype = if class.super_class.is_some() {
+            let parent_prototype = self.load(parent, "exact:prototype".into());
+            self.store(value, "$proto".into(), parent);
+            self.store(prototype, "$proto".into(), parent_prototype);
+            parent_prototype
+        } else {
+            FlowVar::Prim
+        };
         for decorator in &class.decorators {
-            let value = self.expression(&decorator.expression);
+            let decorator = self.expression(&decorator.expression);
+            self.sink(decorator);
             self.sink(value);
         }
-        if let Some(super_class) = &class.super_class {
-            let value = self.expression(super_class);
-            self.sink(value);
-        }
+        self.classes.push(ClassFrame {
+            parent,
+            parent_prototype,
+            static_member: false,
+        });
+        let mut explicit = false;
         for element in &class.body.body {
             match element {
                 ClassElement::MethodDefinition(method) => {
+                    if let Some(frame) = self.classes.last_mut() {
+                        frame.static_member = method.r#static;
+                    }
+                    let field = self.key_field(&method.key, method.computed);
+                    let constructor = method.kind == MethodDefinitionKind::Constructor;
+                    explicit |= constructor;
+                    let function = self.function(
+                        if constructor {
+                            class.span
+                        } else {
+                            class_method_function_span(method, self.source)
+                        },
+                        &method.value,
+                    );
+                    let base = if method.r#static { value } else { prototype };
+                    if !constructor {
+                        if method.kind == MethodDefinitionKind::Method
+                            && let Some(field) = field
+                        {
+                            self.store(base, field, function);
+                        } else {
+                            self.sink(function);
+                            self.sink(base);
+                        }
+                    }
                     for decorator in &method.decorators {
-                        let value = self.expression(&decorator.expression);
-                        self.sink(value);
+                        let decorator = self.expression(&decorator.expression);
+                        self.sink(decorator);
+                        self.sink(function);
+                        self.sink(base);
                     }
-                    if method.computed {
-                        self.sunk_key(&method.key);
-                    }
-                    let span = if method.kind == MethodDefinitionKind::Constructor {
-                        class.span
-                    } else {
-                        class_method_function_span(method, self.source)
-                    };
-                    let value = self.function(span, &method.value);
-                    self.sink(value);
                 }
                 ClassElement::PropertyDefinition(property) => {
-                    for decorator in &property.decorators {
-                        let value = self.expression(&decorator.expression);
-                        self.sink(value);
-                    }
-                    if property.computed {
-                        self.sunk_key(&property.key);
-                    }
                     if property.declare {
                         continue;
                     }
-                    if let Some(value) = &property.value {
-                        let span = Span::new(property.key.span().start, property.span.end);
-                        self.member_body(span, |lowerer| {
-                            let value = lowerer.expression(value);
-                            lowerer.sink(value);
+                    if let Some(frame) = self.classes.last_mut() {
+                        frame.static_member = property.r#static;
+                    }
+                    let field = self.key_field(&property.key, property.computed);
+                    let this = if property.r#static {
+                        value
+                    } else {
+                        FlowVar::This(span)
+                    };
+                    if let Some(init) = &property.value {
+                        let init_span = Span::new(property.key.span().start, property.span.end);
+                        self.copy(FlowVar::This(flow_span(init_span)), this);
+                        self.member_body(init_span, |lowerer| {
+                            let init = lowerer.expression(init);
+                            if let Some(field) = field {
+                                lowerer.store(this, field, init);
+                            } else {
+                                lowerer.sink(this);
+                                lowerer.sink(init);
+                            }
                         });
+                    } else if let Some(field) = field {
+                        self.store(this, field, FlowVar::Prim);
+                    }
+                    for decorator in &property.decorators {
+                        let decorator = self.expression(&decorator.expression);
+                        self.sink(decorator);
+                        self.sink(this);
                     }
                 }
                 ClassElement::StaticBlock(block) => {
+                    if let Some(frame) = self.classes.last_mut() {
+                        frame.static_member = true;
+                    }
+                    self.copy(FlowVar::This(flow_span(block.span)), value);
                     self.member_body(block.span, |lowerer| lowerer.statements(&block.body));
                 }
                 ClassElement::AccessorProperty(_) => {
@@ -414,7 +533,29 @@ impl Lowerer<'_> {
                 ClassElement::TSIndexSignature(_) => {}
             }
         }
-        FlowVar::Open
+        if !explicit {
+            // The frontend emits a class callable even for an implicit constructor.
+            self.flows
+                .functions
+                .push(LoweredFunction { span, params: 0 });
+            if class.super_class.is_some() {
+                let result = self.temp();
+                self.flows.calls.push(FlowCall {
+                    site: span,
+                    callee: parent,
+                    receiver: Some(FlowVar::This(span)),
+                    arguments: Vec::new(),
+                    // The implicit constructor forwards its argument list;
+                    // element flow through that list is not described yet.
+                    spread_from: Some(0),
+                    result,
+                    constructs: None,
+                });
+                self.copy(FlowVar::Return(span), result);
+            }
+        }
+        self.classes.pop();
+        value
     }
 
     // Statements.
@@ -571,6 +712,14 @@ impl Lowerer<'_> {
             VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing
         );
         for declarator in &declaration.declarations {
+            if declaration.kind == VariableDeclarationKind::Const
+                && let BindingPattern::BindingIdentifier(id) = &declarator.id
+                && let Some(symbol) = id.symbol_id.get()
+                && let Some(init) = &declarator.init
+                && let Some(value) = self.constant_string(init, 0)
+            {
+                self.constants.insert(symbol.index() as u32, value);
+            }
             let value = declarator
                 .init
                 .as_ref()
@@ -614,7 +763,14 @@ impl Lowerer<'_> {
             }
             Declaration::TSImportEqualsDeclaration(declaration) => {
                 if let Some(local) = self.binding_local(declaration.id.symbol_id.get()) {
-                    self.copy(local, FlowVar::Open);
+                    let value = match &declaration.module_reference {
+                        TSModuleReference::ExternalModuleReference(reference) => {
+                            let module = self.request(reference.expression.value.as_str(), false);
+                            self.load(module, "exact:exports".into())
+                        }
+                        _ => FlowVar::Open,
+                    };
+                    self.copy(local, value);
                 }
             }
         }
@@ -663,23 +819,37 @@ impl Lowerer<'_> {
     fn module_declaration(&mut self, declaration: &ModuleDeclaration<'_>) {
         match declaration {
             ModuleDeclaration::ImportDeclaration(declaration) => {
+                let request = self.request(declaration.source.value.as_str(), true);
                 for specifier in declaration.specifiers.iter().flatten() {
-                    let local = match specifier {
-                        ImportDeclarationSpecifier::ImportSpecifier(specifier) => &specifier.local,
+                    let (id, value) = match specifier {
+                        ImportDeclarationSpecifier::ImportSpecifier(specifier) => (
+                            &specifier.local,
+                            self.load(
+                                request,
+                                format!("exact:{}", specifier.imported.name()).into(),
+                            ),
+                        ),
                         ImportDeclarationSpecifier::ImportDefaultSpecifier(specifier) => {
-                            &specifier.local
+                            (&specifier.local, self.load(request, "exact:default".into()))
                         }
                         ImportDeclarationSpecifier::ImportNamespaceSpecifier(specifier) => {
-                            &specifier.local
+                            (&specifier.local, request)
                         }
                     };
-                    if let Some(local) = self.binding_local(local.symbol_id.get()) {
-                        self.copy(local, FlowVar::Open);
+                    if let Some(local) = self.binding_local(id.symbol_id.get()) {
+                        self.copy(local, value);
                     }
                 }
             }
-            ModuleDeclaration::ExportAllDeclaration(_)
-            | ModuleDeclaration::TSNamespaceExportDeclaration(_) => {}
+            ModuleDeclaration::ExportAllDeclaration(declaration) => {
+                let request = self.request(declaration.source.value.as_str(), true);
+                let field = declaration.exported.as_ref().map_or_else(
+                    || "$proto".into(),
+                    |name| format!("exact:{}", name.name()).into(),
+                );
+                self.store(FlowVar::Namespace, field, request);
+            }
+            ModuleDeclaration::TSNamespaceExportDeclaration(_) => {}
             ModuleDeclaration::ExportDefaultDeclaration(declaration) => {
                 let value = match &declaration.declaration {
                     ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
@@ -691,7 +861,7 @@ impl Lowerer<'_> {
                         .as_expression()
                         .map_or(FlowVar::Prim, |expression| self.expression(expression)),
                 };
-                self.sink(value);
+                self.store(FlowVar::Namespace, "exact:default".into(), value);
             }
             ModuleDeclaration::ExportNamedDeclaration(declaration) => {
                 if let Some(inner) = &declaration.declaration {
@@ -699,23 +869,37 @@ impl Lowerer<'_> {
                     let mut bound = Vec::new();
                     declared_symbols(inner, &mut bound);
                     for symbol in bound {
+                        let field = format!("exact:{}", self.scoping.symbol_name(symbol)).into();
                         let local = self.local(symbol);
-                        self.sink(local);
+                        self.store(FlowVar::Namespace, field, local);
                     }
                 }
-                if declaration.source.is_none() {
-                    for specifier in &declaration.specifiers {
-                        if let ModuleExportName::IdentifierReference(reference) = &specifier.local
-                            && let Some(local) = self.reference_local(reference)
-                        {
-                            self.sink(local);
+                let request = declaration
+                    .source
+                    .as_ref()
+                    .map(|source| self.request(source.value.as_str(), true));
+                for specifier in &declaration.specifiers {
+                    let value = match request {
+                        Some(request) => {
+                            self.load(request, format!("exact:{}", specifier.local.name()).into())
                         }
-                    }
+                        None => match &specifier.local {
+                            ModuleExportName::IdentifierReference(reference) => {
+                                self.reference_local(reference).unwrap_or(FlowVar::Open)
+                            }
+                            _ => FlowVar::Open,
+                        },
+                    };
+                    self.store(
+                        FlowVar::Namespace,
+                        format!("exact:{}", specifier.exported.name()).into(),
+                        value,
+                    );
                 }
             }
             ModuleDeclaration::TSExportAssignment(assignment) => {
                 let value = self.expression(&assignment.expression);
-                self.sink(value);
+                self.store(FlowVar::Module, "exact:exports".into(), value);
             }
         }
     }
@@ -839,7 +1023,11 @@ impl Lowerer<'_> {
     fn identifier_place(&mut self, reference: &IdentifierReference<'_>) -> Place {
         match self.reference_local(reference) {
             Some(local) => Place::Var(local),
-            None => Place::Global,
+            None => match reference.name.as_str() {
+                "module" => Place::Var(FlowVar::Module),
+                "exports" => Place::Var(FlowVar::Exports),
+                _ => Place::Global,
+            },
         }
     }
 
@@ -951,13 +1139,6 @@ impl Lowerer<'_> {
         }
     }
 
-    fn sunk_key(&mut self, key: &PropertyKey<'_>) {
-        if let Some(expression) = key.as_expression() {
-            let value = self.expression(expression);
-            self.sink(value);
-        }
-    }
-
     fn member_field(&mut self, key: MemberKey<'_, '_>) -> Option<Box<str>> {
         match key {
             MemberKey::Static(name) => Some(format!("exact:{name}").into()),
@@ -968,22 +1149,49 @@ impl Lowerer<'_> {
 
     /// The field a computed key names when it is a literal.
     fn expression_field(&mut self, expression: &Expression<'_>) -> Option<Box<str>> {
-        let folded = match expression.get_inner_expression() {
-            Expression::StringLiteral(literal) => Some(literal.value.to_string()),
-            Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
-            Expression::NullLiteral(_) => Some("null".to_string()),
-            Expression::NumericLiteral(literal) => integral_key(literal.value),
-            Expression::TemplateLiteral(literal) => {
-                literal.single_quasi().map(|quasi| quasi.to_string())
+        let folded = self.constant_string(expression, 0).or_else(|| {
+            match expression.get_inner_expression() {
+                Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+                Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
+                Expression::NullLiteral(_) => Some("null".to_string()),
+                Expression::NumericLiteral(literal) => integral_key(literal.value),
+                Expression::TemplateLiteral(literal) => {
+                    literal.single_quasi().map(|quasi| quasi.to_string())
+                }
+                _ => None,
             }
-            _ => None,
-        };
+        });
         if let Some(folded) = folded {
             return Some(format!("exact:{folded}").into());
         }
         let value = self.expression(expression);
         self.sink(value);
         None
+    }
+
+    fn constant_string(&self, expression: &Expression<'_>, depth: u8) -> Option<String> {
+        if depth >= 16 {
+            return None;
+        }
+        match expression.get_inner_expression() {
+            Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+            Expression::TemplateLiteral(literal) => {
+                literal.single_quasi().map(|quasi| quasi.to_string())
+            }
+            Expression::Identifier(reference) => {
+                let symbol = reference
+                    .reference_id
+                    .get()
+                    .and_then(|id| self.scoping.get_reference(id).symbol_id())?;
+                self.constants.get(&(symbol.index() as u32)).cloned()
+            }
+            Expression::BinaryExpression(binary) if binary.operator == BinaryOperator::Addition => {
+                let left = self.constant_string(&binary.left, depth + 1)?;
+                let right = self.constant_string(&binary.right, depth + 1)?;
+                Some(left + &right)
+            }
+            _ => None,
+        }
     }
 
     // Expressions.
@@ -1011,6 +1219,8 @@ impl Lowerer<'_> {
                 None => match reference.name.as_str() {
                     "undefined" => FlowVar::Prim,
                     "arguments" => self.arguments(),
+                    "module" => FlowVar::Module,
+                    "exports" => FlowVar::Exports,
                     _ => FlowVar::Open,
                 },
             },
@@ -1161,15 +1371,22 @@ impl Lowerer<'_> {
         }
     }
 
-    fn member_read(&mut self, object: &Expression<'_>, key: MemberKey<'_, '_>) -> FlowVar {
+    fn member_base(&mut self, object: &Expression<'_>) -> FlowVar {
         if matches!(object, Expression::Super(_)) {
-            if let MemberKey::Computed(expression) = key {
-                let value = self.expression(expression);
-                self.sink(value);
-            }
-            return FlowVar::Open;
+            self.classes.last().map_or(FlowVar::Open, |frame| {
+                if frame.static_member {
+                    frame.parent
+                } else {
+                    frame.parent_prototype
+                }
+            })
+        } else {
+            self.expression(object)
         }
-        let base = self.expression(object);
+    }
+
+    fn member_read(&mut self, object: &Expression<'_>, key: MemberKey<'_, '_>) -> FlowVar {
+        let base = self.member_base(object);
         match self.member_field(key) {
             Some(field) => self.load(base, field),
             None => {
@@ -1242,7 +1459,14 @@ impl Lowerer<'_> {
     fn callee(&mut self, callee: &Expression<'_>) -> (FlowVar, Option<FlowVar>) {
         let callee = callee.get_inner_expression();
         let member = match callee {
-            Expression::Super(_) => return (FlowVar::Open, Some(self.this())),
+            Expression::Super(_) => {
+                return (
+                    self.classes
+                        .last()
+                        .map_or(FlowVar::Open, |frame| frame.parent),
+                    Some(self.this()),
+                );
+            }
             Expression::ComputedMemberExpression(member) => {
                 Some((&member.object, MemberKey::Computed(&member.expression)))
             }
@@ -1257,15 +1481,12 @@ impl Lowerer<'_> {
         let Some((object, key)) = member else {
             return (self.expression(callee), None);
         };
-        if matches!(object, Expression::Super(_)) {
-            let this = self.this();
-            if let MemberKey::Computed(expression) = key {
-                let value = self.expression(expression);
-                self.sink(value);
-            }
-            return (FlowVar::Open, Some(this));
-        }
-        let base = self.expression(object);
+        let base = self.member_base(object);
+        let receiver = if matches!(object, Expression::Super(_)) {
+            self.this()
+        } else {
+            base
+        };
         let function = match self.member_field(key) {
             Some(field) => self.load(base, field),
             None => {
@@ -1273,7 +1494,7 @@ impl Lowerer<'_> {
                 FlowVar::Open
             }
         };
-        (function, Some(base))
+        (function, Some(receiver))
     }
 
     fn arguments_of(&mut self, arguments: &[Argument<'_>]) -> (Vec<FlowVar>, Option<usize>) {
@@ -1303,6 +1524,9 @@ impl Lowerer<'_> {
         {
             return self.abort();
         }
+        if let Some(value) = self.builtin_call(call) {
+            return value;
+        }
         let (callee, receiver) = self.callee(&call.callee);
         let (arguments, spread_from) = self.arguments_of(&call.arguments);
         let result = self.temp();
@@ -1318,14 +1542,84 @@ impl Lowerer<'_> {
         result
     }
 
+    fn builtin_call(&mut self, call: &CallExpression<'_>) -> Option<FlowVar> {
+        if let Expression::Identifier(reference) = call.callee.get_inner_expression()
+            && reference.name == "require"
+            && self.reference_local(reference).is_none()
+            && let [argument] = call.arguments.as_slice()
+            && let Some(Expression::StringLiteral(specifier)) = argument.as_expression()
+        {
+            let module = self.request(specifier.value.as_str(), false);
+            return Some(self.load(module, "exact:exports".into()));
+        }
+        let Expression::StaticMemberExpression(member) = call.callee.get_inner_expression() else {
+            return None;
+        };
+        let Expression::Identifier(reference) = member.object.get_inner_expression() else {
+            return None;
+        };
+        if reference.name != "Object" || self.reference_local(reference).is_some() {
+            return None;
+        }
+        let arguments = call
+            .arguments
+            .iter()
+            .map(Argument::as_expression)
+            .collect::<Option<Vec<_>>>()?;
+        match (member.property.name.as_str(), arguments.as_slice()) {
+            ("create", [parent]) => {
+                let parent = self.expression(parent);
+                let object = self.temp();
+                self.flows.rows.push(FlowRow::Alloc {
+                    dst: object,
+                    object: FlowObject::Site(flow_span(call.span)),
+                });
+                self.store(object, "$proto".into(), parent);
+                Some(object)
+            }
+            ("setPrototypeOf", [object, parent]) => {
+                let object = self.expression(object);
+                let parent = self.expression(parent);
+                self.store(object, "$proto".into(), parent);
+                Some(object)
+            }
+            ("defineProperty", [object, key, descriptor]) => {
+                let Expression::ObjectExpression(properties) = descriptor.get_inner_expression()
+                else {
+                    return None;
+                };
+                let data = properties.properties.iter().all(|property| matches!(property,
+                    ObjectPropertyKind::ObjectProperty(property) if property.kind == PropertyKind::Init && !property.computed
+                        && !matches!(property.key.static_name().as_deref(), Some("get" | "set"))));
+                if !data || !properties.properties.iter().any(|property| matches!(property, ObjectPropertyKind::ObjectProperty(property) if property.key.static_name().as_deref() == Some("value"))) {return None;}
+                let field =
+                    self.constant_string(key, 0)
+                        .or_else(|| match key.get_inner_expression() {
+                            Expression::NumericLiteral(literal) => integral_key(literal.value),
+                            Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
+                            Expression::NullLiteral(_) => Some("null".into()),
+                            _ => None,
+                        })?;
+                let object = self.expression(object);
+                let descriptor = self.expression(descriptor);
+                let value = self.load(descriptor, "exact:value".into());
+                self.store(object, format!("exact:{field}").into(), value);
+                Some(object)
+            }
+            _ => None,
+        }
+    }
+
     fn construct(&mut self, new: &NewExpression<'_>) -> FlowVar {
         let object = flow_span(new.span);
         let instance = self.temp();
         self.flows.rows.push(FlowRow::Alloc {
             dst: instance,
-            object,
+            object: FlowObject::Site(object),
         });
         let callee = self.expression(&new.callee);
+        let prototype = self.load(callee, "exact:prototype".into());
+        self.store(instance, "$proto".into(), prototype);
         let (arguments, spread_from) = self.arguments_of(&new.arguments);
         let result = self.temp();
         self.flows.calls.push(FlowCall {
@@ -1365,7 +1659,7 @@ impl Lowerer<'_> {
         let instance = self.temp();
         self.flows.rows.push(FlowRow::Alloc {
             dst: instance,
-            object: flow_span(object.span),
+            object: FlowObject::Site(flow_span(object.span)),
         });
         for property in &object.properties {
             match property {
@@ -1413,7 +1707,7 @@ impl Lowerer<'_> {
         let instance = self.temp();
         self.flows.rows.push(FlowRow::Alloc {
             dst: instance,
-            object: flow_span(array.span),
+            object: FlowObject::Site(flow_span(array.span)),
         });
         let mut spread = false;
         for (index, element) in array.elements.iter().enumerate() {
@@ -1525,7 +1819,7 @@ mod tests {
 
     use super::*;
     use crate::internal_core::{FileId, Language};
-    use crate::ts::constraints::described::describe;
+    use crate::ts::constraints::described::{describe, describe_program};
 
     fn lower(source: &str) -> TsValueFlows {
         let file = SourceFile::new(
@@ -1565,6 +1859,183 @@ mod tests {
             described.named.get(&site_of(&flows, source, "apply(cb)")),
             Some(&1)
         );
+    }
+
+    fn assert_named(source: &str, needles: &[&str]) {
+        let flows = lower(source);
+        assert!(flows.lowered);
+        let described = describe(&flows, |_| true);
+        for needle in needles {
+            assert!(
+                described
+                    .named
+                    .contains_key(&site_of(&flows, source, needle)),
+                "{needle}: {described:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn object_fields_flow_through_parameters() {
+        assert_named(
+            "function f() {} function use(o) { o.run(); } const o = {}; o.run = f; use(o);",
+            &["o.run()"],
+        );
+    }
+
+    #[test]
+    fn functions_hold_assigned_and_defined_properties() {
+        assert_named(
+            "function F() {} function g() {} F.run = g; Object.defineProperty(F, 'init', {value: g}); F.run(); F.init();",
+            &["F.run()", "F.init()"],
+        );
+    }
+
+    #[test]
+    fn prototype_chains_and_own_shadowing_are_described() {
+        assert_named(
+            "function C() {} C.prototype.run = function run() {}; const o = new C(); o.run(); const p = Object.create(o); p.run();",
+            &["new C()", "o.run()", "p.run()"],
+        );
+    }
+
+    #[test]
+    fn class_fields_inheritance_and_super_are_described() {
+        assert_named(
+            "function f() {} class A { constructor() {} run() {} } class B extends A { handler = f; constructor() { super(); } run() { super.run(); this.handler(); } } const b = new B(); b.run();",
+            &[
+                "super()",
+                "super.run()",
+                "this.handler()",
+                "new B()",
+                "b.run()",
+            ],
+        );
+    }
+
+    #[test]
+    fn a_factory_constructor_keeps_its_initializer_and_prototype() {
+        assert_named(
+            "function make(initializer, proto) { function Made(def) { init(this, def); return this; } function init(inst, def) { initializer(inst, def); } Made.prototype.check = proto.check; Object.defineProperty(Made, 'init', {value: init}); return Made; } function initialize(inst, def) {} const C = make(initialize, {check() {}}); const inst = new C({}); inst.check(); C.init(inst, {});",
+            &[
+                "initializer(inst, def)",
+                "new C({})",
+                "inst.check()",
+                "C.init(inst, {})",
+            ],
+        );
+    }
+
+    #[test]
+    fn implicit_derived_constructors_keep_forwarded_arguments_open() {
+        let source = "function fallback() {} function supplied() {} class Base { constructor(callback = fallback) { callback(); } } class Derived extends Base {} new Derived(supplied);";
+        let flows = lower(source);
+        let described = describe(&flows, |_| true);
+        assert!(
+            !described
+                .named
+                .contains_key(&site_of(&flows, source, "callback()"))
+        );
+    }
+
+    #[test]
+    fn constant_string_keys_are_folded() {
+        assert_named(
+            "function f() {} const PREFIX = 'on'; const o = {}; o[PREFIX + 'Open'] = f; o.onOpen();",
+            &["o.onOpen()"],
+        );
+    }
+
+    #[test]
+    fn namespace_reexports_and_commonjs_requests_link_across_files() {
+        for (library, barrel, main, needles) in [
+            (
+                "export function run() {}",
+                "export * from './lib';",
+                "import * as ns from './barrel'; ns.run();",
+                vec!["ns.run()"],
+            ),
+            (
+                "function run() {} module.exports = {run};",
+                "module.exports = require('./lib');",
+                "const ns = require('./barrel'); ns.run();",
+                vec!["ns.run()"],
+            ),
+            (
+                "exports.run = function run() {};",
+                "export {run as task} from './lib';",
+                "import {task} from './barrel'; task();",
+                vec!["task()"],
+            ),
+        ] {
+            let files = [lower(library), lower(barrel), lower(main)];
+            assert!(files.iter().all(|flows| flows.lowered));
+            let refs = files.iter().collect::<Vec<_>>();
+            let described = describe_program(
+                &refs,
+                |_, _| true,
+                |file, request| match files[file].requests[request as usize].as_ref() {
+                    "./lib" => Some(0),
+                    "./barrel" => Some(1),
+                    _ => None,
+                },
+            );
+            for needle in needles {
+                assert!(
+                    described[2]
+                        .named
+                        .contains_key(&site_of(&files[2], main, needle)),
+                    "{described:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_exported_object_keeps_its_fields_but_an_escaped_object_opens_them() {
+        let source = "export const api = {run() {}}; api.run();";
+        let flows = lower(source);
+        let described = describe(&flows, |_| true);
+        assert!(described.escaped_objects.is_empty());
+        assert!(
+            described
+                .named
+                .contains_key(&site_of(&flows, source, "api.run()"))
+        );
+        let source = "const api = {run() {}}; unknown(api); api.run();";
+        let flows = lower(source);
+        let described = describe(&flows, |_| true);
+        assert!(
+            !described
+                .named
+                .contains_key(&site_of(&flows, source, "api.run()"))
+        );
+    }
+
+    #[test]
+    fn prototype_lookup_respects_shadowing_and_opens_unknown_chains_and_cycles() {
+        let source =
+            "const p = {run() {}}; const o = Object.create(p); o.run = function own() {}; o.run();";
+        let flows = lower(source);
+        let described = describe(&flows, |_| true);
+        assert!(
+            described
+                .named
+                .contains_key(&site_of(&flows, source, "o.run()"))
+        );
+        assert!(described.lookups.is_empty());
+        for source in [
+            "const o = Object.create(unknown); o.run();",
+            "const o = {}; Object.setPrototypeOf(o, o); o.run();",
+        ] {
+            let flows = lower(source);
+            let described = describe(&flows, |_| true);
+            assert!(
+                !described
+                    .named
+                    .contains_key(&site_of(&flows, source, "o.run()"))
+            );
+        }
     }
 
     /// The functions whose objects reach `var` through copies.
@@ -1644,7 +2115,9 @@ mod tests {
         let flows = lower(source);
         let described = describe(&flows, |_| true);
         let run = flows.functions[0].span;
-        assert!(described.escaped_functions.contains(&run));
+        // Exported functions accept outside arguments without making their
+        // own properties writable by unknown code.
+        assert!(!described.escaped_functions.contains(&run));
         assert!(described.open.contains(&FlowVar::Param(run, 0)));
         assert!(
             !described
@@ -1691,6 +2164,19 @@ mod tests {
             !described
                 .named
                 .contains_key(&site_of(&flows, source, "cb()"))
+        );
+    }
+
+    #[test]
+    fn a_loop_overwriting_a_parameter_leaves_its_call_open() {
+        let source = "function a() {} function apply(fn, fns) { for (var fn of fns) {} return fn(); } apply(a, [lookup()]);";
+        let flows = lower(source);
+        let described = describe(&flows, |_| true);
+        assert!(
+            !described
+                .named
+                .contains_key(&site_of(&flows, source, "fn()")),
+            "{flows:?}\n{described:?}"
         );
     }
 
