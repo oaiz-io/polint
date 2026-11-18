@@ -7,7 +7,8 @@ graphs. This is engine data; it adds no configuration or SDK contract.
 
 The schema has `schema_version = 1` and `[[methods]]` entries. A method lists
 `names` selectors (`global:JSON.stringify`, `member:map`, `new:Promise`), optional
-`allocate`, `calls`, `stores`, `returns`, and an optional `operation`.
+`allocate`, `calls`, `stores`, `returns`, and an optional `operation`. Callback
+`args_from` appends the enclosing call's trailing arguments, as required by timers.
 
 ```toml
 [[methods]]
@@ -41,14 +42,16 @@ The direct resolver continues to abstain from resolving builtin receivers to
 same-named user functions.
 
 The model is an over-approximation. Member selectors do not prove receiver brands;
-results remain open when a behavior may be overridden. Bind forwarding carries
-possible targets and bound arguments conservatively, rather than claiming a total
-bound-function implementation. Collection keys and elements are merged; order,
+results remain open when a behavior may be overridden. Bind forwarding follows local binding copies and carries possible targets and
+bound arguments at calls of the returned function; binding itself does not invoke
+the target. Bound values crossing call results or heap slots retain the fallback
+analysis rather than claiming a total bound-function implementation. Collection keys and elements are merged; order,
 callback predicates, promise settlement, and event removal are not simulated.
-Object field/descriptor operations use syntactically available shapes; unavailable
-shapes escape. Executor settlement extraction follows local binding copies and
-leaves fulfilled and rejected slots open. Getter return flow is conservative and
-does not claim the getter runs during descriptor installation. Array spread and
+Object field/descriptor operations use syntactically available shapes. Only direct
+literal sources can close copied properties; aliases and partial shapes retain
+an escape guard. Executor settlement extraction follows local binding copies and
+leaves fulfilled and rejected slots open. Getter return flow is approximated eagerly at descriptor installation; the model
+does not track property-read timing. Array spread and
 generator iteration retain aggregate element flow; unknown lengths remain open.
 
 Async function results allocate a promise-shaped value; `await` loads its fulfilled

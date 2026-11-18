@@ -67,6 +67,7 @@ pub(crate) fn lower_ts_program_value_flows(
         constants: BTreeMap::new(),
         copy_sources: BTreeMap::new(),
         field_sources: BTreeMap::new(),
+        bound_values: BTreeMap::new(),
         classes: Vec::new(),
     };
     lowerer.flows.esm = program.body.iter().any(|statement| {
@@ -124,6 +125,7 @@ struct Lowerer<'s> {
     constants: BTreeMap<u32, String>,
     copy_sources: BTreeMap<FlowVar, Vec<FlowVar>>,
     field_sources: BTreeMap<FlowVar, BTreeMap<Box<str>, Vec<FlowVar>>>,
+    bound_values: BTreeMap<FlowVar, platform::BoundValue>,
     classes: Vec<ClassFrame>,
     frames: Vec<Frame>,
     aborted: bool,
@@ -984,16 +986,28 @@ impl Lowerer<'_> {
                 }
             }
             BindingPattern::ArrayPattern(pattern) => {
-                // Destructuring an array runs its iterator.
-                self.sink(value);
-                for element in pattern.elements.iter().flatten() {
-                    self.bind(element, FlowVar::Open);
+                for (index, element) in pattern.elements.iter().enumerate() {
+                    if let Some(element) = element {
+                        let element_value = self.array_element(value, index);
+                        self.bind(element, element_value);
+                    }
                 }
                 if let Some(rest) = &pattern.rest {
                     self.bind(&rest.argument, FlowVar::Open);
                 }
             }
         }
+    }
+
+    fn array_element(&mut self, value: FlowVar, index: usize) -> FlowVar {
+        let indexed = self.load(value, format!("exact:{index}").into());
+        let fields = self.known_fields(value);
+        if fields.contains_key("$array") && !fields.contains_key("$spread") {
+            return indexed;
+        }
+        let elements = self.load(value, "$elements".into());
+        let joined = self.join(indexed, elements);
+        self.join(joined, FlowVar::Open)
     }
 
     fn assign(&mut self, target: &AssignmentTarget<'_>, value: FlowVar) {
@@ -1008,9 +1022,11 @@ impl Lowerer<'_> {
     fn assign_pattern(&mut self, pattern: &AssignmentTargetPattern<'_>, value: FlowVar) {
         match pattern {
             AssignmentTargetPattern::ArrayAssignmentTarget(pattern) => {
-                self.sink(value);
-                for element in pattern.elements.iter().flatten() {
-                    self.assign_with_default(element, FlowVar::Open);
+                for (index, element) in pattern.elements.iter().enumerate() {
+                    if let Some(element) = element {
+                        let element_value = self.array_element(value, index);
+                        self.assign_with_default(element, element_value);
+                    }
                 }
                 if let Some(rest) = &pattern.rest {
                     self.assign(&rest.target, FlowVar::Open);
@@ -1591,6 +1607,8 @@ impl Lowerer<'_> {
         }
         let (callee, receiver) = self.callee(&call.callee);
         let (arguments, spread_from) = self.arguments_of(&call.arguments);
+        let site = flow_span(normalized_call_expression_span(self.source, call));
+        self.forward_bound_calls(callee, site, &arguments, spread_from);
         let result = self.temp();
         self.flows.calls.push(FlowCall {
             site: flow_span(normalized_call_expression_span(self.source, call)),

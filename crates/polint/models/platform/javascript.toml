@@ -46,8 +46,18 @@ calls = [{ param = 1, args = ["$prim", "$param0"], this = "$open" }]
 returns = ["$prim"]
 
 [[methods]]
-names = ["global:setTimeout", "global:setInterval", "global:setImmediate", "global:queueMicrotask", "global:process.nextTick"]
-calls = [{ param = 0, args = ["$open", "$open", "$open", "$open"], this = "$open" }]
+names = ["global:setTimeout", "global:setInterval"]
+calls = [{ param = 0, args_from = 2, this = "$open" }]
+returns = ["$prim"]
+
+[[methods]]
+names = ["global:setImmediate", "global:process.nextTick"]
+calls = [{ param = 0, args_from = 1, this = "$open" }]
+returns = ["$prim"]
+
+[[methods]]
+names = ["global:queueMicrotask"]
+calls = [{ param = 0, args = [] }]
 returns = ["$prim"]
 
 [[methods]]
@@ -63,7 +73,7 @@ returns = ["$result"]
 [[methods]]
 names = ["member:bind"]
 operation = "bind"
-returns = ["$this", "$open"]
+returns = ["$result", "$open"]
 
 [[methods]]
 names = ["new:Promise"]
@@ -85,23 +95,35 @@ stores = [{ base = "$result", field = "$rejected", value = "$param0" }]
 returns = ["$result"]
 
 [[methods]]
-names = ["global:Promise.all", "global:Promise.allSettled", "global:Promise.race", "global:Promise.any"]
+names = ["global:Promise.race", "global:Promise.any"]
 allocate = "promise"
 stores = [{ base = "$result", field = "$fulfilled", value = "$param0.$elements.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$param0.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Promise.all"]
+allocate = "promise"
+operation = "promise_all"
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Promise.allSettled"]
+allocate = "promise"
+operation = "promise_all_settled"
 returns = ["$result"]
 
 [[methods]]
 names = ["member:then"]
 allocate = "promise"
 calls = [{ param = 0, args = ["$this.$fulfilled"] }, { param = 1, args = ["$this.$rejected"] }]
-stores = [{ base = "$result", field = "$fulfilled", value = "$call0" }, { base = "$result", field = "$fulfilled", value = "$call0.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$call1" }]
+stores = [{ base = "$result", field = "$fulfilled", value = "$call0" }, { base = "$result", field = "$fulfilled", value = "$call0.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$call1" }, { base = "$result", field = "$fulfilled", value = "$call1.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$this.$fulfilled" }, { base = "$result", field = "$rejected", value = "$this.$rejected" }]
 returns = ["$result"]
 
 [[methods]]
 names = ["member:catch"]
 allocate = "promise"
 calls = [{ param = 0, args = ["$this.$rejected"] }]
-stores = [{ base = "$result", field = "$fulfilled", value = "$this.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$call0" }]
+stores = [{ base = "$result", field = "$fulfilled", value = "$this.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$call0" }, { base = "$result", field = "$fulfilled", value = "$call0.$fulfilled" }, { base = "$result", field = "$rejected", value = "$this.$rejected" }]
 returns = ["$result"]
 
 [[methods]]
@@ -118,7 +140,7 @@ returns = ["$result"]
 [[methods]]
 names = ["member:flat"]
 allocate = "array"
-stores = [{ base = "$result", field = "$elements", value = "$this.$elements" }, { base = "$result", field = "$elements", value = "$this.$elements.$elements" }]
+operation = "flatten"
 returns = ["$result"]
 
 [[methods]]

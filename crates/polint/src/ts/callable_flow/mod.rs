@@ -846,8 +846,8 @@ mod tests {
                 "function wrong() {}",
             ),
             // Constructor and method parameters receive arguments through
-            // the row call, including object destructuring. Array and rest
-            // bindings remain open until their element flow is described.
+            // the row call, including object and array destructuring. Rest
+            // bindings remain open without positional element rows.
             (
                 "function callback() {}\nclass C {\n  constructor({callback}) { callback(); }\n}\nnew C({callback: function right() {}});\n",
                 "callback();",
@@ -858,7 +858,7 @@ mod tests {
             (
                 "function callback() {}\nclass C {\n  constructor([callback]) { callback(); }\n}\nnew C([function right() {}]);\n",
                 "callback();",
-                &[],
+                &["function right() {}"],
                 "function callback() {}",
             ),
             // Class constructor, rest parameter.

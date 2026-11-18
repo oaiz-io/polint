@@ -37,6 +37,7 @@ pub(crate) struct Invocation {
     #[serde(default)]
     pub(crate) args: Vec<String>,
     pub(crate) this: Option<String>,
+    pub(crate) args_from: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +67,9 @@ pub(crate) enum Operation {
     Values,
     Entries,
     Collection,
+    PromiseAll,
+    PromiseAllSettled,
+    Flatten,
 }
 
 /// Invalid embedded data disables modeling instead of risking an exact claim.
@@ -137,7 +141,8 @@ fn parse(source: &str) -> Result<Platform, String> {
             return Err("invalid allocation kind".into());
         }
         for (index, call) in method.calls.iter().enumerate() {
-            if call.param >= 256
+            if call.args_from.is_some_and(|position| position >= 256)
+                || call.param >= 256
                 || call
                     .args
                     .iter()
@@ -277,6 +282,25 @@ mod tests {
             assert!(
                 found.contains(&("function cb() {}".into(), CallPrecision::Conservative)),
                 "{call}: {found:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn timer_arguments_and_aggregate_results_keep_callable_values() {
+        for body in [
+            "function invoke(fn) { fn(); } setTimeout(invoke, 0, target);",
+            "function invoke(fn) { fn(); } setImmediate(invoke, target);",
+            "Promise.all([Promise.resolve(target)]).then(values => { const [fn] = values; fn(); });",
+            "const [fn] = [[[target]]].flat(2); fn();",
+        ] {
+            let source = format!("function target() {{}} {body}");
+            let found = edges(&source, "fn()");
+            assert!(
+                found
+                    .iter()
+                    .any(|(target, _)| target == "function target() {}"),
+                "{body}: {found:?}"
             );
         }
     }

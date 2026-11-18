@@ -3,6 +3,13 @@
 use super::*;
 use crate::ts::constraints::platform::{Invocation, Method, Operation, embedded};
 
+#[derive(Clone)]
+pub(super) struct BoundValue {
+    target: FlowVar,
+    receiver: FlowVar,
+    prefix: Vec<FlowVar>,
+}
+
 impl Lowerer<'_> {
     fn global_path(&mut self, expression: &Expression<'_>) -> Option<String> {
         match expression.get_inner_expression() {
@@ -83,6 +90,24 @@ impl Lowerer<'_> {
             property.as_deref(),
         );
         if spread.is_some() {
+            self.sink(value);
+        }
+        let expression_at =
+            |index: usize| call.arguments.get(index).and_then(Argument::as_expression);
+        let complete_shape = match selector.operation {
+            Some(Operation::Assign) => call
+                .arguments
+                .iter()
+                .skip(1)
+                .all(|arg| arg.as_expression().is_some_and(literal_data_object)),
+            Some(Operation::DefineProperty) => expression_at(2).is_some_and(literal_data_object),
+            Some(Operation::DefineProperties) => {
+                expression_at(1).is_some_and(literal_descriptor_map)
+            }
+            Some(Operation::Create) => expression_at(1).is_none_or(literal_descriptor_map),
+            _ => true,
+        };
+        if !complete_shape {
             self.sink(value);
         }
         if global.is_none()
@@ -229,11 +254,14 @@ impl Lowerer<'_> {
         called: &[FlowVar],
     ) -> FlowVar {
         let callee = arguments.get(call.param).copied().unwrap_or(FlowVar::Prim);
-        let args = call
+        let mut args: Vec<_> = call
             .args
             .iter()
             .map(|path| self.model_value(path, receiver, arguments, result, called))
             .collect();
+        if let Some(position) = call.args_from {
+            args.extend(arguments.iter().skip(position).copied());
+        }
         let this = call.this.as_ref().map_or(FlowVar::Prim, |path| {
             self.model_value(path, receiver, arguments, result, called)
         });
@@ -277,7 +305,18 @@ impl Lowerer<'_> {
             called.push(value);
         }
         match method.operation {
-            Some(Operation::ForwardCall | Operation::ForwardApply | Operation::Bind) => {
+            Some(Operation::Bind) => {
+                self.copy(result, receiver);
+                self.bound_values.insert(
+                    result,
+                    BoundValue {
+                        target: receiver,
+                        receiver: arg(0),
+                        prefix: arguments.iter().skip(1).copied().collect(),
+                    },
+                );
+            }
+            Some(Operation::ForwardCall | Operation::ForwardApply) => {
                 let mut values = arguments.iter().skip(1).copied().collect::<Vec<_>>();
                 let mut spread = None;
                 if matches!(method.operation, Some(Operation::ForwardApply)) {
@@ -390,6 +429,41 @@ impl Lowerer<'_> {
                         self.store(result, "$elements".into(), value);
                     }
                 }
+            }
+            Some(Operation::PromiseAll | Operation::PromiseAllSettled) => {
+                let array = self.temp();
+                self.flows.rows.push(FlowRow::Alloc {
+                    dst: array,
+                    object: FlowObject::Site((site.0, site.0)),
+                });
+                self.store(array, "$array".into(), FlowVar::Prim);
+                self.store(array, "$spread".into(), FlowVar::Prim);
+                let elements = self.load(arg(0), "$elements".into());
+                let fulfilled = self.load(elements, "$fulfilled".into());
+                let value = self.join(elements, fulfilled);
+                if matches!(method.operation, Some(Operation::PromiseAllSettled)) {
+                    let record = self.temp();
+                    self.flows.rows.push(FlowRow::Alloc {
+                        dst: record,
+                        object: FlowObject::Site((site.1, site.1)),
+                    });
+                    self.store(record, "exact:value".into(), value);
+                    let rejected = self.load(elements, "$rejected".into());
+                    self.store(record, "exact:reason".into(), rejected);
+                    self.store(record, "exact:status".into(), FlowVar::Prim);
+                    self.store(array, "$elements".into(), record);
+                } else {
+                    self.store(array, "$elements".into(), value);
+                }
+                self.store(result, "$fulfilled".into(), array);
+            }
+            Some(Operation::Flatten) => {
+                let elements = self.load(receiver, "$elements".into());
+                let closure = self.temp();
+                self.copy(closure, elements);
+                let nested = self.load(closure, "$elements".into());
+                self.copy(closure, nested);
+                self.store(result, "$elements".into(), closure);
             }
             Some(Operation::EventRegister) => {
                 if let Some(event) = event {
@@ -549,6 +623,33 @@ impl Lowerer<'_> {
         }
     }
 
+    pub(super) fn forward_bound_calls(
+        &mut self,
+        callee: FlowVar,
+        site: FlowSpan,
+        arguments: &[FlowVar],
+        spread: Option<usize>,
+    ) {
+        let bound = self
+            .sources(callee)
+            .iter()
+            .filter_map(|var| self.bound_values.get(var).cloned())
+            .collect::<Vec<_>>();
+        for binding in bound {
+            let count = binding.prefix.len();
+            let mut args = binding.prefix;
+            args.extend_from_slice(arguments);
+            self.model_invoke(
+                site,
+                "member:bind",
+                binding.target,
+                binding.receiver,
+                args,
+                spread.map(|position| position + count),
+            );
+        }
+    }
+
     fn executor_values(&mut self, promise: FlowVar, executor: FlowVar) {
         let functions = self
             .sources(executor)
@@ -594,4 +695,20 @@ fn static_length(expression: &Expression<'_>) -> Option<usize> {
             )
         })
         .then_some(array.elements.len())
+}
+
+/// A direct literal cannot receive additional properties before the builtin
+/// consumes it. Aliases and partial shapes must retain an escape guard.
+fn literal_data_object(expression: &Expression<'_>) -> bool {
+    let Expression::ObjectExpression(object) = expression.get_inner_expression() else {
+        return false;
+    };
+    object.properties.iter().all(|property| matches!(property, ObjectPropertyKind::ObjectProperty(property) if property.kind == PropertyKind::Init && !property.computed))
+}
+
+fn literal_descriptor_map(expression: &Expression<'_>) -> bool {
+    let Expression::ObjectExpression(object) = expression.get_inner_expression() else {
+        return false;
+    };
+    literal_data_object(expression) && object.properties.iter().all(|property| matches!(property, ObjectPropertyKind::ObjectProperty(property) if literal_data_object(&property.value)))
 }
