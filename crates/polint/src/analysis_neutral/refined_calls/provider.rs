@@ -423,6 +423,11 @@ fn refined_edge_from_solver_edge(
 struct SolverProjectionIndex<'a> {
     function_by_node: BTreeMap<crate::analysis_neutral::ids::SemanticNodeId, FunctionId>,
     callsite_by_stable_key: BTreeMap<String, &'a CallSiteFact>,
+    /// The call site of each callsite node, by the node's stable key. A
+    /// derived edge names the node of the site it was derived at, and also
+    /// the calls whose bindings carried the target there, which are other
+    /// sites: the node decides.
+    callsite_by_node_key: BTreeMap<String, &'a CallSiteFact>,
 }
 
 impl<'a> SolverProjectionIndex<'a> {
@@ -456,6 +461,17 @@ impl<'a> SolverProjectionIndex<'a> {
                 Some((node.id, callsite))
             })
             .collect::<BTreeMap<_, _>>();
+        let callsite_by_node_key = db
+            .semantic_nodes()
+            .iter()
+            .filter_map(|node| {
+                let NodeKind::Callsite(callsite) = node.kind else {
+                    return None;
+                };
+                let site = callsite_by_id.get(&callsite).copied()?;
+                Some((db.resolve_stable_key(node.stable_key).to_string(), site))
+            })
+            .collect();
         let mut callsite_by_stable_key = db
             .call_sites()
             .iter()
@@ -488,6 +504,7 @@ impl<'a> SolverProjectionIndex<'a> {
         Self {
             function_by_node,
             callsite_by_stable_key,
+            callsite_by_node_key,
         }
     }
 
@@ -496,11 +513,14 @@ impl<'a> SolverProjectionIndex<'a> {
         interner: &StableKeyInterner,
         edge: &DerivedEdgeFact,
     ) -> Option<&'a CallSiteFact> {
-        edge.provenance.contributing_facts.iter().find_map(|fact| {
-            self.callsite_by_stable_key
-                .get(interner.resolve(fact.stable_key).as_ref())
-                .copied()
-        })
+        let site_by = |index: &BTreeMap<String, &'a CallSiteFact>| {
+            edge.provenance.contributing_facts.iter().find_map(|fact| {
+                index
+                    .get(interner.resolve(fact.stable_key).as_ref())
+                    .copied()
+            })
+        };
+        site_by(&self.callsite_by_node_key).or_else(|| site_by(&self.callsite_by_stable_key))
     }
 }
 

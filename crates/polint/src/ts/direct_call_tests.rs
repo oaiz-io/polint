@@ -482,3 +482,31 @@ fn named_function_expression_keeps_its_target_under_a_same_named_binding() {
         set(&["function fact(n) { return n ? fact(n - 1) : fact; }"])
     );
 }
+
+/// A target derived at a call through a value another call returned belongs
+/// to the call that consumes the value, not to the call that carried it: the
+/// returning call keeps only its own target.
+#[test]
+fn a_returned_callee_is_attributed_to_the_call_that_consumes_it() {
+    let main = "function double(x) { return x * 2; }\n\
+                function negate(x) { return -x; }\n\
+                function pick(mode) {\n\
+                \x20 if (mode) { return double; }\n\
+                \x20 return negate;\n\
+                }\n\
+                const fn = pick(process.argv.length > 2);\n\
+                fn(1);\n";
+    let files = [("main.js", main)];
+
+    assert_eq!(
+        refined_targets_at(&files, "main.js", "pick(process.argv.length > 2)"),
+        set(&["function pick(mode) {\n  if (mode) { return double; }\n  return negate;\n}"])
+    );
+    assert_eq!(
+        refined_targets_at(&files, "main.js", "fn(1)"),
+        set(&[
+            "function double(x) { return x * 2; }",
+            "function negate(x) { return -x; }",
+        ])
+    );
+}
