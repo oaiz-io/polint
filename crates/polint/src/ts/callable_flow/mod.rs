@@ -191,7 +191,7 @@ mod tests {
         let cases = [
             (
                 "const list = [target]; for (const callable of list) { callable(); }",
-                Heuristic,
+                SetupAware,
             ),
             (
                 "const box = { method: target }; const { method: callable } = box; callable();",

@@ -15,8 +15,7 @@
 pub(crate) mod described;
 #[cfg(feature = "lang-typescript")]
 mod lower;
-#[cfg(test)]
-mod platform;
+pub(crate) mod platform;
 
 #[cfg(feature = "lang-typescript")]
 pub(crate) use lower::{lower_ts_program_value_flows, lower_ts_source_value_flows};
@@ -99,6 +98,8 @@ pub(crate) struct FlowCall {
     pub(crate) result: FlowVar,
     /// The object a `new` allocates, passed as the receiver.
     pub(crate) constructs: Option<FlowSpan>,
+    /// A platform invocation stays conservative, even with one known target.
+    pub(crate) model: Option<Box<str>>,
 }
 
 /// A function whose body was lowered.

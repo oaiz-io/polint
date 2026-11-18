@@ -1,0 +1,226 @@
+schema_version = 1
+
+[[methods]]
+names = ["member:forEach", "member:some", "member:every", "member:findIndex", "member:findLastIndex"]
+calls = [{ param = 0, args = ["$this.$elements", "$this.$keys", "$this"], this = "$param1" }]
+returns = ["$prim"]
+
+[[methods]]
+names = ["member:map", "member:flatMap"]
+allocate = "array"
+calls = [{ param = 0, args = ["$this.$elements", "$prim", "$this"], this = "$param1" }]
+stores = [{ base = "$result", field = "$elements", value = "$call0" }, { base = "$result", field = "$elements", value = "$call0.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:filter"]
+allocate = "array"
+calls = [{ param = 0, args = ["$this.$elements", "$prim", "$this"], this = "$param1" }]
+stores = [{ base = "$result", field = "$elements", value = "$this.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:find", "member:findLast"]
+calls = [{ param = 0, args = ["$this.$elements", "$prim", "$this"], this = "$param1" }]
+returns = ["$this.$elements"]
+
+[[methods]]
+names = ["member:reduce", "member:reduceRight"]
+operation = "reduce"
+calls = [{ param = 0, args = ["$param1", "$this.$elements", "$prim", "$this"] }]
+returns = ["$call0"]
+
+[[methods]]
+names = ["member:sort", "member:toSorted"]
+calls = [{ param = 0, args = ["$this.$elements", "$this.$elements"] }]
+returns = ["$this"]
+
+[[methods]]
+names = ["member:replace", "member:replaceAll"]
+calls = [{ param = 1, args = ["$prim", "$open", "$open", "$open"] }]
+returns = ["$prim"]
+
+[[methods]]
+names = ["global:JSON.stringify"]
+calls = [{ param = 1, args = ["$prim", "$param0"], this = "$open" }]
+returns = ["$prim"]
+
+[[methods]]
+names = ["global:setTimeout", "global:setInterval", "global:setImmediate", "global:queueMicrotask", "global:process.nextTick"]
+calls = [{ param = 0, args = ["$open", "$open", "$open", "$open"], this = "$open" }]
+returns = ["$prim"]
+
+[[methods]]
+names = ["member:call"]
+operation = "forward_call"
+returns = ["$result"]
+
+[[methods]]
+names = ["member:apply"]
+operation = "forward_apply"
+returns = ["$result"]
+
+[[methods]]
+names = ["member:bind"]
+operation = "bind"
+returns = ["$this", "$open"]
+
+[[methods]]
+names = ["new:Promise"]
+allocate = "promise"
+operation = "executor"
+calls = [{ param = 0, args = ["$open", "$open"] }]
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Promise.resolve"]
+allocate = "promise"
+stores = [{ base = "$result", field = "$fulfilled", value = "$param0" }, { base = "$result", field = "$fulfilled", value = "$param0.$fulfilled" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Promise.reject"]
+allocate = "promise"
+stores = [{ base = "$result", field = "$rejected", value = "$param0" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Promise.all", "global:Promise.allSettled", "global:Promise.race", "global:Promise.any"]
+allocate = "promise"
+stores = [{ base = "$result", field = "$fulfilled", value = "$param0.$elements.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$param0.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:then"]
+allocate = "promise"
+calls = [{ param = 0, args = ["$this.$fulfilled"] }, { param = 1, args = ["$this.$rejected"] }]
+stores = [{ base = "$result", field = "$fulfilled", value = "$call0" }, { base = "$result", field = "$fulfilled", value = "$call0.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$call1" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:catch"]
+allocate = "promise"
+calls = [{ param = 0, args = ["$this.$rejected"] }]
+stores = [{ base = "$result", field = "$fulfilled", value = "$this.$fulfilled" }, { base = "$result", field = "$fulfilled", value = "$call0" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:finally"]
+calls = [{ param = 0, args = [] }]
+returns = ["$this"]
+
+[[methods]]
+names = ["member:slice", "member:reverse", "member:toReversed", "member:values"]
+allocate = "array"
+stores = [{ base = "$result", field = "$elements", value = "$this.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:flat"]
+allocate = "array"
+stores = [{ base = "$result", field = "$elements", value = "$this.$elements" }, { base = "$result", field = "$elements", value = "$this.$elements.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:concat"]
+allocate = "array"
+operation = "concat"
+stores = [{ base = "$result", field = "$elements", value = "$this.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Array.from"]
+allocate = "array"
+operation = "array_from"
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Array.of"]
+allocate = "array"
+operation = "concat"
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Object.assign"]
+operation = "assign"
+returns = ["$param0"]
+
+[[methods]]
+names = ["global:Object.defineProperty", "global:Reflect.defineProperty"]
+operation = "define_property"
+returns = ["$param0"]
+
+[[methods]]
+names = ["global:Object.defineProperties"]
+operation = "define_properties"
+returns = ["$param0"]
+
+[[methods]]
+names = ["global:Object.create"]
+allocate = "object"
+operation = "create"
+stores = [{ base = "$result", field = "$proto", value = "$param0" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Object.setPrototypeOf", "global:Reflect.setPrototypeOf"]
+stores = [{ base = "$param0", field = "$proto", value = "$param1" }]
+returns = ["$param0"]
+
+[[methods]]
+names = ["global:Object.freeze", "global:Object.seal", "global:Object.preventExtensions"]
+returns = ["$param0"]
+
+[[methods]]
+names = ["global:Object.keys"]
+allocate = "array"
+stores = [{ base = "$result", field = "$elements", value = "$prim" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Object.values"]
+allocate = "array"
+operation = "values"
+returns = ["$result"]
+
+[[methods]]
+names = ["global:Object.entries"]
+allocate = "array"
+operation = "entries"
+returns = ["$result"]
+
+[[methods]]
+names = ["new:Map", "new:Set", "new:WeakMap", "new:WeakSet"]
+allocate = "collection"
+operation = "collection"
+returns = ["$result"]
+
+[[methods]]
+names = ["member:set"]
+stores = [{ base = "$this", field = "$keys", value = "$param0" }, { base = "$this", field = "$elements", value = "$param1" }]
+returns = ["$this"]
+
+[[methods]]
+names = ["member:add", "member:push", "member:unshift"]
+stores = [{ base = "$this", field = "$elements", value = "$param0" }]
+returns = ["$this"]
+
+[[methods]]
+names = ["member:get", "member:pop", "member:shift", "member:at"]
+returns = ["$this.$elements"]
+
+[[methods]]
+names = ["member:next"]
+allocate = "object"
+stores = [{ base = "$result", field = "value", value = "$this.$elements" }]
+returns = ["$result"]
+
+[[methods]]
+names = ["member:on", "member:once", "member:addListener", "member:prependListener", "member:prependOnceListener"]
+operation = "event_register"
+returns = ["$this"]
+
+[[methods]]
+names = ["member:emit"]
+operation = "event_emit"
+returns = ["$prim"]

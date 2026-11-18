@@ -500,6 +500,54 @@ impl FileProjection<'_, '_> {
         described: &Described,
         results_by_callsite: &BTreeMap<SemanticNodeId, Vec<SemanticNodeId>>,
     ) {
+        if let Some(model) = &call.model {
+            if let Some(source) = self.nodes.callsite(call.site) {
+                for token in described.model_targets.get(&index).into_iter().flatten() {
+                    if let Token::Function(file, span) = token
+                        && let Some(function) =
+                            self.all_nodes[&self.file_ids[*file as usize]].function(*span)
+                    {
+                        self.push(ConstraintKind::ModelEdge {
+                            source,
+                            target: function.node,
+                            language: "javascript".into(),
+                            scope: self.path.clone(),
+                            confidence: "conservative".into(),
+                            evidence: vec![
+                                format!("platform:{model}"),
+                                format!(
+                                    "platform_digest:{}",
+                                    crate::ts::constraints::platform::digest(
+                                        crate::ts::constraints::platform::SOURCE
+                                    )
+                                    .value
+                                ),
+                            ],
+                        });
+                    }
+                }
+            }
+            // Argument and return flow uses an internal call site. Only the
+            // validated model edge reaches the source call site's targets.
+            let callsite = self.place(format!("platform#{}:{}#{index}", call.site.0, call.site.1));
+            let callee = self.var(call.callee, false);
+            let receiver = call.receiver.map(|var| self.var(var, false));
+            let arguments = call
+                .arguments
+                .iter()
+                .map(|var| self.var(*var, false))
+                .collect();
+            let result = self.var(call.result, true);
+            self.push(ConstraintKind::CallConstraint {
+                callsite,
+                callee: Some(callee),
+                receiver,
+                arguments,
+                spread_from: call.spread_from,
+                result: Some(result),
+            });
+            return;
+        }
         let callee = self.var(call.callee, false);
         let receiver = call.receiver.map(|receiver| self.var(receiver, false));
         let mut arguments = call

@@ -44,6 +44,7 @@ pub(crate) struct Described {
     pub(crate) escaped_functions: BTreeSet<FlowSpan>,
     pub(crate) escaped_objects: BTreeSet<Obj>,
     pub(crate) lookups: BTreeSet<(usize, Token)>,
+    pub(crate) model_targets: BTreeMap<usize, BTreeSet<Token>>,
     pub(crate) prototypes: BTreeSet<FlowSpan>,
 }
 
@@ -411,7 +412,17 @@ impl<'a> Solve<'a> {
 
     fn load(&mut self, load: Load, token: Token) {
         if matches!(token, Token::Unknown | Token::Prim) {
-            self.add(load.dst, Token::Unknown);
+            let internal = self.fields.iter().any(|(field, &id)| {
+                id == load.field && field.starts_with('$') && &**field != "$proto"
+            });
+            self.add(
+                load.dst,
+                if token == Token::Prim && internal {
+                    Token::Prim
+                } else {
+                    Token::Unknown
+                },
+            );
             return;
         }
         let slot = self.slot(token, load.field);
@@ -525,6 +536,12 @@ impl<'a> Solve<'a> {
             for parent in self.sets[proto].clone() {
                 self.lookup(load, parent, depth + 1, walk);
             }
+        } else if self
+            .fields
+            .iter()
+            .any(|(field, &id)| id == load.field && field.starts_with('$') && &**field != "$proto")
+        {
+            self.add(load.dst, Token::Prim);
         } else if !matches!(token, Token::Object(_, Obj::Namespace)) {
             self.add(load.dst, Token::Unknown);
             if matches!(token, Token::Function(..)) {
@@ -555,7 +572,7 @@ impl<'a> Solve<'a> {
                 continue;
             }
             let mut sites = BTreeMap::<FlowSpan, Option<u8>>::new();
-            for call in &flows.calls {
+            for (index, call) in flows.calls.iter().enumerate() {
                 let callee_file =
                     if matches!(call.callee, FlowVar::Open | FlowVar::Sink | FlowVar::Prim) {
                         usize::MAX
@@ -563,6 +580,13 @@ impl<'a> Solve<'a> {
                         file
                     };
                 let set = &self.sets[self.index[&(callee_file, call.callee)]];
+                if call.model.is_some() {
+                    self.descriptions[file]
+                        .model_targets
+                        .insert(index, set.clone());
+                    sites.insert(call.site, None);
+                    continue;
+                }
                 let mut pad = None::<u8>;
                 for token in set {
                     match token {
@@ -628,6 +652,7 @@ mod tests {
             spread_from: None,
             result: FlowVar::Temp(99),
             constructs: None,
+            model: None,
         }
     }
 

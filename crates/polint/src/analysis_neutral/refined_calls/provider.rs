@@ -378,6 +378,46 @@ pub fn derive_solver_refinements_with_inputs(
             .iter()
             .filter_map(|edge| refined_edge_from_solver_edge(interner, &index, edge)),
     );
+    let modeled = db
+        .semantic_constraints()
+        .iter()
+        .filter_map(|constraint| match constraint.kind {
+            ConstraintKind::ModelEdge { source, .. } => Some(source),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    for source in modeled {
+        let Some(site) = index.callsite_by_node.get(&source).copied() else {
+            continue;
+        };
+        let site_key = interner.resolve(site.stable_key).to_string();
+        output.edges.push(RefinedCallEdgeFact {
+            id: crate::analysis_neutral::ids::RefinedCallEdgeId(0),
+            site: site.id,
+            base_target: None,
+            caller: site.caller,
+            target_function: None,
+            target_symbol: None,
+            synthetic_target: None,
+            language: site.language,
+            edge_kind: CallEdgeKind::Unknown,
+            algorithm: solver_algorithm_for_site(site),
+            tier: RefinedCallTier::PointsToAssisted,
+            status: CallTargetStatus::Unresolved,
+            reason: Some(UnresolvedCallReason::Unknown),
+            provenance: CallProvenance::Model,
+            precision: CallPrecision::Unknown,
+            validation: RefinedCallValidation::ReferentiallyValidated,
+            confidence: RefinedCallConfidence::Low,
+            evidence: vec!["platform_model_open".into()],
+            input_stable_keys: vec![site_key.clone()],
+            stable_key: stable_key_from_parts(
+                interner,
+                FactFamily::RefinedCallEdge,
+                &[("platform_open", site_key)],
+            ),
+        });
+    }
     output
 }
 
@@ -386,12 +426,22 @@ fn refined_edge_from_solver_edge(
     index: &SolverProjectionIndex<'_>,
     edge: &DerivedEdgeFact,
 ) -> Option<RefinedCallEdgeFact> {
-    if edge.provenance.constraint_kind != "call_constraint" {
+    let modeled = edge.provenance.constraint_kind == "model_edge";
+    if edge.provenance.constraint_kind != "call_constraint" && !modeled {
         return None;
     }
-    let caller = index.function_by_node.get(&edge.source).copied()?;
+    let model_site = index.callsite_by_node.get(&edge.source).copied();
+    let caller = if modeled {
+        model_site?.caller
+    } else {
+        index.function_by_node.get(&edge.source).copied()?
+    };
     let target_function = index.function_by_node.get(&edge.target).copied()?;
-    let site = index.callsite_for_solver_edge(interner, edge)?;
+    let site = if modeled {
+        model_site?
+    } else {
+        index.callsite_for_solver_edge(interner, edge)?
+    };
     if site.caller != caller {
         return None;
     }
@@ -411,7 +461,11 @@ fn refined_edge_from_solver_edge(
         status: call_status_for_solver_edge(edge.status),
         reason: unresolved_reason_for_solver_edge(edge.status),
         provenance: CallProvenance::Model,
-        precision: call_precision_for_solver_edge(edge.precision),
+        precision: if modeled {
+            CallPrecision::Conservative
+        } else {
+            call_precision_for_solver_edge(edge.precision)
+        },
         validation: RefinedCallValidation::ReferentiallyValidated,
         confidence: confidence_for_solver_edge(edge.status),
         evidence: solver_evidence(edge),
@@ -421,6 +475,7 @@ fn refined_edge_from_solver_edge(
 }
 
 struct SolverProjectionIndex<'a> {
+    callsite_by_node: BTreeMap<crate::analysis_neutral::ids::SemanticNodeId, &'a CallSiteFact>,
     function_by_node: BTreeMap<crate::analysis_neutral::ids::SemanticNodeId, FunctionId>,
     callsite_by_stable_key: BTreeMap<String, &'a CallSiteFact>,
     /// The call site of each callsite node, by the node's stable key. A
@@ -501,7 +556,12 @@ impl<'a> SolverProjectionIndex<'a> {
             callsite_by_stable_key
                 .insert(db.resolve_stable_key(callsite.stable_key).to_string(), site);
         }
+        let callsite_by_node = callsite_id_by_node
+            .iter()
+            .filter_map(|(node, id)| Some((*node, *callsite_by_id.get(id)?)))
+            .collect();
         Self {
+            callsite_by_node,
             function_by_node,
             callsite_by_stable_key,
             callsite_by_node_key,

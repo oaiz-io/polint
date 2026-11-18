@@ -7,6 +7,8 @@
 //! (`with`, a direct `eval`) and syntax the walker does not know (JSX, V8
 //! intrinsics, auto-accessors) stop the walk, and the file is not lowered.
 
+mod platform;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use oxc_allocator::Allocator;
@@ -63,6 +65,8 @@ pub(crate) fn lower_ts_program_value_flows(
         bodied: BTreeSet::new(),
         bodiless: BTreeSet::new(),
         constants: BTreeMap::new(),
+        copy_sources: BTreeMap::new(),
+        field_sources: BTreeMap::new(),
         classes: Vec::new(),
     };
     lowerer.flows.esm = program.body.iter().any(|statement| {
@@ -88,6 +92,7 @@ struct Frame {
     params: u8,
     /// Whether `arguments` was read in this function.
     arguments_opened: bool,
+    returned_field: Option<&'static str>,
 }
 
 /// Where an assignment writes.
@@ -117,6 +122,8 @@ struct Lowerer<'s> {
     flows: TsValueFlows,
     next_temp: u32,
     constants: BTreeMap<u32, String>,
+    copy_sources: BTreeMap<FlowVar, Vec<FlowVar>>,
+    field_sources: BTreeMap<FlowVar, BTreeMap<Box<str>, Vec<FlowVar>>>,
     classes: Vec<ClassFrame>,
     frames: Vec<Frame>,
     aborted: bool,
@@ -208,6 +215,7 @@ impl Lowerer<'_> {
     fn copy(&mut self, dst: FlowVar, src: FlowVar) {
         debug_assert!(!matches!(dst, FlowVar::Open | FlowVar::Prim));
         if dst != src {
+            self.copy_sources.entry(dst).or_default().push(src);
             self.flows.rows.push(FlowRow::Copy { dst, src });
         }
     }
@@ -238,7 +246,19 @@ impl Lowerer<'_> {
     }
 
     fn store(&mut self, base: FlowVar, field: Box<str>, src: FlowVar) {
+        self.field_sources
+            .entry(base)
+            .or_default()
+            .entry(field.clone())
+            .or_default()
+            .push(src);
+        let numeric = field
+            .strip_prefix("exact:")
+            .is_some_and(|key| key.parse::<usize>().is_ok());
         self.flows.rows.push(FlowRow::Store { base, field, src });
+        if numeric {
+            self.store(base, "$elements".into(), src);
+        }
     }
 
     fn local(&mut self, symbol: oxc_semantic::SymbolId) -> FlowVar {
@@ -353,6 +373,13 @@ impl Lowerer<'_> {
             arrow: false,
             params,
             arguments_opened: false,
+            returned_field: if function.generator {
+                Some("$elements")
+            } else if function.r#async {
+                Some("$fulfilled")
+            } else {
+                None
+            },
         });
         self.suspended_return(span, function.r#async || function.generator);
         self.bind_params(span, &function.params);
@@ -372,13 +399,14 @@ impl Lowerer<'_> {
             arrow: true,
             params,
             arguments_opened: false,
+            returned_field: arrow.r#async.then_some("$fulfilled"),
         });
         self.suspended_return(span, arrow.r#async);
         self.bind_params(span, &arrow.params);
         if arrow.expression {
             if let Some(Statement::ExpressionStatement(statement)) = arrow.body.statements.first() {
                 let value = self.expression(&statement.expression);
-                self.copy(FlowVar::Return(span), value);
+                self.return_value(value);
             }
         } else {
             self.statements(&arrow.body.statements);
@@ -393,8 +421,27 @@ impl Lowerer<'_> {
     fn suspended_return(&mut self, span: FlowSpan, suspends: bool) {
         if suspends {
             let ret = FlowVar::Return(span);
-            self.copy(ret, FlowVar::Open);
-            self.sink(ret);
+            self.flows.rows.push(FlowRow::Alloc {
+                dst: ret,
+                object: FlowObject::Site(span),
+            });
+        }
+    }
+
+    fn return_value(&mut self, value: FlowVar) {
+        if let Some(frame) = self.frames.last() {
+            let ret = FlowVar::Return(frame.span);
+            if let Some(field) = frame.returned_field {
+                if field == "$fulfilled" {
+                    self.store(ret, field.into(), value);
+                    let fulfilled = self.load(value, field.into());
+                    self.store(ret, field.into(), fulfilled);
+                }
+            } else {
+                self.copy(ret, value);
+            }
+        } else {
+            self.sink(value);
         }
     }
 
@@ -407,6 +454,7 @@ impl Lowerer<'_> {
             arrow: false,
             params: 0,
             arguments_opened: false,
+            returned_field: None,
         });
         lower(self);
         self.frames.pop();
@@ -550,6 +598,7 @@ impl Lowerer<'_> {
                     spread_from: Some(0),
                     result,
                     constructs: None,
+                    model: None,
                 });
                 self.copy(FlowVar::Return(span), result);
             }
@@ -595,8 +644,11 @@ impl Lowerer<'_> {
             }
             Statement::ForOfStatement(statement) => {
                 let iterated = self.expression(&statement.right);
-                self.sink(iterated);
-                self.for_left(&statement.left, FlowVar::Open);
+                let mut elements = self.load(iterated, "$elements".into());
+                if !self.known_fields(iterated).contains_key("$array") {
+                    elements = self.join(elements, FlowVar::Open);
+                }
+                self.for_left(&statement.left, elements);
                 self.statement(&statement.body);
             }
             Statement::ForStatement(statement) => {
@@ -632,13 +684,7 @@ impl Lowerer<'_> {
                     .argument
                     .as_ref()
                     .map_or(FlowVar::Prim, |argument| self.expression(argument));
-                match self.frames.last() {
-                    Some(frame) => {
-                        let ret = FlowVar::Return(frame.span);
-                        self.copy(ret, value);
-                    }
-                    None => self.sink(value),
-                }
+                self.return_value(value);
             }
             Statement::SwitchStatement(statement) => {
                 self.expression(&statement.discriminant);
@@ -1230,13 +1276,19 @@ impl Lowerer<'_> {
             Expression::AssignmentExpression(assignment) => self.assignment(assignment),
             Expression::AwaitExpression(expression) => {
                 let value = self.expression(&expression.argument);
-                self.sink(value);
-                FlowVar::Open
+                let fulfilled = self.load(value, "$fulfilled".into());
+                self.join(value, fulfilled)
             }
             Expression::YieldExpression(expression) => {
                 if let Some(argument) = &expression.argument {
-                    let value = self.expression(argument);
-                    self.sink(value);
+                    let mut value = self.expression(argument);
+                    if expression.delegate {
+                        value = self.load(value, "$elements".into());
+                    }
+                    if let Some(frame) = self.frames.last() {
+                        let ret = FlowVar::Return(frame.span);
+                        self.store(ret, "$elements".into(), value);
+                    }
                 }
                 FlowVar::Open
             }
@@ -1279,6 +1331,7 @@ impl Lowerer<'_> {
                     spread_from: None,
                     result,
                     constructs: None,
+                    model: None,
                 });
                 result
             }
@@ -1500,13 +1553,19 @@ impl Lowerer<'_> {
     fn arguments_of(&mut self, arguments: &[Argument<'_>]) -> (Vec<FlowVar>, Option<usize>) {
         let mut values = Vec::with_capacity(arguments.len());
         let mut spread_from = None;
-        for (position, argument) in arguments.iter().enumerate() {
+        for argument in arguments {
             let value = match argument {
                 Argument::SpreadElement(spread) => {
                     let value = self.expression(&spread.argument);
+                    if spread_from.is_none()
+                        && let Some(elements) = self.array_arguments(value)
+                    {
+                        values.extend(elements);
+                        continue;
+                    }
                     self.sink(value);
-                    spread_from.get_or_insert(position);
-                    value
+                    spread_from.get_or_insert(values.len());
+                    self.load(value, "$elements".into())
                 }
                 _ => argument
                     .as_expression()
@@ -1524,6 +1583,9 @@ impl Lowerer<'_> {
         {
             return self.abort();
         }
+        if let Some(value) = self.platform_call(call) {
+            return value;
+        }
         if let Some(value) = self.builtin_call(call) {
             return value;
         }
@@ -1538,6 +1600,7 @@ impl Lowerer<'_> {
             spread_from,
             result,
             constructs: None,
+            model: None,
         });
         result
     }
@@ -1552,65 +1615,13 @@ impl Lowerer<'_> {
             let module = self.request(specifier.value.as_str(), false);
             return Some(self.load(module, "exact:exports".into()));
         }
-        let Expression::StaticMemberExpression(member) = call.callee.get_inner_expression() else {
-            return None;
-        };
-        let Expression::Identifier(reference) = member.object.get_inner_expression() else {
-            return None;
-        };
-        if reference.name != "Object" || self.reference_local(reference).is_some() {
-            return None;
-        }
-        let arguments = call
-            .arguments
-            .iter()
-            .map(Argument::as_expression)
-            .collect::<Option<Vec<_>>>()?;
-        match (member.property.name.as_str(), arguments.as_slice()) {
-            ("create", [parent]) => {
-                let parent = self.expression(parent);
-                let object = self.temp();
-                self.flows.rows.push(FlowRow::Alloc {
-                    dst: object,
-                    object: FlowObject::Site(flow_span(call.span)),
-                });
-                self.store(object, "$proto".into(), parent);
-                Some(object)
-            }
-            ("setPrototypeOf", [object, parent]) => {
-                let object = self.expression(object);
-                let parent = self.expression(parent);
-                self.store(object, "$proto".into(), parent);
-                Some(object)
-            }
-            ("defineProperty", [object, key, descriptor]) => {
-                let Expression::ObjectExpression(properties) = descriptor.get_inner_expression()
-                else {
-                    return None;
-                };
-                let data = properties.properties.iter().all(|property| matches!(property,
-                    ObjectPropertyKind::ObjectProperty(property) if property.kind == PropertyKind::Init && !property.computed
-                        && !matches!(property.key.static_name().as_deref(), Some("get" | "set"))));
-                if !data || !properties.properties.iter().any(|property| matches!(property, ObjectPropertyKind::ObjectProperty(property) if property.key.static_name().as_deref() == Some("value"))) {return None;}
-                let field =
-                    self.constant_string(key, 0)
-                        .or_else(|| match key.get_inner_expression() {
-                            Expression::NumericLiteral(literal) => integral_key(literal.value),
-                            Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
-                            Expression::NullLiteral(_) => Some("null".into()),
-                            _ => None,
-                        })?;
-                let object = self.expression(object);
-                let descriptor = self.expression(descriptor);
-                let value = self.load(descriptor, "exact:value".into());
-                self.store(object, format!("exact:{field}").into(), value);
-                Some(object)
-            }
-            _ => None,
-        }
+        None
     }
 
     fn construct(&mut self, new: &NewExpression<'_>) -> FlowVar {
+        if let Some(value) = self.platform_construct(new) {
+            return value;
+        }
         let object = flow_span(new.span);
         let instance = self.temp();
         self.flows.rows.push(FlowRow::Alloc {
@@ -1630,6 +1641,7 @@ impl Lowerer<'_> {
             spread_from,
             result,
             constructs: Some(object),
+            model: None,
         });
         self.join(instance, result)
     }
@@ -1649,6 +1661,7 @@ impl Lowerer<'_> {
             spread_from: None,
             result,
             constructs: None,
+            model: None,
         });
         result
     }
@@ -1709,14 +1722,16 @@ impl Lowerer<'_> {
             dst: instance,
             object: FlowObject::Site(flow_span(array.span)),
         });
+        self.store(instance, "$array".into(), FlowVar::Prim);
         let mut spread = false;
         for (index, element) in array.elements.iter().enumerate() {
             match element {
                 ArrayExpressionElement::Elision(_) => {}
                 ArrayExpressionElement::SpreadElement(element) => {
                     let value = self.expression(&element.argument);
-                    self.sink(value);
-                    self.sink(instance);
+                    let elements = self.load(value, "$elements".into());
+                    self.store(instance, "$elements".into(), elements);
+                    self.store(instance, "$spread".into(), FlowVar::Prim);
                     spread = true;
                 }
                 _ => {
@@ -1724,9 +1739,9 @@ impl Lowerer<'_> {
                         continue;
                     };
                     let value = self.expression(expression);
-                    if spread {
-                        self.sink(value);
-                    } else {
+                    self.store(instance, "$elements".into(), value);
+                    self.store(instance, "$keys".into(), FlowVar::Prim);
+                    if !spread {
                         self.store(instance, format!("exact:{index}").into(), value);
                     }
                 }
