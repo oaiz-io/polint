@@ -32,6 +32,7 @@ pub mod mir_body_compose;
 pub mod mir_op;
 pub mod mir_validation;
 pub mod module_graph;
+pub(crate) mod package_graph;
 pub mod places;
 pub mod points_to;
 pub mod reachability;
