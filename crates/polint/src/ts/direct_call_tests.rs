@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::analysis_neutral::calls::facts::{
     CallPrecision, CallProvenance, CallTargetStatus, ClaimTier,
 };
+use crate::analysis_neutral::ids::CallSiteId;
 
 /// Which edges of a call site a case reads.
 #[derive(Clone, Copy)]
@@ -29,19 +30,20 @@ fn refined_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSe
     targets_at(files, main, call, Edges::Refined)
 }
 
+/// Whether the refined answer at `call` marks the site open: some refined edge
+/// there is not resolved, so the targets it claims may not be all of them.
+fn refined_site_is_open(files: &[(&str, &str)], main: &str, call: &str) -> bool {
+    let (output, site) = analyse_site(files, main, call);
+    output
+        .db
+        .refined_call_edges()
+        .iter()
+        .any(|edge| edge.site == site && edge.status != CallTargetStatus::Resolved)
+}
+
 fn targets_at(files: &[(&str, &str)], main: &str, call: &str, edges: Edges) -> BTreeSet<String> {
-    let repo = tempfile::tempdir().unwrap();
-    for (name, body) in files {
-        std::fs::write(repo.path().join(name), body).unwrap();
-    }
+    let (output, site) = analyse_site(files, main, call);
     let sources = files.iter().copied().collect::<BTreeMap<_, _>>();
-    let source = sources[main];
-    assert_eq!(
-        source.matches(call).count(),
-        1,
-        "call snippet {call:?} must be unique in {source}"
-    );
-    let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
     let paths = output
         .db
         .files()
@@ -54,31 +56,13 @@ fn targets_at(files: &[(&str, &str)], main: &str, call: &str, edges: Edges) -> B
         .iter()
         .map(|function| (function.id, function))
         .collect::<BTreeMap<_, _>>();
-    let main_file = output
-        .db
-        .files()
-        .iter()
-        .find(|file| file.relative_path == main)
-        .unwrap();
-    let start = source.find(call).unwrap() as u32;
-    let site = output
-        .db
-        .call_sites()
-        .iter()
-        .filter(|site| {
-            site.file == main_file.id
-                && site.span.start_byte == start
-                && site.span.end_byte <= start + call.len() as u32
-        })
-        .max_by_key(|site| site.span.end_byte)
-        .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
     let targets = match edges {
         Edges::Direct => output
             .db
             .call_targets()
             .iter()
             .filter(|target| {
-                target.site == site.id
+                target.site == site
                     && target.status == CallTargetStatus::Resolved
                     && target.provenance == CallProvenance::NativeDirect
                     && target.precision != CallPrecision::Heuristic
@@ -90,7 +74,7 @@ fn targets_at(files: &[(&str, &str)], main: &str, call: &str, edges: Edges) -> B
             .refined_call_edges()
             .iter()
             .filter(|edge| {
-                edge.site == site.id
+                edge.site == site
                     && edge.status == CallTargetStatus::Resolved
                     && edge.precision.tier() != ClaimTier::NoClaim
             })
@@ -108,6 +92,47 @@ fn targets_at(files: &[(&str, &str)], main: &str, call: &str, edges: Edges) -> B
             )
         })
         .collect()
+}
+
+/// The kernel's output over `files`, and the call site of `call`: the longest
+/// site that starts where the snippet does and ends inside it.
+fn analyse_site(
+    files: &[(&str, &str)],
+    main: &str,
+    call: &str,
+) -> (crate::analysis_kernel::KernelOutput, CallSiteId) {
+    let repo = tempfile::tempdir().unwrap();
+    for (name, body) in files {
+        std::fs::write(repo.path().join(name), body).unwrap();
+    }
+    let sources = files.iter().copied().collect::<BTreeMap<_, _>>();
+    let source = sources[main];
+    assert_eq!(
+        source.matches(call).count(),
+        1,
+        "call snippet {call:?} must be unique in {source}"
+    );
+    let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+    let main_file = output
+        .db
+        .files()
+        .iter()
+        .find(|file| file.relative_path == main)
+        .unwrap();
+    let start = source.find(call).unwrap() as u32;
+    let site = output
+        .db
+        .call_sites()
+        .iter()
+        .filter(|site| {
+            site.file == main_file.id
+                && site.span.start_byte == start
+                && site.span.end_byte <= start + call.len() as u32
+        })
+        .max_by_key(|site| site.span.end_byte)
+        .map(|site| site.id)
+        .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
+    (output, site)
 }
 
 fn set(texts: &[&str]) -> BTreeSet<String> {
@@ -241,6 +266,27 @@ fn refined_edges_reach_the_implementation_of_an_overload() {
         refined_targets_at(&files, "main.ts", "pick(\"c\")"),
         set(&["function pick(x: any) { return x; }"])
     );
+}
+
+/// A callee set that also takes a value the solve cannot see (a parameter of
+/// an exported function, which any caller may bind) is heuristic: its edge to
+/// the known function stays, and the site stays open, so no other layer's
+/// target makes it look complete.
+#[test]
+fn a_heuristic_callee_set_leaves_the_site_open() {
+    let main = "function known() { return 1; }\n\
+                export function run(other) {\n\
+                \x20 let pick = known;\n\
+                \x20 if (other) pick = other;\n\
+                \x20 pick();\n\
+                }\n";
+    let files = [("main.js", main)];
+
+    assert_eq!(
+        refined_targets_at(&files, "main.js", "pick()"),
+        set(&["function known() { return 1; }"])
+    );
+    assert!(refined_site_is_open(&files, "main.js", "pick()"));
 }
 
 /// `eval` bound to a parameter may still be the global `eval`, which can
