@@ -276,17 +276,51 @@ fn refined_edges_reach_the_implementation_of_an_overload() {
 fn a_heuristic_callee_set_leaves_the_site_open() {
     let main = "function known() { return 1; }\n\
                 export function run(other) {\n\
-                \x20 let pick = known;\n\
-                \x20 if (other) pick = other;\n\
-                \x20 pick();\n\
+                \x20 const o = { f: known };\n\
+                \x20 o.f = other;\n\
+                \x20 o.f();\n\
                 }\n";
     let files = [("main.js", main)];
 
     assert_eq!(
-        refined_targets_at(&files, "main.js", "pick()"),
+        refined_targets_at(&files, "main.js", "o.f()"),
         set(&["function known() { return 1; }"])
     );
-    assert!(refined_site_is_open(&files, "main.js", "pick()"));
+    assert!(refined_site_is_open(&files, "main.js", "o.f()"));
+}
+
+/// A name written after its declaration, or redeclared, may hold another value,
+/// and so may a name aliased after the function it read was written: none of
+/// them is an alias of its initializer, and the call through it stays open.
+#[test]
+fn a_written_alias_is_no_alias_of_its_initializer() {
+    let reassigned = "function known() { return 1; }\n\
+                      export function run(other) {\n\
+                      \x20 let pick = known;\n\
+                      \x20 if (other) pick = other;\n\
+                      \x20 pick();\n\
+                      }\n";
+    let redeclared = "function known() { return 1; }\n\
+                      export function run(other) {\n\
+                      \x20 var pick = known;\n\
+                      \x20 var pick = other;\n\
+                      \x20 pick();\n\
+                      }\n";
+    let target_written = "function known() { return 1; }\n\
+                          export function run(other) {\n\
+                          \x20 known = other;\n\
+                          \x20 let pick = known;\n\
+                          \x20 pick();\n\
+                          }\n";
+
+    for main in [reassigned, redeclared, target_written] {
+        let files = [("main.js", main)];
+        assert!(refined_site_is_open(&files, "main.js", "pick()"), "{main}");
+    }
+    assert_eq!(
+        refined_targets_at(&[("main.js", redeclared)], "main.js", "pick()"),
+        set(&[])
+    );
 }
 
 /// `eval` bound to a parameter may still be the global `eval`, which can
