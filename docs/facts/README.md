@@ -48,3 +48,4 @@ Reserved/internal references:
 
 - [Reserved capability plans](capability-plans.md)
 - [Diagnostic evidence limits](evidence.md)
+- [Call edge tiers and assumptions](call-edge-tiers.md)
