@@ -6012,58 +6012,58 @@
     "check": {
       "async": {
         "cold": {
-          "analysis_peak_rss_bytes": 78815232,
-          "analysis_wall_ms": 473,
-          "analysis_wall_ms_per_mb": 1476,
-          "process_peak_rss_bytes": 78815232,
-          "process_wall_ms": 590,
-          "process_wall_ms_per_mb": 1841
+          "analysis_peak_rss_bytes": 78839808,
+          "analysis_wall_ms": 429,
+          "analysis_wall_ms_per_mb": 1338,
+          "process_peak_rss_bytes": 78839808,
+          "process_wall_ms": 549,
+          "process_wall_ms_per_mb": 1713
         },
         "source_bytes": 320550,
         "stored_bytes": 14247706,
         "stored_bytes_per_mb": 44447687,
-        "stored_gzip_bytes": 1116247,
-        "stored_gzip_bytes_per_mb": 3482287,
+        "stored_gzip_bytes": 1116246,
+        "stored_gzip_bytes_per_mb": 3482284,
         "warm": {
-          "analysis_peak_rss_bytes": 78548992,
-          "analysis_wall_ms": 333,
-          "analysis_wall_ms_per_mb": 1039,
-          "process_peak_rss_bytes": 78548992,
-          "process_wall_ms": 458,
-          "process_wall_ms_per_mb": 1429
+          "analysis_peak_rss_bytes": 79011840,
+          "analysis_wall_ms": 298,
+          "analysis_wall_ms_per_mb": 930,
+          "process_peak_rss_bytes": 79011840,
+          "process_wall_ms": 412,
+          "process_wall_ms_per_mb": 1285
         }
       },
       "axios": {
         "cold": {
-          "analysis_peak_rss_bytes": 102674432,
-          "analysis_wall_ms": 722,
-          "analysis_wall_ms_per_mb": 2560,
-          "process_peak_rss_bytes": 102674432,
-          "process_wall_ms": 855,
-          "process_wall_ms_per_mb": 3032
+          "analysis_peak_rss_bytes": 102043648,
+          "analysis_wall_ms": 654,
+          "analysis_wall_ms_per_mb": 2319,
+          "process_peak_rss_bytes": 102043648,
+          "process_wall_ms": 772,
+          "process_wall_ms_per_mb": 2737
         },
         "source_bytes": 282016,
         "stored_bytes": 21400670,
         "stored_bytes_per_mb": 75884595,
-        "stored_gzip_bytes": 1527227,
-        "stored_gzip_bytes_per_mb": 5415391,
+        "stored_gzip_bytes": 1527228,
+        "stored_gzip_bytes_per_mb": 5415395,
         "warm": {
-          "analysis_peak_rss_bytes": 103505920,
-          "analysis_wall_ms": 460,
-          "analysis_wall_ms_per_mb": 1631,
-          "process_peak_rss_bytes": 103505920,
-          "process_wall_ms": 596,
-          "process_wall_ms_per_mb": 2113
+          "analysis_peak_rss_bytes": 102871040,
+          "analysis_wall_ms": 435,
+          "analysis_wall_ms_per_mb": 1542,
+          "process_peak_rss_bytes": 102871040,
+          "process_wall_ms": 552,
+          "process_wall_ms_per_mb": 1957
         }
       },
       "chalk": {
         "cold": {
-          "analysis_peak_rss_bytes": 72781824,
-          "analysis_wall_ms": 73,
-          "analysis_wall_ms_per_mb": 3385,
-          "process_peak_rss_bytes": 72781824,
-          "process_wall_ms": 192,
-          "process_wall_ms_per_mb": 8902
+          "analysis_peak_rss_bytes": 72810496,
+          "analysis_wall_ms": 69,
+          "analysis_wall_ms_per_mb": 3199,
+          "process_peak_rss_bytes": 72810496,
+          "process_wall_ms": 180,
+          "process_wall_ms_per_mb": 8346
         },
         "source_bytes": 21568,
         "stored_bytes": 1698990,
@@ -6071,45 +6071,45 @@
         "stored_gzip_bytes": 125349,
         "stored_gzip_bytes_per_mb": 5811805,
         "warm": {
-          "analysis_peak_rss_bytes": 72835072,
-          "analysis_wall_ms": 45,
-          "analysis_wall_ms_per_mb": 2086,
-          "process_peak_rss_bytes": 72835072,
-          "process_wall_ms": 174,
-          "process_wall_ms_per_mb": 8068
+          "analysis_peak_rss_bytes": 73109504,
+          "analysis_wall_ms": 42,
+          "analysis_wall_ms_per_mb": 1947,
+          "process_peak_rss_bytes": 73109504,
+          "process_wall_ms": 154,
+          "process_wall_ms_per_mb": 7140
         }
       },
       "commander": {
         "cold": {
-          "analysis_peak_rss_bytes": 72519680,
-          "analysis_wall_ms": 269,
-          "analysis_wall_ms_per_mb": 2125,
-          "process_peak_rss_bytes": 72519680,
-          "process_wall_ms": 397,
-          "process_wall_ms_per_mb": 3136
+          "analysis_peak_rss_bytes": 72830976,
+          "analysis_wall_ms": 244,
+          "analysis_wall_ms_per_mb": 1927,
+          "process_peak_rss_bytes": 72830976,
+          "process_wall_ms": 356,
+          "process_wall_ms_per_mb": 2812
         },
         "source_bytes": 126592,
-        "stored_bytes": 5607617,
-        "stored_bytes_per_mb": 44296772,
-        "stored_gzip_bytes": 405625,
-        "stored_gzip_bytes_per_mb": 3204191,
+        "stored_bytes": 5607616,
+        "stored_bytes_per_mb": 44296764,
+        "stored_gzip_bytes": 405626,
+        "stored_gzip_bytes_per_mb": 3204199,
         "warm": {
-          "analysis_peak_rss_bytes": 72691712,
-          "analysis_wall_ms": 190,
-          "analysis_wall_ms_per_mb": 1501,
-          "process_peak_rss_bytes": 72691712,
-          "process_wall_ms": 319,
-          "process_wall_ms_per_mb": 2520
+          "analysis_peak_rss_bytes": 73084928,
+          "analysis_wall_ms": 178,
+          "analysis_wall_ms_per_mb": 1406,
+          "process_peak_rss_bytes": 73084928,
+          "process_wall_ms": 288,
+          "process_wall_ms_per_mb": 2275
         }
       },
       "constructs (all cases)": {
         "cold": {
-          "analysis_peak_rss_bytes": 72704000,
-          "analysis_wall_ms": 115,
-          "analysis_wall_ms_per_mb": 6299,
-          "process_peak_rss_bytes": 72704000,
-          "process_wall_ms": 256,
-          "process_wall_ms_per_mb": 14022
+          "analysis_peak_rss_bytes": 73326592,
+          "analysis_wall_ms": 103,
+          "analysis_wall_ms_per_mb": 5642,
+          "process_peak_rss_bytes": 73326592,
+          "process_wall_ms": 218,
+          "process_wall_ms_per_mb": 11941
         },
         "source_bytes": 18257,
         "stored_bytes": 2018622,
@@ -6117,81 +6117,81 @@
         "stored_gzip_bytes": 191975,
         "stored_gzip_bytes_per_mb": 10515145,
         "warm": {
-          "analysis_peak_rss_bytes": 71888896,
-          "analysis_wall_ms": 63,
-          "analysis_wall_ms_per_mb": 3451,
-          "process_peak_rss_bytes": 71888896,
-          "process_wall_ms": 197,
-          "process_wall_ms_per_mb": 10790
+          "analysis_peak_rss_bytes": 73121792,
+          "analysis_wall_ms": 60,
+          "analysis_wall_ms_per_mb": 3286,
+          "process_peak_rss_bytes": 73121792,
+          "process_wall_ms": 177,
+          "process_wall_ms_per_mb": 9695
         }
       },
       "dayjs": {
         "cold": {
-          "analysis_peak_rss_bytes": 73076736,
-          "analysis_wall_ms": 74,
-          "analysis_wall_ms_per_mb": 10334,
-          "process_peak_rss_bytes": 73076736,
-          "process_wall_ms": 195,
-          "process_wall_ms_per_mb": 27231
+          "analysis_peak_rss_bytes": 73154560,
+          "analysis_wall_ms": 66,
+          "analysis_wall_ms_per_mb": 9217,
+          "process_peak_rss_bytes": 73154560,
+          "process_wall_ms": 186,
+          "process_wall_ms_per_mb": 25974
         },
         "source_bytes": 7161,
         "stored_bytes": 1633684,
         "stored_bytes_per_mb": 228136294,
-        "stored_gzip_bytes": 97759,
-        "stored_gzip_bytes_per_mb": 13651585,
+        "stored_gzip_bytes": 97758,
+        "stored_gzip_bytes_per_mb": 13651445,
         "warm": {
-          "analysis_peak_rss_bytes": 73101312,
-          "analysis_wall_ms": 50,
-          "analysis_wall_ms_per_mb": 6982,
-          "process_peak_rss_bytes": 73101312,
-          "process_wall_ms": 173,
-          "process_wall_ms_per_mb": 24159
+          "analysis_peak_rss_bytes": 72568832,
+          "analysis_wall_ms": 47,
+          "analysis_wall_ms_per_mb": 6563,
+          "process_peak_rss_bytes": 72568832,
+          "process_wall_ms": 159,
+          "process_wall_ms_per_mb": 22204
         }
       },
       "underscore": {
         "cold": {
-          "analysis_peak_rss_bytes": 72863744,
-          "analysis_wall_ms": 215,
-          "analysis_wall_ms_per_mb": 3120,
-          "process_peak_rss_bytes": 72863744,
-          "process_wall_ms": 336,
-          "process_wall_ms_per_mb": 4876
+          "analysis_peak_rss_bytes": 73654272,
+          "analysis_wall_ms": 206,
+          "analysis_wall_ms_per_mb": 2989,
+          "process_peak_rss_bytes": 73654272,
+          "process_wall_ms": 322,
+          "process_wall_ms_per_mb": 4672
         },
         "source_bytes": 68916,
         "stored_bytes": 6301285,
         "stored_bytes_per_mb": 91434282,
-        "stored_gzip_bytes": 405336,
-        "stored_gzip_bytes_per_mb": 5881595,
+        "stored_gzip_bytes": 405337,
+        "stored_gzip_bytes_per_mb": 5881609,
         "warm": {
-          "analysis_peak_rss_bytes": 73302016,
-          "analysis_wall_ms": 159,
-          "analysis_wall_ms_per_mb": 2307,
-          "process_peak_rss_bytes": 73302016,
-          "process_wall_ms": 281,
-          "process_wall_ms_per_mb": 4077
+          "analysis_peak_rss_bytes": 73129984,
+          "analysis_wall_ms": 153,
+          "analysis_wall_ms_per_mb": 2220,
+          "process_peak_rss_bytes": 73129984,
+          "process_wall_ms": 268,
+          "process_wall_ms_per_mb": 3889
         }
       },
       "zod": {
         "cold": {
-          "analysis_peak_rss_bytes": 524058624,
-          "analysis_wall_ms": 4291,
-          "analysis_wall_ms_per_mb": 3169,
-          "process_peak_rss_bytes": 524058624,
-          "process_wall_ms": 4444,
-          "process_wall_ms_per_mb": 3282
+          "analysis_peak_rss_bytes": 524963840,
+          "analysis_wall_ms": 3985,
+          "analysis_wall_ms_per_mb": 2943,
+          "process_peak_rss_bytes": 524963840,
+          "process_wall_ms": 4133,
+          "process_wall_ms_per_mb": 3052
         },
         "source_bytes": 1354196,
         "stored_bytes": 173096492,
         "stored_bytes_per_mb": 127822333,
-        "stored_gzip_bytes": 14171240,
-        "stored_gzip_bytes_per_mb": 10464689,
+        "stored_gzip_bytes": 14171241,
+        "stored_gzip_bytes_per_mb": 10464690,
         "warm": {
-          "analysis_peak_rss_bytes": 668311552,
-          "analysis_wall_ms": 2734,
-          "analysis_wall_ms_per_mb": 2019,
-          "process_peak_rss_bytes": 668311552,
-          "process_wall_ms": 2883,
-          "process_wall_ms_per_mb": 2129
+          "analysis_peak_rss_bytes": 666607616,
+          "analysis_wall_ms": 2513,
+          "analysis_wall_ms_per_mb": 1856,
+          "process_peak_rss_bytes": 666607616,
+          "process_wall_ms": 2659,
+          "process_wall_ms_per_mb": 1964
         }
       }
     },
@@ -6199,77 +6199,77 @@
       "async": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 96333824,
+          "peak_rss_bytes": 95236096,
           "stages": {
             "polint.calls": {
-              "elapsed_ms": 23,
-              "peak_rss_mb": 85
+              "elapsed_ms": 29,
+              "peak_rss_mb": 83
             },
             "polint.cfg": {
-              "elapsed_ms": 55,
-              "peak_rss_mb": 84
+              "elapsed_ms": 76,
+              "peak_rss_mb": 83
             },
             "polint.go.semantic": {
-              "elapsed_ms": 0,
-              "peak_rss_mb": 68
+              "elapsed_ms": 1,
+              "peak_rss_mb": 67
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 85
+              "peak_rss_mb": 83
             },
             "polint.module_graph": {
-              "elapsed_ms": 26,
-              "peak_rss_mb": 33
+              "elapsed_ms": 22,
+              "peak_rss_mb": 27
             },
             "polint.module_topology": {
               "elapsed_ms": 2,
-              "peak_rss_mb": 68
+              "peak_rss_mb": 67
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 102,
-              "peak_rss_mb": 68
+              "elapsed_ms": 128,
+              "peak_rss_mb": 67
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 172,
-              "peak_rss_mb": 68
+              "elapsed_ms": 209,
+              "peak_rss_mb": 67
             },
             "polint.ts.syntax": {
               "elapsed_ms": 3,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             }
           },
-          "wall_ms": 436
+          "wall_ms": 546
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 291373056,
+          "peak_rss_bytes": 277954560,
           "stages": {
             "polint.abstract_domains": {
-              "elapsed_ms": 355,
+              "elapsed_ms": 435,
               "peak_rss_mb": 258
             },
             "polint.calls": {
-              "elapsed_ms": 25,
+              "elapsed_ms": 29,
               "peak_rss_mb": 141
             },
             "polint.cfg": {
-              "elapsed_ms": 219,
+              "elapsed_ms": 302,
               "peak_rss_mb": 140
             },
             "polint.data_flow": {
-              "elapsed_ms": 108,
-              "peak_rss_mb": 277
+              "elapsed_ms": 130,
+              "peak_rss_mb": 265
             },
             "polint.direct_summaries": {
-              "elapsed_ms": 21,
+              "elapsed_ms": 28,
               "peak_rss_mb": 258
             },
             "polint.entrypoints": {
@@ -6277,8 +6277,8 @@
               "peak_rss_mb": 258
             },
             "polint.evidence": {
-              "elapsed_ms": 157,
-              "peak_rss_mb": 277
+              "elapsed_ms": 224,
+              "peak_rss_mb": 265
             },
             "polint.extensions": {
               "elapsed_ms": 0,
@@ -6286,84 +6286,84 @@
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 67
+              "peak_rss_mb": 68
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.identity": {
-              "elapsed_ms": 8,
+              "elapsed_ms": 11,
               "peak_rss_mb": 141
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 277
+              "peak_rss_mb": 265
             },
             "polint.module_graph": {
-              "elapsed_ms": 26,
-              "peak_rss_mb": 33
+              "elapsed_ms": 23,
+              "peak_rss_mb": 27
             },
             "polint.module_topology": {
-              "elapsed_ms": 2,
-              "peak_rss_mb": 67
+              "elapsed_ms": 3,
+              "peak_rss_mb": 68
             },
             "polint.reachability": {
               "elapsed_ms": 0,
               "peak_rss_mb": 258
             },
             "polint.refined_calls": {
-              "elapsed_ms": 16,
-              "peak_rss_mb": 273
+              "elapsed_ms": 19,
+              "peak_rss_mb": 262
             },
             "polint.semantic_graph": {
-              "elapsed_ms": 150,
-              "peak_rss_mb": 273
+              "elapsed_ms": 199,
+              "peak_rss_mb": 262
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 89,
-              "peak_rss_mb": 67
+              "elapsed_ms": 135,
+              "peak_rss_mb": 68
             },
             "polint.solver": {
-              "elapsed_ms": 165,
-              "peak_rss_mb": 273
+              "elapsed_ms": 217,
+              "peak_rss_mb": 262
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 173,
-              "peak_rss_mb": 67
+              "elapsed_ms": 218,
+              "peak_rss_mb": 68
             },
             "polint.ts.syntax": {
-              "elapsed_ms": 3,
-              "peak_rss_mb": 33
+              "elapsed_ms": 4,
+              "peak_rss_mb": 23
             },
             "polint.ts.types": {
               "elapsed_ms": 0,
               "peak_rss_mb": 141
             },
             "polint.type_value_alias": {
-              "elapsed_ms": 180,
-              "peak_rss_mb": 273
+              "elapsed_ms": 221,
+              "peak_rss_mb": 262
             }
           },
-          "wall_ms": 1857
+          "wall_ms": 2409
         }
       },
       "axios": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 120848384,
+          "peak_rss_bytes": 122269696,
           "stages": {
             "polint.calls": {
-              "elapsed_ms": 32,
+              "elapsed_ms": 44,
               "peak_rss_mb": 106
             },
             "polint.cfg": {
-              "elapsed_ms": 63,
-              "peak_rss_mb": 105
+              "elapsed_ms": 92,
+              "peak_rss_mb": 106
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
@@ -6371,7 +6371,7 @@
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.metrics": {
               "elapsed_ms": 0,
@@ -6379,378 +6379,378 @@
             },
             "polint.module_graph": {
               "elapsed_ms": 26,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 26
             },
             "polint.module_topology": {
-              "elapsed_ms": 1,
+              "elapsed_ms": 2,
               "peak_rss_mb": 88
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 160,
+              "elapsed_ms": 212,
               "peak_rss_mb": 88
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 272,
+              "elapsed_ms": 315,
               "peak_rss_mb": 88
             },
             "polint.ts.syntax": {
-              "elapsed_ms": 3,
-              "peak_rss_mb": 33
+              "elapsed_ms": 5,
+              "peak_rss_mb": 23
             }
           },
-          "wall_ms": 620
+          "wall_ms": 785
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 300101632,
+          "peak_rss_bytes": 311484416,
           "stages": {
             "polint.abstract_domains": {
-              "elapsed_ms": 141,
-              "peak_rss_mb": 167
+              "elapsed_ms": 202,
+              "peak_rss_mb": 166
             },
             "polint.calls": {
-              "elapsed_ms": 34,
-              "peak_rss_mb": 122
+              "elapsed_ms": 44,
+              "peak_rss_mb": 121
             },
             "polint.cfg": {
-              "elapsed_ms": 155,
+              "elapsed_ms": 212,
               "peak_rss_mb": 121
             },
             "polint.data_flow": {
-              "elapsed_ms": 124,
-              "peak_rss_mb": 234
+              "elapsed_ms": 177,
+              "peak_rss_mb": 243
             },
             "polint.direct_summaries": {
-              "elapsed_ms": 23,
-              "peak_rss_mb": 167
+              "elapsed_ms": 32,
+              "peak_rss_mb": 166
             },
             "polint.entrypoints": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 167
+              "peak_rss_mb": 166
             },
             "polint.evidence": {
-              "elapsed_ms": 319,
-              "peak_rss_mb": 261
+              "elapsed_ms": 414,
+              "peak_rss_mb": 266
             },
             "polint.extensions": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 167
+              "peak_rss_mb": 166
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 88
+              "peak_rss_mb": 87
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.identity": {
-              "elapsed_ms": 9,
+              "elapsed_ms": 11,
               "peak_rss_mb": 122
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 261
+              "peak_rss_mb": 266
             },
             "polint.module_graph": {
-              "elapsed_ms": 22,
-              "peak_rss_mb": 33
+              "elapsed_ms": 24,
+              "peak_rss_mb": 27
             },
             "polint.module_topology": {
-              "elapsed_ms": 1,
-              "peak_rss_mb": 88
+              "elapsed_ms": 2,
+              "peak_rss_mb": 87
             },
             "polint.reachability": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 167
+              "peak_rss_mb": 166
             },
             "polint.refined_calls": {
-              "elapsed_ms": 21,
+              "elapsed_ms": 31,
               "peak_rss_mb": 224
             },
             "polint.semantic_graph": {
-              "elapsed_ms": 212,
+              "elapsed_ms": 294,
               "peak_rss_mb": 224
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 165,
-              "peak_rss_mb": 88
+              "elapsed_ms": 225,
+              "peak_rss_mb": 87
             },
             "polint.solver": {
-              "elapsed_ms": 30,
+              "elapsed_ms": 59,
               "peak_rss_mb": 224
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 287,
-              "peak_rss_mb": 88
+              "elapsed_ms": 342,
+              "peak_rss_mb": 87
             },
             "polint.ts.syntax": {
-              "elapsed_ms": 3,
-              "peak_rss_mb": 33
+              "elapsed_ms": 4,
+              "peak_rss_mb": 24
             },
             "polint.ts.types": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 122
+              "peak_rss_mb": 121
             },
             "polint.type_value_alias": {
-              "elapsed_ms": 289,
+              "elapsed_ms": 381,
               "peak_rss_mb": 224
             }
           },
-          "wall_ms": 2016
+          "wall_ms": 2719
         }
       },
       "chalk": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 37400576,
+          "peak_rss_bytes": 35995648,
           "stages": {
             "polint.calls": {
-              "elapsed_ms": 1,
-              "peak_rss_mb": 35
+              "elapsed_ms": 2,
+              "peak_rss_mb": 33
             },
             "polint.cfg": {
-              "elapsed_ms": 10,
-              "peak_rss_mb": 34
+              "elapsed_ms": 13,
+              "peak_rss_mb": 33
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 31
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 35
+              "peak_rss_mb": 33
             },
             "polint.module_graph": {
-              "elapsed_ms": 11,
-              "peak_rss_mb": 33
+              "elapsed_ms": 18,
+              "peak_rss_mb": 23
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 30
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 10,
-              "peak_rss_mb": 33
+              "elapsed_ms": 12,
+              "peak_rss_mb": 31
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 19,
-              "peak_rss_mb": 33
+              "elapsed_ms": 21,
+              "peak_rss_mb": 30
             },
             "polint.ts.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             }
           },
-          "wall_ms": 65
+          "wall_ms": 85
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 59375616,
+          "peak_rss_bytes": 58462208,
           "stages": {
             "polint.abstract_domains": {
-              "elapsed_ms": 18,
-              "peak_rss_mb": 45
+              "elapsed_ms": 22,
+              "peak_rss_mb": 44
             },
             "polint.calls": {
-              "elapsed_ms": 2,
-              "peak_rss_mb": 39
+              "elapsed_ms": 3,
+              "peak_rss_mb": 38
             },
             "polint.cfg": {
-              "elapsed_ms": 39,
-              "peak_rss_mb": 39
+              "elapsed_ms": 58,
+              "peak_rss_mb": 37
             },
             "polint.data_flow": {
-              "elapsed_ms": 7,
-              "peak_rss_mb": 52
+              "elapsed_ms": 13,
+              "peak_rss_mb": 51
             },
             "polint.direct_summaries": {
               "elapsed_ms": 2,
-              "peak_rss_mb": 46
+              "peak_rss_mb": 45
             },
             "polint.entrypoints": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 46
+              "peak_rss_mb": 45
             },
             "polint.evidence": {
-              "elapsed_ms": 17,
-              "peak_rss_mb": 54
+              "elapsed_ms": 30,
+              "peak_rss_mb": 53
             },
             "polint.extensions": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 46
+              "peak_rss_mb": 45
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 31
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.identity": {
-              "elapsed_ms": 0,
-              "peak_rss_mb": 40
+              "elapsed_ms": 1,
+              "peak_rss_mb": 38
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 54
+              "peak_rss_mb": 53
             },
             "polint.module_graph": {
-              "elapsed_ms": 19,
-              "peak_rss_mb": 33
+              "elapsed_ms": 13,
+              "peak_rss_mb": 23
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 30
             },
             "polint.reachability": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 46
+              "peak_rss_mb": 45
             },
             "polint.refined_calls": {
-              "elapsed_ms": 1,
-              "peak_rss_mb": 52
+              "elapsed_ms": 2,
+              "peak_rss_mb": 51
             },
             "polint.semantic_graph": {
-              "elapsed_ms": 11,
-              "peak_rss_mb": 52
+              "elapsed_ms": 21,
+              "peak_rss_mb": 51
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 9,
-              "peak_rss_mb": 33
+              "elapsed_ms": 14,
+              "peak_rss_mb": 31
             },
             "polint.solver": {
-              "elapsed_ms": 5,
-              "peak_rss_mb": 52
+              "elapsed_ms": 6,
+              "peak_rss_mb": 51
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 18,
-              "peak_rss_mb": 33
+              "elapsed_ms": 22,
+              "peak_rss_mb": 30
             },
             "polint.ts.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.ts.types": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 39
+              "peak_rss_mb": 38
             },
             "polint.type_value_alias": {
-              "elapsed_ms": 22,
-              "peak_rss_mb": 52
+              "elapsed_ms": 26,
+              "peak_rss_mb": 51
             }
           },
-          "wall_ms": 198
+          "wall_ms": 269
         }
       },
       "commander": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 62050304,
+          "peak_rss_bytes": 60256256,
           "stages": {
             "polint.calls": {
-              "elapsed_ms": 10,
-              "peak_rss_mb": 56
+              "elapsed_ms": 12,
+              "peak_rss_mb": 54
             },
             "polint.cfg": {
-              "elapsed_ms": 33,
-              "peak_rss_mb": 55
+              "elapsed_ms": 43,
+              "peak_rss_mb": 53
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 46
+              "peak_rss_mb": 45
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 56
+              "peak_rss_mb": 54
             },
             "polint.module_graph": {
-              "elapsed_ms": 12,
-              "peak_rss_mb": 33
+              "elapsed_ms": 14,
+              "peak_rss_mb": 23
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 43
+              "peak_rss_mb": 41
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 85,
-              "peak_rss_mb": 46
+              "elapsed_ms": 103,
+              "peak_rss_mb": 45
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 67,
-              "peak_rss_mb": 43
+              "elapsed_ms": 80,
+              "peak_rss_mb": 41
             },
             "polint.ts.syntax": {
               "elapsed_ms": 2,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             }
           },
-          "wall_ms": 236
+          "wall_ms": 289
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 158343168,
+          "peak_rss_bytes": 158924800,
           "stages": {
             "polint.abstract_domains": {
-              "elapsed_ms": 118,
-              "peak_rss_mb": 115
+              "elapsed_ms": 157,
+              "peak_rss_mb": 118
             },
             "polint.calls": {
-              "elapsed_ms": 10,
-              "peak_rss_mb": 80
+              "elapsed_ms": 12,
+              "peak_rss_mb": 82
             },
             "polint.cfg": {
-              "elapsed_ms": 112,
-              "peak_rss_mb": 79
+              "elapsed_ms": 162,
+              "peak_rss_mb": 82
             },
             "polint.data_flow": {
-              "elapsed_ms": 41,
+              "elapsed_ms": 49,
               "peak_rss_mb": 145
             },
             "polint.direct_summaries": {
-              "elapsed_ms": 9,
-              "peak_rss_mb": 116
+              "elapsed_ms": 12,
+              "peak_rss_mb": 118
             },
             "polint.entrypoints": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 116
+              "peak_rss_mb": 118
             },
             "polint.evidence": {
-              "elapsed_ms": 95,
+              "elapsed_ms": 121,
               "peak_rss_mb": 145
             },
             "polint.extensions": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 116
+              "peak_rss_mb": 118
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
@@ -6758,19 +6758,19 @@
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.identity": {
-              "elapsed_ms": 3,
-              "peak_rss_mb": 81
+              "elapsed_ms": 4,
+              "peak_rss_mb": 83
             },
             "polint.metrics": {
               "elapsed_ms": 0,
               "peak_rss_mb": 145
             },
             "polint.module_graph": {
-              "elapsed_ms": 17,
-              "peak_rss_mb": 33
+              "elapsed_ms": 9,
+              "peak_rss_mb": 24
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
@@ -6778,68 +6778,68 @@
             },
             "polint.reachability": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 116
+              "peak_rss_mb": 118
             },
             "polint.refined_calls": {
-              "elapsed_ms": 6,
+              "elapsed_ms": 9,
               "peak_rss_mb": 145
             },
             "polint.semantic_graph": {
-              "elapsed_ms": 853,
+              "elapsed_ms": 996,
               "peak_rss_mb": 145
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 87,
+              "elapsed_ms": 114,
               "peak_rss_mb": 46
             },
             "polint.solver": {
-              "elapsed_ms": 10,
+              "elapsed_ms": 23,
               "peak_rss_mb": 145
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 70,
+              "elapsed_ms": 81,
               "peak_rss_mb": 42
             },
             "polint.ts.syntax": {
               "elapsed_ms": 2,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.ts.types": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 80
+              "peak_rss_mb": 82
             },
             "polint.type_value_alias": {
-              "elapsed_ms": 100,
+              "elapsed_ms": 139,
               "peak_rss_mb": 145
             }
           },
-          "wall_ms": 1611
+          "wall_ms": 2002
         }
       },
       "dayjs": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 35913728,
+          "peak_rss_bytes": 35958784,
           "stages": {
             "polint.calls": {
-              "elapsed_ms": 2,
+              "elapsed_ms": 3,
               "peak_rss_mb": 33
             },
             "polint.cfg": {
-              "elapsed_ms": 12,
+              "elapsed_ms": 14,
               "peak_rss_mb": 33
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 32
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.metrics": {
               "elapsed_ms": 0,
@@ -6847,50 +6847,50 @@
             },
             "polint.module_graph": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 29
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 15,
-              "peak_rss_mb": 33
+              "elapsed_ms": 17,
+              "peak_rss_mb": 31
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 26,
-              "peak_rss_mb": 33
+              "elapsed_ms": 32,
+              "peak_rss_mb": 29
             },
             "polint.ts.syntax": {
               "elapsed_ms": 1,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             }
           },
-          "wall_ms": 73
+          "wall_ms": 88
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 59838464,
+          "peak_rss_bytes": 61571072,
           "stages": {
             "polint.abstract_domains": {
-              "elapsed_ms": 18,
+              "elapsed_ms": 20,
               "peak_rss_mb": 45
             },
             "polint.calls": {
-              "elapsed_ms": 2,
+              "elapsed_ms": 3,
               "peak_rss_mb": 38
             },
             "polint.cfg": {
-              "elapsed_ms": 43,
-              "peak_rss_mb": 37
+              "elapsed_ms": 51,
+              "peak_rss_mb": 38
             },
             "polint.data_flow": {
-              "elapsed_ms": 9,
-              "peak_rss_mb": 52
+              "elapsed_ms": 11,
+              "peak_rss_mb": 54
             },
             "polint.direct_summaries": {
               "elapsed_ms": 2,
@@ -6898,96 +6898,96 @@
             },
             "polint.entrypoints": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 45
+              "peak_rss_mb": 46
             },
             "polint.evidence": {
-              "elapsed_ms": 18,
-              "peak_rss_mb": 54
+              "elapsed_ms": 23,
+              "peak_rss_mb": 56
             },
             "polint.extensions": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 45
+              "peak_rss_mb": 46
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 32
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.identity": {
-              "elapsed_ms": 0,
+              "elapsed_ms": 1,
               "peak_rss_mb": 39
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 54
+              "peak_rss_mb": 56
             },
             "polint.module_graph": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 30
             },
             "polint.reachability": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 45
+              "peak_rss_mb": 46
             },
             "polint.refined_calls": {
               "elapsed_ms": 2,
-              "peak_rss_mb": 52
+              "peak_rss_mb": 53
             },
             "polint.semantic_graph": {
-              "elapsed_ms": 55,
-              "peak_rss_mb": 52
+              "elapsed_ms": 64,
+              "peak_rss_mb": 53
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 15,
-              "peak_rss_mb": 33
+              "elapsed_ms": 18,
+              "peak_rss_mb": 32
             },
             "polint.solver": {
-              "elapsed_ms": 2,
-              "peak_rss_mb": 52
+              "elapsed_ms": 4,
+              "peak_rss_mb": 53
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 27,
-              "peak_rss_mb": 33
+              "elapsed_ms": 30,
+              "peak_rss_mb": 30
             },
             "polint.ts.syntax": {
               "elapsed_ms": 1,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.ts.types": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 38
+              "peak_rss_mb": 39
             },
             "polint.type_value_alias": {
-              "elapsed_ms": 23,
-              "peak_rss_mb": 52
+              "elapsed_ms": 30,
+              "peak_rss_mb": 53
             }
           },
-          "wall_ms": 247
+          "wall_ms": 298
         }
       },
       "underscore": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 53837824,
+          "peak_rss_bytes": 54468608,
           "stages": {
             "polint.calls": {
-              "elapsed_ms": 7,
+              "elapsed_ms": 11,
               "peak_rss_mb": 49
             },
             "polint.cfg": {
-              "elapsed_ms": 29,
-              "peak_rss_mb": 48
+              "elapsed_ms": 46,
+              "peak_rss_mb": 49
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
@@ -6995,7 +6995,7 @@
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.metrics": {
               "elapsed_ms": 0,
@@ -7003,305 +7003,305 @@
             },
             "polint.module_graph": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
               "peak_rss_mb": 43
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 57,
+              "elapsed_ms": 72,
               "peak_rss_mb": 43
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 79,
+              "elapsed_ms": 95,
               "peak_rss_mb": 43
             },
             "polint.ts.syntax": {
               "elapsed_ms": 1,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             }
           },
-          "wall_ms": 197
+          "wall_ms": 259
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 128425984,
+          "peak_rss_bytes": 129679360,
           "stages": {
             "polint.abstract_domains": {
-              "elapsed_ms": 70,
-              "peak_rss_mb": 98
+              "elapsed_ms": 86,
+              "peak_rss_mb": 99
             },
             "polint.calls": {
-              "elapsed_ms": 7,
-              "peak_rss_mb": 74
+              "elapsed_ms": 10,
+              "peak_rss_mb": 76
             },
             "polint.cfg": {
-              "elapsed_ms": 104,
-              "peak_rss_mb": 73
+              "elapsed_ms": 165,
+              "peak_rss_mb": 75
             },
             "polint.data_flow": {
-              "elapsed_ms": 27,
-              "peak_rss_mb": 118
+              "elapsed_ms": 37,
+              "peak_rss_mb": 120
             },
             "polint.direct_summaries": {
-              "elapsed_ms": 7,
-              "peak_rss_mb": 98
+              "elapsed_ms": 8,
+              "peak_rss_mb": 99
             },
             "polint.entrypoints": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 98
+              "peak_rss_mb": 100
             },
             "polint.evidence": {
-              "elapsed_ms": 89,
-              "peak_rss_mb": 118
+              "elapsed_ms": 117,
+              "peak_rss_mb": 120
             },
             "polint.extensions": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 98
+              "peak_rss_mb": 100
             },
             "polint.go.semantic": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 44
+              "peak_rss_mb": 43
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.identity": {
               "elapsed_ms": 2,
-              "peak_rss_mb": 74
+              "peak_rss_mb": 76
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 118
+              "peak_rss_mb": 120
             },
             "polint.module_graph": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.module_topology": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 44
+              "peak_rss_mb": 43
             },
             "polint.reachability": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 98
+              "peak_rss_mb": 100
             },
             "polint.refined_calls": {
-              "elapsed_ms": 4,
-              "peak_rss_mb": 118
+              "elapsed_ms": 6,
+              "peak_rss_mb": 120
             },
             "polint.semantic_graph": {
-              "elapsed_ms": 38,
-              "peak_rss_mb": 118
+              "elapsed_ms": 49,
+              "peak_rss_mb": 120
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 58,
-              "peak_rss_mb": 44
+              "elapsed_ms": 78,
+              "peak_rss_mb": 43
             },
             "polint.solver": {
-              "elapsed_ms": 5,
-              "peak_rss_mb": 118
+              "elapsed_ms": 12,
+              "peak_rss_mb": 120
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 75,
-              "peak_rss_mb": 44
+              "elapsed_ms": 95,
+              "peak_rss_mb": 43
             },
             "polint.ts.syntax": {
               "elapsed_ms": 1,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.ts.types": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 74
+              "peak_rss_mb": 76
             },
             "polint.type_value_alias": {
-              "elapsed_ms": 66,
-              "peak_rss_mb": 118
+              "elapsed_ms": 79,
+              "peak_rss_mb": 120
             }
           },
-          "wall_ms": 613
+          "wall_ms": 828
         }
       },
       "zod": {
         "base": {
           "error": null,
-          "peak_rss_bytes": 534413312,
+          "peak_rss_bytes": 534073344,
           "stages": {
             "polint.calls": {
-              "elapsed_ms": 174,
+              "elapsed_ms": 218,
               "peak_rss_mb": 509
             },
             "polint.cfg": {
-              "elapsed_ms": 198,
+              "elapsed_ms": 255,
               "peak_rss_mb": 509
             },
             "polint.go.semantic": {
-              "elapsed_ms": 0,
+              "elapsed_ms": 2,
               "peak_rss_mb": 509
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.metrics": {
               "elapsed_ms": 0,
               "peak_rss_mb": 509
             },
             "polint.module_graph": {
-              "elapsed_ms": 36,
+              "elapsed_ms": 40,
               "peak_rss_mb": 40
             },
             "polint.module_topology": {
-              "elapsed_ms": 3,
+              "elapsed_ms": 6,
               "peak_rss_mb": 509
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 1100,
+              "elapsed_ms": 1474,
               "peak_rss_mb": 509
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 1982,
+              "elapsed_ms": 2452,
               "peak_rss_mb": 509
             },
             "polint.ts.syntax": {
-              "elapsed_ms": 19,
+              "elapsed_ms": 24,
               "peak_rss_mb": 36
             }
           },
-          "wall_ms": 3762
+          "wall_ms": 4838
         },
         "refined": {
           "error": null,
-          "peak_rss_bytes": 1022701568,
+          "peak_rss_bytes": 1056415744,
           "stages": {
             "polint.abstract_domains": {
-              "elapsed_ms": 254,
-              "peak_rss_mb": 511
+              "elapsed_ms": 363,
+              "peak_rss_mb": 510
             },
             "polint.calls": {
-              "elapsed_ms": 177,
-              "peak_rss_mb": 511
+              "elapsed_ms": 224,
+              "peak_rss_mb": 510
             },
             "polint.cfg": {
-              "elapsed_ms": 480,
-              "peak_rss_mb": 511
+              "elapsed_ms": 688,
+              "peak_rss_mb": 510
             },
             "polint.data_flow": {
-              "elapsed_ms": 508,
-              "peak_rss_mb": 795
+              "elapsed_ms": 780,
+              "peak_rss_mb": 813
             },
             "polint.direct_summaries": {
-              "elapsed_ms": 105,
-              "peak_rss_mb": 511
+              "elapsed_ms": 173,
+              "peak_rss_mb": 510
             },
             "polint.entrypoints": {
-              "elapsed_ms": 0,
-              "peak_rss_mb": 511
+              "elapsed_ms": 1,
+              "peak_rss_mb": 510
             },
             "polint.evidence": {
-              "elapsed_ms": 1137,
-              "peak_rss_mb": 884
+              "elapsed_ms": 1692,
+              "peak_rss_mb": 907
             },
             "polint.extensions": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 511
+              "peak_rss_mb": 510
             },
             "polint.go.semantic": {
-              "elapsed_ms": 0,
-              "peak_rss_mb": 511
+              "elapsed_ms": 2,
+              "peak_rss_mb": 510
             },
             "polint.go.syntax": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.identity": {
-              "elapsed_ms": 34,
-              "peak_rss_mb": 511
+              "elapsed_ms": 54,
+              "peak_rss_mb": 510
             },
             "polint.metrics": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 884
+              "peak_rss_mb": 907
             },
             "polint.module_graph": {
-              "elapsed_ms": 31,
+              "elapsed_ms": 35,
               "peak_rss_mb": 42
             },
             "polint.module_topology": {
               "elapsed_ms": 3,
-              "peak_rss_mb": 511
+              "peak_rss_mb": 510
             },
             "polint.reachability": {
-              "elapsed_ms": 4,
-              "peak_rss_mb": 511
+              "elapsed_ms": 5,
+              "peak_rss_mb": 510
             },
             "polint.refined_calls": {
-              "elapsed_ms": 72,
+              "elapsed_ms": 136,
               "peak_rss_mb": 784
             },
             "polint.semantic_graph": {
-              "elapsed_ms": 3244,
+              "elapsed_ms": 3907,
               "peak_rss_mb": 784
             },
             "polint.semantic_mir": {
-              "elapsed_ms": 1111,
-              "peak_rss_mb": 511
+              "elapsed_ms": 1555,
+              "peak_rss_mb": 510
             },
             "polint.solver": {
-              "elapsed_ms": 176,
+              "elapsed_ms": 411,
               "peak_rss_mb": 784
             },
             "polint.source": {
               "elapsed_ms": 0,
-              "peak_rss_mb": 33
+              "peak_rss_mb": 23
             },
             "polint.symbol_graph": {
-              "elapsed_ms": 1975,
-              "peak_rss_mb": 511
+              "elapsed_ms": 2498,
+              "peak_rss_mb": 510
             },
             "polint.ts.syntax": {
-              "elapsed_ms": 21,
+              "elapsed_ms": 23,
               "peak_rss_mb": 38
             },
             "polint.ts.types": {
-              "elapsed_ms": 0,
-              "peak_rss_mb": 511
+              "elapsed_ms": 1,
+              "peak_rss_mb": 510
             },
             "polint.type_value_alias": {
-              "elapsed_ms": 1373,
+              "elapsed_ms": 1883,
               "peak_rss_mb": 784
             }
           },
-          "wall_ms": 11383
+          "wall_ms": 15458
         }
       }
     },
     "machine": {
       "cpus": 32,
-      "git_head": "53e0153e1472b29540737331034da29bdb15c875",
-      "launcher_peak_rss_bytes": 35737600,
+      "git_head": "84d24ab428eb302db6c6e1422ae722d8debc5e90",
+      "launcher_peak_rss_bytes": 27459584,
       "load_average_end": [
-        15.47,
-        11.62,
-        17.26
+        8.85,
+        27.04,
+        42.82
       ],
       "load_average_start": [
-        3.21,
-        7.16,
-        18.06
+        7.54,
+        50.99,
+        53.35
       ],
       "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
       "python": "3.12.3"
@@ -7337,15 +7337,15 @@
   "dump_cost": {
     "acorn": {
       "base": {
-        "peak_rss_bytes": 105234432,
+        "peak_rss_bytes": 105369600,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 26,
+            "elapsed_ms": 36,
             "peak_rss_mb": 97
           },
           "polint.cfg": {
-            "elapsed_ms": 59,
-            "peak_rss_mb": 96
+            "elapsed_ms": 82,
+            "peak_rss_mb": 97
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
@@ -7353,7 +7353,7 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.metrics": {
             "elapsed_ms": 0,
@@ -7361,206 +7361,206 @@
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 64
+            "peak_rss_mb": 63
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 297,
+            "elapsed_ms": 363,
             "peak_rss_mb": 75
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 169,
-            "peak_rss_mb": 64
+            "elapsed_ms": 214,
+            "peak_rss_mb": 63
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 4,
-            "peak_rss_mb": 33
+            "elapsed_ms": 5,
+            "peak_rss_mb": 24
           }
         },
-        "wall_ms": 599
+        "wall_ms": 766
       },
       "refined": {
-        "peak_rss_bytes": 285843456,
+        "peak_rss_bytes": 301883392,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 149,
+            "elapsed_ms": 217,
             "peak_rss_mb": 162
           },
           "polint.calls": {
-            "elapsed_ms": 26,
+            "elapsed_ms": 34,
             "peak_rss_mb": 109
           },
           "polint.cfg": {
-            "elapsed_ms": 134,
-            "peak_rss_mb": 108
+            "elapsed_ms": 196,
+            "peak_rss_mb": 109
           },
           "polint.data_flow": {
-            "elapsed_ms": 120,
-            "peak_rss_mb": 252
+            "elapsed_ms": 147,
+            "peak_rss_mb": 254
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 14,
+            "elapsed_ms": 19,
             "peak_rss_mb": 162
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 162
+            "peak_rss_mb": 163
           },
           "polint.evidence": {
-            "elapsed_ms": 287,
-            "peak_rss_mb": 255
+            "elapsed_ms": 348,
+            "peak_rss_mb": 270
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 162
+            "peak_rss_mb": 163
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 76
+            "peak_rss_mb": 75
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.identity": {
-            "elapsed_ms": 6,
-            "peak_rss_mb": 110
+            "elapsed_ms": 9,
+            "peak_rss_mb": 111
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 255
+            "peak_rss_mb": 270
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 64
+            "peak_rss_mb": 63
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 162
+            "peak_rss_mb": 163
           },
           "polint.refined_calls": {
-            "elapsed_ms": 16,
-            "peak_rss_mb": 252
+            "elapsed_ms": 22,
+            "peak_rss_mb": 254
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 359,
-            "peak_rss_mb": 252
+            "elapsed_ms": 471,
+            "peak_rss_mb": 254
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 285,
-            "peak_rss_mb": 76
+            "elapsed_ms": 377,
+            "peak_rss_mb": 75
           },
           "polint.solver": {
-            "elapsed_ms": 20,
-            "peak_rss_mb": 252
+            "elapsed_ms": 41,
+            "peak_rss_mb": 254
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 168,
-            "peak_rss_mb": 64
+            "elapsed_ms": 222,
+            "peak_rss_mb": 63
           },
           "polint.ts.syntax": {
             "elapsed_ms": 5,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 109
+            "peak_rss_mb": 110
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 398,
-            "peak_rss_mb": 252
+            "elapsed_ms": 544,
+            "peak_rss_mb": 254
           }
         },
-        "wall_ms": 2146
+        "wall_ms": 2873
       }
     },
     "async": {
       "base": {
-        "peak_rss_bytes": 96333824,
+        "peak_rss_bytes": 95236096,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 23,
-            "peak_rss_mb": 85
+            "elapsed_ms": 29,
+            "peak_rss_mb": 83
           },
           "polint.cfg": {
-            "elapsed_ms": 55,
-            "peak_rss_mb": 84
+            "elapsed_ms": 76,
+            "peak_rss_mb": 83
           },
           "polint.go.semantic": {
-            "elapsed_ms": 0,
-            "peak_rss_mb": 68
+            "elapsed_ms": 1,
+            "peak_rss_mb": 67
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 85
+            "peak_rss_mb": 83
           },
           "polint.module_graph": {
-            "elapsed_ms": 26,
-            "peak_rss_mb": 33
+            "elapsed_ms": 22,
+            "peak_rss_mb": 27
           },
           "polint.module_topology": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 68
+            "peak_rss_mb": 67
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 102,
-            "peak_rss_mb": 68
+            "elapsed_ms": 128,
+            "peak_rss_mb": 67
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 172,
-            "peak_rss_mb": 68
+            "elapsed_ms": 209,
+            "peak_rss_mb": 67
           },
           "polint.ts.syntax": {
             "elapsed_ms": 3,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 436
+        "wall_ms": 546
       },
       "refined": {
-        "peak_rss_bytes": 291373056,
+        "peak_rss_bytes": 277954560,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 355,
+            "elapsed_ms": 435,
             "peak_rss_mb": 258
           },
           "polint.calls": {
-            "elapsed_ms": 25,
+            "elapsed_ms": 29,
             "peak_rss_mb": 141
           },
           "polint.cfg": {
-            "elapsed_ms": 219,
+            "elapsed_ms": 302,
             "peak_rss_mb": 140
           },
           "polint.data_flow": {
-            "elapsed_ms": 108,
-            "peak_rss_mb": 277
+            "elapsed_ms": 130,
+            "peak_rss_mb": 265
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 21,
+            "elapsed_ms": 28,
             "peak_rss_mb": 258
           },
           "polint.entrypoints": {
@@ -7568,8 +7568,8 @@
             "peak_rss_mb": 258
           },
           "polint.evidence": {
-            "elapsed_ms": 157,
-            "peak_rss_mb": 277
+            "elapsed_ms": 224,
+            "peak_rss_mb": 265
           },
           "polint.extensions": {
             "elapsed_ms": 0,
@@ -7577,83 +7577,83 @@
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 67
+            "peak_rss_mb": 68
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
-            "elapsed_ms": 8,
+            "elapsed_ms": 11,
             "peak_rss_mb": 141
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 277
+            "peak_rss_mb": 265
           },
           "polint.module_graph": {
-            "elapsed_ms": 26,
-            "peak_rss_mb": 33
+            "elapsed_ms": 23,
+            "peak_rss_mb": 27
           },
           "polint.module_topology": {
-            "elapsed_ms": 2,
-            "peak_rss_mb": 67
+            "elapsed_ms": 3,
+            "peak_rss_mb": 68
           },
           "polint.reachability": {
             "elapsed_ms": 0,
             "peak_rss_mb": 258
           },
           "polint.refined_calls": {
-            "elapsed_ms": 16,
-            "peak_rss_mb": 273
+            "elapsed_ms": 19,
+            "peak_rss_mb": 262
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 150,
-            "peak_rss_mb": 273
+            "elapsed_ms": 199,
+            "peak_rss_mb": 262
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 89,
-            "peak_rss_mb": 67
+            "elapsed_ms": 135,
+            "peak_rss_mb": 68
           },
           "polint.solver": {
-            "elapsed_ms": 165,
-            "peak_rss_mb": 273
+            "elapsed_ms": 217,
+            "peak_rss_mb": 262
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 173,
-            "peak_rss_mb": 67
+            "elapsed_ms": 218,
+            "peak_rss_mb": 68
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 3,
-            "peak_rss_mb": 33
+            "elapsed_ms": 4,
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
             "peak_rss_mb": 141
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 180,
-            "peak_rss_mb": 273
+            "elapsed_ms": 221,
+            "peak_rss_mb": 262
           }
         },
-        "wall_ms": 1857
+        "wall_ms": 2409
       }
     },
     "axios": {
       "base": {
-        "peak_rss_bytes": 120848384,
+        "peak_rss_bytes": 122269696,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 32,
+            "elapsed_ms": 44,
             "peak_rss_mb": 106
           },
           "polint.cfg": {
-            "elapsed_ms": 63,
-            "peak_rss_mb": 105
+            "elapsed_ms": 92,
+            "peak_rss_mb": 106
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
@@ -7661,7 +7661,7 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
@@ -7669,356 +7669,356 @@
           },
           "polint.module_graph": {
             "elapsed_ms": 26,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 26
           },
           "polint.module_topology": {
-            "elapsed_ms": 1,
+            "elapsed_ms": 2,
             "peak_rss_mb": 88
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 160,
+            "elapsed_ms": 212,
             "peak_rss_mb": 88
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 272,
+            "elapsed_ms": 315,
             "peak_rss_mb": 88
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 3,
-            "peak_rss_mb": 33
+            "elapsed_ms": 5,
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 620
+        "wall_ms": 785
       },
       "refined": {
-        "peak_rss_bytes": 300101632,
+        "peak_rss_bytes": 311484416,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 141,
-            "peak_rss_mb": 167
+            "elapsed_ms": 202,
+            "peak_rss_mb": 166
           },
           "polint.calls": {
-            "elapsed_ms": 34,
-            "peak_rss_mb": 122
+            "elapsed_ms": 44,
+            "peak_rss_mb": 121
           },
           "polint.cfg": {
-            "elapsed_ms": 155,
+            "elapsed_ms": 212,
             "peak_rss_mb": 121
           },
           "polint.data_flow": {
-            "elapsed_ms": 124,
-            "peak_rss_mb": 234
+            "elapsed_ms": 177,
+            "peak_rss_mb": 243
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 23,
-            "peak_rss_mb": 167
+            "elapsed_ms": 32,
+            "peak_rss_mb": 166
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 167
+            "peak_rss_mb": 166
           },
           "polint.evidence": {
-            "elapsed_ms": 319,
-            "peak_rss_mb": 261
+            "elapsed_ms": 414,
+            "peak_rss_mb": 266
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 167
+            "peak_rss_mb": 166
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 88
+            "peak_rss_mb": 87
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
-            "elapsed_ms": 9,
+            "elapsed_ms": 11,
             "peak_rss_mb": 122
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 261
+            "peak_rss_mb": 266
           },
           "polint.module_graph": {
-            "elapsed_ms": 22,
-            "peak_rss_mb": 33
+            "elapsed_ms": 24,
+            "peak_rss_mb": 27
           },
           "polint.module_topology": {
-            "elapsed_ms": 1,
-            "peak_rss_mb": 88
+            "elapsed_ms": 2,
+            "peak_rss_mb": 87
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 167
+            "peak_rss_mb": 166
           },
           "polint.refined_calls": {
-            "elapsed_ms": 21,
+            "elapsed_ms": 31,
             "peak_rss_mb": 224
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 212,
+            "elapsed_ms": 294,
             "peak_rss_mb": 224
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 165,
-            "peak_rss_mb": 88
+            "elapsed_ms": 225,
+            "peak_rss_mb": 87
           },
           "polint.solver": {
-            "elapsed_ms": 30,
+            "elapsed_ms": 59,
             "peak_rss_mb": 224
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 287,
-            "peak_rss_mb": 88
+            "elapsed_ms": 342,
+            "peak_rss_mb": 87
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 3,
-            "peak_rss_mb": 33
+            "elapsed_ms": 4,
+            "peak_rss_mb": 24
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 122
+            "peak_rss_mb": 121
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 289,
+            "elapsed_ms": 381,
             "peak_rss_mb": 224
           }
         },
-        "wall_ms": 2016
+        "wall_ms": 2719
       }
     },
     "chalk": {
       "base": {
-        "peak_rss_bytes": 37400576,
+        "peak_rss_bytes": 35995648,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 1,
-            "peak_rss_mb": 35
+            "elapsed_ms": 2,
+            "peak_rss_mb": 33
           },
           "polint.cfg": {
-            "elapsed_ms": 10,
-            "peak_rss_mb": 34
+            "elapsed_ms": 13,
+            "peak_rss_mb": 33
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 31
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 35
+            "peak_rss_mb": 33
           },
           "polint.module_graph": {
-            "elapsed_ms": 11,
-            "peak_rss_mb": 33
+            "elapsed_ms": 18,
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 30
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 10,
-            "peak_rss_mb": 33
+            "elapsed_ms": 12,
+            "peak_rss_mb": 31
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 19,
-            "peak_rss_mb": 33
+            "elapsed_ms": 21,
+            "peak_rss_mb": 30
           },
           "polint.ts.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 65
+        "wall_ms": 85
       },
       "refined": {
-        "peak_rss_bytes": 59375616,
+        "peak_rss_bytes": 58462208,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 18,
-            "peak_rss_mb": 45
+            "elapsed_ms": 22,
+            "peak_rss_mb": 44
           },
           "polint.calls": {
-            "elapsed_ms": 2,
-            "peak_rss_mb": 39
+            "elapsed_ms": 3,
+            "peak_rss_mb": 38
           },
           "polint.cfg": {
-            "elapsed_ms": 39,
-            "peak_rss_mb": 39
+            "elapsed_ms": 58,
+            "peak_rss_mb": 37
           },
           "polint.data_flow": {
-            "elapsed_ms": 7,
-            "peak_rss_mb": 52
+            "elapsed_ms": 13,
+            "peak_rss_mb": 51
           },
           "polint.direct_summaries": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 45
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 45
           },
           "polint.evidence": {
-            "elapsed_ms": 17,
-            "peak_rss_mb": 54
+            "elapsed_ms": 30,
+            "peak_rss_mb": 53
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 45
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 31
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
-            "elapsed_ms": 0,
-            "peak_rss_mb": 40
+            "elapsed_ms": 1,
+            "peak_rss_mb": 38
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 54
+            "peak_rss_mb": 53
           },
           "polint.module_graph": {
-            "elapsed_ms": 19,
-            "peak_rss_mb": 33
+            "elapsed_ms": 13,
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 30
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 45
           },
           "polint.refined_calls": {
-            "elapsed_ms": 1,
-            "peak_rss_mb": 52
+            "elapsed_ms": 2,
+            "peak_rss_mb": 51
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 11,
-            "peak_rss_mb": 52
+            "elapsed_ms": 21,
+            "peak_rss_mb": 51
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 9,
-            "peak_rss_mb": 33
+            "elapsed_ms": 14,
+            "peak_rss_mb": 31
           },
           "polint.solver": {
-            "elapsed_ms": 5,
-            "peak_rss_mb": 52
+            "elapsed_ms": 6,
+            "peak_rss_mb": 51
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 18,
-            "peak_rss_mb": 33
+            "elapsed_ms": 22,
+            "peak_rss_mb": 30
           },
           "polint.ts.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 39
+            "peak_rss_mb": 38
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 22,
-            "peak_rss_mb": 52
+            "elapsed_ms": 26,
+            "peak_rss_mb": 51
           }
         },
-        "wall_ms": 198
+        "wall_ms": 269
       }
     },
     "co": {
       "base": {
-        "peak_rss_bytes": 34603008,
+        "peak_rss_bytes": 31293440,
         "stages": {
           "polint.calls": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 29
           },
           "polint.cfg": {
-            "elapsed_ms": 3,
-            "peak_rss_mb": 33
+            "elapsed_ms": 4,
+            "peak_rss_mb": 28
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 28
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 29
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 26
           },
           "polint.semantic_mir": {
             "elapsed_ms": 3,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 27
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
             "elapsed_ms": 5,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 26
           },
           "polint.ts.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 25
+        "wall_ms": 27
       },
       "refined": {
-        "peak_rss_bytes": 38825984,
+        "peak_rss_bytes": 38281216,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 2,
-            "peak_rss_mb": 33
+            "elapsed_ms": 3,
+            "peak_rss_mb": 32
           },
           "polint.calls": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 31
           },
           "polint.cfg": {
-            "elapsed_ms": 9,
-            "peak_rss_mb": 33
+            "elapsed_ms": 12,
+            "peak_rss_mb": 31
           },
           "polint.data_flow": {
-            "elapsed_ms": 3,
+            "elapsed_ms": 4,
             "peak_rss_mb": 35
           },
           "polint.direct_summaries": {
@@ -8030,7 +8030,7 @@
             "peak_rss_mb": 33
           },
           "polint.evidence": {
-            "elapsed_ms": 4,
+            "elapsed_ms": 5,
             "peak_rss_mb": 36
           },
           "polint.extensions": {
@@ -8039,15 +8039,15 @@
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 29
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 31
           },
           "polint.metrics": {
             "elapsed_ms": 0,
@@ -8055,11 +8055,11 @@
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 27
           },
           "polint.reachability": {
             "elapsed_ms": 0,
@@ -8070,126 +8070,126 @@
             "peak_rss_mb": 35
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 2,
-            "peak_rss_mb": 34
+            "elapsed_ms": 4,
+            "peak_rss_mb": 35
           },
           "polint.semantic_mir": {
             "elapsed_ms": 3,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 29
           },
           "polint.solver": {
-            "elapsed_ms": 0,
-            "peak_rss_mb": 34
+            "elapsed_ms": 1,
+            "peak_rss_mb": 35
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 4,
-            "peak_rss_mb": 33
+            "elapsed_ms": 5,
+            "peak_rss_mb": 27
           },
           "polint.ts.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 31
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 5,
-            "peak_rss_mb": 34
+            "elapsed_ms": 7,
+            "peak_rss_mb": 35
           }
         },
-        "wall_ms": 55
+        "wall_ms": 69
       }
     },
     "commander": {
       "base": {
-        "peak_rss_bytes": 62050304,
+        "peak_rss_bytes": 60256256,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 10,
-            "peak_rss_mb": 56
+            "elapsed_ms": 12,
+            "peak_rss_mb": 54
           },
           "polint.cfg": {
-            "elapsed_ms": 33,
-            "peak_rss_mb": 55
+            "elapsed_ms": 43,
+            "peak_rss_mb": 53
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 45
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 56
+            "peak_rss_mb": 54
           },
           "polint.module_graph": {
-            "elapsed_ms": 12,
-            "peak_rss_mb": 33
+            "elapsed_ms": 14,
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 43
+            "peak_rss_mb": 41
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 85,
-            "peak_rss_mb": 46
+            "elapsed_ms": 103,
+            "peak_rss_mb": 45
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 67,
-            "peak_rss_mb": 43
+            "elapsed_ms": 80,
+            "peak_rss_mb": 41
           },
           "polint.ts.syntax": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 236
+        "wall_ms": 289
       },
       "refined": {
-        "peak_rss_bytes": 158343168,
+        "peak_rss_bytes": 158924800,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 118,
-            "peak_rss_mb": 115
+            "elapsed_ms": 157,
+            "peak_rss_mb": 118
           },
           "polint.calls": {
-            "elapsed_ms": 10,
-            "peak_rss_mb": 80
+            "elapsed_ms": 12,
+            "peak_rss_mb": 82
           },
           "polint.cfg": {
-            "elapsed_ms": 112,
-            "peak_rss_mb": 79
+            "elapsed_ms": 162,
+            "peak_rss_mb": 82
           },
           "polint.data_flow": {
-            "elapsed_ms": 41,
+            "elapsed_ms": 49,
             "peak_rss_mb": 145
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 9,
-            "peak_rss_mb": 116
+            "elapsed_ms": 12,
+            "peak_rss_mb": 118
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 116
+            "peak_rss_mb": 118
           },
           "polint.evidence": {
-            "elapsed_ms": 95,
+            "elapsed_ms": 121,
             "peak_rss_mb": 145
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 116
+            "peak_rss_mb": 118
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
@@ -8197,19 +8197,19 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
-            "elapsed_ms": 3,
-            "peak_rss_mb": 81
+            "elapsed_ms": 4,
+            "peak_rss_mb": 83
           },
           "polint.metrics": {
             "elapsed_ms": 0,
             "peak_rss_mb": 145
           },
           "polint.module_graph": {
-            "elapsed_ms": 17,
-            "peak_rss_mb": 33
+            "elapsed_ms": 9,
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
@@ -8217,67 +8217,67 @@
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 116
+            "peak_rss_mb": 118
           },
           "polint.refined_calls": {
-            "elapsed_ms": 6,
+            "elapsed_ms": 9,
             "peak_rss_mb": 145
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 853,
+            "elapsed_ms": 996,
             "peak_rss_mb": 145
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 87,
+            "elapsed_ms": 114,
             "peak_rss_mb": 46
           },
           "polint.solver": {
-            "elapsed_ms": 10,
+            "elapsed_ms": 23,
             "peak_rss_mb": 145
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 70,
+            "elapsed_ms": 81,
             "peak_rss_mb": 42
           },
           "polint.ts.syntax": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 80
+            "peak_rss_mb": 82
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 100,
+            "elapsed_ms": 139,
             "peak_rss_mb": 145
           }
         },
-        "wall_ms": 1611
+        "wall_ms": 2002
       }
     },
     "dayjs": {
       "base": {
-        "peak_rss_bytes": 35913728,
+        "peak_rss_bytes": 35958784,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 2,
+            "elapsed_ms": 3,
             "peak_rss_mb": 33
           },
           "polint.cfg": {
-            "elapsed_ms": 12,
+            "elapsed_ms": 14,
             "peak_rss_mb": 33
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 32
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
@@ -8285,49 +8285,49 @@
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 29
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 15,
-            "peak_rss_mb": 33
+            "elapsed_ms": 17,
+            "peak_rss_mb": 31
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 26,
-            "peak_rss_mb": 33
+            "elapsed_ms": 32,
+            "peak_rss_mb": 29
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 73
+        "wall_ms": 88
       },
       "refined": {
-        "peak_rss_bytes": 59838464,
+        "peak_rss_bytes": 61571072,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 18,
+            "elapsed_ms": 20,
             "peak_rss_mb": 45
           },
           "polint.calls": {
-            "elapsed_ms": 2,
+            "elapsed_ms": 3,
             "peak_rss_mb": 38
           },
           "polint.cfg": {
-            "elapsed_ms": 43,
-            "peak_rss_mb": 37
+            "elapsed_ms": 51,
+            "peak_rss_mb": 38
           },
           "polint.data_flow": {
-            "elapsed_ms": 9,
-            "peak_rss_mb": 52
+            "elapsed_ms": 11,
+            "peak_rss_mb": 54
           },
           "polint.direct_summaries": {
             "elapsed_ms": 2,
@@ -8335,94 +8335,94 @@
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 45
+            "peak_rss_mb": 46
           },
           "polint.evidence": {
-            "elapsed_ms": 18,
-            "peak_rss_mb": 54
+            "elapsed_ms": 23,
+            "peak_rss_mb": 56
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 45
+            "peak_rss_mb": 46
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 32
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
-            "elapsed_ms": 0,
+            "elapsed_ms": 1,
             "peak_rss_mb": 39
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 54
+            "peak_rss_mb": 56
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 30
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 45
+            "peak_rss_mb": 46
           },
           "polint.refined_calls": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 52
+            "peak_rss_mb": 53
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 55,
-            "peak_rss_mb": 52
+            "elapsed_ms": 64,
+            "peak_rss_mb": 53
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 15,
-            "peak_rss_mb": 33
+            "elapsed_ms": 18,
+            "peak_rss_mb": 32
           },
           "polint.solver": {
-            "elapsed_ms": 2,
-            "peak_rss_mb": 52
+            "elapsed_ms": 4,
+            "peak_rss_mb": 53
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 27,
-            "peak_rss_mb": 33
+            "elapsed_ms": 30,
+            "peak_rss_mb": 30
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 38
+            "peak_rss_mb": 39
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 23,
-            "peak_rss_mb": 52
+            "elapsed_ms": 30,
+            "peak_rss_mb": 53
           }
         },
-        "wall_ms": 247
+        "wall_ms": 298
       }
     },
     "express": {
       "base": {
-        "peak_rss_bytes": 47554560,
+        "peak_rss_bytes": 46764032,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 5,
+            "elapsed_ms": 6,
             "peak_rss_mb": 43
           },
           "polint.cfg": {
-            "elapsed_ms": 23,
+            "elapsed_ms": 25,
             "peak_rss_mb": 43
           },
           "polint.go.semantic": {
@@ -8431,69 +8431,69 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 44
+            "peak_rss_mb": 43
           },
           "polint.module_graph": {
-            "elapsed_ms": 21,
-            "peak_rss_mb": 33
+            "elapsed_ms": 8,
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
             "peak_rss_mb": 35
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 26,
-            "peak_rss_mb": 38
+            "elapsed_ms": 33,
+            "peak_rss_mb": 37
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 36,
+            "elapsed_ms": 44,
             "peak_rss_mb": 35
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           }
         },
-        "wall_ms": 132
+        "wall_ms": 145
       },
       "refined": {
-        "peak_rss_bytes": 96366592,
+        "peak_rss_bytes": 98607104,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 54,
+            "elapsed_ms": 89,
             "peak_rss_mb": 73
           },
           "polint.calls": {
-            "elapsed_ms": 5,
+            "elapsed_ms": 7,
             "peak_rss_mb": 54
           },
           "polint.cfg": {
-            "elapsed_ms": 75,
+            "elapsed_ms": 90,
             "peak_rss_mb": 53
           },
           "polint.data_flow": {
-            "elapsed_ms": 22,
-            "peak_rss_mb": 89
+            "elapsed_ms": 26,
+            "peak_rss_mb": 90
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 3,
+            "elapsed_ms": 6,
             "peak_rss_mb": 73
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 74
+            "peak_rss_mb": 73
           },
           "polint.evidence": {
-            "elapsed_ms": 50,
-            "peak_rss_mb": 89
+            "elapsed_ms": 64,
+            "peak_rss_mb": 90
           },
           "polint.extensions": {
             "elapsed_ms": 0,
@@ -8501,27 +8501,27 @@
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 36
+            "peak_rss_mb": 38
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.identity": {
-            "elapsed_ms": 1,
+            "elapsed_ms": 2,
             "peak_rss_mb": 54
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 89
+            "peak_rss_mb": 90
           },
           "polint.module_graph": {
-            "elapsed_ms": 18,
-            "peak_rss_mb": 33
+            "elapsed_ms": 17,
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 34
+            "peak_rss_mb": 35
           },
           "polint.reachability": {
             "elapsed_ms": 0,
@@ -8529,116 +8529,116 @@
           },
           "polint.refined_calls": {
             "elapsed_ms": 4,
-            "peak_rss_mb": 89
+            "peak_rss_mb": 90
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 31,
-            "peak_rss_mb": 89
+            "elapsed_ms": 39,
+            "peak_rss_mb": 90
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 29,
-            "peak_rss_mb": 36
+            "elapsed_ms": 38,
+            "peak_rss_mb": 37
           },
           "polint.solver": {
-            "elapsed_ms": 7,
-            "peak_rss_mb": 89
+            "elapsed_ms": 8,
+            "peak_rss_mb": 90
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 38,
-            "peak_rss_mb": 34
+            "elapsed_ms": 46,
+            "peak_rss_mb": 35
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
             "peak_rss_mb": 54
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 56,
-            "peak_rss_mb": 89
+            "elapsed_ms": 72,
+            "peak_rss_mb": 90
           }
         },
-        "wall_ms": 444
+        "wall_ms": 571
       }
     },
     "immer": {
       "base": {
-        "peak_rss_bytes": 59768832,
+        "peak_rss_bytes": 59609088,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 8,
-            "peak_rss_mb": 55
+            "elapsed_ms": 12,
+            "peak_rss_mb": 54
           },
           "polint.cfg": {
-            "elapsed_ms": 28,
-            "peak_rss_mb": 55
+            "elapsed_ms": 42,
+            "peak_rss_mb": 54
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 55
+            "peak_rss_mb": 54
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 55
+            "peak_rss_mb": 54
           },
           "polint.module_graph": {
-            "elapsed_ms": 12,
-            "peak_rss_mb": 33
+            "elapsed_ms": 11,
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 55
+            "peak_rss_mb": 54
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 38,
-            "peak_rss_mb": 55
+            "elapsed_ms": 49,
+            "peak_rss_mb": 54
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 112,
-            "peak_rss_mb": 55
+            "elapsed_ms": 139,
+            "peak_rss_mb": 54
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           }
         },
-        "wall_ms": 227
+        "wall_ms": 293
       },
       "refined": {
-        "peak_rss_bytes": 140021760,
+        "peak_rss_bytes": 141127680,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 64,
+            "elapsed_ms": 66,
             "peak_rss_mb": 90
           },
           "polint.calls": {
-            "elapsed_ms": 9,
+            "elapsed_ms": 10,
             "peak_rss_mb": 72
           },
           "polint.cfg": {
-            "elapsed_ms": 96,
+            "elapsed_ms": 128,
             "peak_rss_mb": 71
           },
           "polint.data_flow": {
-            "elapsed_ms": 37,
+            "elapsed_ms": 47,
             "peak_rss_mb": 122
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 7,
+            "elapsed_ms": 8,
             "peak_rss_mb": 90
           },
           "polint.entrypoints": {
@@ -8646,8 +8646,8 @@
             "peak_rss_mb": 90
           },
           "polint.evidence": {
-            "elapsed_ms": 108,
-            "peak_rss_mb": 122
+            "elapsed_ms": 144,
+            "peak_rss_mb": 123
           },
           "polint.extensions": {
             "elapsed_ms": 0,
@@ -8655,144 +8655,144 @@
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 53
+            "peak_rss_mb": 54
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.identity": {
-            "elapsed_ms": 3,
+            "elapsed_ms": 4,
             "peak_rss_mb": 73
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 122
+            "peak_rss_mb": 123
           },
           "polint.module_graph": {
             "elapsed_ms": 18,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 53
+            "peak_rss_mb": 54
           },
           "polint.reachability": {
             "elapsed_ms": 0,
             "peak_rss_mb": 90
           },
           "polint.refined_calls": {
-            "elapsed_ms": 8,
+            "elapsed_ms": 9,
             "peak_rss_mb": 122
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 34,
+            "elapsed_ms": 45,
             "peak_rss_mb": 122
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 41,
-            "peak_rss_mb": 53
+            "elapsed_ms": 48,
+            "peak_rss_mb": 54
           },
           "polint.solver": {
-            "elapsed_ms": 8,
+            "elapsed_ms": 15,
             "peak_rss_mb": 122
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 123,
-            "peak_rss_mb": 53
+            "elapsed_ms": 137,
+            "peak_rss_mb": 54
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 73
+            "peak_rss_mb": 72
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 72,
+            "elapsed_ms": 87,
             "peak_rss_mb": 122
           }
         },
-        "wall_ms": 703
+        "wall_ms": 870
       }
     },
     "js-yaml": {
       "base": {
-        "peak_rss_bytes": 69050368,
+        "peak_rss_bytes": 68419584,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 9,
+            "elapsed_ms": 14,
             "peak_rss_mb": 63
           },
           "polint.cfg": {
-            "elapsed_ms": 45,
-            "peak_rss_mb": 63
+            "elapsed_ms": 59,
+            "peak_rss_mb": 62
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 53
+            "peak_rss_mb": 52
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.metrics": {
             "elapsed_ms": 0,
             "peak_rss_mb": 63
           },
           "polint.module_graph": {
-            "elapsed_ms": 17,
-            "peak_rss_mb": 33
+            "elapsed_ms": 15,
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 53
+            "peak_rss_mb": 52
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 70,
-            "peak_rss_mb": 53
+            "elapsed_ms": 88,
+            "peak_rss_mb": 52
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 114,
-            "peak_rss_mb": 53
+            "elapsed_ms": 139,
+            "peak_rss_mb": 52
           },
           "polint.ts.syntax": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           }
         },
-        "wall_ms": 288
+        "wall_ms": 356
       },
       "refined": {
-        "peak_rss_bytes": 174379008,
+        "peak_rss_bytes": 173867008,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 186,
-            "peak_rss_mb": 127
+            "elapsed_ms": 254,
+            "peak_rss_mb": 126
           },
           "polint.calls": {
-            "elapsed_ms": 10,
+            "elapsed_ms": 13,
             "peak_rss_mb": 70
           },
           "polint.cfg": {
-            "elapsed_ms": 96,
+            "elapsed_ms": 120,
             "peak_rss_mb": 70
           },
           "polint.data_flow": {
-            "elapsed_ms": 54,
-            "peak_rss_mb": 166
+            "elapsed_ms": 65,
+            "peak_rss_mb": 165
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 7,
+            "elapsed_ms": 10,
             "peak_rss_mb": 127
           },
           "polint.entrypoints": {
@@ -8800,8 +8800,8 @@
             "peak_rss_mb": 127
           },
           "polint.evidence": {
-            "elapsed_ms": 127,
-            "peak_rss_mb": 166
+            "elapsed_ms": 169,
+            "peak_rss_mb": 165
           },
           "polint.extensions": {
             "elapsed_ms": 0,
@@ -8813,7 +8813,7 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.identity": {
             "elapsed_ms": 2,
@@ -8821,11 +8821,11 @@
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 166
+            "peak_rss_mb": 165
           },
           "polint.module_graph": {
-            "elapsed_ms": 15,
-            "peak_rss_mb": 33
+            "elapsed_ms": 18,
+            "peak_rss_mb": 25
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
@@ -8836,55 +8836,55 @@
             "peak_rss_mb": 127
           },
           "polint.refined_calls": {
-            "elapsed_ms": 6,
-            "peak_rss_mb": 166
+            "elapsed_ms": 10,
+            "peak_rss_mb": 165
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 58,
-            "peak_rss_mb": 166
+            "elapsed_ms": 68,
+            "peak_rss_mb": 165
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 69,
+            "elapsed_ms": 88,
             "peak_rss_mb": 53
           },
           "polint.solver": {
-            "elapsed_ms": 27,
-            "peak_rss_mb": 166
+            "elapsed_ms": 45,
+            "peak_rss_mb": 165
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 110,
+            "elapsed_ms": 144,
             "peak_rss_mb": 53
           },
           "polint.ts.syntax": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 71
+            "peak_rss_mb": 70
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 126,
-            "peak_rss_mb": 166
+            "elapsed_ms": 175,
+            "peak_rss_mb": 165
           }
         },
-        "wall_ms": 969
+        "wall_ms": 1291
       }
     },
     "nanostores": {
       "base": {
-        "peak_rss_bytes": 39903232,
+        "peak_rss_bytes": 39763968,
         "stages": {
           "polint.calls": {
             "elapsed_ms": 2,
             "peak_rss_mb": 36
           },
           "polint.cfg": {
-            "elapsed_ms": 11,
+            "elapsed_ms": 16,
             "peak_rss_mb": 36
           },
           "polint.go.semantic": {
@@ -8893,73 +8893,73 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 37
+            "peak_rss_mb": 36
           },
           "polint.module_graph": {
-            "elapsed_ms": 13,
-            "peak_rss_mb": 33
+            "elapsed_ms": 14,
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 32
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 11,
+            "elapsed_ms": 15,
             "peak_rss_mb": 33
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 23,
-            "peak_rss_mb": 33
+            "elapsed_ms": 28,
+            "peak_rss_mb": 32
           },
           "polint.ts.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 78
+        "wall_ms": 96
       },
       "refined": {
-        "peak_rss_bytes": 62586880,
+        "peak_rss_bytes": 62824448,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 13,
-            "peak_rss_mb": 45
+            "elapsed_ms": 19,
+            "peak_rss_mb": 46
           },
           "polint.calls": {
-            "elapsed_ms": 2,
-            "peak_rss_mb": 39
+            "elapsed_ms": 3,
+            "peak_rss_mb": 40
           },
           "polint.cfg": {
-            "elapsed_ms": 33,
-            "peak_rss_mb": 39
+            "elapsed_ms": 46,
+            "peak_rss_mb": 40
           },
           "polint.data_flow": {
-            "elapsed_ms": 11,
-            "peak_rss_mb": 54
+            "elapsed_ms": 13,
+            "peak_rss_mb": 55
           },
           "polint.direct_summaries": {
             "elapsed_ms": 3,
-            "peak_rss_mb": 45
+            "peak_rss_mb": 46
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 47
           },
           "polint.evidence": {
-            "elapsed_ms": 21,
-            "peak_rss_mb": 56
+            "elapsed_ms": 26,
+            "peak_rss_mb": 57
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 47
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
@@ -8967,19 +8967,19 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
-            "elapsed_ms": 0,
-            "peak_rss_mb": 40
+            "elapsed_ms": 1,
+            "peak_rss_mb": 41
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 56
+            "peak_rss_mb": 57
           },
           "polint.module_graph": {
-            "elapsed_ms": 14,
-            "peak_rss_mb": 33
+            "elapsed_ms": 12,
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
@@ -8987,18 +8987,18 @@
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 46
+            "peak_rss_mb": 47
           },
           "polint.refined_calls": {
-            "elapsed_ms": 1,
+            "elapsed_ms": 2,
             "peak_rss_mb": 53
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 16,
+            "elapsed_ms": 21,
             "peak_rss_mb": 53
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 11,
+            "elapsed_ms": 13,
             "peak_rss_mb": 33
           },
           "polint.solver": {
@@ -9007,347 +9007,347 @@
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 25,
+            "elapsed_ms": 28,
             "peak_rss_mb": 33
           },
           "polint.ts.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
             "peak_rss_mb": 40
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 20,
+            "elapsed_ms": 24,
             "peak_rss_mb": 53
           }
         },
-        "wall_ms": 206
+        "wall_ms": 254
       }
     },
     "node-forge": {
       "base": {
-        "peak_rss_bytes": 270884864,
+        "peak_rss_bytes": 268320768,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 95,
-            "peak_rss_mb": 253
+            "elapsed_ms": 124,
+            "peak_rss_mb": 252
           },
           "polint.cfg": {
-            "elapsed_ms": 214,
-            "peak_rss_mb": 252
+            "elapsed_ms": 271,
+            "peak_rss_mb": 251
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 193
+            "peak_rss_mb": 192
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 253
+            "peak_rss_mb": 252
           },
           "polint.module_graph": {
-            "elapsed_ms": 25,
-            "peak_rss_mb": 33
+            "elapsed_ms": 18,
+            "peak_rss_mb": 31
           },
           "polint.module_topology": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 193
+            "peak_rss_mb": 192
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 568,
-            "peak_rss_mb": 193
+            "elapsed_ms": 803,
+            "peak_rss_mb": 192
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 782,
-            "peak_rss_mb": 193
+            "elapsed_ms": 996,
+            "peak_rss_mb": 192
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 6,
-            "peak_rss_mb": 33
+            "elapsed_ms": 7,
+            "peak_rss_mb": 29
           }
         },
-        "wall_ms": 1827
+        "wall_ms": 2440
       },
       "refined": {
-        "peak_rss_bytes": 722305024,
+        "peak_rss_bytes": 730259456,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 220,
-            "peak_rss_mb": 316
+            "elapsed_ms": 279,
+            "peak_rss_mb": 318
           },
           "polint.calls": {
-            "elapsed_ms": 102,
-            "peak_rss_mb": 267
+            "elapsed_ms": 125,
+            "peak_rss_mb": 270
           },
           "polint.cfg": {
-            "elapsed_ms": 349,
-            "peak_rss_mb": 267
+            "elapsed_ms": 475,
+            "peak_rss_mb": 269
           },
           "polint.data_flow": {
-            "elapsed_ms": 385,
+            "elapsed_ms": 477,
             "peak_rss_mb": 553
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 50,
-            "peak_rss_mb": 316
+            "elapsed_ms": 67,
+            "peak_rss_mb": 318
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 317
+            "peak_rss_mb": 318
           },
           "polint.evidence": {
-            "elapsed_ms": 1084,
+            "elapsed_ms": 1481,
             "peak_rss_mb": 637
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 317
+            "peak_rss_mb": 319
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 193
+            "peak_rss_mb": 192
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.identity": {
-            "elapsed_ms": 27,
-            "peak_rss_mb": 268
+            "elapsed_ms": 32,
+            "peak_rss_mb": 270
           },
           "polint.metrics": {
             "elapsed_ms": 0,
             "peak_rss_mb": 637
           },
           "polint.module_graph": {
-            "elapsed_ms": 22,
-            "peak_rss_mb": 33
+            "elapsed_ms": 20,
+            "peak_rss_mb": 31
           },
           "polint.module_topology": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 193
+            "peak_rss_mb": 192
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 317
+            "peak_rss_mb": 319
           },
           "polint.refined_calls": {
-            "elapsed_ms": 54,
+            "elapsed_ms": 84,
             "peak_rss_mb": 553
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 592,
+            "elapsed_ms": 808,
             "peak_rss_mb": 553
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 598,
-            "peak_rss_mb": 193
+            "elapsed_ms": 803,
+            "peak_rss_mb": 192
           },
           "polint.solver": {
-            "elapsed_ms": 93,
+            "elapsed_ms": 213,
             "peak_rss_mb": 553
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 781,
-            "peak_rss_mb": 193
+            "elapsed_ms": 1011,
+            "peak_rss_mb": 192
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 5,
-            "peak_rss_mb": 33
+            "elapsed_ms": 6,
+            "peak_rss_mb": 28
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 268
+            "peak_rss_mb": 270
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 1168,
+            "elapsed_ms": 1600,
             "peak_rss_mb": 553
           }
         },
-        "wall_ms": 5979
+        "wall_ms": 8148
       }
     },
     "pako": {
       "base": {
-        "peak_rss_bytes": 71667712,
+        "peak_rss_bytes": 72732672,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 11,
-            "peak_rss_mb": 67
+            "elapsed_ms": 14,
+            "peak_rss_mb": 68
           },
           "polint.cfg": {
-            "elapsed_ms": 63,
-            "peak_rss_mb": 67
+            "elapsed_ms": 64,
+            "peak_rss_mb": 68
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 60
+            "peak_rss_mb": 58
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 67
+            "peak_rss_mb": 68
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 60
+            "peak_rss_mb": 58
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 197,
-            "peak_rss_mb": 60
+            "elapsed_ms": 211,
+            "peak_rss_mb": 58
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 476,
-            "peak_rss_mb": 60
+            "elapsed_ms": 578,
+            "peak_rss_mb": 58
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 4,
-            "peak_rss_mb": 33
+            "elapsed_ms": 5,
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 777
+        "wall_ms": 911
       },
       "refined": {
-        "peak_rss_bytes": 242114560,
+        "peak_rss_bytes": 242409472,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 308,
-            "peak_rss_mb": 150
+            "elapsed_ms": 363,
+            "peak_rss_mb": 149
           },
           "polint.calls": {
-            "elapsed_ms": 10,
-            "peak_rss_mb": 75
+            "elapsed_ms": 13,
+            "peak_rss_mb": 74
           },
           "polint.cfg": {
-            "elapsed_ms": 98,
-            "peak_rss_mb": 75
+            "elapsed_ms": 139,
+            "peak_rss_mb": 74
           },
           "polint.data_flow": {
-            "elapsed_ms": 51,
-            "peak_rss_mb": 230
+            "elapsed_ms": 58,
+            "peak_rss_mb": 231
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 5,
-            "peak_rss_mb": 150
+            "elapsed_ms": 6,
+            "peak_rss_mb": 149
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
             "peak_rss_mb": 150
           },
           "polint.evidence": {
-            "elapsed_ms": 136,
-            "peak_rss_mb": 230
+            "elapsed_ms": 179,
+            "peak_rss_mb": 231
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 151
+            "peak_rss_mb": 150
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 61
+            "peak_rss_mb": 60
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 76
+            "peak_rss_mb": 75
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 230
+            "peak_rss_mb": 231
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 61
+            "peak_rss_mb": 60
           },
           "polint.reachability": {
             "elapsed_ms": 0,
             "peak_rss_mb": 150
           },
           "polint.refined_calls": {
-            "elapsed_ms": 5,
-            "peak_rss_mb": 230
+            "elapsed_ms": 7,
+            "peak_rss_mb": 231
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 2843,
-            "peak_rss_mb": 230
+            "elapsed_ms": 3121,
+            "peak_rss_mb": 231
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 181,
-            "peak_rss_mb": 61
+            "elapsed_ms": 210,
+            "peak_rss_mb": 60
           },
           "polint.solver": {
-            "elapsed_ms": 13,
-            "peak_rss_mb": 230
+            "elapsed_ms": 21,
+            "peak_rss_mb": 231
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 492,
-            "peak_rss_mb": 61
+            "elapsed_ms": 541,
+            "peak_rss_mb": 60
           },
           "polint.ts.syntax": {
             "elapsed_ms": 5,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
             "peak_rss_mb": 75
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 310,
-            "peak_rss_mb": 230
+            "elapsed_ms": 416,
+            "peak_rss_mb": 231
           }
         },
-        "wall_ms": 4535
+        "wall_ms": 5186
       }
     },
     "underscore": {
       "base": {
-        "peak_rss_bytes": 53837824,
+        "peak_rss_bytes": 54468608,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 7,
+            "elapsed_ms": 11,
             "peak_rss_mb": 49
           },
           "polint.cfg": {
-            "elapsed_ms": 29,
-            "peak_rss_mb": 48
+            "elapsed_ms": 46,
+            "peak_rss_mb": 49
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
@@ -9355,7 +9355,7 @@
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
@@ -9363,440 +9363,440 @@
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
             "peak_rss_mb": 43
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 57,
+            "elapsed_ms": 72,
             "peak_rss_mb": 43
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 79,
+            "elapsed_ms": 95,
             "peak_rss_mb": 43
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           }
         },
-        "wall_ms": 197
+        "wall_ms": 259
       },
       "refined": {
-        "peak_rss_bytes": 128425984,
+        "peak_rss_bytes": 129679360,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 70,
-            "peak_rss_mb": 98
+            "elapsed_ms": 86,
+            "peak_rss_mb": 99
           },
           "polint.calls": {
-            "elapsed_ms": 7,
-            "peak_rss_mb": 74
+            "elapsed_ms": 10,
+            "peak_rss_mb": 76
           },
           "polint.cfg": {
-            "elapsed_ms": 104,
-            "peak_rss_mb": 73
+            "elapsed_ms": 165,
+            "peak_rss_mb": 75
           },
           "polint.data_flow": {
-            "elapsed_ms": 27,
-            "peak_rss_mb": 118
+            "elapsed_ms": 37,
+            "peak_rss_mb": 120
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 7,
-            "peak_rss_mb": 98
+            "elapsed_ms": 8,
+            "peak_rss_mb": 99
           },
           "polint.entrypoints": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 98
+            "peak_rss_mb": 100
           },
           "polint.evidence": {
-            "elapsed_ms": 89,
-            "peak_rss_mb": 118
+            "elapsed_ms": 117,
+            "peak_rss_mb": 120
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 98
+            "peak_rss_mb": 100
           },
           "polint.go.semantic": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 44
+            "peak_rss_mb": 43
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
             "elapsed_ms": 2,
-            "peak_rss_mb": 74
+            "peak_rss_mb": 76
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 118
+            "peak_rss_mb": 120
           },
           "polint.module_graph": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.module_topology": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 44
+            "peak_rss_mb": 43
           },
           "polint.reachability": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 98
+            "peak_rss_mb": 100
           },
           "polint.refined_calls": {
-            "elapsed_ms": 4,
-            "peak_rss_mb": 118
+            "elapsed_ms": 6,
+            "peak_rss_mb": 120
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 38,
-            "peak_rss_mb": 118
+            "elapsed_ms": 49,
+            "peak_rss_mb": 120
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 58,
-            "peak_rss_mb": 44
+            "elapsed_ms": 78,
+            "peak_rss_mb": 43
           },
           "polint.solver": {
-            "elapsed_ms": 5,
-            "peak_rss_mb": 118
+            "elapsed_ms": 12,
+            "peak_rss_mb": 120
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 75,
-            "peak_rss_mb": 44
+            "elapsed_ms": 95,
+            "peak_rss_mb": 43
           },
           "polint.ts.syntax": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.ts.types": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 74
+            "peak_rss_mb": 76
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 66,
-            "peak_rss_mb": 118
+            "elapsed_ms": 79,
+            "peak_rss_mb": 120
           }
         },
-        "wall_ms": 613
+        "wall_ms": 828
       }
     },
     "zod": {
       "base": {
-        "peak_rss_bytes": 534413312,
+        "peak_rss_bytes": 534073344,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 174,
+            "elapsed_ms": 218,
             "peak_rss_mb": 509
           },
           "polint.cfg": {
-            "elapsed_ms": 198,
+            "elapsed_ms": 255,
             "peak_rss_mb": 509
           },
           "polint.go.semantic": {
-            "elapsed_ms": 0,
+            "elapsed_ms": 2,
             "peak_rss_mb": 509
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.metrics": {
             "elapsed_ms": 0,
             "peak_rss_mb": 509
           },
           "polint.module_graph": {
-            "elapsed_ms": 36,
+            "elapsed_ms": 40,
             "peak_rss_mb": 40
           },
           "polint.module_topology": {
-            "elapsed_ms": 3,
+            "elapsed_ms": 6,
             "peak_rss_mb": 509
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 1100,
+            "elapsed_ms": 1474,
             "peak_rss_mb": 509
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 1982,
+            "elapsed_ms": 2452,
             "peak_rss_mb": 509
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 19,
+            "elapsed_ms": 24,
             "peak_rss_mb": 36
           }
         },
-        "wall_ms": 3762
+        "wall_ms": 4838
       },
       "refined": {
-        "peak_rss_bytes": 1022701568,
+        "peak_rss_bytes": 1056415744,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 254,
-            "peak_rss_mb": 511
+            "elapsed_ms": 363,
+            "peak_rss_mb": 510
           },
           "polint.calls": {
-            "elapsed_ms": 177,
-            "peak_rss_mb": 511
+            "elapsed_ms": 224,
+            "peak_rss_mb": 510
           },
           "polint.cfg": {
-            "elapsed_ms": 480,
-            "peak_rss_mb": 511
+            "elapsed_ms": 688,
+            "peak_rss_mb": 510
           },
           "polint.data_flow": {
-            "elapsed_ms": 508,
-            "peak_rss_mb": 795
+            "elapsed_ms": 780,
+            "peak_rss_mb": 813
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 105,
-            "peak_rss_mb": 511
+            "elapsed_ms": 173,
+            "peak_rss_mb": 510
           },
           "polint.entrypoints": {
-            "elapsed_ms": 0,
-            "peak_rss_mb": 511
+            "elapsed_ms": 1,
+            "peak_rss_mb": 510
           },
           "polint.evidence": {
-            "elapsed_ms": 1137,
-            "peak_rss_mb": 884
+            "elapsed_ms": 1692,
+            "peak_rss_mb": 907
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 511
+            "peak_rss_mb": 510
           },
           "polint.go.semantic": {
-            "elapsed_ms": 0,
-            "peak_rss_mb": 511
+            "elapsed_ms": 2,
+            "peak_rss_mb": 510
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.identity": {
-            "elapsed_ms": 34,
-            "peak_rss_mb": 511
+            "elapsed_ms": 54,
+            "peak_rss_mb": 510
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 884
+            "peak_rss_mb": 907
           },
           "polint.module_graph": {
-            "elapsed_ms": 31,
+            "elapsed_ms": 35,
             "peak_rss_mb": 42
           },
           "polint.module_topology": {
             "elapsed_ms": 3,
-            "peak_rss_mb": 511
+            "peak_rss_mb": 510
           },
           "polint.reachability": {
-            "elapsed_ms": 4,
-            "peak_rss_mb": 511
+            "elapsed_ms": 5,
+            "peak_rss_mb": 510
           },
           "polint.refined_calls": {
-            "elapsed_ms": 72,
+            "elapsed_ms": 136,
             "peak_rss_mb": 784
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 3244,
+            "elapsed_ms": 3907,
             "peak_rss_mb": 784
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 1111,
-            "peak_rss_mb": 511
+            "elapsed_ms": 1555,
+            "peak_rss_mb": 510
           },
           "polint.solver": {
-            "elapsed_ms": 176,
+            "elapsed_ms": 411,
             "peak_rss_mb": 784
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 23
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 1975,
-            "peak_rss_mb": 511
+            "elapsed_ms": 2498,
+            "peak_rss_mb": 510
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 21,
+            "elapsed_ms": 23,
             "peak_rss_mb": 38
           },
           "polint.ts.types": {
-            "elapsed_ms": 0,
-            "peak_rss_mb": 511
+            "elapsed_ms": 1,
+            "peak_rss_mb": 510
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 1373,
+            "elapsed_ms": 1883,
             "peak_rss_mb": 784
           }
         },
-        "wall_ms": 11383
+        "wall_ms": 15458
       }
     },
     "zod, globs alone": {
       "base": {
-        "peak_rss_bytes": 1368133632,
+        "peak_rss_bytes": 1372438528,
         "stages": {
           "polint.calls": {
-            "elapsed_ms": 1426,
-            "peak_rss_mb": 1021
+            "elapsed_ms": 1803,
+            "peak_rss_mb": 1025
           },
           "polint.cfg": {
-            "elapsed_ms": 884,
-            "peak_rss_mb": 1018
+            "elapsed_ms": 1189,
+            "peak_rss_mb": 1023
           },
           "polint.go.semantic": {
-            "elapsed_ms": 7,
-            "peak_rss_mb": 880
+            "elapsed_ms": 11,
+            "peak_rss_mb": 877
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 1021
+            "peak_rss_mb": 1025
           },
           "polint.module_graph": {
             "elapsed_ms": 73,
-            "peak_rss_mb": 58
+            "peak_rss_mb": 57
           },
           "polint.module_topology": {
-            "elapsed_ms": 20,
-            "peak_rss_mb": 880
+            "elapsed_ms": 17,
+            "peak_rss_mb": 877
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 3706,
-            "peak_rss_mb": 880
+            "elapsed_ms": 4944,
+            "peak_rss_mb": 877
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 3975,
-            "peak_rss_mb": 880
+            "elapsed_ms": 5022,
+            "peak_rss_mb": 877
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 43,
+            "elapsed_ms": 49,
             "peak_rss_mb": 53
           }
         },
-        "wall_ms": 11446
+        "wall_ms": 14917
       },
       "refined": {
-        "peak_rss_bytes": 4064264192,
+        "peak_rss_bytes": 4139888640,
         "stages": {
           "polint.abstract_domains": {
-            "elapsed_ms": 892,
-            "peak_rss_mb": 1304
+            "elapsed_ms": 1369,
+            "peak_rss_mb": 1317
           },
           "polint.calls": {
-            "elapsed_ms": 1415,
-            "peak_rss_mb": 1095
+            "elapsed_ms": 1871,
+            "peak_rss_mb": 1111
           },
           "polint.cfg": {
-            "elapsed_ms": 1456,
-            "peak_rss_mb": 1050
+            "elapsed_ms": 2131,
+            "peak_rss_mb": 1058
           },
           "polint.data_flow": {
-            "elapsed_ms": 4983,
-            "peak_rss_mb": 2795
+            "elapsed_ms": 4331,
+            "peak_rss_mb": 2843
           },
           "polint.direct_summaries": {
-            "elapsed_ms": 985,
-            "peak_rss_mb": 1404
+            "elapsed_ms": 1541,
+            "peak_rss_mb": 1414
           },
           "polint.entrypoints": {
-            "elapsed_ms": 373,
-            "peak_rss_mb": 1404
+            "elapsed_ms": 424,
+            "peak_rss_mb": 1414
           },
           "polint.evidence": {
-            "elapsed_ms": 7561,
-            "peak_rss_mb": 3086
+            "elapsed_ms": 7432,
+            "peak_rss_mb": 3123
           },
           "polint.extensions": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 1404
+            "peak_rss_mb": 1414
           },
           "polint.go.semantic": {
-            "elapsed_ms": 9,
-            "peak_rss_mb": 879
+            "elapsed_ms": 12,
+            "peak_rss_mb": 877
           },
           "polint.go.syntax": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.identity": {
-            "elapsed_ms": 306,
-            "peak_rss_mb": 1096
+            "elapsed_ms": 439,
+            "peak_rss_mb": 1113
           },
           "polint.metrics": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 3086
+            "peak_rss_mb": 3123
           },
           "polint.module_graph": {
-            "elapsed_ms": 69,
-            "peak_rss_mb": 58
+            "elapsed_ms": 72,
+            "peak_rss_mb": 56
           },
           "polint.module_topology": {
-            "elapsed_ms": 11,
-            "peak_rss_mb": 879
+            "elapsed_ms": 13,
+            "peak_rss_mb": 877
           },
           "polint.reachability": {
-            "elapsed_ms": 36,
-            "peak_rss_mb": 1404
+            "elapsed_ms": 45,
+            "peak_rss_mb": 1414
           },
           "polint.refined_calls": {
-            "elapsed_ms": 1536,
-            "peak_rss_mb": 2376
+            "elapsed_ms": 855,
+            "peak_rss_mb": 2410
           },
           "polint.semantic_graph": {
-            "elapsed_ms": 7121,
-            "peak_rss_mb": 2376
+            "elapsed_ms": 9119,
+            "peak_rss_mb": 2410
           },
           "polint.semantic_mir": {
-            "elapsed_ms": 3693,
-            "peak_rss_mb": 879
+            "elapsed_ms": 4979,
+            "peak_rss_mb": 877
           },
           "polint.solver": {
-            "elapsed_ms": 1007,
-            "peak_rss_mb": 2376
+            "elapsed_ms": 3565,
+            "peak_rss_mb": 2410
           },
           "polint.source": {
             "elapsed_ms": 0,
-            "peak_rss_mb": 33
+            "peak_rss_mb": 24
           },
           "polint.symbol_graph": {
-            "elapsed_ms": 3926,
-            "peak_rss_mb": 879
+            "elapsed_ms": 4928,
+            "peak_rss_mb": 877
           },
           "polint.ts.syntax": {
-            "elapsed_ms": 42,
-            "peak_rss_mb": 53
+            "elapsed_ms": 47,
+            "peak_rss_mb": 52
           },
           "polint.ts.types": {
             "elapsed_ms": 1,
-            "peak_rss_mb": 1095
+            "peak_rss_mb": 1112
           },
           "polint.type_value_alias": {
-            "elapsed_ms": 5897,
-            "peak_rss_mb": 2376
+            "elapsed_ms": 8596,
+            "peak_rss_mb": 2410
           }
         },
-        "wall_ms": 45847
+        "wall_ms": 56312
       }
     }
   },
@@ -9982,13 +9982,13 @@
     "refined": {
       "class_method_through_inheritance": 2,
       "left_out": [],
-      "missed_edges": 1710,
+      "missed_edges": 1677,
       "observed_edges": 3389,
       "other_by_syntax_and_callee": {
         "expression call to arrow": 14,
         "expression call to declaration": 134,
         "expression call to expression": 10,
-        "identifier call to arrow": 248,
+        "identifier call to arrow": 245,
         "identifier call to declaration": 38,
         "identifier call to expression": 99,
         "identifier call to method": 1,
@@ -10006,10 +10006,10 @@
       "rows": [
         {
           "applying": 0,
-          "attributed": 729,
+          "attributed": 703,
           "by_package": {
             "async": 52,
-            "axios": 251,
+            "axios": 225,
             "chalk": 18,
             "commander": 9,
             "dayjs": 73,
@@ -10019,14 +10019,14 @@
           "fixable_gap": false,
           "gap": "other_member",
           "label": "other member calls (object-literal functions, namespaces)",
-          "recall_gain_upper_bound": 0.2151
+          "recall_gain_upper_bound": 0.2074
         },
         {
           "applying": 0,
-          "attributed": 548,
+          "attributed": 545,
           "by_package": {
             "async": 236,
-            "axios": 68,
+            "axios": 65,
             "commander": 13,
             "dayjs": 3,
             "underscore": 78,
@@ -10035,14 +10035,14 @@
           "fixable_gap": false,
           "gap": "other",
           "label": "other resolution misses",
-          "recall_gain_upper_bound": 0.1617
+          "recall_gain_upper_bound": 0.1608
         },
         {
-          "applying": 184,
-          "attributed": 182,
+          "applying": 180,
+          "attributed": 178,
           "by_package": {
             "async": 4,
-            "axios": 36,
+            "axios": 32,
             "commander": 121,
             "underscore": 1,
             "zod": 20
@@ -10050,7 +10050,7 @@
           "fixable_gap": true,
           "gap": "class_method",
           "label": "prototype and class methods, incl. inheritance",
-          "recall_gain_upper_bound": 0.0537
+          "recall_gain_upper_bound": 0.0525
         },
         {
           "applying": 162,
@@ -10437,7 +10437,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 1587,
+            "rows": 1593,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -10472,14 +10472,6 @@
             "rows": 48,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 6,
-            "status": "Unresolved",
-            "tier": "none"
           },
           {
             "algorithm": "SummaryAssisted",
@@ -11281,7 +11273,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 363,
+            "rows": 388,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -11292,14 +11284,6 @@
             "rows": 25,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 25,
-            "status": "Unresolved",
-            "tier": "none"
           },
           {
             "algorithm": "DirectReference",
@@ -11733,7 +11717,7 @@
             "algorithm": "PointsTo",
             "has_function": true,
             "precision": "SetupAware",
-            "rows": 172,
+            "rows": 167,
             "status": "Resolved",
             "tier": "exact"
           },
@@ -11760,6 +11744,14 @@
             "rows": 6,
             "status": "Resolved",
             "tier": "exact"
+          },
+          {
+            "algorithm": "PointsTo",
+            "has_function": true,
+            "precision": "Heuristic",
+            "rows": 5,
+            "status": "Resolved",
+            "tier": "apart"
           },
           {
             "algorithm": "ConstructorBinding",
@@ -11792,7 +11784,7 @@
           "status": "WithinBudget"
         },
         "tiers": {
-          "apart_edges": 2,
+          "apart_edges": 7,
           "found": {
             "apart_only": 0,
             "exact": 225,
@@ -11801,13 +11793,13 @@
           },
           "precision": {
             "apart": {
-              "claimed": 0,
+              "claimed": 3,
               "examples": [],
               "multi_target": 0,
-              "observed": 0,
-              "precision": null,
+              "observed": 3,
+              "precision": 1.0,
               "single_target": 0,
-              "sites": 0
+              "sites": 3
             },
             "conservative": {
               "claimed": 0,
@@ -11819,57 +11811,11 @@
               "sites": 0
             },
             "exact": {
-              "claimed": 231,
-              "examples": [
-                {
-                  "answer": "multi_target",
-                  "observed_callees": [
-                    "src/utils/common.ts:102 each"
-                  ],
-                  "site": "src/core/current.ts:40",
-                  "site_text": "each( source, (key, childValue) => { set(copy, key, currentImpl(childValue)) }, strict )",
-                  "target": "src/utils/common.ts:97 each"
-                },
-                {
-                  "answer": "multi_target",
-                  "observed_callees": [
-                    "src/utils/common.ts:267 freeze"
-                  ],
-                  "site": "src/core/finalize.ts:103",
-                  "site_text": "freeze(value, deep)",
-                  "target": "src/utils/common.ts:266 freeze"
-                },
-                {
-                  "answer": "multi_target",
-                  "observed_callees": [
-                    "src/utils/common.ts:102 each"
-                  ],
-                  "site": "src/core/finalize.ts:147",
-                  "site_text": "each(parentCopy, (key, value) => { if (isDraft(value)) { const keys = draftLocations.get(\u2026",
-                  "target": "src/utils/common.ts:97 each"
-                },
-                {
-                  "answer": "multi_target",
-                  "observed_callees": [
-                    "src/utils/common.ts:102 each"
-                  ],
-                  "site": "src/core/finalize.ts:299",
-                  "site_text": "each(target, (key, value) => { if (isDraft(value)) { const state: ImmerState = value[DRAF\u2026",
-                  "target": "src/utils/common.ts:97 each"
-                },
-                {
-                  "answer": "multi_target",
-                  "observed_callees": [
-                    "src/utils/common.ts:102 each"
-                  ],
-                  "site": "src/plugins/mapset.ts:107",
-                  "site_text": "each(state.base_, key => { state.assigned_!.set(key, false) })",
-                  "target": "src/utils/common.ts:97 each"
-                }
-              ],
-              "multi_target": 6,
+              "claimed": 225,
+              "examples": [],
+              "multi_target": 0,
               "observed": 225,
-              "precision": 0.974,
+              "precision": 1.0,
               "single_target": 0,
               "sites": 225
             }
@@ -11897,7 +11843,7 @@
               "max": 1,
               "mean": 1.0,
               "p95": 1,
-              "sites": 1
+              "sites": 6
             },
             "conservative": {
               "max": null,
@@ -11906,14 +11852,14 @@
               "sites": 0
             },
             "exact": {
-              "max": 2,
-              "mean": 1.03,
+              "max": 1,
+              "mean": 1.0,
               "p95": 1,
               "sites": 302
             },
             "exact_conservative": {
-              "max": 2,
-              "mean": 1.03,
+              "max": 1,
+              "mean": 1.0,
               "p95": 1,
               "sites": 302
             }
@@ -11927,54 +11873,8 @@
           "without_target_share": 0.473
         },
         "wrong_targets": {
-          "examples": [
-            {
-              "answer": "multi_target",
-              "observed_callees": [
-                "src/utils/common.ts:102 each"
-              ],
-              "site": "src/core/current.ts:40",
-              "site_text": "each( source, (key, childValue) => { set(copy, key, currentImpl(childValue)) }, strict )",
-              "target": "src/utils/common.ts:97 each"
-            },
-            {
-              "answer": "multi_target",
-              "observed_callees": [
-                "src/utils/common.ts:267 freeze"
-              ],
-              "site": "src/core/finalize.ts:103",
-              "site_text": "freeze(value, deep)",
-              "target": "src/utils/common.ts:266 freeze"
-            },
-            {
-              "answer": "multi_target",
-              "observed_callees": [
-                "src/utils/common.ts:102 each"
-              ],
-              "site": "src/core/finalize.ts:147",
-              "site_text": "each(parentCopy, (key, value) => { if (isDraft(value)) { const keys = draftLocations.get(\u2026",
-              "target": "src/utils/common.ts:97 each"
-            },
-            {
-              "answer": "multi_target",
-              "observed_callees": [
-                "src/utils/common.ts:102 each"
-              ],
-              "site": "src/core/finalize.ts:299",
-              "site_text": "each(target, (key, value) => { if (isDraft(value)) { const state: ImmerState = value[DRAF\u2026",
-              "target": "src/utils/common.ts:97 each"
-            },
-            {
-              "answer": "multi_target",
-              "observed_callees": [
-                "src/utils/common.ts:102 each"
-              ],
-              "site": "src/plugins/mapset.ts:107",
-              "site_text": "each(state.base_, key => { state.assigned_!.set(key, false) })",
-              "target": "src/utils/common.ts:97 each"
-            }
-          ],
-          "multi_target": 6,
+          "examples": [],
+          "multi_target": 0,
           "single_target": 0
         }
       },
@@ -12252,7 +12152,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 366,
+            "rows": 380,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -12287,14 +12187,6 @@
             "rows": 14,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 14,
-            "status": "Unresolved",
-            "tier": "none"
           },
           {
             "algorithm": "SummaryAssisted",
@@ -13080,9 +12972,9 @@
       "refined": {
         "by_kind": {
           "call": {
-            "found": 577,
+            "found": 666,
             "observed": 3128,
-            "recall": 0.1845
+            "recall": 0.2129
           },
           "callback": {
             "found": 0,
@@ -13102,31 +12994,32 @@
             "recall": 1.0
           },
           "identifier": {
-            "found": 566,
+            "found": 573,
             "observed": 670,
-            "recall": 0.8448
+            "recall": 0.8552
           },
           "member": {
-            "found": 0,
+            "found": 81,
             "observed": 2378,
-            "recall": 0.0
+            "recall": 0.0341
           },
           "new": {
-            "found": 5,
+            "found": 6,
             "observed": 59,
-            "recall": 0.0847
+            "recall": 0.1017
           }
         },
-        "found": 577,
+        "found": 666,
         "observed_edges": 3131,
         "observed_implicit_edges": 0,
         "outcome_examples": {},
         "outcomes": {
-          "found": 577,
-          "no target, marked unresolved": 2529,
-          "no target, no unresolved marker": 25
+          "found": 666,
+          "no target, marked unresolved": 2439,
+          "no target, no unresolved marker": 25,
+          "other targets, marked unresolved": 1
         },
-        "recall": 0.1843,
+        "recall": 0.2127,
         "references": {
           "by_status": {
             "Resolved": 21678,
@@ -13141,7 +13034,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 4388,
+            "rows": 4387,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -13160,6 +13053,14 @@
             "rows": 610,
             "status": "Resolved",
             "tier": "exact"
+          },
+          {
+            "algorithm": "PointsTo",
+            "has_function": true,
+            "precision": "Heuristic",
+            "rows": 156,
+            "status": "Resolved",
+            "tier": "apart"
           },
           {
             "algorithm": "ConstructorBinding",
@@ -13184,32 +13085,73 @@
             "rows": 9,
             "status": "Resolved",
             "tier": "apart"
+          },
+          {
+            "algorithm": "PointsTo",
+            "has_function": true,
+            "precision": "SetupAware",
+            "rows": 1,
+            "status": "Resolved",
+            "tier": "exact"
           }
         ],
-        "sites_gained": [],
+        "sites_gained": [
+          {
+            "executed": 0,
+            "file": "lib/prng.js",
+            "sites": 1,
+            "test_path": false
+          }
+        ],
         "solver_budget": {
-          "reasons": [
-            "points_to.max_dynamic_vars"
-          ],
-          "status": "BudgetExceeded"
+          "reasons": [],
+          "status": "WithinBudget"
         },
         "tiers": {
-          "apart_edges": 18,
+          "apart_edges": 174,
           "found": {
-            "apart_only": 7,
+            "apart_only": 96,
             "exact": 570,
             "exact_complete": 570,
             "exact_conservative": 570
           },
           "precision": {
             "apart": {
-              "claimed": 7,
-              "examples": [],
-              "multi_target": 0,
-              "observed": 7,
-              "precision": 1.0,
-              "single_target": 0,
-              "sites": 7
+              "claimed": 103,
+              "examples": [
+                {
+                  "answer": "multi_target",
+                  "observed_callees": [
+                    "lib/jsbn.js:81 am1"
+                  ],
+                  "site": "lib/jsbn.js:928",
+                  "site_text": "this.am(0,n-1,this,0,0,this.t)",
+                  "target": "lib/jsbn.js:92 am2"
+                },
+                {
+                  "answer": "multi_target",
+                  "observed_callees": [
+                    "lib/jsbn.js:81 am1"
+                  ],
+                  "site": "lib/jsbn.js:928",
+                  "site_text": "this.am(0,n-1,this,0,0,this.t)",
+                  "target": "lib/jsbn.js:106 am3"
+                },
+                {
+                  "answer": "single_target",
+                  "observed_callees": [
+                    "lib/prng.js:339 <polint:anonymous:9930:10007>"
+                  ],
+                  "site": "lib/prng.js:210",
+                  "site_text": "ctx.seedFileSync(needed)",
+                  "target": "lib/prng.js:267 defaultSeedFile"
+                }
+              ],
+              "multi_target": 2,
+              "observed": 100,
+              "precision": 0.9709,
+              "single_target": 1,
+              "sites": 101
             },
             "conservative": {
               "claimed": 0,
@@ -13231,29 +13173,29 @@
             }
           },
           "recall": {
-            "apart_only": 0.0022,
+            "apart_only": 0.0307,
             "exact": 0.1821,
             "exact_complete": 0.1821,
             "exact_conservative": 0.1821
           },
           "sites": {
             "call_sites": 5283,
-            "complete": 664,
-            "open": 4619,
+            "complete": 665,
+            "open": 4618,
             "open_by_reason": {
               "CallApplyBind": 15,
               "DynamicProperty": 3293,
-              "MissingSemanticReference": 1080,
+              "MissingSemanticReference": 1079,
               "none recorded": 231
             },
             "open_with_a_claimed_target": 0
           },
           "targets_per_site": {
             "apart": {
-              "max": 1,
-              "mean": 1.0,
+              "max": 3,
+              "mean": 1.01,
               "p95": 1,
-              "sites": 9
+              "sites": 163
             },
             "conservative": {
               "max": null,
@@ -13265,22 +13207,22 @@
               "max": 1,
               "mean": 1.0,
               "p95": 1,
-              "sites": 664
+              "sites": 665
             },
             "exact_conservative": {
               "max": 1,
               "mean": 1.0,
               "p95": 1,
-              "sites": 664
+              "sites": 665
             }
           }
         },
         "unresolved_calls": {
           "call_sites": 5283,
-          "marked_unresolved": 4388,
-          "marked_unresolved_share": 0.8306,
-          "without_target": 4610,
-          "without_target_share": 0.8726
+          "marked_unresolved": 4387,
+          "marked_unresolved_share": 0.8304,
+          "without_target": 4462,
+          "without_target_share": 0.8446
         },
         "wrong_targets": {
           "examples": [],
@@ -13549,7 +13491,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 170,
+            "rows": 172,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -13592,14 +13534,6 @@
             "rows": 2,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 2,
-            "status": "Unresolved",
-            "tier": "none"
           }
         ],
         "sites_gained": [],
@@ -13758,20 +13692,20 @@
         "tiers": {
           "exact": {
             "held_out": 0.2751,
-            "points_below_tune": 16.9,
-            "tune": 0.4444,
+            "points_below_tune": 17.0,
+            "tune": 0.4456,
             "within": false
           },
           "exact_complete": {
             "held_out": 0.2751,
-            "points_below_tune": 16.9,
-            "tune": 0.4444,
+            "points_below_tune": 17.0,
+            "tune": 0.4456,
             "within": false
           },
           "exact_conservative": {
             "held_out": 0.2751,
-            "points_below_tune": 16.9,
-            "tune": 0.4444,
+            "points_below_tune": 17.0,
+            "tune": 0.4456,
             "within": false
           }
         },
@@ -16692,7 +16626,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 1003,
+            "rows": 1009,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -16719,14 +16653,6 @@
             "rows": 8,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 6,
-            "status": "Unresolved",
-            "tier": "none"
           },
           {
             "algorithm": "FrameworkModel",
@@ -18299,9 +18225,9 @@
       "refined": {
         "by_kind": {
           "call": {
-            "found": 272,
+            "found": 305,
             "observed": 632,
-            "recall": 0.4304
+            "recall": 0.4826
           },
           "callback": {
             "found": 1,
@@ -18326,14 +18252,14 @@
             "recall": 1.0
           },
           "identifier": {
-            "found": 249,
+            "found": 252,
             "observed": 317,
-            "recall": 0.7855
+            "recall": 0.795
           },
           "member": {
-            "found": 1,
+            "found": 31,
             "observed": 326,
-            "recall": 0.0031
+            "recall": 0.0951
           },
           "new": {
             "found": 15,
@@ -18348,17 +18274,16 @@
         },
         "causes": {
           "counts": {
-            "call_apply_bind": 34,
+            "call_apply_bind": 30,
             "callback": 42,
             "computed_key": 2,
             "constructor": 2,
-            "import_binding": 1,
-            "local_call": 44,
-            "local_member": 38,
-            "module_member": 192,
+            "local_call": 42,
+            "local_member": 29,
+            "module_member": 178,
             "parameter_call": 24,
             "parameter_member": 12,
-            "this_member": 11
+            "this_member": 8
           },
           "examples": {
             "call_apply_bind": [
@@ -18382,27 +18307,27 @@
               },
               {
                 "kind": "call",
-                "observed_callee": "lib/core/dispatchRequest.js:66 dispatchRequest",
+                "observed_callee": "lib/core/AxiosHeaders.js:478 get",
                 "outcome": "no target, marked unresolved",
-                "polint_callee": "lib/core/dispatchRequest.js@2009..4217#dispatchRequest",
+                "polint_callee": "lib/core/AxiosHeaders.js@11035..11046#<polint:anonymous:11035:11046>",
                 "polint_site": {
-                  "key": "lib/core/Axios.js@9500..9537",
+                  "key": "lib/core/AxiosHeaders.js@4911..4964",
                   "marked_unresolved": true,
                   "match": "exact span",
                   "stops_at_import_binding": false,
                   "targets": [],
-                  "text": "dispatchRequest.call(this, newConfig)"
+                  "text": "this[methodName].call(this, header, arg1, arg2, arg3)"
                 },
-                "site": "lib/core/Axios.js:297",
-                "site_key": "lib/core/Axios.js@9500..9537",
-                "site_text": "dispatchRequest.call(this, newConfig)",
+                "site": "lib/core/AxiosHeaders.js:204",
+                "site_key": "lib/core/AxiosHeaders.js@4911..4964",
+                "site_text": "this[methodName].call(this, header, arg1, arg2, arg3)",
                 "syntax": "member"
               },
               {
                 "kind": "call",
-                "observed_callee": "lib/core/AxiosHeaders.js:478 get",
+                "observed_callee": "lib/core/AxiosHeaders.js:216 set",
                 "outcome": "no target, marked unresolved",
-                "polint_callee": "lib/core/AxiosHeaders.js@11035..11046#<polint:anonymous:11035:11046>",
+                "polint_callee": "lib/core/AxiosHeaders.js@5105..6705#AxiosHeaders.set",
                 "polint_site": {
                   "key": "lib/core/AxiosHeaders.js@4911..4964",
                   "marked_unresolved": true,
@@ -18547,26 +18472,6 @@
                 "site_key": "lib/core/AxiosHeaders.js@9901..9916",
                 "site_text": "new this(thing)",
                 "syntax": "new"
-              }
-            ],
-            "import_binding": [
-              {
-                "kind": "call",
-                "observed_callee": "lib/helpers/parseHeaders.js:41 <anonymous>",
-                "outcome": "no target, no unresolved marker",
-                "polint_callee": "lib/helpers/parseHeaders.js@814..1590#<polint:anonymous:814:1590>",
-                "polint_site": {
-                  "key": "lib/core/AxiosHeaders.js@5975..5995",
-                  "marked_unresolved": false,
-                  "match": "exact span",
-                  "stops_at_import_binding": true,
-                  "targets": [],
-                  "text": "parseHeaders(header)"
-                },
-                "site": "lib/core/AxiosHeaders.js:244",
-                "site_key": "lib/core/AxiosHeaders.js@5975..5995",
-                "site_text": "parseHeaders(header)",
-                "syntax": "identifier"
               }
             ],
             "local_call": [
@@ -18720,20 +18625,20 @@
               },
               {
                 "kind": "call",
-                "observed_callee": "lib/utils.js:497 forEach",
+                "observed_callee": "lib/utils.js:990 isSpecCompliantForm",
                 "outcome": "no target, marked unresolved",
-                "polint_callee": "lib/utils.js@14335..15146#forEach",
+                "polint_callee": "lib/utils.js@27776..27939#isSpecCompliantForm",
                 "polint_site": {
-                  "key": "lib/adapters/adapters.js@602..1038",
+                  "key": "lib/adapters/fetch.js@10015..10046",
                   "marked_unresolved": true,
                   "match": "exact span",
                   "stops_at_import_binding": false,
                   "targets": [],
-                  "text": "utils.forEach(knownAdapters, (fn, value) => { if (fn) { try { // Null-proto descriptors s\u2026"
+                  "text": "utils.isSpecCompliantForm(data)"
                 },
-                "site": "lib/adapters/adapters.js:25",
-                "site_key": "lib/adapters/adapters.js@602..1038",
-                "site_text": "utils.forEach(knownAdapters, (fn, value) => { if (fn) { try { // Null-proto descriptors s\u2026",
+                "site": "lib/adapters/fetch.js:341",
+                "site_key": "lib/adapters/fetch.js@10015..10046",
+                "site_text": "utils.isSpecCompliantForm(data)",
                 "syntax": "member"
               }
             ],
@@ -18907,21 +18812,21 @@
             ]
           }
         },
-        "found": 273,
+        "found": 306,
         "gaps": {
           "applying": {
             "callback": 42,
-            "class_method": 37,
+            "class_method": 33,
             "computed": 2,
             "constructor": 7
           },
           "attributed": {
             "callback": 38,
-            "class_method": 36,
+            "class_method": 32,
             "computed": 2,
             "constructor": 7,
-            "other": 68,
-            "other_member": 251
+            "other": 65,
+            "other_member": 225
           },
           "class_method_through_inheritance": 2,
           "examples": {
@@ -19245,7 +19150,7 @@
             ]
           },
           "other_by_syntax_and_callee": {
-            "identifier call to arrow": 52,
+            "identifier call to arrow": 49,
             "identifier call to declaration": 6,
             "identifier call to expression": 9,
             "identifier call to method": 1
@@ -19274,6 +19179,26 @@
               "site_key": "lib/adapters/adapters.js@2235..2266",
               "site_text": "isResolvedHandle(nameOrAdapter)",
               "syntax": "identifier"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "lib/utils.js:497 forEach",
+              "outcome": "found",
+              "polint_callee": "lib/utils.js@14335..15146#forEach",
+              "polint_site": {
+                "key": "lib/adapters/adapters.js@602..1038",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "lib/utils.js:497 forEach"
+                ],
+                "text": "utils.forEach(knownAdapters, (fn, value) => { if (fn) { try { // Null-proto descriptors s\u2026"
+              },
+              "site": "lib/adapters/adapters.js:25",
+              "site_key": "lib/adapters/adapters.js@602..1038",
+              "site_text": "utils.forEach(knownAdapters, (fn, value) => { if (fn) { try { // Null-proto descriptors s\u2026",
+              "syntax": "member"
             },
             {
               "kind": "call",
@@ -19334,26 +19259,6 @@
               "site_key": "lib/adapters/fetch.js@13178..13332",
               "site_text": "progressEventDecorator( requestContentLength, progressEventReducer(asyncDecorator(onUploa\u2026",
               "syntax": "identifier"
-            },
-            {
-              "kind": "call",
-              "observed_callee": "lib/helpers/progressEventReducer.js:5 progressEventReducer",
-              "outcome": "found",
-              "polint_callee": "lib/helpers/progressEventReducer.js@152..1086#progressEventReducer",
-              "polint_site": {
-                "key": "lib/adapters/fetch.js@13260..13314",
-                "marked_unresolved": false,
-                "match": "exact span",
-                "stops_at_import_binding": false,
-                "targets": [
-                  "lib/helpers/progressEventReducer.js:5 progressEventReducer"
-                ],
-                "text": "progressEventReducer(asyncDecorator(onUploadProgress))"
-              },
-              "site": "lib/adapters/fetch.js:428",
-              "site_key": "lib/adapters/fetch.js@13260..13314",
-              "site_text": "progressEventReducer(asyncDecorator(onUploadProgress))",
-              "syntax": "identifier"
             }
           ],
           "no target, marked unresolved": [
@@ -19413,24 +19318,6 @@
             },
             {
               "kind": "call",
-              "observed_callee": "lib/utils.js:497 forEach",
-              "outcome": "no target, marked unresolved",
-              "polint_callee": "lib/utils.js@14335..15146#forEach",
-              "polint_site": {
-                "key": "lib/adapters/adapters.js@602..1038",
-                "marked_unresolved": true,
-                "match": "exact span",
-                "stops_at_import_binding": false,
-                "targets": [],
-                "text": "utils.forEach(knownAdapters, (fn, value) => { if (fn) { try { // Null-proto descriptors s\u2026"
-              },
-              "site": "lib/adapters/adapters.js:25",
-              "site_key": "lib/adapters/adapters.js@602..1038",
-              "site_text": "utils.forEach(knownAdapters, (fn, value) => { if (fn) { try { // Null-proto descriptors s\u2026",
-              "syntax": "member"
-            },
-            {
-              "kind": "call",
               "observed_callee": "lib/utils.js:990 isSpecCompliantForm",
               "outcome": "no target, marked unresolved",
               "polint_callee": "lib/utils.js@27776..27939#isSpecCompliantForm",
@@ -19446,6 +19333,24 @@
               "site_key": "lib/adapters/fetch.js@10015..10046",
               "site_text": "utils.isSpecCompliantForm(data)",
               "syntax": "member"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "lib/helpers/progressEventReducer.js:41 <anonymous>",
+              "outcome": "no target, marked unresolved",
+              "polint_callee": "lib/helpers/progressEventReducer.js@1209..1307#<polint:anonymous:1209:1307>",
+              "polint_site": {
+                "key": "lib/adapters/fetch.js@12064..12087",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [],
+                "text": "onProgress(loadedBytes)"
+              },
+              "site": "lib/adapters/fetch.js:389",
+              "site_key": "lib/adapters/fetch.js@12064..12087",
+              "site_text": "onProgress(loadedBytes)",
+              "syntax": "identifier"
             }
           ],
           "no target, no unresolved marker": [
@@ -19505,48 +19410,111 @@
             },
             {
               "kind": "call",
-              "observed_callee": "lib/core/AxiosHeaders.js:431 concat",
+              "observed_callee": "lib/core/AxiosHeaders.js:423 from",
               "outcome": "no target, no unresolved marker",
-              "polint_callee": "lib/core/AxiosHeaders.js@10006..10153#AxiosHeaders.concat",
+              "polint_callee": "lib/core/AxiosHeaders.js@9844..9921#AxiosHeaders.from",
               "polint_site": {
-                "key": "lib/core/Axios.js@7073..7117",
+                "key": "lib/core/dispatchRequest.js@2388..2443",
                 "marked_unresolved": false,
                 "match": "exact span",
                 "stops_at_import_binding": false,
                 "targets": [],
-                "text": "AxiosHeaders.concat(contextHeaders, headers)"
+                "text": "AxiosHeaders.from(utils.getSafeProp(config, 'headers'))"
               },
-              "site": "lib/core/Axios.js:217",
-              "site_key": "lib/core/Axios.js@7073..7117",
-              "site_text": "AxiosHeaders.concat(contextHeaders, headers)",
+              "site": "lib/core/dispatchRequest.js:74",
+              "site_key": "lib/core/dispatchRequest.js@2388..2443",
+              "site_text": "AxiosHeaders.from(utils.getSafeProp(config, 'headers'))",
               "syntax": "member"
             },
             {
               "kind": "call",
-              "observed_callee": "lib/helpers/parseHeaders.js:41 <anonymous>",
+              "observed_callee": "lib/core/AxiosHeaders.js:423 from",
               "outcome": "no target, no unresolved marker",
-              "polint_callee": "lib/helpers/parseHeaders.js@814..1590#<polint:anonymous:814:1590>",
+              "polint_callee": "lib/core/AxiosHeaders.js@9844..9921#AxiosHeaders.from",
               "polint_site": {
-                "key": "lib/core/AxiosHeaders.js@5975..5995",
+                "key": "lib/core/dispatchRequest.js@3449..3484",
                 "marked_unresolved": false,
                 "match": "exact span",
-                "stops_at_import_binding": true,
+                "stops_at_import_binding": false,
                 "targets": [],
-                "text": "parseHeaders(header)"
+                "text": "AxiosHeaders.from(response.headers)"
               },
-              "site": "lib/core/AxiosHeaders.js:244",
-              "site_key": "lib/core/AxiosHeaders.js@5975..5995",
-              "site_text": "parseHeaders(header)",
-              "syntax": "identifier"
+              "site": "lib/core/dispatchRequest.js:104",
+              "site_key": "lib/core/dispatchRequest.js@3449..3484",
+              "site_text": "AxiosHeaders.from(response.headers)",
+              "syntax": "member"
+            }
+          ],
+          "other targets, marked unresolved": [
+            {
+              "kind": "call",
+              "observed_callee": "lib/core/AxiosHeaders.js:478 get",
+              "outcome": "other targets, marked unresolved",
+              "polint_callee": "lib/core/AxiosHeaders.js@11035..11046#<polint:anonymous:11035:11046>",
+              "polint_site": {
+                "key": "lib/core/AxiosHeaders.js@5079..5096",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "lib/core/AxiosHeaders.js:216 AxiosHeaders.set"
+                ],
+                "text": "this.set(headers)"
+              },
+              "site": "lib/core/AxiosHeaders.js:213",
+              "site_key": "lib/core/AxiosHeaders.js@5079..5096",
+              "site_text": "this.set(headers)",
+              "syntax": "member"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "lib/core/AxiosHeaders.js:478 get",
+              "outcome": "other targets, marked unresolved",
+              "polint_callee": "lib/core/AxiosHeaders.js@11035..11046#<polint:anonymous:11035:11046>",
+              "polint_site": {
+                "key": "lib/core/AxiosHeaders.js@9440..9453",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "lib/core/AxiosHeaders.js:392 AxiosHeaders.toJSON"
+                ],
+                "text": "this.toJSON()"
+              },
+              "site": "lib/core/AxiosHeaders.js:405",
+              "site_key": "lib/core/AxiosHeaders.js@9440..9453",
+              "site_text": "this.toJSON()",
+              "syntax": "member"
+            },
+            {
+              "kind": "call",
+              "observed_callee": "lib/core/AxiosHeaders.js:478 get",
+              "outcome": "other targets, marked unresolved",
+              "polint_callee": "lib/core/AxiosHeaders.js@11035..11046#<polint:anonymous:11035:11046>",
+              "polint_site": {
+                "key": "lib/core/AxiosHeaders.js@9521..9534",
+                "marked_unresolved": true,
+                "match": "exact span",
+                "stops_at_import_binding": false,
+                "targets": [
+                  "lib/core/AxiosHeaders.js:392 AxiosHeaders.toJSON"
+                ],
+                "text": "this.toJSON()"
+              },
+              "site": "lib/core/AxiosHeaders.js:409",
+              "site_key": "lib/core/AxiosHeaders.js@9521..9534",
+              "site_text": "this.toJSON()",
+              "syntax": "member"
             }
           ]
         },
         "outcomes": {
-          "found": 273,
-          "no target, marked unresolved": 392,
-          "no target, no unresolved marker": 10
+          "found": 306,
+          "no target, marked unresolved": 358,
+          "no target, no unresolved marker": 8,
+          "other targets, marked unresolved": 3
         },
-        "recall": 0.4044,
+        "recall": 0.4533,
         "references": {
           "by_status": {
             "Ambiguous": 2,
@@ -19562,7 +19530,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 1413,
+            "rows": 1406,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -19589,6 +19557,22 @@
             "rows": 94,
             "status": "Resolved",
             "tier": "exact"
+          },
+          {
+            "algorithm": "PointsTo",
+            "has_function": true,
+            "precision": "SetupAware",
+            "rows": 76,
+            "status": "Resolved",
+            "tier": "exact"
+          },
+          {
+            "algorithm": "PointsTo",
+            "has_function": true,
+            "precision": "Heuristic",
+            "rows": 74,
+            "status": "Resolved",
+            "tier": "apart"
           },
           {
             "algorithm": "SummaryAssisted",
@@ -19631,30 +19615,47 @@
             "tier": "exact"
           }
         ],
-        "sites_gained": [],
+        "sites_gained": [
+          {
+            "executed": 1,
+            "file": "lib/core/Axios.js",
+            "sites": 3,
+            "test_path": false
+          },
+          {
+            "executed": 3,
+            "file": "lib/core/dispatchRequest.js",
+            "sites": 3,
+            "test_path": false
+          },
+          {
+            "executed": 0,
+            "file": "lib/helpers/estimateDataURLDecodedBytes.js",
+            "sites": 1,
+            "test_path": false
+          }
+        ],
         "solver_budget": {
-          "reasons": [
-            "points_to.max_dynamic_vars"
-          ],
-          "status": "BudgetExceeded"
+          "reasons": [],
+          "status": "WithinBudget"
         },
         "tiers": {
-          "apart_edges": 134,
+          "apart_edges": 208,
           "found": {
-            "apart_only": 11,
-            "exact": 262,
-            "exact_complete": 262,
-            "exact_conservative": 262
+            "apart_only": 40,
+            "exact": 266,
+            "exact_complete": 266,
+            "exact_conservative": 266
           },
           "precision": {
             "apart": {
-              "claimed": 11,
+              "claimed": 75,
               "examples": [],
               "multi_target": 0,
-              "observed": 11,
+              "observed": 75,
               "precision": 1.0,
               "single_target": 0,
-              "sites": 11
+              "sites": 75
             },
             "conservative": {
               "claimed": 0,
@@ -19666,29 +19667,29 @@
               "sites": 0
             },
             "exact": {
-              "claimed": 262,
+              "claimed": 266,
               "examples": [],
               "multi_target": 0,
-              "observed": 262,
+              "observed": 266,
               "precision": 1.0,
               "single_target": 0,
-              "sites": 262
+              "sites": 266
             }
           },
           "recall": {
-            "apart_only": 0.0163,
-            "exact": 0.3881,
-            "exact_complete": 0.3881,
-            "exact_conservative": 0.3881
+            "apart_only": 0.0593,
+            "exact": 0.3941,
+            "exact_complete": 0.3941,
+            "exact_conservative": 0.3941
           },
           "sites": {
             "call_sites": 2098,
-            "complete": 488,
-            "open": 1610,
+            "complete": 495,
+            "open": 1603,
             "open_by_reason": {
-              "CallApplyBind": 35,
+              "CallApplyBind": 29,
               "DynamicProperty": 857,
-              "MissingSemanticReference": 521,
+              "MissingSemanticReference": 520,
               "none recorded": 197
             },
             "open_with_a_claimed_target": 0
@@ -19698,7 +19699,7 @@
               "max": 1,
               "mean": 1.0,
               "p95": 1,
-              "sites": 67
+              "sites": 140
             },
             "conservative": {
               "max": null,
@@ -19707,25 +19708,25 @@
               "sites": 0
             },
             "exact": {
-              "max": 1,
+              "max": 2,
               "mean": 1.0,
               "p95": 1,
-              "sites": 488
+              "sites": 495
             },
             "exact_conservative": {
-              "max": 1,
+              "max": 2,
               "mean": 1.0,
               "p95": 1,
-              "sites": 488
+              "sites": 495
             }
           }
         },
         "unresolved_calls": {
           "call_sites": 2098,
-          "marked_unresolved": 1413,
-          "marked_unresolved_share": 0.6735,
-          "without_target": 1543,
-          "without_target_share": 0.7355
+          "marked_unresolved": 1406,
+          "marked_unresolved_share": 0.6702,
+          "without_target": 1504,
+          "without_target_share": 0.7169
         },
         "wrong_targets": {
           "examples": [],
@@ -23443,7 +23444,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 602,
+            "rows": 745,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -23454,14 +23455,6 @@
             "rows": 161,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 143,
-            "status": "Unresolved",
-            "tier": "none"
           },
           {
             "algorithm": "SummaryAssisted",
@@ -25471,7 +25464,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 135,
+            "rows": 137,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -25522,14 +25515,6 @@
             "rows": 2,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 2,
-            "status": "Unresolved",
-            "tier": "none"
           }
         ],
         "sites_gained": [],
@@ -27249,7 +27234,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 252,
+            "rows": 254,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -27292,14 +27277,6 @@
             "rows": 2,
             "status": "Resolved",
             "tier": "apart"
-          },
-          {
-            "algorithm": "SyntaxOnly",
-            "has_function": false,
-            "precision": "Unknown",
-            "rows": 2,
-            "status": "Unresolved",
-            "tier": "none"
           },
           {
             "algorithm": "ConstructorBinding",
@@ -30078,7 +30055,7 @@
             "algorithm": "PointsTo",
             "has_function": false,
             "precision": "Unknown",
-            "rows": 3259,
+            "rows": 3251,
             "status": "Unresolved",
             "tier": "none"
           },
@@ -30105,6 +30082,22 @@
             "rows": 1081,
             "status": "Resolved",
             "tier": "exact"
+          },
+          {
+            "algorithm": "PointsTo",
+            "has_function": true,
+            "precision": "SetupAware",
+            "rows": 1032,
+            "status": "Resolved",
+            "tier": "exact"
+          },
+          {
+            "algorithm": "PointsTo",
+            "has_function": true,
+            "precision": "Heuristic",
+            "rows": 277,
+            "status": "Resolved",
+            "tier": "apart"
           },
           {
             "algorithm": "SummaryAssisted",
@@ -30155,16 +30148,20 @@
             "tier": "none"
           }
         ],
-        "sites_gained": [],
+        "sites_gained": [
+          {
+            "executed": 0,
+            "file": "src/v4/classic/schemas.ts",
+            "sites": 8,
+            "test_path": false
+          }
+        ],
         "solver_budget": {
-          "reasons": [
-            "points_to.max_dynamic_vars",
-            "solver.max_steps"
-          ],
-          "status": "BudgetExceeded"
+          "reasons": [],
+          "status": "WithinBudget"
         },
         "tiers": {
-          "apart_edges": 320,
+          "apart_edges": 597,
           "found": {
             "apart_only": 51,
             "exact": 670,
@@ -30173,13 +30170,13 @@
           },
           "precision": {
             "apart": {
-              "claimed": 51,
+              "claimed": 328,
               "examples": [],
               "multi_target": 0,
-              "observed": 51,
+              "observed": 328,
               "precision": 1.0,
               "single_target": 0,
-              "sites": 51
+              "sites": 328
             },
             "conservative": {
               "claimed": 0,
@@ -30208,12 +30205,12 @@
           },
           "sites": {
             "call_sites": 6109,
-            "complete": 2506,
-            "open": 3603,
+            "complete": 2514,
+            "open": 3595,
             "open_by_reason": {
               "CallApplyBind": 45,
               "DynamicProperty": 2269,
-              "MissingSemanticReference": 945,
+              "MissingSemanticReference": 937,
               "Reflection": 1,
               "none recorded": 344
             },
@@ -30224,7 +30221,7 @@
               "max": 1,
               "mean": 1.0,
               "p95": 1,
-              "sites": 160
+              "sites": 437
             },
             "conservative": {
               "max": null,
@@ -30236,22 +30233,22 @@
               "max": 1,
               "mean": 1.0,
               "p95": 1,
-              "sites": 2506
+              "sites": 2514
             },
             "exact_conservative": {
               "max": 1,
               "mean": 1.0,
               "p95": 1,
-              "sites": 2506
+              "sites": 2514
             }
           }
         },
         "unresolved_calls": {
           "call_sites": 6109,
-          "marked_unresolved": 3259,
-          "marked_unresolved_share": 0.5335,
-          "without_target": 3443,
-          "without_target_share": 0.5636
+          "marked_unresolved": 3251,
+          "marked_unresolved_share": 0.5322,
+          "without_target": 3435,
+          "without_target_share": 0.5623
         },
         "wrong_targets": {
           "examples": [],
