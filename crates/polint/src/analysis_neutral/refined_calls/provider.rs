@@ -174,7 +174,7 @@ pub fn derive_refined_calls_with_cache_stats(
             ts_type_file_densities,
         );
     if ts_typed_join != TsTypeJoinReport::default() {
-        tracing::debug!(
+        tracing::info!(
             target: "polint::kernel::stage",
             provider = REFINED_CALLS_PROVIDER_ID,
             matched_callsites = ts_typed_join.matched_callsites,

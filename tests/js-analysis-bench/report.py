@@ -329,10 +329,12 @@ def run_dump(
         return {"dump": None, "cost": cost, "error": f"timed out after {timeout} s"}
     if result.exit_code != 0 or not out.exists():
         tail = [
-            line for line in result.stderr.splitlines() if "stage done" not in line and SOLVE_EVENT not in line
+            line
+            for line in result.stderr.splitlines()
+            if "stage done" not in line and SOLVE_EVENT not in line and TYPE_JOIN_EVENT not in line
         ][-8:]
         return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
-    return {"dump": out, "cost": cost, "error": None}
+    return {"dump": out, "cost": cost, "error": None, "ts_type_join": ts_type_join(result.stderr)}
 
 
 # The kernel's per-provider stage log: one `stage done` line per provider run,
@@ -343,6 +345,10 @@ SOLVE_FIELD = re.compile(r'\b([a-z_0-9]+)=("[^"]*"|\S+)')
 SOLVE_COUNTS = (
     "calls", "variables", "objects", "slots", "copy_edges", "pops", "collapsed", "largest_set", "sets_over_64",
     "sets_over_1024", "initialize_ms", "run_ms", "result_ms", "rss_delta_mb", "peak_rss_mb",
+)
+TYPE_JOIN_EVENT = "ts type tier join"
+TYPE_JOIN_COUNTS = (
+    "matched_callsites", "unmatched_callsites", "matched_callees", "unmatched_callees", "deferred_callsites",
 )
 STAGE_FIELD = re.compile(r'\b(provider|elapsed_ms|peak_rss_mb)=("[^"]*"|\S+)')
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
@@ -389,6 +395,20 @@ def solver_solves(stderr: str) -> list:
         }
         solves.append(row)
     return solves
+
+
+def ts_type_join(stderr: str) -> dict | None:
+    """How the type tier's rows joined the syntax facts, from its one log line.
+
+    None when the tier logged nothing: it did not run, or every count was zero.
+    The counts are deterministic, unlike the stage times beside them."""
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if TYPE_JOIN_EVENT not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in SOLVE_FIELD.findall(line)}
+        return {key: int(fields.get(key, 0)) for key in TYPE_JOIN_COUNTS}
+    return None
 
 
 def load_dump(run: dict) -> None:
@@ -1821,7 +1841,8 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
                 entry[plan]["refined_edge_census"] = refined_edge_census(run["dump"])
             if plan == TYPED_PLAN:
                 entry[plan]["ts_types"] = {
-                    key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")
+                    **{key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")},
+                    "join": run.get("ts_type_join"),
                 }
         if "base" in plan_facts:
             for plan, facts in plan_facts.items():
@@ -2346,6 +2367,24 @@ def render_types(report: dict, add) -> None:
             f"| {typed.get('ts_types', {}).get('callsites', 'n/a')} "
             f"| {cost('refined', 'wall_ms', 1000)} / {cost(TYPED_PLAN, 'wall_ms', 1000)} "
             f"| {cost('refined', 'peak_rss_bytes', MB)} / {cost(TYPED_PLAN, 'peak_rss_bytes', MB)} |"
+        )
+    add("")
+    add("How the type rows joined the syntax facts. A callsite row joins a call site by span and adds nothing when "
+        "it does not. A deferred callsite joined but sits in a file dense with `any` and is not resolved, so it "
+        "adds nothing either. A callee row joins a function by span, then by name for the kinds a call runs (an "
+        "accessor joins by span only); a callee outside the tree counts as matched. An unmatched callee is a "
+        "declaration in the tree that names no function polint extracted, and adds no edge.")
+    add("")
+    add("| package | callsites matched / unmatched / deferred | callees matched / unmatched |")
+    add("|---|---|---|")
+    for name, entry in report["packages"].items():
+        join = entry.get(TYPED_PLAN, {}).get("ts_types", {}).get("join")
+        if not join:
+            add(f"| {name} | n/a | n/a |")
+            continue
+        add(
+            f"| {name} | {join['matched_callsites']:,} / {join['unmatched_callsites']:,} / {join['deferred_callsites']:,} "
+            f"| {join['matched_callees']:,} / {join['unmatched_callees']:,} |"
         )
     add("")
     fc = report["constructs"]["false_complete"]
