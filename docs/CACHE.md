@@ -50,6 +50,45 @@ directory. Repo-local rule hosts run with Cargo's `release` profile by default;
 set `POLINT_RULES_PROFILE=dev` for faster unoptimized local rule development, or
 to another Cargo profile name to build with `--profile <name>`.
 
+A `dev` rule host is built with small artifacts by default: the rule package
+keeps line tables (`profile.dev.debug = "line-tables-only"`), so a panicking
+rule still reports its file and line and `RUST_BACKTRACE=1` still names every
+frame, while its dependencies, polint among them, carry no debug info and no
+incremental state (`profile.dev.package."*".debug = 0` and
+`profile.dev.package."*".incremental = false`). That makes a host roughly a
+fifth of the size of Cargo's stock `dev` profile and builds it faster. Each
+default applies only while the user has not chosen that key: a `debug` or
+`incremental` setting for the `dev` profile, or for its `"*"` package override,
+in the rule package's or repository's `Cargo.toml`, in any applicable
+`.cargo/config*`, or in a `CARGO_PROFILE_DEV_*` environment variable, wins. The
+defaults polint applies are part of the rule host's build fingerprint.
+
+### Disk budget
+
+The rules target directory and the shared rule-host store below each keep
+themselves within a size budget, evicting least recently used rule hosts:
+
+```bash
+POLINT_RULES_TARGET_MAX_MB=4096 polint check   # rules target directory (default 4096 MiB)
+POLINT_CACHE_STORE_MAX_MB=2048 polint check    # shared rule-host store (default 2048 MiB)
+POLINT_RULES_TARGET_MAX_MB=off polint check    # no automatic eviction
+```
+
+A value is a size in MiB; `off`, `disabled`, or `none` turns eviction off, and
+any other value that is not a number keeps the default. After a check runs its
+rule host, polint removes the least recently used other rule hosts from the
+rules target directory until it fits: their binaries, fingerprints, build-script
+output, and incremental state. Libraries every host shares, polint among them,
+are kept. Every polint process that builds or runs a rule host holds a shared
+lease on it, so a host in use by any process is never evicted, and eviction only
+runs after a check has its results. An evicted host is rebuilt the next time it
+is needed. Publishing a host to the store evicts the store's least recently
+restored entries and the blobs no remaining entry names. A store entry or blob
+removed while another process is about to restore it is a miss that builds
+locally, so eviction changes only where a host comes from, never which host a
+check runs or what it reports. For the same reason the budgets are not part of
+any cache key.
+
 ### Shared rule-host store
 
 `.polint/cache` is per checkout, so every git worktree of a repository would
@@ -105,7 +144,8 @@ metadata. A config or source tree polint cannot read or prove is local-only too.
 The store is one user's state on one machine, at the trust level of
 `~/.cargo/registry`: polint creates it `0700` on Unix and never shares it between
 users or over a network. Point `POLINT_CACHE_STORE` only at local storage you
-alone can write. Deleting the directory is always safe.
+alone can write. Deleting the directory is always safe. The store keeps itself
+within `POLINT_CACHE_STORE_MAX_MB`, as described under [Disk budget](#disk-budget).
 
 ### Contributor build cache
 
@@ -123,4 +163,10 @@ rustc-wrapper = "sccache"
 The repository caps sccache's shared local cache at 10 GiB. Each worktree keeps
 its own `target` directory, avoiding Cargo lock contention and collisions
 between concurrently developed branches.
+
+The integration tests build their rule hosts in one shared
+`target/polint-cli-test-rules` directory per worktree. Each test names its rule
+package after the test and fixture layout, so a re-run rebuilds that test's host
+in place rather than adding another one, and the directory stays within the
+rules target budget above like any other.
 

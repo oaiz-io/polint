@@ -340,9 +340,12 @@ fn run_rule_host_check(
         .unwrap_or_else(|_| "cargo".to_string());
     let test_cache = CacheLayout::for_repo(temp_root);
     let host_cache = CacheLayout::for_repo(root);
+    // Keeps a concurrent check from evicting this host while it builds and runs.
+    let _lease =
+        crate::cache::rules_budget::HostLease::acquire(&host_cache.rules_target_dir(), manifest);
     let mut command = ProcessCommand::new(&cargo);
     command.current_dir(temp_root).args(["run", "--quiet"]);
-    apply_local_rule_host_profile(&mut command);
+    apply_local_rule_host_profile(&mut command, temp_root, manifest);
     command.args([
         "--manifest-path",
         manifest
@@ -602,9 +605,15 @@ impl LocalRuleHostProfile {
     }
 }
 
-fn apply_local_rule_host_profile(command: &mut ProcessCommand) {
+fn apply_local_rule_host_profile(command: &mut ProcessCommand, root: &Path, manifest: &Path) {
     match LocalRuleHostProfile::from_env() {
-        LocalRuleHostProfile::Dev => {}
+        LocalRuleHostProfile::Dev => {
+            if let Some(rule_pkg_dir) = manifest.parent() {
+                for setting in crate::cache::rules_store::dev_profile_settings(rule_pkg_dir, root) {
+                    command.args(["--config", setting]);
+                }
+            }
+        }
         LocalRuleHostProfile::Release => {
             command.arg("--release");
         }

@@ -4,6 +4,7 @@ use crate::baseline::{
     BaselineConfig, BaselineSummary, DEFAULT_BASELINE_PATH, classify_diagnostics, load_baseline,
     render_baseline_summary, write_baseline,
 };
+use crate::cache::rules_budget;
 use crate::cache::rules_store;
 use crate::cache::{
     CacheCleanReport, CacheCleanSelection, CacheLayout, CacheManagedCategory, CachePruneOptions,
@@ -2859,9 +2860,10 @@ fn test_rule_pack_units(root: &Path) -> Result<u8> {
     let cache_layout = CacheLayout::for_repo(root);
     let mut failed = false;
     for manifest in &manifests {
+        let _lease = rules_budget::HostLease::acquire(&cache_layout.rules_target_dir(), manifest);
         let mut command = ProcessCommand::new(&cargo);
         command.current_dir(root).args(["test", "--quiet"]);
-        apply_local_rule_host_profile(&mut command);
+        apply_local_rule_host_profile(&mut command, root, manifest);
         command.args(["--manifest-path", manifest_path_argument(manifest)?]);
         apply_local_rule_host_env(&mut command, &cache_layout);
         let status = command.status().with_context(|| {
@@ -4397,7 +4399,40 @@ fn run_local_rule_host(
 /// compiled in another checkout, or a fresh compile. Which one answered changes
 /// nothing about what the host reports — the fingerprint names the build's whole
 /// input surface, and the bytes are verified against it before anything runs.
+///
+/// The host is leased for the whole build and run, so no other polint process
+/// evicts it meanwhile. Once it has exited, this run brings the rules target
+/// directory back within its budget, which removes only hosts nobody holds and
+/// therefore never changes what this or any concurrent check reports.
 fn run_local_rule_host_kind(
+    root: &Path,
+    manifest: &Path,
+    args: &CheckArgs,
+    apply_ignore_comments: bool,
+    kind: &str,
+    changed_files: Option<&Path>,
+) -> Result<(Vec<Diagnostic>, crate::diagnostics::RunSummary)> {
+    let rules_target_dir = CacheLayout::for_repo(root).rules_target_dir();
+    let lease = rules_budget::HostLease::acquire(&rules_target_dir, manifest);
+    let result = run_leased_local_rule_host(
+        root,
+        manifest,
+        args,
+        apply_ignore_comments,
+        kind,
+        changed_files,
+    );
+    if lease.is_some()
+        && let Some(budget) = rules_budget::rules_target_budget()
+    {
+        rules_budget::evict_rules_target(&rules_target_dir, budget);
+    }
+    drop(lease);
+    result
+}
+
+/// [`run_local_rule_host_kind`] while its lease is held.
+fn run_leased_local_rule_host(
     root: &Path,
     manifest: &Path,
     args: &CheckArgs,
@@ -4502,6 +4537,7 @@ fn local_rule_host_plan(
     let environment = rules_store::BuildEnvironment::new(
         LocalRuleHostProfile::from_env().name(),
         local_rule_host_toolchain(root, cargo)?,
+        local_rule_host_profile_settings(root, manifest),
     )?;
     Some(LocalRuleHostPlan {
         _target_lock: target_lock,
@@ -4669,7 +4705,7 @@ fn build_local_rule_host_binary(
         "--quiet",
         "--message-format=json-render-diagnostics",
     ]);
-    apply_local_rule_host_profile(&mut command);
+    apply_local_rule_host_profile(&mut command, root, manifest);
     command.args(["--manifest-path", manifest_path_argument(manifest)?]);
     apply_local_rule_host_env(&mut command, cache_layout);
 
@@ -4765,7 +4801,7 @@ fn run_local_rule_host_through_cargo(
 ) -> Result<(Vec<Diagnostic>, crate::diagnostics::RunSummary)> {
     let mut command = ProcessCommand::new(cargo);
     command.current_dir(root).args(["run", "--quiet"]);
-    apply_local_rule_host_profile(&mut command);
+    apply_local_rule_host_profile(&mut command, root, manifest);
     command.args(["--manifest-path", manifest_path_argument(manifest)?, "--"]);
     command.args(host_args);
     apply_local_rule_host_env(&mut command, cache_layout);
@@ -4870,9 +4906,10 @@ fn run_local_rule_host_inspect(root: &Path, manifest: &Path) -> Result<InspectRu
         .or_else(|_| std::env::var("CARGO"))
         .unwrap_or_else(|_| "cargo".to_string());
     let cache_layout = CacheLayout::for_repo(root);
+    let _lease = rules_budget::HostLease::acquire(&cache_layout.rules_target_dir(), manifest);
     let mut command = ProcessCommand::new(&cargo);
     command.current_dir(root).args(["run", "--quiet"]);
-    apply_local_rule_host_profile(&mut command);
+    apply_local_rule_host_profile(&mut command, root, manifest);
     command.args([
         "--manifest-path",
         manifest
@@ -4977,7 +5014,24 @@ impl LocalRuleHostProfile {
     }
 }
 
-fn apply_local_rule_host_profile(command: &mut ProcessCommand) {
+/// The `--config` settings a rule-host build of `manifest` in `root` gets: the
+/// `dev` size defaults the user has not chosen otherwise, and nothing for any
+/// other profile.
+fn local_rule_host_profile_settings(root: &Path, manifest: &Path) -> Vec<&'static str> {
+    match (LocalRuleHostProfile::from_env(), manifest.parent()) {
+        (LocalRuleHostProfile::Dev, Some(rule_pkg_dir)) => {
+            rules_store::dev_profile_settings(rule_pkg_dir, root)
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Select the rule-host profile for a cargo command spawned in `root` for the
+/// package at `manifest`, with the size defaults a `dev` build gets.
+fn apply_local_rule_host_profile(command: &mut ProcessCommand, root: &Path, manifest: &Path) {
+    for setting in local_rule_host_profile_settings(root, manifest) {
+        command.args(["--config", setting]);
+    }
     match LocalRuleHostProfile::from_env() {
         LocalRuleHostProfile::Dev => {}
         LocalRuleHostProfile::Release => {

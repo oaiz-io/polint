@@ -144,6 +144,9 @@ const CARGO_UNSHAREABLE_KEYS: [&str; 6] = ["patch", "replace", "paths", "source"
 #[derive(Debug, Clone)]
 pub(crate) struct RuleHostStore {
     root: PathBuf,
+    /// The size the store is brought back within after each publish, or
+    /// `None` for no limit.
+    budget: Option<u64>,
 }
 
 /// An exclusive lease on one checkout's rule-host target directory.
@@ -186,12 +189,26 @@ impl RuleHostStore {
             std::env::var("LOCALAPPDATA").ok().as_deref(),
             std::env::var("HOME").ok().as_deref(),
         )?;
-        Some(Self::at(root))
+        Some(Self {
+            root,
+            budget: super::rules_budget::store_budget(),
+        })
     }
 
-    /// A store rooted at an explicit directory.
+    /// A store rooted at an explicit directory, with no size limit.
+    #[cfg(test)]
     pub(crate) fn at(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            budget: None,
+        }
+    }
+
+    /// The same store, brought back within `budget` bytes after each publish.
+    #[cfg(test)]
+    pub(crate) fn with_budget(mut self, budget: u64) -> Self {
+        self.budget = Some(budget);
+        self
     }
 
     /// The bytes recorded for `key`, or `None` when nothing is recorded.
@@ -419,6 +436,10 @@ pub(crate) fn restore(
         return None;
     }
     write_stamp(target_dir, fingerprint, &entry);
+    // A restore is a use: it keeps the entry from being the next one evicted.
+    if let Some(path) = store.entry_path(fingerprint) {
+        super::rules_budget::touch(&path);
+    }
     Some(destination)
 }
 
@@ -460,11 +481,22 @@ pub(crate) fn record(
         len,
     };
     write_stamp(target_dir, fingerprint, &entry);
-    if let Some(store) = store
-        && store.publish_blob(&entry.sha256, binary)
-        && let Ok(bytes) = serde_json::to_vec(&entry)
+    let Some(store) = store else {
+        return;
+    };
     {
-        store.publish(fingerprint, &bytes);
+        // Held until the entry names the blob, so no eviction can remove the
+        // blob in between; while an eviction runs, this host is not published.
+        let publishing = super::rules_budget::store_publish_guard(&store.root);
+        if publishing.is_some()
+            && store.publish_blob(&entry.sha256, binary)
+            && let Ok(bytes) = serde_json::to_vec(&entry)
+        {
+            store.publish(fingerprint, &bytes);
+        }
+    }
+    if let Some(budget) = store.budget {
+        super::rules_budget::evict_store(&store.root, budget);
     }
 }
 
@@ -657,12 +689,19 @@ pub(crate) struct BuildEnvironment {
     cargo_overrides: Vec<(String, String)>,
     /// Cargo's user-wide configuration/source root for this build.
     cargo_home: Option<PathBuf>,
+    /// The `--config` settings polint adds to this build, from
+    /// [`dev_profile_settings`].
+    profile_settings: Vec<&'static str>,
 }
 
 impl BuildEnvironment {
     /// The build environment of this process, for a host compiled under
     /// `profile` by `toolchain`.
-    pub(crate) fn new(profile: String, toolchain: ToolchainIdentity) -> Option<Self> {
+    pub(crate) fn new(
+        profile: String,
+        toolchain: ToolchainIdentity,
+        profile_settings: Vec<&'static str>,
+    ) -> Option<Self> {
         let mut cargo_flags = Vec::with_capacity(CARGO_FLAG_VARIABLES.len());
         for (_, variable) in CARGO_FLAG_VARIABLES {
             let value = match std::env::var_os(variable) {
@@ -689,6 +728,7 @@ impl BuildEnvironment {
             cargo_flags,
             cargo_overrides,
             cargo_home: cargo_home(),
+            profile_settings,
         })
     }
 }
@@ -793,6 +833,9 @@ pub(crate) fn build_fingerprint(
     }
     for (name, value) in &environment.cargo_overrides {
         digest.line(&format!("cargo_override_{name}"), value);
+    }
+    for setting in &environment.profile_settings {
+        digest.line("profile_setting", setting);
     }
     // The files cargo and rustup discover from the directory polint spawns cargo
     // in, and then the rule package's own. Both lockfiles matter: the one beside
@@ -1315,6 +1358,90 @@ fn cargo_config_files(
         .collect()
 }
 
+/// The cargo `--config` settings polint adds to a `dev` rule-host build, each
+/// paired with the profile key it sets.
+///
+/// Cargo's stock `dev` profile compiles polint and every dependency with full
+/// debug info and keeps incremental state for the `polint` path dependency, which
+/// together make one host and its target directory several times larger than the
+/// code they hold. The rule package keeps line tables, so a panic backtrace still
+/// names the rule's file and line; dependencies keep their symbol names but no
+/// debug info, and compile without incremental state, which only pays off for
+/// code that is edited between builds.
+const DEV_PROFILE_DEFAULTS: [(&str, &str); 3] = [
+    ("debug", r#"profile.dev.debug="line-tables-only""#),
+    ("debug", r#"profile.dev.package."*".debug=0"#),
+    (
+        "incremental",
+        r#"profile.dev.package."*".incremental=false"#,
+    ),
+];
+
+/// The [`DEV_PROFILE_DEFAULTS`] a `dev` rule-host build of the package in
+/// `rule_pkg_dir`, spawned in `repo_root`, should pass to cargo as `--config`.
+///
+/// A default is left out whenever its key is already chosen by the user: in a
+/// `CARGO_PROFILE_DEV_*` variable, in any cargo config file cargo would merge, or
+/// in a manifest that could be the workspace root. A file that exists but cannot
+/// be read or parsed leaves every default out, because its choices are unknown.
+pub(crate) fn dev_profile_settings(rule_pkg_dir: &Path, repo_root: &Path) -> Vec<&'static str> {
+    dev_profile_settings_with(rule_pkg_dir, repo_root, cargo_home(), |name| {
+        std::env::var_os(name).is_some()
+    })
+}
+
+fn dev_profile_settings_with(
+    rule_pkg_dir: &Path,
+    repo_root: &Path,
+    cargo_home: Option<PathBuf>,
+    env_is_set: impl Fn(&str) -> bool,
+) -> Vec<&'static str> {
+    let mut files = cargo_config_files(rule_pkg_dir, repo_root, cargo_home);
+    files.extend(rule_pkg_dir.ancestors().map(|dir| dir.join("Cargo.toml")));
+    let mut documents = Vec::new();
+    for file in files {
+        match std::fs::read_to_string(&file) {
+            Ok(text) => match text.parse::<toml::Table>() {
+                Ok(document) => documents.push(document),
+                Err(_) => return Vec::new(),
+            },
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) => {}
+            Err(_) => return Vec::new(),
+        }
+    }
+    DEV_PROFILE_DEFAULTS
+        .iter()
+        .filter(|(key, _)| {
+            !env_is_set(&format!("CARGO_PROFILE_DEV_{}", key.to_ascii_uppercase()))
+                && !documents
+                    .iter()
+                    .any(|document| dev_profile_sets(document, key))
+        })
+        .map(|(_, setting)| *setting)
+        .collect()
+}
+
+/// Whether one manifest or cargo config chooses `key` for the `dev` profile, for
+/// every package or for the `"*"` dependency override.
+fn dev_profile_sets(document: &toml::Table, key: &str) -> bool {
+    let Some(dev) = document
+        .get("profile")
+        .and_then(|profile| profile.get("dev"))
+    else {
+        return false;
+    };
+    dev.get(key).is_some()
+        || dev
+            .get("package")
+            .and_then(|packages| packages.get("*"))
+            .and_then(|all| all.get(key))
+            .is_some()
+}
+
 /// Where cargo keeps its user-wide config: `$CARGO_HOME`, else `~/.cargo`,
 /// resolved the way cargo itself resolves it. `None` when the environment names
 /// neither, which is no location to read.
@@ -1401,6 +1528,7 @@ mod tests {
                 .collect(),
             cargo_overrides: Vec::new(),
             cargo_home: None,
+            profile_settings: Vec::new(),
         }
     }
 
@@ -1637,6 +1765,86 @@ mod tests {
             build_fingerprint(root, &package, &with_profile_override),
             build_fingerprint(root, &package, &environment),
             "Cargo profile environment overrides change the built artifact"
+        );
+
+        let mut with_profile_settings = environment.clone();
+        with_profile_settings.profile_settings = DEV_PROFILE_DEFAULTS
+            .iter()
+            .map(|(_, setting)| *setting)
+            .collect();
+        assert_ne!(
+            build_fingerprint(root, &package, &with_profile_settings),
+            build_fingerprint(root, &package, &environment),
+            "the profile settings polint adds change the built artifact"
+        );
+    }
+
+    fn settings_in(rule_pkg_dir: &Path, repo_root: &Path, env: &[&str]) -> Vec<&'static str> {
+        dev_profile_settings_with(rule_pkg_dir, repo_root, None, |name| env.contains(&name))
+    }
+
+    #[test]
+    fn a_dev_build_gets_every_size_default_nothing_else_chose() {
+        let temp = temp_dir("profile-defaults");
+        let root = temp.path();
+        let package = rule_package(root);
+        assert_eq!(
+            settings_in(&package, root, &[]),
+            vec![
+                r#"profile.dev.debug="line-tables-only""#,
+                r#"profile.dev.package."*".debug=0"#,
+                r#"profile.dev.package."*".incremental=false"#,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_dev_profile_key_the_user_chose_is_never_overridden() {
+        let temp = temp_dir("profile-user");
+        let root = temp.path();
+        let package = rule_package(root);
+        let incremental_only = vec![r#"profile.dev.package."*".incremental=false"#];
+        let debug_only = vec![
+            r#"profile.dev.debug="line-tables-only""#,
+            r#"profile.dev.package."*".debug=0"#,
+        ];
+
+        assert_eq!(
+            settings_in(&package, root, &["CARGO_PROFILE_DEV_DEBUG"]),
+            incremental_only,
+            "an environment override is the user's choice"
+        );
+        assert_eq!(
+            settings_in(&package, root, &["CARGO_PROFILE_DEV_INCREMENTAL"]),
+            debug_only
+        );
+
+        write(
+            &root.join(".cargo/config.toml"),
+            "[profile.dev]\ndebug = 2\n",
+        );
+        assert_eq!(
+            settings_in(&package, root, &[]),
+            incremental_only,
+            "a cargo config the build merges is the user's choice"
+        );
+        std::fs::remove_file(root.join(".cargo/config.toml")).expect("remove the config");
+
+        let manifest = std::fs::read_to_string(package.join("Cargo.toml")).expect("manifest");
+        write(
+            &package.join("Cargo.toml"),
+            &format!("{manifest}\n[profile.dev.package.\"*\"]\nincremental = true\n"),
+        );
+        assert_eq!(
+            settings_in(&package, root, &[]),
+            debug_only,
+            "a workspace manifest's profile is the user's choice"
+        );
+
+        write(&root.join(".cargo/config"), "[profile.dev\n");
+        assert!(
+            settings_in(&package, root, &[]).is_empty(),
+            "a config whose choices cannot be read leaves every default out"
         );
     }
 
@@ -2070,6 +2278,73 @@ mod tests {
             Some(restored.as_path()),
             "a restore stamps the checkout it restored into"
         );
+    }
+
+    #[test]
+    fn a_publish_over_budget_evicts_the_host_restored_least_recently() {
+        let temp = temp_dir("budget");
+        // Room for two of the three hosts below.
+        let store = RuleHostStore::at(temp.path().join("store")).with_budget(3000);
+        let publish = |key: &str, byte: u8| {
+            let built = temp.path().join(key);
+            let binary = built.join("release/polint-local-rules");
+            std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+            std::fs::write(&binary, vec![byte; 1000]).unwrap();
+            record(Some(&store), &built, &key.repeat(32), &binary);
+        };
+        let age = |key: &str, seconds_ago: u64| {
+            let path = store.entry_path(&key.repeat(32)).unwrap();
+            let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+            file.set_modified(
+                std::time::SystemTime::now() - std::time::Duration::from_secs(seconds_ago),
+            )
+            .unwrap();
+        };
+        publish("aa", 1);
+        age("aa", 300);
+        publish("bb", 2);
+        age("bb", 200);
+        // Restoring the older host is what makes the other one least recent.
+        restore(&store, &temp.path().join("other"), &"aa".repeat(32)).expect("restore aa");
+
+        publish("cc", 3);
+
+        let into = temp.path().join("later");
+        assert!(restore(&store, &into, &"aa".repeat(32)).is_some());
+        assert!(restore(&store, &into, &"cc".repeat(32)).is_some());
+        assert!(
+            restore(&store, &into, &"bb".repeat(32)).is_none(),
+            "the least recently used host is gone"
+        );
+    }
+
+    #[test]
+    fn a_host_built_while_the_store_is_being_evicted_is_not_published() {
+        let temp = temp_dir("evicting");
+        let store = RuleHostStore::at(temp.path().join("store"));
+        std::fs::create_dir_all(&store.root).unwrap();
+        let eviction = std::fs::File::create(
+            store
+                .root
+                .join(super::super::rules_budget::STORE_EVICTION_LOCK),
+        )
+        .unwrap();
+        eviction.lock().unwrap();
+        let built = temp.path().join("built");
+        let binary = built.join("release/polint-local-rules");
+        std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        std::fs::write(&binary, b"host").unwrap();
+
+        record(Some(&store), &built, &"dd".repeat(32), &binary);
+
+        let into = temp.path().join("later");
+        assert!(
+            restore(&store, &into, &"dd".repeat(32)).is_none(),
+            "an eviction could remove the blob before its entry names it"
+        );
+        drop(eviction);
+        record(Some(&store), &built, &"dd".repeat(32), &binary);
+        assert!(restore(&store, &into, &"dd".repeat(32)).is_some());
     }
 
     #[test]
