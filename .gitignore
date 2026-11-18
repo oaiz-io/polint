@@ -38,6 +38,9 @@ node_modules/
 !tests/js-analysis-bench/observed/stubs/node_modules/
 # Dependency packages of the package-graph composition fixture; source.
 !tests/js-analysis-bench/composition/node_modules/
+# Package graphs the JS analysis bench writes beside its report; their sizes are
+# in the report, and each run writes them again.
+tests/js-analysis-bench/baseline/*.package-graph.json.gz
 
 # Benchmark reports written by `make eval-gate`; generated artifacts, not source.
 .context/
