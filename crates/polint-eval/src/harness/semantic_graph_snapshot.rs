@@ -227,29 +227,40 @@ fn ts_direct_bindings_fixture_emits_resolved_copy_and_call_constraints() {
     let constraints = observed["constraints"]
         .as_array()
         .expect("constraints array");
-    let ts_direct_rows = constraints
+    // Module-linked rows name imported callees too, so they replace
+    // every resolved direct-binding call and its callee copy in this fixture.
+    assert!(
+        !constraints
+            .iter()
+            .any(|row| row["source"] == "ts_direct_binding")
+    );
+    let value_flow_rows = constraints
         .iter()
-        .filter(|row| row["source"] == "ts_direct_binding")
+        .filter(|row| {
+            row["stable_key"]
+                .as_str()
+                .is_some_and(|key| key.contains("value_flow:"))
+        })
         .collect::<Vec<_>>();
     assert!(
-        ts_direct_rows
+        value_flow_rows
             .iter()
             .any(|row| row["kind"].as_str() == Some("copy_edge")),
-        "ts_direct_bindings: expected a TS direct-binding CopyEdge row: {observed:#}"
+        "ts_direct_bindings: expected a value-flow CopyEdge row: {observed:#}"
     );
     assert!(
-        ts_direct_rows
+        value_flow_rows
             .iter()
             .any(|row| row["kind"].as_str() == Some("call_constraint")),
-        "ts_direct_bindings: expected a TS direct-binding CallConstraint row: {observed:#}"
+        "ts_direct_bindings: expected a value-flow CallConstraint row: {observed:#}"
     );
-    for row in ts_direct_rows {
+    for row in value_flow_rows {
         let refs = row["referenced_nodes"]
             .as_array()
             .expect("referenced_nodes array");
         assert!(
             !refs.is_empty(),
-            "ts_direct_bindings: TS direct row must reference graph nodes: {row:#}"
+            "ts_direct_bindings: value-flow row must reference graph nodes: {row:#}"
         );
         for node in refs {
             let node = node.as_u64().expect("node ref is u64");
@@ -426,7 +437,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("namedTarget"),
             emits_copy_edge: true,
-            named_by_value_flow: false,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "defaultTarget",
@@ -435,7 +446,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("defaultTarget"),
             emits_copy_edge: true,
-            named_by_value_flow: false,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "ns.namespaceTarget",
@@ -444,7 +455,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("namespaceTarget"),
             emits_copy_edge: true,
-            named_by_value_flow: false,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "viaBarrel",
@@ -453,7 +464,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("namedTarget"),
             emits_copy_edge: true,
-            named_by_value_flow: false,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "aliasTarget",
@@ -462,7 +473,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("aliasTarget"),
             emits_copy_edge: true,
-            named_by_value_flow: false,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "cjsMember",
@@ -471,7 +482,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("cjsTarget"),
             emits_copy_edge: true,
-            named_by_value_flow: false,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "destructured",

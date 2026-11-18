@@ -317,9 +317,11 @@ fn a_written_alias_is_no_alias_of_its_initializer() {
         let files = [("main.js", main)];
         assert!(refined_site_is_open(&files, "main.js", "pick()"), "{main}");
     }
+    // The row call contributes the known operand at the real site on the
+    // heuristic tier; the unresolved row still forbids a complete answer.
     assert_eq!(
         refined_targets_at(&[("main.js", redeclared)], "main.js", "pick()"),
-        set(&[])
+        set(&["function known() { return 1; }"])
     );
 }
 
@@ -509,4 +511,51 @@ fn a_returned_callee_is_attributed_to_the_call_that_consumes_it() {
             "function negate(x) { return -x; }",
         ])
     );
+}
+
+#[test]
+fn function_properties_and_prototypes_flow_across_module_requests() {
+    let main =
+        "const {C} = require('./factory'); const inst = new C({}); inst.check(); C.init(inst, {});";
+    for prototype_store in [
+        "Made.prototype.check = proto.check;",
+        "Made.prototype = proto;",
+    ] {
+        let library = "function make(initializer, proto) { function Made(def) { initializer(this, def); } PROTOTYPE_STORE Object.defineProperty(Made, 'init', {value: initializer}); return Made; } function initialize(inst, def) {} exports.C = make(initialize, {check() {}});"
+            .replace("PROTOTYPE_STORE", prototype_store);
+        let files = [("factory.js", library.as_str()), ("main.js", main)];
+        assert_eq!(
+            refined_targets_at(&files, "main.js", "new C({})"),
+            set(&["function Made(def) { initializer(this, def); }"])
+        );
+        assert_eq!(
+            refined_targets_at(&files, "main.js", "inst.check()"),
+            set(&["check() {}"])
+        );
+        assert_eq!(
+            refined_targets_at(&files, "main.js", "C.init(inst, {})"),
+            set(&["function initialize(inst, def) {}"])
+        );
+    }
+}
+
+#[test]
+fn inherited_field_projection_keeps_an_own_override() {
+    let main = "const parent = {run() {}}; const child = Object.create(parent); child.run = function own() {}; child.run();";
+    assert_eq!(
+        refined_targets_at(&[("main.js", main)], "main.js", "child.run()"),
+        set(&["function own() {}"])
+    );
+}
+
+#[test]
+fn implicit_derived_constructor_arguments_do_not_close_a_default_callback() {
+    let main = "function fallback() {} function supplied() {} class Base { constructor(callback = fallback) { callback(); } } class Derived extends Base {} new Derived(supplied);";
+    // Forwarding the implicit argument list remains open until element flow
+    // describes it, so the default cannot become a complete answer.
+    assert!(refined_site_is_open(
+        &[("main.js", main)],
+        "main.js",
+        "callback()"
+    ));
 }

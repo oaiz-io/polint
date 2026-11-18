@@ -491,6 +491,14 @@ mod tests {
     /// fixture below a precision control too: an extra target fails the same way
     /// a missing one does.
     fn resolved_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
+        targets_at(files, call, false)
+    }
+
+    fn claimed_targets_at(files: &[(&str, &str)], call: &str) -> BTreeSet<String> {
+        targets_at(files, call, true)
+    }
+
+    fn targets_at(files: &[(&str, &str)], call: &str, claimed_only: bool) -> BTreeSet<String> {
         let repo = tempfile::tempdir().unwrap();
         for (name, body) in files {
             std::fs::write(repo.path().join(name), body).unwrap();
@@ -545,6 +553,14 @@ mod tests {
             .refined_call_edges()
             .iter()
             .filter(|edge| edge.site == site.id && edge.status == CallTargetStatus::Resolved)
+            .filter(|edge| {
+                !claimed_only
+                    || matches!(
+                        edge.precision.tier(),
+                        crate::analysis_neutral::calls::facts::ClaimTier::Exact
+                            | crate::analysis_neutral::calls::facts::ClaimTier::Conservative
+                    )
+            })
             .filter_map(|edge| {
                 let target = functions.get(&edge.target_function?)?;
                 let body = sources[paths.get(&target.file)?.as_str()];
@@ -829,14 +845,13 @@ mod tests {
                 &["function right() {}"],
                 "function wrong() {}",
             ),
-            // Class constructor, destructured parameter. The speculative class
-            // walk has no arguments, so the parameter is genuinely unknown here
-            // and uncertainty is the right answer — but the module's `callback`
-            // is not it.
+            // Constructor and method parameters receive arguments through
+            // the row call, including object destructuring. Array and rest
+            // bindings remain open until their element flow is described.
             (
                 "function callback() {}\nclass C {\n  constructor({callback}) { callback(); }\n}\nnew C({callback: function right() {}});\n",
                 "callback();",
-                &[],
+                &["function right() {}"],
                 "function callback() {}",
             ),
             // Class constructor, array-destructured parameter.
@@ -858,7 +873,7 @@ mod tests {
             (
                 "function callback() {}\nclass C {\n  m({callback}) { callback(); }\n}\nnew C().m({callback: function right() {}});\n",
                 "callback();",
-                &[],
+                &["function right() {}"],
                 "function callback() {}",
             ),
             // Controls: the plain identifier and default-valued forms were
@@ -866,13 +881,13 @@ mod tests {
             (
                 "function callback() {}\nclass C {\n  constructor(callback) { callback(); }\n}\nnew C(function right() {});\n",
                 "callback();",
-                &[],
+                &["function right() {}"],
                 "(already unresolved)",
             ),
             (
                 "function callback() {}\nclass C {\n  constructor(callback = function dflt() {}) { callback(); }\n}\nnew C(function right() {});\n",
                 "callback();",
-                &[],
+                &["function right() {}", "function dflt() {}"],
                 "(already unresolved)",
             ),
         ];
@@ -1021,7 +1036,14 @@ mod tests {
         for (lib, tail, call, expected, note) in cases {
             let main = format!("{HELPERS}{tail}");
             assert_eq!(
-                resolved_targets_at(&[("main.js", &main), ("lib.js", lib)], call),
+                // Flow-insensitive rows retain both helper branches. A call
+                // that throws may therefore carry a heuristic candidate, but
+                // must never claim an exact or conservative target.
+                if expected.is_empty() {
+                    claimed_targets_at(&[("main.js", &main), ("lib.js", lib)], call)
+                } else {
+                    resolved_targets_at(&[("main.js", &main), ("lib.js", lib)], call)
+                },
                 expected
                     .iter()
                     .map(|text| (*text).to_string())
@@ -1293,7 +1315,13 @@ mod tests {
         for (path, (body, call, expected, why)) in all_cases {
             let source = format!("{HEADER}{body}");
             assert_eq!(
-                resolved_targets_at(&[(path, &source)], call),
+                // An open row call retains known operands as heuristic
+                // candidates; only claim tiers count as resolved answers here.
+                if expected.is_empty() {
+                    claimed_targets_at(&[(path, &source)], call)
+                } else {
+                    resolved_targets_at(&[(path, &source)], call)
+                },
                 expected
                     .iter()
                     .map(|text| (*text).to_string())

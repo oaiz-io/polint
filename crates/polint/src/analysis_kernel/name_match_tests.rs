@@ -114,7 +114,7 @@ fn a_member_call_matched_only_by_property_name_stays_unresolved() {
 }
 
 #[test]
-fn the_refined_answer_for_a_name_matched_call_keeps_its_unresolved_row() {
+fn the_refined_answer_for_a_stored_property_uses_its_function() {
     let output = run(MEMBER_MATCHED_BY_NAME, REFINED);
     let site = member_site(&output, "parse");
     let refined = output
@@ -125,19 +125,37 @@ fn the_refined_answer_for_a_name_matched_call_keeps_its_unresolved_row() {
         .collect::<Vec<_>>();
 
     assert!(!refined.is_empty(), "the refined layer answers the site");
-    for edge in &refined {
-        assert!(
-            !(edge.status == CallTargetStatus::Resolved && claims(edge.precision.tier())),
-            "refined {:?} edge claims {:?}",
-            edge.tier,
-            edge.precision
-        );
-    }
+    // The base name match remains heuristic, while the row field store
+    // supplies the actual function independently of that match.
+    let function = output
+        .db
+        .functions()
+        .iter()
+        .find(|function| {
+            let span = &function.span;
+            &MEMBER_MATCHED_BY_NAME[span.start_byte as usize..span.end_byte as usize]
+                == "function parse(input) { return input; }"
+        })
+        .expect("the assigned function");
     assert!(
         refined
             .iter()
-            .any(|edge| edge.status != CallTargetStatus::Resolved),
-        "the refined answer has no unresolved row"
+            .any(|edge| edge.status == CallTargetStatus::Resolved
+                && edge.target_function == Some(function.id)
+                && edge.precision.tier() == ClaimTier::Exact)
+    );
+    assert!(
+        refined
+            .iter()
+            .filter(|edge| claims(edge.precision.tier()))
+            .all(|edge| edge.target_function == Some(function.id))
+    );
+    // A fully described stored property closes the refined answer even
+    // though the base layer still has only a property-name match.
+    assert!(
+        refined
+            .iter()
+            .all(|edge| edge.status == CallTargetStatus::Resolved)
     );
 }
 
