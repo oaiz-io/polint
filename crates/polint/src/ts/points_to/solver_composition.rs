@@ -1159,3 +1159,60 @@ fn superset_of_constraints_solves_to_a_superset() {
     );
     assert!(larger.derived_edges.len() > smaller.derived_edges.len());
 }
+
+/// The variable of the heap slot that holds `function`: the one set with that
+/// object whose variable is no fixture place.
+fn slot_holding(fixture: &Fixture, result: &TsPointsToSolveResult, function: &str) -> PtVarId {
+    let places = fixture
+        .nodes
+        .values()
+        .map(|node| var_for_node(*node))
+        .collect::<BTreeSet<_>>();
+    let object = object_for_node(fixture.nodes[function]);
+    let slots = result
+        .points_to
+        .sets
+        .iter()
+        .filter(|set| !places.contains(&set.variable) && set.objects.contains(&object))
+        .map(|set| set.variable)
+        .collect::<Vec<_>>();
+    assert_eq!(slots.len(), 1, "slots holding `{function}`: {slots:?}");
+    slots[0]
+}
+
+/// A heap slot's variable depends on its object and field alone, so a package
+/// graph's slot keeps its id when the graph is solved together with more
+/// slots, including slots the solve reaches first.
+#[test]
+fn a_slot_keeps_its_variable_when_other_slots_are_added() {
+    let alone = {
+        let mut fixture = Fixture::new();
+        fixture.function("fnf");
+        fixture.alloc("p", "obj");
+        fixture.store("p", "f", "fnf");
+        fixture
+    };
+    let with_others = {
+        let mut fixture = Fixture::new();
+        fixture.function("fnf");
+        fixture.node("p");
+        fixture.node("obj");
+        fixture.function("fna");
+        fixture.store("p", "a", "fna");
+        fixture.store("p", "e", "fna");
+        fixture.alloc("p", "obj");
+        fixture.store("p", "f", "fnf");
+        fixture.store("p", "z", "fna");
+        fixture.alloc("q", "objq");
+        fixture.store("q", "a", "fna");
+        fixture
+    };
+    let budget = SolverBudget::default();
+    let alone_result = alone.solve(&budget);
+    let others_result = with_others.solve(&budget);
+    assert_eq!(
+        slot_holding(&alone, &alone_result, "fnf"),
+        slot_holding(&with_others, &others_result, "fnf"),
+        "p.f changed its variable when other slots were added"
+    );
+}
