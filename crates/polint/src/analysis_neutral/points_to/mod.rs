@@ -1,5 +1,6 @@
 pub mod constraints;
 pub mod facts;
+mod sets;
 pub mod solver;
 pub mod store;
 #[cfg(test)]

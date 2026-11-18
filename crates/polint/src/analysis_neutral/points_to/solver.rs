@@ -20,12 +20,13 @@
 //! the call's result. Those copies enter the same worklist, so the solve stays
 //! the least fixed point of constraints and calls together.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use super::facts::{
     PointsToBudgetStatus, PointsToConstraintFact, PointsToConstraintKind, PointsToPrecision,
     PointsToSetFact, PointsToStatus,
 };
+use super::sets::ObjectSet;
 use super::store::PointsToOutput;
 use super::vars;
 use crate::analysis_api::{FactFamily, stable_key_from_parts, stable_key_text_from_parts};
@@ -251,48 +252,143 @@ fn constraint_counts(constraints: &[PointsToConstraintFact]) -> BTreeMap<&'stati
 const CONTENTS_SLOT: &str = "$contents";
 
 /// A load from, or a store into, a field of the objects a base points to.
-/// `var` is the load's destination or the store's source.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// `var` is the load's destination or the store's source; `field` is the
+/// field's index, and indices follow field-name order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Projection {
-    field: String,
-    var: PtVarId,
+    field: u32,
+    var: u32,
     precision: PointsToPrecision,
 }
 
-type Edges = BTreeMap<PtVarId, BTreeMap<PtVarId, PointsToPrecision>>;
+/// One part of a variable's stable identity: a constraint or call that names
+/// it in a role, or the object and field of the heap slot it is.
+#[derive(Debug, Clone, Copy)]
+enum IdentityPart {
+    Relation(StableKeyId, &'static str),
+    Slot { object: u32, field: u32 },
+}
 
+/// An edge to another variable, with the precision of the constraint that
+/// made it. A variable's edges are kept in the order of their targets' ids.
+type Edge = (u32, PointsToPrecision);
+
+/// What the solve keeps of one variable, at the variable's dense index.
+#[derive(Debug, Default)]
+struct Var {
+    set: ObjectSet,
+    /// Objects received and not yet propagated; `Some` exactly while the
+    /// variable is on the queue.
+    pending: Option<Vec<u32>>,
+    /// Inclusion edges, `self -> target`.
+    copies: Vec<Edge>,
+    /// Edges that carry precision and incompleteness but no objects: a base
+    /// to its loads' destinations and to the slots its stores write.
+    dependencies: Vec<Edge>,
+    /// Ordered by field, then by the variable's id, then by precision.
+    loads: Vec<Projection>,
+    stores: Vec<Projection>,
+    seed_precision: Option<PointsToPrecision>,
+    /// The object and field of a heap slot.
+    slot: Option<(u32, u32)>,
+    /// The calls whose callee set this is.
+    calls: Vec<u32>,
+    identity: Vec<IdentityPart>,
+    /// The call-rule copies into the variable.
+    bindings: BTreeSet<CallBinding>,
+    /// A budget event cut the variable's propagation short.
+    interrupted: bool,
+}
+
+#[derive(Debug)]
+struct Object {
+    id: ObjectTokenId,
+    identity: Vec<(StableKeyId, &'static str)>,
+    /// Index of the function's signature.
+    signature: Option<u32>,
+    /// The object's heap slots.
+    slots: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Place {
+    var: u32,
+    stable_key: StableKeyId,
+}
+
+#[derive(Debug)]
+struct Signature {
+    /// By position.
+    params: Vec<(usize, Place)>,
+    rest: Option<Place>,
+    this: Option<Place>,
+    ret: Option<Place>,
+}
+
+impl Signature {
+    fn param(&self, position: usize) -> Option<Place> {
+        self.params
+            .binary_search_by_key(&position, |(at, _)| *at)
+            .ok()
+            .map(|index| self.params[index].1)
+    }
+
+    /// The places a call fills: parameters, the rest parameter and `this`.
+    fn inputs(&self) -> impl Iterator<Item = u32> + '_ {
+        self.params
+            .iter()
+            .map(|(_, place)| place)
+            .chain(self.rest.iter())
+            .chain(self.this.iter())
+            .map(|place| place.var)
+    }
+}
+
+#[derive(Debug)]
+struct Call {
+    stable_key: StableKeyId,
+    callee: u32,
+    receiver: Option<u32>,
+    arguments: Vec<u32>,
+    spread_from: Option<usize>,
+    result: Option<u32>,
+    precision: PointsToPrecision,
+}
+
+impl Call {
+    /// Arguments before this position are bound by position.
+    fn bound(&self) -> usize {
+        self.spread_from.map_or(self.arguments.len(), |spread| {
+            spread.min(self.arguments.len())
+        })
+    }
+}
+
+/// The solve runs over dense indices: variables in the order they are first
+/// named, objects in object-id order and fields in name order. Every list
+/// the worklist walks is kept in id order, so the order of the walk, and
+/// with it a result cut short by a budget, is that of the ids.
 struct Solver<'a> {
     interner: &'a crate::internal_core::StableKeyInterner,
     budget: PointsToBudget,
-    sets: BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
-    /// Objects a variable has received and not yet propagated. A variable has
-    /// an entry exactly while it is on the queue.
-    pending: BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
-    queue: VecDeque<PtVarId>,
-    /// Inclusion edges, `src -> dst`, with the precision of the constraint
-    /// that made each one.
-    copy_edges: Edges,
-    /// Edges that carry precision and incompleteness but no objects: a base
-    /// to its loads' destinations and to the slots its stores write.
-    dependency_edges: Edges,
-    loads: BTreeMap<PtVarId, BTreeSet<Projection>>,
-    stores: BTreeMap<PtVarId, BTreeSet<Projection>>,
-    seed_precision: BTreeMap<PtVarId, PointsToPrecision>,
-    slots: BTreeMap<ObjectTokenId, BTreeMap<String, PtVarId>>,
-    slot_keys: BTreeMap<PtVarId, (ObjectTokenId, String)>,
-    slots_by_field: BTreeMap<String, BTreeSet<PtVarId>>,
-    variable_identities: BTreeMap<PtVarId, BTreeSet<String>>,
-    object_identities: BTreeMap<ObjectTokenId, BTreeSet<String>>,
-    /// Calls sorted by stable key text, and the calls of each callee variable.
-    calls: Vec<PointsToCall>,
-    calls_by_callee: BTreeMap<PtVarId, Vec<usize>>,
-    signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
-    /// The call-rule copies into each variable.
-    bindings: BTreeMap<PtVarId, BTreeSet<CallBinding>>,
+    var_ids: Vec<PtVarId>,
+    var_index: HashMap<PtVarId, u32>,
+    vars: Vec<Var>,
+    objects: Vec<Object>,
+    object_index: HashMap<ObjectTokenId, u32>,
+    fields: Vec<String>,
+    field_index: HashMap<String, u32>,
+    slots: HashMap<(u32, u32), u32>,
+    slots_by_field: Vec<Vec<u32>>,
+    /// Calls sorted by stable key text.
+    calls: Vec<Call>,
+    /// In object-id order.
+    signatures: Vec<Signature>,
+    queue: VecDeque<u32>,
+    /// Reused to carry a set's objects along a new edge.
+    scratch: Vec<u32>,
     steps: usize,
     halted: bool,
-    /// Variables whose propagation a budget event cut short.
-    interrupted: BTreeSet<PtVarId>,
     budget_reasons: BTreeSet<String>,
 }
 
@@ -301,31 +397,57 @@ impl<'a> Solver<'a> {
         Self {
             interner,
             budget,
-            sets: BTreeMap::new(),
-            pending: BTreeMap::new(),
-            queue: VecDeque::new(),
-            copy_edges: BTreeMap::new(),
-            dependency_edges: BTreeMap::new(),
-            loads: BTreeMap::new(),
-            stores: BTreeMap::new(),
-            seed_precision: BTreeMap::new(),
-            slots: BTreeMap::new(),
-            slot_keys: BTreeMap::new(),
-            slots_by_field: BTreeMap::new(),
-            variable_identities: BTreeMap::new(),
-            object_identities: BTreeMap::new(),
+            var_ids: Vec::new(),
+            var_index: HashMap::new(),
+            vars: Vec::new(),
+            objects: Vec::new(),
+            object_index: HashMap::new(),
+            fields: Vec::new(),
+            field_index: HashMap::new(),
+            slots: HashMap::new(),
+            slots_by_field: Vec::new(),
             calls: Vec::new(),
-            calls_by_callee: BTreeMap::new(),
-            signatures: BTreeMap::new(),
-            bindings: BTreeMap::new(),
+            signatures: Vec::new(),
+            queue: VecDeque::new(),
+            scratch: Vec::new(),
             steps: 0,
             halted: false,
-            interrupted: BTreeSet::new(),
             budget_reasons: BTreeSet::new(),
         }
     }
 
+    /// The dense index of `id`, assigned on first use.
+    fn var(&mut self, id: PtVarId) -> u32 {
+        if let Some(index) = self.var_index.get(&id) {
+            return *index;
+        }
+        let index = u32::try_from(self.vars.len()).expect("points-to variables exceed u32");
+        self.var_ids.push(id);
+        self.var_index.insert(id, index);
+        self.vars.push(Var::default());
+        index
+    }
+
+    fn name_var(&mut self, id: PtVarId, key: StableKeyId, role: &'static str) -> u32 {
+        let var = self.var(id);
+        self.vars[var as usize]
+            .identity
+            .push(IdentityPart::Relation(key, role));
+        var
+    }
+
+    fn name_object(&mut self, id: ObjectTokenId, key: StableKeyId, role: &'static str) -> u32 {
+        let object = self.object_index[&id];
+        self.objects[object as usize].identity.push((key, role));
+        object
+    }
+
+    fn field(&self, name: &str) -> u32 {
+        self.field_index[name]
+    }
+
     fn initialize(&mut self, constraints: &[PointsToConstraintFact]) {
+        use PointsToConstraintKind as Kind;
         let mut sorted = constraints
             .iter()
             .map(|constraint| (self.interner.resolve(constraint.stable_key), constraint))
@@ -336,37 +458,84 @@ impl<'a> Solver<'a> {
                 .then_with(|| left.kind.cmp(&right.kind))
                 .then_with(|| left.precision.cmp(&right.precision))
         });
-        for (key, constraint) in sorted {
-            self.record_constraint_identities(&key, &constraint.kind);
+        let mut objects = BTreeSet::new();
+        let mut fields = BTreeSet::new();
+        for (_, constraint) in &sorted {
+            match &constraint.kind {
+                Kind::AddressOf { object, .. } => {
+                    objects.insert(*object);
+                }
+                Kind::CallReturn { value, .. } => {
+                    objects.insert(vars::value_fact_object(*value));
+                }
+                kind => {
+                    fields.extend(projection_field(kind));
+                }
+            }
+        }
+        for (index, id) in objects.into_iter().enumerate() {
+            self.object_index.insert(id, index as u32);
+            self.objects.push(Object {
+                id,
+                identity: Vec::new(),
+                signature: None,
+                slots: Vec::new(),
+            });
+        }
+        for (index, name) in fields.into_iter().enumerate() {
+            self.field_index.insert(name.clone(), index as u32);
+            self.fields.push(name);
+            self.slots_by_field.push(Vec::new());
+        }
+        for (_, constraint) in sorted {
+            let key = constraint.stable_key;
             let precision = constraint.precision;
             match &constraint.kind {
-                PointsToConstraintKind::AddressOf { dst, object } => {
-                    self.seed(*dst, *object, precision);
+                Kind::AddressOf { dst, object } => {
+                    let dst = self.name_var(*dst, key, "address_of_destination");
+                    let object = self.name_object(*object, key, "address_of_object");
+                    self.seed(dst, object, precision);
                 }
-                PointsToConstraintKind::CallReturn { dst, value } => {
-                    self.seed(*dst, vars::value_fact_object(*value), precision);
+                Kind::CallReturn { dst, value } => {
+                    let dst = self.name_var(*dst, key, "call_return_destination");
+                    let object = self.name_object(
+                        vars::value_fact_object(*value),
+                        key,
+                        "call_return_object",
+                    );
+                    self.seed(dst, object, precision);
                 }
-                PointsToConstraintKind::Copy { dst, src }
-                | PointsToConstraintKind::SummaryFlow { dst, src, .. } => {
-                    self.add_copy_edge(*src, *dst, precision);
+                Kind::Copy { dst, src } => {
+                    let dst = self.name_var(*dst, key, "copy_destination");
+                    let src = self.name_var(*src, key, "copy_source");
+                    self.add_copy_edge(src, dst, precision);
                 }
-                PointsToConstraintKind::Load { dst, pointer } => {
-                    self.add_load(*pointer, CONTENTS_SLOT.to_string(), *dst, precision);
+                Kind::SummaryFlow { dst, src, .. } => {
+                    let dst = self.name_var(*dst, key, "summary_destination");
+                    let src = self.name_var(*src, key, "summary_source");
+                    self.add_copy_edge(src, dst, precision);
                 }
-                PointsToConstraintKind::FieldLoad { dst, base, field } => {
-                    self.add_load(*base, field.clone(), *dst, precision);
+                Kind::Load { dst, pointer } => {
+                    let dst = self.name_var(*dst, key, "load_destination");
+                    let pointer = self.name_var(*pointer, key, "load_pointer");
+                    self.add_load(pointer, self.field(CONTENTS_SLOT), dst, precision);
                 }
-                PointsToConstraintKind::ElementLoad { dst, base, index } => {
-                    self.add_load(*base, format!("[{index}]"), *dst, precision);
+                Kind::FieldLoad { dst, base, .. } | Kind::ElementLoad { dst, base, .. } => {
+                    let field = self.field(&projection_field(&constraint.kind).expect("load"));
+                    let dst = self.name_var(*dst, key, "projection_load_destination");
+                    let base = self.name_var(*base, key, "projection_load_base");
+                    self.add_load(base, field, dst, precision);
                 }
-                PointsToConstraintKind::Store { pointer, src } => {
-                    self.add_store(*pointer, CONTENTS_SLOT.to_string(), *src, precision);
+                Kind::Store { pointer, src } => {
+                    let pointer = self.name_var(*pointer, key, "store_pointer");
+                    let src = self.name_var(*src, key, "store_source");
+                    self.add_store(pointer, self.field(CONTENTS_SLOT), src, precision);
                 }
-                PointsToConstraintKind::FieldStore { base, field, src } => {
-                    self.add_store(*base, field.clone(), *src, precision);
-                }
-                PointsToConstraintKind::ElementStore { base, index, src } => {
-                    self.add_store(*base, format!("[{index}]"), *src, precision);
+                Kind::FieldStore { base, src, .. } | Kind::ElementStore { base, src, .. } => {
+                    let field = self.field(&projection_field(&constraint.kind).expect("store"));
+                    let base = self.name_var(*base, key, "projection_store_base");
+                    let src = self.name_var(*src, key, "projection_store_source");
+                    self.add_store(base, field, src, precision);
                 }
             }
         }
@@ -382,91 +551,95 @@ impl<'a> Solver<'a> {
             left_key.cmp(right_key).then_with(|| left.cmp(right))
         });
         calls.dedup_by(|(_, left), (_, right)| left == right);
-        for (index, (key, call)) in calls.into_iter().enumerate() {
-            self.record_variable_identity(call.callee, &key, "call_callee");
-            if let Some(receiver) = call.receiver {
-                self.record_variable_identity(receiver, &key, "call_receiver");
-            }
-            for argument in &call.arguments {
-                self.record_variable_identity(*argument, &key, "call_argument");
-            }
-            if let Some(result) = call.result {
-                self.record_variable_identity(result, &key, "call_result");
+        for (index, (_, call)) in calls.into_iter().enumerate() {
+            let key = call.stable_key;
+            let callee = self.name_var(call.callee, key, "call_callee");
+            let receiver = call
+                .receiver
+                .map(|receiver| self.name_var(receiver, key, "call_receiver"));
+            let arguments = call
+                .arguments
+                .iter()
+                .map(|argument| self.name_var(*argument, key, "call_argument"))
+                .collect();
+            let result = call.result.map(|result| {
+                let result = self.name_var(result, key, "call_result");
                 // The result holds only what the callees return, so it is as
                 // weak and as incomplete as the callee set.
                 add_edge(
-                    &mut self.dependency_edges,
-                    call.callee,
+                    &self.var_ids,
+                    &mut self.vars[callee as usize].dependencies,
                     result,
                     call.precision,
                 );
-            }
-            self.calls_by_callee
-                .entry(call.callee)
-                .or_default()
-                .push(index);
-            self.calls.push(call.clone());
+                result
+            });
+            self.vars[callee as usize].calls.push(index as u32);
+            self.calls.push(Call {
+                stable_key: key,
+                callee,
+                receiver,
+                arguments,
+                spread_from: call.spread_from,
+                result,
+                precision: call.precision,
+            });
         }
-        for signature in inputs.signatures.values() {
-            let places = signature
-                .params
-                .values()
-                .map(|place| (place, "function_parameter"))
-                .chain(signature.rest.iter().map(|place| (place, "function_rest")))
-                .chain(signature.this.iter().map(|place| (place, "function_this")))
-                .chain(signature.ret.iter().map(|place| (place, "function_return")));
-            for (place, role) in places {
-                let key = self.interner.resolve(place.stable_key);
-                self.record_variable_identity(place.var, &key, role);
+        for (object, signature) in &inputs.signatures {
+            let mut place = |place: &SignaturePlace, role: &'static str| Place {
+                var: self.name_var(place.var, place.stable_key, role),
+                stable_key: place.stable_key,
+            };
+            let signature = Signature {
+                params: signature
+                    .params
+                    .iter()
+                    .map(|(position, param)| (*position, place(param, "function_parameter")))
+                    .collect(),
+                rest: signature.rest.map(|rest| place(&rest, "function_rest")),
+                this: signature.this.map(|this| place(&this, "function_this")),
+                ret: signature.ret.map(|ret| place(&ret, "function_return")),
+            };
+            let index = self.signatures.len() as u32;
+            self.signatures.push(signature);
+            if let Some(object) = self.object_index.get(object) {
+                self.objects[*object as usize].signature = Some(index);
             }
         }
-        self.signatures = inputs.signatures.clone();
     }
 
-    fn seed(&mut self, dst: PtVarId, object: ObjectTokenId, precision: PointsToPrecision) {
-        raise(
-            self.seed_precision.entry(dst).or_insert(precision),
+    fn seed(&mut self, dst: u32, object: u32, precision: PointsToPrecision) {
+        let seed = &mut self.vars[dst as usize].seed_precision;
+        *seed = Some(seed.map_or(precision, |held| held.max(precision)));
+        self.enqueue(dst, &[object]);
+    }
+
+    fn add_load(&mut self, base: u32, field: u32, dst: u32, precision: PointsToPrecision) {
+        add_edge(
+            &self.var_ids,
+            &mut self.vars[base as usize].dependencies,
+            dst,
             precision,
         );
-        enqueue(
-            &self.sets,
-            &mut self.pending,
-            &mut self.queue,
-            dst,
-            std::iter::once(object),
-        );
-    }
-
-    fn add_load(
-        &mut self,
-        base: PtVarId,
-        field: String,
-        dst: PtVarId,
-        precision: PointsToPrecision,
-    ) {
-        add_edge(&mut self.dependency_edges, base, dst, precision);
-        self.loads.entry(base).or_default().insert(Projection {
+        let load = Projection {
             field,
             var: dst,
             precision,
-        });
+        };
+        insert_projection(&self.var_ids, &mut self.vars[base as usize].loads, load);
     }
 
-    fn add_store(
-        &mut self,
-        base: PtVarId,
-        field: String,
-        src: PtVarId,
-        precision: PointsToPrecision,
-    ) {
-        self.stores.entry(base).or_default().insert(Projection {
+    fn add_store(&mut self, base: u32, field: u32, src: u32, precision: PointsToPrecision) {
+        let store = Projection {
             field,
             var: src,
             precision,
-        });
+        };
+        insert_projection(&self.var_ids, &mut self.vars[base as usize].stores, store);
     }
 
     fn run(&mut self) {
+        let mut new = Vec::new();
         while let Some(&var) = self.queue.front() {
             if self.steps >= self.budget.max_steps {
                 self.halt(BudgetReason::SolverMaxSteps);
@@ -474,66 +647,62 @@ impl<'a> Solver<'a> {
             }
             self.queue.pop_front();
             self.steps += 1;
-            let delta = self.pending.remove(&var).unwrap_or_default();
-            self.process(var, delta);
+            let mut delta = self.vars[var as usize].pending.take().unwrap_or_default();
+            delta.sort_unstable();
+            delta.dedup();
+            new.clear();
+            self.vars[var as usize].set.missing(&delta, &mut new);
+            self.process(var, &new);
             if self.halted {
                 break;
             }
         }
     }
 
-    fn process(&mut self, var: PtVarId, delta: BTreeSet<ObjectTokenId>) {
-        let held = self.sets.get(&var);
-        let new = delta
-            .into_iter()
-            .filter(|object| held.is_none_or(|held| !held.contains(object)))
-            .collect::<BTreeSet<_>>();
+    /// Adds `new` to the set of `var` and carries it along every edge out of
+    /// `var`: copies, the slots its loads and stores reach, and calls.
+    fn process(&mut self, var: u32, new: &[u32]) {
         if new.is_empty() {
             return;
         }
-        if held.map_or(0, BTreeSet::len) + new.len() > self.budget.max_objects_per_var {
-            self.interrupted.insert(var);
+        let at = var as usize;
+        if self.vars[at].set.len() + new.len() > self.budget.max_objects_per_var {
+            self.vars[at].interrupted = true;
             self.halt(BudgetReason::PointsToMaxObjectsPerVar);
             return;
         }
-        self.sets
-            .entry(var)
-            .or_default()
-            .extend(new.iter().copied());
-
-        if let Some(dsts) = self.copy_edges.get(&var) {
-            for dst in dsts.keys() {
-                enqueue(
-                    &self.sets,
-                    &mut self.pending,
-                    &mut self.queue,
-                    *dst,
-                    new.iter().copied(),
-                );
-            }
+        self.vars[at].set.add_new(new);
+        for index in 0..self.vars[at].copies.len() {
+            let dst = self.vars[at].copies[index].0;
+            self.enqueue(dst, new);
         }
-        let loads = self.loads.get(&var).cloned().unwrap_or_default();
-        for load in &loads {
-            for object in &new {
-                let Some(slot) = self.object_slot(*object, &load.field) else {
-                    self.interrupted.insert(var);
+        for index in 0..self.vars[at].loads.len() {
+            let load = self.vars[at].loads[index];
+            for object in new {
+                let Some(slot) = self.object_slot(*object, load.field) else {
+                    self.vars[at].interrupted = true;
                     return;
                 };
                 self.add_copy_edge(slot, load.var, load.precision);
             }
         }
-        let stores = self.stores.get(&var).cloned().unwrap_or_default();
-        for store in &stores {
-            for object in &new {
-                let Some(slot) = self.object_slot(*object, &store.field) else {
-                    self.interrupted.insert(var);
+        for index in 0..self.vars[at].stores.len() {
+            let store = self.vars[at].stores[index];
+            for object in new {
+                let Some(slot) = self.object_slot(*object, store.field) else {
+                    self.vars[at].interrupted = true;
                     return;
                 };
-                add_edge(&mut self.dependency_edges, var, slot, store.precision);
+                add_edge(
+                    &self.var_ids,
+                    &mut self.vars[at].dependencies,
+                    slot,
+                    store.precision,
+                );
                 self.add_copy_edge(store.var, slot, store.precision);
             }
         }
-        self.apply_call_rule(var, &new);
+        self.apply_call_rule(var, new);
     }
 
     /// Connects every call whose callee is `callee` to the functions among
@@ -541,56 +710,63 @@ impl<'a> Solver<'a> {
     /// receiver to `this`, return to result. A parameter the call fills from
     /// a spread, and the rest parameter, receive values the solve does not
     /// model, so they are made heuristic instead of bound.
-    fn apply_call_rule(&mut self, callee: PtVarId, new: &BTreeSet<ObjectTokenId>) {
-        let Some(indices) = self.calls_by_callee.get(&callee).cloned() else {
-            return;
-        };
-        for index in indices {
-            let call = self.calls[index].clone();
+    fn apply_call_rule(&mut self, callee: u32, new: &[u32]) {
+        for call_at in 0..self.vars[callee as usize].calls.len() {
+            let index = self.vars[callee as usize].calls[call_at] as usize;
+            let (precision, bound, spread, receiver, result) = {
+                let call = &self.calls[index];
+                (
+                    call.precision,
+                    call.bound(),
+                    call.spread_from.is_some(),
+                    call.receiver,
+                    call.result,
+                )
+            };
+            let passes_arguments = !self.calls[index].arguments.is_empty();
             for object in new {
-                let Some(signature) = self.signatures.get(object).cloned() else {
+                let Some(signature) = self.objects[*object as usize].signature else {
                     continue;
                 };
-                let bound = call.spread_from.map_or(call.arguments.len(), |spread| {
-                    spread.min(call.arguments.len())
-                });
-                for (position, argument) in call.arguments[..bound].iter().enumerate() {
-                    if let Some(param) = signature.params.get(&position) {
-                        self.bind(index, *argument, *param, call.precision);
+                let signature = signature as usize;
+                for position in 0..bound {
+                    let argument = self.calls[index].arguments[position];
+                    if let Some(param) = self.signatures[signature].param(position) {
+                        self.bind(index, argument, param, precision);
                     }
                 }
-                if call.spread_from.is_some() {
-                    for param in signature.params.range(bound..).map(|(_, param)| param) {
+                if spread {
+                    let params = &self.signatures[signature].params;
+                    let from = params.partition_point(|(position, _)| *position < bound);
+                    for at in from..params.len() {
+                        let param = self.signatures[signature].params[at].1;
                         add_edge(
-                            &mut self.dependency_edges,
-                            callee,
+                            &self.var_ids,
+                            &mut self.vars[callee as usize].dependencies,
                             param.var,
                             PointsToPrecision::Heuristic,
                         );
                     }
                 }
-                if let Some(rest) = signature.rest
-                    && !call.arguments.is_empty()
+                if let Some(rest) = self.signatures[signature].rest
+                    && passes_arguments
                 {
                     add_edge(
-                        &mut self.dependency_edges,
-                        callee,
+                        &self.var_ids,
+                        &mut self.vars[callee as usize].dependencies,
                         rest.var,
                         PointsToPrecision::Heuristic,
                     );
                 }
-                if let (Some(receiver), Some(this)) = (call.receiver, signature.this) {
-                    self.bind(index, receiver, this, call.precision);
+                if let (Some(receiver), Some(this)) = (receiver, self.signatures[signature].this) {
+                    self.bind(index, receiver, this, precision);
                 }
-                if let (Some(result), Some(ret)) = (call.result, signature.ret) {
-                    self.add_copy_edge(ret.var, result, call.precision);
-                    self.bindings
-                        .entry(result)
-                        .or_default()
-                        .insert(CallBinding {
-                            call: call.stable_key,
-                            place: ret.stable_key,
-                        });
+                if let (Some(result), Some(ret)) = (result, self.signatures[signature].ret) {
+                    self.add_copy_edge(ret.var, result, precision);
+                    self.vars[result as usize].bindings.insert(CallBinding {
+                        call: self.calls[index].stable_key,
+                        place: ret.stable_key,
+                    });
                 }
             }
         }
@@ -598,38 +774,53 @@ impl<'a> Solver<'a> {
 
     /// Copies `src` into a signature place for a call, and makes the place as
     /// weak and as incomplete as the callee set it was reached through.
-    fn bind(
-        &mut self,
-        index: usize,
-        src: PtVarId,
-        place: SignaturePlace,
-        precision: PointsToPrecision,
-    ) {
-        let call = &self.calls[index];
-        let (callee, key) = (call.callee, call.stable_key);
-        add_edge(&mut self.dependency_edges, callee, place.var, precision);
+    fn bind(&mut self, index: usize, src: u32, place: Place, precision: PointsToPrecision) {
+        let (callee, key) = (self.calls[index].callee, self.calls[index].stable_key);
+        add_edge(
+            &self.var_ids,
+            &mut self.vars[callee as usize].dependencies,
+            place.var,
+            precision,
+        );
         self.add_copy_edge(src, place.var, precision);
-        self.bindings
-            .entry(place.var)
-            .or_default()
-            .insert(CallBinding {
-                call: key,
-                place: place.stable_key,
-            });
+        self.vars[place.var as usize].bindings.insert(CallBinding {
+            call: key,
+            place: place.stable_key,
+        });
     }
 
-    fn add_copy_edge(&mut self, src: PtVarId, dst: PtVarId, precision: PointsToPrecision) {
-        if !add_edge(&mut self.copy_edges, src, dst, precision) {
+    fn add_copy_edge(&mut self, src: u32, dst: u32, precision: PointsToPrecision) {
+        if !add_edge(
+            &self.var_ids,
+            &mut self.vars[src as usize].copies,
+            dst,
+            precision,
+        ) {
             return;
         }
-        if let Some(objects) = self.sets.get(&src) {
-            enqueue(
-                &self.sets,
-                &mut self.pending,
-                &mut self.queue,
-                dst,
-                objects.iter().copied(),
-            );
+        if self.vars[src as usize].set.is_empty() {
+            return;
+        }
+        let mut objects = std::mem::take(&mut self.scratch);
+        objects.clear();
+        objects.extend(self.vars[src as usize].set.iter());
+        self.enqueue(dst, &objects);
+        self.scratch = objects;
+    }
+
+    /// Queues the objects of `objects` that `dst` does not hold yet.
+    fn enqueue(&mut self, dst: u32, objects: &[u32]) {
+        let Var { set, pending, .. } = &mut self.vars[dst as usize];
+        match pending {
+            Some(pending) => set.missing(objects, pending),
+            None => {
+                let mut missing = Vec::new();
+                set.missing(objects, &mut missing);
+                if !missing.is_empty() {
+                    *pending = Some(missing);
+                    self.queue.push_back(dst);
+                }
+            }
         }
     }
 
@@ -640,42 +831,36 @@ impl<'a> Solver<'a> {
 
     /// The variable of `object.field`, created on first use. `None` when the
     /// slot ceiling is reached; the solve has then stopped.
-    fn object_slot(&mut self, object: ObjectTokenId, field: &str) -> Option<PtVarId> {
-        if let Some(var) = self.slots.get(&object).and_then(|slots| slots.get(field)) {
+    fn object_slot(&mut self, object: u32, field: u32) -> Option<u32> {
+        if let Some(var) = self.slots.get(&(object, field)) {
             return Some(*var);
         }
-        if self.slot_keys.len() >= self.budget.max_dynamic_vars {
+        if self.slots.len() >= self.budget.max_dynamic_vars {
             self.halt(BudgetReason::PointsToMaxDynamicVars);
             return None;
         }
-        let mut hash = slot_hash(object, field);
-        let var = loop {
+        let mut hash = slot_hash(
+            self.objects[object as usize].id,
+            &self.fields[field as usize],
+        );
+        let id = loop {
             let candidate = vars::slot_var(hash);
-            if !self.slot_keys.contains_key(&candidate) {
+            let taken = self
+                .var_index
+                .get(&candidate)
+                .is_some_and(|var| self.vars[*var as usize].slot.is_some());
+            if !taken {
                 break candidate;
             }
             hash = hash.wrapping_add(1);
         };
-        let slot_identity = stable_key_text_from_parts(
-            FactFamily::PointsToSet,
-            &[
-                ("object", self.semantic_object_identity(object)),
-                ("slot", field.to_string()),
-            ],
-        );
-        self.variable_identities
-            .entry(var)
-            .or_default()
-            .insert(slot_identity);
-        self.slots
-            .entry(object)
-            .or_default()
-            .insert(field.to_string(), var);
-        self.slot_keys.insert(var, (object, field.to_string()));
-        self.slots_by_field
-            .entry(field.to_string())
-            .or_default()
-            .insert(var);
+        let var = self.var(id);
+        let slot = &mut self.vars[var as usize];
+        slot.identity.push(IdentityPart::Slot { object, field });
+        slot.slot = Some((object, field));
+        self.slots.insert((object, field), var);
+        self.slots_by_field[field as usize].push(var);
+        self.objects[object as usize].slots.push(var);
         Some(var)
     }
 
@@ -685,32 +870,32 @@ impl<'a> Solver<'a> {
     /// that field is incomplete too; likewise a call through an incomplete
     /// callee that passes values may reach any function, so every parameter
     /// and `this` is incomplete.
-    fn incomplete_variables(&self) -> BTreeSet<PtVarId> {
-        let mut incomplete = BTreeSet::new();
-        let mut work = self
-            .pending
-            .keys()
-            .chain(self.interrupted.iter())
-            .copied()
+    fn incomplete_variables(&self) -> Vec<bool> {
+        let mut incomplete = vec![false; self.vars.len()];
+        let mut work = (0..self.vars.len() as u32)
+            .filter(|var| {
+                let var = &self.vars[*var as usize];
+                var.pending.is_some() || var.interrupted
+            })
             .collect::<Vec<_>>();
         let mut passed_values = false;
         while let Some(var) = work.pop() {
-            if !incomplete.insert(var) {
+            if std::mem::replace(&mut incomplete[var as usize], true) {
                 continue;
             }
-            for edges in [&self.copy_edges, &self.dependency_edges] {
-                if let Some(dsts) = edges.get(&var) {
-                    work.extend(dsts.keys().copied());
-                }
-            }
-            for store in self.stores.get(&var).into_iter().flatten() {
-                if let Some(slots) = self.slots_by_field.get(&store.field) {
-                    work.extend(slots.iter().copied());
-                }
+            let data = &self.vars[var as usize];
+            work.extend(
+                data.copies
+                    .iter()
+                    .chain(&data.dependencies)
+                    .map(|(dst, _)| *dst),
+            );
+            for store in &data.stores {
+                work.extend(&self.slots_by_field[store.field as usize]);
             }
             if !passed_values && self.passes_values(var) {
                 passed_values = true;
-                work.extend(self.signature_inputs());
+                work.extend(self.signatures.iter().flat_map(Signature::inputs));
             }
         }
         incomplete
@@ -733,77 +918,65 @@ impl<'a> Solver<'a> {
     /// escaped object and call an escaped function with anything, so those
     /// slots and that function's parameters, rest parameter and `this` are
     /// open. Openness and escape feed each other until neither grows.
-    fn open_variables(
-        &self,
-        precisions: &BTreeMap<PtVarId, PointsToPrecision>,
-    ) -> BTreeSet<PtVarId> {
-        let defined = |var: &PtVarId| {
-            self.seed_precision.contains_key(var)
-                || self.slot_keys.contains_key(var)
-                || self.bindings.contains_key(var)
-        };
-        let mut targets = BTreeSet::new();
-        for edges in [&self.copy_edges, &self.dependency_edges] {
-            for dsts in edges.values() {
-                targets.extend(dsts.keys().copied());
+    fn open_variables(&self, precisions: &[PointsToPrecision]) -> Vec<bool> {
+        let mut targets = vec![false; self.vars.len()];
+        for var in &self.vars {
+            for (dst, _) in var.copies.iter().chain(&var.dependencies) {
+                targets[*dst as usize] = true;
             }
         }
-        let read = self
-            .copy_edges
-            .keys()
-            .chain(self.dependency_edges.keys())
-            .chain(self.loads.keys())
-            .chain(self.stores.keys())
-            .chain(self.stores.values().flatten().map(|store| &store.var))
-            .chain(self.calls.iter().map(|call| &call.callee))
-            .copied()
-            .filter(|var| !defined(var) && !targets.contains(var));
-        let unresolved_results = self
-            .calls
-            .iter()
-            .filter(|call| self.callees_unresolved(call))
-            .filter_map(|call| call.result);
-        let mut work = read.chain(unresolved_results).collect::<Vec<_>>();
+        let undefined = |var: u32| {
+            let data = &self.vars[var as usize];
+            data.seed_precision.is_none()
+                && data.slot.is_none()
+                && data.bindings.is_empty()
+                && !targets[var as usize]
+        };
+        let mut work = Vec::new();
+        for (index, var) in self.vars.iter().enumerate() {
+            let read = !var.copies.is_empty()
+                || !var.dependencies.is_empty()
+                || !var.loads.is_empty()
+                || !var.stores.is_empty()
+                || !var.calls.is_empty();
+            if read {
+                work.push(index as u32);
+            }
+            work.extend(var.stores.iter().map(|store| store.var));
+        }
+        work.retain(|var| undefined(*var));
+        work.extend(
+            self.calls
+                .iter()
+                .filter(|call| self.callees_unresolved(call))
+                .filter_map(|call| call.result),
+        );
         let mut escaping = Vec::new();
         for call in &self.calls {
-            let heuristic = precisions
-                .get(&call.callee)
-                .is_some_and(|precision| *precision == PointsToPrecision::Heuristic);
+            let heuristic = precisions[call.callee as usize] == PointsToPrecision::Heuristic;
             if heuristic || self.callees_unresolved(call) {
                 escaping.extend(call.receiver.iter().chain(&call.arguments).copied());
             } else {
                 escaping.extend(self.unbound_arguments(call));
             }
         }
-        let mut open = BTreeSet::new();
-        let mut escaped = BTreeSet::new();
+        let mut open = vec![false; self.vars.len()];
+        let mut escaped = vec![false; self.objects.len()];
         let mut objects = Vec::new();
         loop {
             for var in escaping.drain(..) {
-                objects.extend(self.sets.get(&var).into_iter().flatten().copied());
+                objects.extend(self.vars[var as usize].set.iter());
             }
             if let Some(object) = objects.pop() {
-                if !escaped.insert(object) {
+                if std::mem::replace(&mut escaped[object as usize], true) {
                     continue;
                 }
-                for slot in self
-                    .slots
-                    .get(&object)
-                    .into_iter()
-                    .flat_map(|slots| slots.values())
-                {
-                    work.push(*slot);
-                    escaping.push(*slot);
-                }
-                if let Some(signature) = self.signatures.get(&object) {
-                    work.extend(
-                        signature
-                            .params
-                            .values()
-                            .chain(signature.rest.iter())
-                            .chain(signature.this.iter())
-                            .map(|place| place.var),
-                    );
+                let slots = &self.objects[object as usize].slots;
+                work.extend(slots);
+                escaping.extend(slots);
+                if let Some(signature) = self.objects[object as usize].signature {
+                    let signature = &self.signatures[signature as usize];
+                    work.extend(signature.inputs());
                     escaping.extend(signature.ret.iter().map(|place| place.var));
                 }
                 continue;
@@ -811,83 +984,68 @@ impl<'a> Solver<'a> {
             let Some(var) = work.pop() else {
                 break;
             };
-            if !open.insert(var) {
+            if std::mem::replace(&mut open[var as usize], true) {
                 continue;
             }
-            for edges in [&self.copy_edges, &self.dependency_edges] {
-                if let Some(dsts) = edges.get(&var) {
-                    work.extend(dsts.keys().copied());
-                }
-            }
-            for store in self.stores.get(&var).into_iter().flatten() {
+            let data = &self.vars[var as usize];
+            work.extend(
+                data.copies
+                    .iter()
+                    .chain(&data.dependencies)
+                    .map(|(dst, _)| *dst),
+            );
+            for store in &data.stores {
                 escaping.push(store.var);
-                if let Some(slots) = self.slots_by_field.get(&store.field) {
-                    work.extend(slots.iter().copied());
-                }
+                work.extend(&self.slots_by_field[store.field as usize]);
             }
-            for index in self.calls_by_callee.get(&var).into_iter().flatten() {
-                let call = &self.calls[*index];
+            for index in &data.calls {
+                let call = &self.calls[*index as usize];
                 escaping.extend(call.receiver.iter().chain(&call.arguments).copied());
             }
         }
         open
     }
 
-    /// True when a call's callee set is missing or holds an object without a
+    /// True when a call's callee set is empty or holds an object without a
     /// signature, so the call may run code the constraints do not describe.
-    fn callees_unresolved(&self, call: &PointsToCall) -> bool {
-        self.sets.get(&call.callee).is_none_or(|objects| {
-            objects
+    fn callees_unresolved(&self, call: &Call) -> bool {
+        let callees = &self.vars[call.callee as usize].set;
+        callees.is_empty()
+            || callees
                 .iter()
-                .any(|object| !self.signatures.contains_key(object))
-        })
+                .any(|object| self.objects[object as usize].signature.is_none())
     }
 
     /// The arguments of a call that some callee receives in no parameter:
     /// spread arguments, and arguments at a position its signature does not
     /// bind. Such a callee can still read them, through its rest parameter or
     /// `arguments`.
-    fn unbound_arguments<'c>(
-        &'c self,
-        call: &'c PointsToCall,
-    ) -> impl Iterator<Item = PtVarId> + 'c {
-        let bound = call.spread_from.map_or(call.arguments.len(), |spread| {
-            spread.min(call.arguments.len())
-        });
-        let callees = self.sets.get(&call.callee);
+    fn unbound_arguments<'c>(&'c self, call: &'c Call) -> impl Iterator<Item = u32> + 'c {
+        let bound = call.bound();
+        let callees = &self.vars[call.callee as usize].set;
         call.arguments
             .iter()
             .enumerate()
             .filter(move |(position, _)| {
                 *position >= bound
-                    || callees.into_iter().flatten().any(|object| {
-                        self.signatures
-                            .get(object)
-                            .is_none_or(|signature| !signature.params.contains_key(position))
+                    || callees.iter().any(|object| {
+                        self.objects[object as usize]
+                            .signature
+                            .is_none_or(|signature| {
+                                self.signatures[signature as usize]
+                                    .param(*position)
+                                    .is_none()
+                            })
                     })
             })
             .map(|(_, argument)| *argument)
     }
 
     /// True when a call through `callee` passes a receiver or an argument.
-    fn passes_values(&self, callee: PtVarId) -> bool {
-        self.calls_by_callee.get(&callee).is_some_and(|indices| {
-            indices.iter().any(|index| {
-                let call = &self.calls[*index];
-                call.receiver.is_some() || !call.arguments.is_empty()
-            })
-        })
-    }
-
-    /// Every place a call fills: parameters, rest parameters and `this`.
-    fn signature_inputs(&self) -> impl Iterator<Item = PtVarId> + '_ {
-        self.signatures.values().flat_map(|signature| {
-            signature
-                .params
-                .values()
-                .chain(signature.rest.iter())
-                .chain(signature.this.iter())
-                .map(|place| place.var)
+    fn passes_values(&self, callee: u32) -> bool {
+        self.vars[callee as usize].calls.iter().any(|index| {
+            let call = &self.calls[*index as usize];
+            call.receiver.is_some() || !call.arguments.is_empty()
         })
     }
 
@@ -909,145 +1067,120 @@ impl<'a> Solver<'a> {
             held.truncate(MAX_BINDINGS_PER_VAR);
             *held != before
         };
-        let mut reached = BTreeMap::<PtVarId, Vec<CallBinding>>::new();
+        let mut reached = vec![Vec::new(); self.vars.len()];
         let mut work = VecDeque::new();
-        for (var, bindings) in &self.bindings {
-            let bindings = bindings.iter().copied().collect::<Vec<_>>();
-            if merge(reached.entry(*var).or_default(), &bindings) {
-                work.push_back(*var);
+        for (var, data) in self.vars.iter().enumerate() {
+            if data.bindings.is_empty() {
+                continue;
+            }
+            let bindings = data.bindings.iter().copied().collect::<Vec<_>>();
+            if merge(&mut reached[var], &bindings) {
+                work.push_back(var);
             }
         }
         while let Some(var) = work.pop_front() {
-            let from = reached.get(&var).cloned().unwrap_or_default();
-            for dst in self
-                .copy_edges
-                .get(&var)
-                .into_iter()
-                .flat_map(BTreeMap::keys)
-            {
-                if !self.sets.contains_key(dst) {
+            let from = reached[var].clone();
+            for (dst, _) in &self.vars[var].copies {
+                let dst = *dst as usize;
+                if self.vars[dst].set.is_empty() {
                     continue;
                 }
-                if merge(reached.entry(*dst).or_default(), &from) {
-                    work.push_back(*dst);
+                if merge(&mut reached[dst], &from) {
+                    work.push_back(dst);
                 }
             }
         }
-        reached.retain(|var, _| self.sets.contains_key(var));
         reached
+            .into_iter()
+            .enumerate()
+            .filter(|(var, bindings)| !bindings.is_empty() && !self.vars[*var].set.is_empty())
+            .map(|(var, bindings)| (self.var_ids[var], bindings))
+            .collect()
     }
 
     /// The weakest precision of the inputs that reached each set, carried
     /// along every edge from a non-empty set.
-    fn precisions(&self) -> BTreeMap<PtVarId, PointsToPrecision> {
+    fn precisions(&self) -> Vec<PointsToPrecision> {
         let mut precision = self
-            .seed_precision
+            .vars
             .iter()
-            .filter(|(var, _)| self.sets.contains_key(var))
-            .map(|(var, precision)| (*var, *precision))
-            .collect::<BTreeMap<_, _>>();
-        let mut work = self.sets.keys().copied().collect::<VecDeque<_>>();
+            .map(|var| {
+                var.seed_precision
+                    .filter(|_| !var.set.is_empty())
+                    .unwrap_or(PointsToPrecision::FlowInsensitive)
+            })
+            .collect::<Vec<_>>();
+        let mut work = (0..self.vars.len())
+            .filter(|var| !self.vars[*var].set.is_empty())
+            .collect::<VecDeque<_>>();
         while let Some(var) = work.pop_front() {
-            if !self.sets.contains_key(&var) {
+            if self.vars[var].set.is_empty() {
                 continue;
             }
-            let from = precision
-                .get(&var)
-                .copied()
-                .unwrap_or(PointsToPrecision::FlowInsensitive);
-            for edges in [&self.copy_edges, &self.dependency_edges] {
-                for (dst, edge) in edges.get(&var).into_iter().flatten() {
-                    let reached = from.max(*edge);
-                    let current = precision
-                        .entry(*dst)
-                        .or_insert(PointsToPrecision::FlowInsensitive);
-                    if reached > *current {
-                        *current = reached;
-                        work.push_back(*dst);
-                    }
+            let from = precision[var];
+            let data = &self.vars[var];
+            for (dst, edge) in data.copies.iter().chain(&data.dependencies) {
+                let reached = from.max(*edge);
+                let current = &mut precision[*dst as usize];
+                if reached > *current {
+                    *current = reached;
+                    work.push_back(*dst as usize);
                 }
             }
         }
         precision
     }
 
-    fn record_constraint_identities(&mut self, key: &str, kind: &PointsToConstraintKind) {
-        use PointsToConstraintKind as Kind;
-        match kind {
-            Kind::AddressOf { dst, object } => {
-                self.record_variable_identity(*dst, key, "address_of_destination");
-                self.record_object_identity(*object, key, "address_of_object");
-            }
-            Kind::Copy { dst, src } => {
-                self.record_variable_identity(*dst, key, "copy_destination");
-                self.record_variable_identity(*src, key, "copy_source");
-            }
-            Kind::Load { dst, pointer } => {
-                self.record_variable_identity(*dst, key, "load_destination");
-                self.record_variable_identity(*pointer, key, "load_pointer");
-            }
-            Kind::Store { pointer, src } => {
-                self.record_variable_identity(*pointer, key, "store_pointer");
-                self.record_variable_identity(*src, key, "store_source");
-            }
-            Kind::FieldLoad { dst, base, .. } | Kind::ElementLoad { dst, base, .. } => {
-                self.record_variable_identity(*dst, key, "projection_load_destination");
-                self.record_variable_identity(*base, key, "projection_load_base");
-            }
-            Kind::FieldStore { base, src, .. } | Kind::ElementStore { base, src, .. } => {
-                self.record_variable_identity(*base, key, "projection_store_base");
-                self.record_variable_identity(*src, key, "projection_store_source");
-            }
-            Kind::CallReturn { dst, value } => {
-                self.record_variable_identity(*dst, key, "call_return_destination");
-                self.record_object_identity(
-                    vars::value_fact_object(*value),
-                    key,
-                    "call_return_object",
-                );
-            }
-            Kind::SummaryFlow { dst, src, .. } => {
-                self.record_variable_identity(*dst, key, "summary_destination");
-                self.record_variable_identity(*src, key, "summary_source");
-            }
-        }
-    }
-
-    fn record_variable_identity(&mut self, variable: PtVarId, key: &str, role: &str) {
-        let fragment = stable_key_text_from_parts(
-            FactFamily::PointsToSet,
-            &[("relation", key.to_string()), ("role", role.to_string())],
+    fn object_identity(&self, object: u32) -> String {
+        let object = &self.objects[object as usize];
+        assert!(
+            !object.identity.is_empty(),
+            "points-to object must originate in an address or call-return constraint"
         );
-        self.variable_identities
-            .entry(variable)
-            .or_default()
-            .insert(fragment);
-    }
-
-    fn record_object_identity(&mut self, object: ObjectTokenId, key: &str, role: &str) {
-        let fragment = stable_key_text_from_parts(
-            FactFamily::PointsToSet,
-            &[("relation", key.to_string()), ("role", role.to_string())],
-        );
-        self.object_identities
-            .entry(object)
-            .or_default()
-            .insert(fragment);
-    }
-
-    fn semantic_variable_identity(&self, variable: PtVarId) -> String {
         semantic_relation_identity(
-            self.variable_identities
-                .get(&variable)
-                .expect("points-to set variable must originate in a constraint or object slot"),
+            &object
+                .identity
+                .iter()
+                .map(|(key, role)| self.relation_fragment(*key, role))
+                .collect(),
         )
     }
 
-    fn semantic_object_identity(&self, object: ObjectTokenId) -> String {
-        semantic_relation_identity(
-            self.object_identities
-                .get(&object)
-                .expect("points-to object must originate in an address or call-return constraint"),
+    fn variable_identity(&self, var: usize, objects: &mut HashMap<u32, String>) -> String {
+        let parts = &self.vars[var].identity;
+        assert!(
+            !parts.is_empty(),
+            "points-to set variable must originate in a constraint or object slot"
+        );
+        let fragments = parts
+            .iter()
+            .map(|part| match part {
+                IdentityPart::Relation(key, role) => self.relation_fragment(*key, role),
+                IdentityPart::Slot { object, field } => {
+                    let object = objects
+                        .entry(*object)
+                        .or_insert_with(|| self.object_identity(*object))
+                        .clone();
+                    stable_key_text_from_parts(
+                        FactFamily::PointsToSet,
+                        &[
+                            ("object", object),
+                            ("slot", self.fields[*field as usize].clone()),
+                        ],
+                    )
+                }
+            })
+            .collect();
+        semantic_relation_identity(&fragments)
+    }
+
+    fn relation_fragment(&self, key: StableKeyId, role: &str) -> String {
+        stable_key_text_from_parts(
+            FactFamily::PointsToSet,
+            &[
+                ("relation", self.interner.resolve(key).to_string()),
+                ("role", role.to_string()),
+            ],
         )
     }
 
@@ -1059,51 +1192,43 @@ impl<'a> Solver<'a> {
         };
         let incomplete = self.incomplete_variables();
         let mut precisions = self.precisions();
-        for variable in self.open_variables(&precisions) {
-            if self.sets.contains_key(&variable) {
-                raise(
-                    precisions
-                        .entry(variable)
-                        .or_insert(PointsToPrecision::Heuristic),
-                    PointsToPrecision::Heuristic,
-                );
+        let open = self.open_variables(&precisions);
+        for (var, data) in self.vars.iter().enumerate() {
+            if open[var] && !data.set.is_empty() {
+                raise(&mut precisions[var], PointsToPrecision::Heuristic);
             }
         }
         let call_bindings = self.reached_bindings();
-        let empty = BTreeSet::new();
-        let variables = self
-            .sets
-            .keys()
-            .chain(incomplete.iter())
-            .copied()
-            .collect::<BTreeSet<_>>();
+        let mut variables = (0..self.vars.len())
+            .filter(|var| incomplete[*var] || !self.vars[*var].set.is_empty())
+            .collect::<Vec<_>>();
+        variables.sort_by_key(|var| self.var_ids[*var]);
+        let mut object_identities = HashMap::new();
         let sets = variables
             .into_iter()
-            .map(|variable| PointsToSetFact {
+            .map(|var| PointsToSetFact {
                 id: PointsToSetId(0),
-                variable,
-                objects: self
-                    .sets
-                    .get(&variable)
-                    .unwrap_or(&empty)
+                variable: self.var_ids[var],
+                objects: self.vars[var]
+                    .set
                     .iter()
-                    .copied()
+                    .map(|object| self.objects[object as usize].id)
                     .collect(),
-                status: if incomplete.contains(&variable) {
+                status: if incomplete[var] {
                     PointsToStatus::BudgetExceeded
                 } else {
                     PointsToStatus::Present
                 },
-                precision: precisions
-                    .get(&variable)
-                    .copied()
-                    .unwrap_or(PointsToPrecision::FlowInsensitive),
+                precision: precisions[var],
                 budget: budget_status,
                 stable_key: stable_key_from_parts(
                     self.interner,
                     FactFamily::PointsToSet,
                     &[
-                        ("variable", self.semantic_variable_identity(variable)),
+                        (
+                            "variable",
+                            self.variable_identity(var, &mut object_identities),
+                        ),
                         (
                             "budget",
                             points_to_budget_status_label(budget_status).to_string(),
@@ -1112,18 +1237,16 @@ impl<'a> Solver<'a> {
                 ),
             })
             .collect();
-        let set_sizes = self.sets.values().map(BTreeSet::len);
+        let set_sizes = self
+            .vars
+            .iter()
+            .map(|var| var.set.len())
+            .filter(|size| *size > 0);
         let stats = PointsToSolveStats {
-            variables: self
-                .variable_identities
-                .keys()
-                .chain(self.slot_keys.keys())
-                .chain(self.sets.keys())
-                .collect::<BTreeSet<_>>()
-                .len(),
-            objects: self.object_identities.len(),
-            slots: self.slot_keys.len(),
-            copy_edges: self.copy_edges.values().map(BTreeMap::len).sum(),
+            variables: self.vars.len(),
+            objects: self.objects.len(),
+            slots: self.slots.len(),
+            copy_edges: self.vars.iter().map(|var| var.copies.len()).sum(),
             pops: self.steps,
             largest_set: set_sizes.clone().max().unwrap_or(0),
             sets_over_64: set_sizes.clone().filter(|size| *size > 64).count(),
@@ -1140,46 +1263,57 @@ impl<'a> Solver<'a> {
     }
 }
 
-/// Adds `src -> dst` or weakens its precision. True when the edge is new.
-fn add_edge(edges: &mut Edges, src: PtVarId, dst: PtVarId, precision: PointsToPrecision) -> bool {
-    match edges.entry(src).or_default().entry(dst) {
-        std::collections::btree_map::Entry::Vacant(entry) => {
-            entry.insert(precision);
-            true
+/// The field a load or store projects, by name.
+fn projection_field(kind: &PointsToConstraintKind) -> Option<String> {
+    use PointsToConstraintKind as Kind;
+    match kind {
+        Kind::Load { .. } | Kind::Store { .. } => Some(CONTENTS_SLOT.to_string()),
+        Kind::FieldLoad { field, .. } | Kind::FieldStore { field, .. } => Some(field.clone()),
+        Kind::ElementLoad { index, .. } | Kind::ElementStore { index, .. } => {
+            Some(format!("[{index}]"))
         }
-        std::collections::btree_map::Entry::Occupied(mut entry) => {
-            raise(entry.get_mut(), precision);
+        _ => None,
+    }
+}
+
+/// Adds the edge to `dst` or weakens its precision, keeping `edges` in the
+/// order of the targets' ids. True when the edge is new.
+fn add_edge(
+    var_ids: &[PtVarId],
+    edges: &mut Vec<Edge>,
+    dst: u32,
+    precision: PointsToPrecision,
+) -> bool {
+    let target = var_ids[dst as usize];
+    match edges.binary_search_by(|(held, _)| var_ids[*held as usize].cmp(&target)) {
+        Ok(at) => {
+            raise(&mut edges[at].1, precision);
             false
         }
+        Err(at) => {
+            edges.insert(at, (dst, precision));
+            true
+        }
+    }
+}
+
+/// Adds a load or store unless held, ordered by field, the variable's id and
+/// precision.
+fn insert_projection(var_ids: &[PtVarId], projections: &mut Vec<Projection>, new: Projection) {
+    let key = |projection: &Projection| {
+        (
+            projection.field,
+            var_ids[projection.var as usize],
+            projection.precision,
+        )
+    };
+    if let Err(at) = projections.binary_search_by_key(&key(&new), key) {
+        projections.insert(at, new);
     }
 }
 
 fn raise(current: &mut PointsToPrecision, precision: PointsToPrecision) {
     *current = (*current).max(precision);
-}
-
-/// Queues the objects of `objects` that `dst` does not hold yet.
-fn enqueue(
-    sets: &BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
-    pending: &mut BTreeMap<PtVarId, BTreeSet<ObjectTokenId>>,
-    queue: &mut VecDeque<PtVarId>,
-    dst: PtVarId,
-    objects: impl Iterator<Item = ObjectTokenId>,
-) {
-    let held = sets.get(&dst);
-    let mut objects = objects
-        .filter(|object| held.is_none_or(|held| !held.contains(object)))
-        .peekable();
-    if objects.peek().is_none() {
-        return;
-    }
-    match pending.entry(dst) {
-        std::collections::btree_map::Entry::Vacant(entry) => {
-            entry.insert(objects.collect());
-            queue.push_back(dst);
-        }
-        std::collections::btree_map::Entry::Occupied(mut entry) => entry.get_mut().extend(objects),
-    }
 }
 
 /// FNV-1a over the object id and the field name.

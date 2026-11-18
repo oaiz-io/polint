@@ -176,10 +176,13 @@ mod tests {
     };
 
     const INPUTS_ENV: &str = "POLINT_POINTS_TO_INPUTS";
+    const MAX_GROWTH_ENV: &str = "POLINT_POINTS_TO_MAX_GROWTH_MB";
 
     /// Solves each stored input named in `POLINT_POINTS_TO_INPUTS`
     /// (comma-separated paths the benchmark dump wrote) with the default
-    /// budget and logs the solve. Run it in release:
+    /// budget and logs the solve. With `POLINT_POINTS_TO_MAX_GROWTH_MB` set,
+    /// each solve must raise the process peak at most that far above the
+    /// resident size it started from. Run it in release:
     ///
     /// ```sh
     /// POLINT_POINTS_TO_INPUTS=zod.solver.json,axios.solver.json \
@@ -195,10 +198,16 @@ mod tests {
             .try_init();
         let paths = std::env::var(INPUTS_ENV)
             .unwrap_or_else(|_| panic!("{INPUTS_ENV} lists the stored inputs; it is required"));
+        let max_growth_mb = std::env::var(MAX_GROWTH_ENV).ok().map(|bound| {
+            bound
+                .parse::<u64>()
+                .unwrap_or_else(|_| panic!("{MAX_GROWTH_ENV} is a whole number of MB"))
+        });
         for path in paths.split(',').filter(|path| !path.is_empty()) {
             let interner = crate::internal_core::test_stable_key_interner();
             let (constraints, calls) =
                 read(Path::new(path), &interner).unwrap_or_else(|error| panic!("{path}: {error}"));
+            let rss_before = crate::measure::current_rss_bytes();
             let started = std::time::Instant::now();
             let result = solve_points_to_logged(
                 "stored",
@@ -213,6 +222,14 @@ mod tests {
                 result.sets.len(),
                 result.budget_status
             );
+            let growth_mb =
+                crate::measure::peak_rss_bytes().saturating_sub(rss_before) / (1024 * 1024);
+            if let Some(bound) = max_growth_mb {
+                assert!(
+                    growth_mb <= bound,
+                    "{path}: the solve raised the peak {growth_mb} MB, above {bound} MB"
+                );
+            }
         }
     }
 
