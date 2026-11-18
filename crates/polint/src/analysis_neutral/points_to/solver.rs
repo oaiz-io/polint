@@ -611,15 +611,27 @@ impl<'a> Solver<'a> {
         incomplete
     }
 
-    /// Variables whose sets may hold values the constraints do not describe.
+    /// Variables whose sets may hold values the constraints do not describe,
+    /// given the precision of every set before openness is applied.
+    ///
     /// The roots are the variables read as a source that nothing defines (no
     /// seed, no copy into them, no slot, no call binding), and the results of
-    /// calls whose callee set is empty or holds an object without a
-    /// signature. Openness then spreads like incompleteness: along copies and
-    /// dependencies, from a store through an open base to every slot of its
-    /// field, and from a call through an open callee that passes values to
-    /// every parameter, rest parameter and `this`.
-    fn open_variables(&self) -> BTreeSet<PtVarId> {
+    /// calls whose callee set is unresolved. Openness spreads along copies and
+    /// dependencies, and from a store through an open base to every slot of
+    /// its field.
+    ///
+    /// Code the constraints do not describe can also read values: an object
+    /// escapes when it is passed to a call whose callees are unresolved,
+    /// heuristic or open, passed where no parameter receives it, stored
+    /// through an open base, or held by a slot of an escaped object or by the
+    /// return of an escaped function. Such code may write every slot of an
+    /// escaped object and call an escaped function with anything, so those
+    /// slots and that function's parameters, rest parameter and `this` are
+    /// open. Openness and escape feed each other until neither grows.
+    fn open_variables(
+        &self,
+        precisions: &BTreeMap<PtVarId, PointsToPrecision>,
+    ) -> BTreeSet<PtVarId> {
         let defined = |var: &PtVarId| {
             self.seed_precision.contains_key(var)
                 || self.slot_keys.contains_key(var)
@@ -641,20 +653,59 @@ impl<'a> Solver<'a> {
             .chain(self.calls.iter().map(|call| &call.callee))
             .copied()
             .filter(|var| !defined(var) && !targets.contains(var));
-        let unresolved_results = self.calls.iter().filter_map(|call| {
-            let result = call.result?;
-            let callees = self.sets.get(&call.callee);
-            let unresolved = callees.is_none_or(|objects| {
-                objects
-                    .iter()
-                    .any(|object| !self.signatures.contains_key(object))
-            });
-            unresolved.then_some(result)
-        });
+        let unresolved_results = self
+            .calls
+            .iter()
+            .filter(|call| self.callees_unresolved(call))
+            .filter_map(|call| call.result);
         let mut work = read.chain(unresolved_results).collect::<Vec<_>>();
+        let mut escaping = Vec::new();
+        for call in &self.calls {
+            let heuristic = precisions
+                .get(&call.callee)
+                .is_some_and(|precision| *precision == PointsToPrecision::Heuristic);
+            if heuristic || self.callees_unresolved(call) {
+                escaping.extend(call.receiver.iter().chain(&call.arguments).copied());
+            } else {
+                escaping.extend(self.unbound_arguments(call));
+            }
+        }
         let mut open = BTreeSet::new();
-        let mut passed_values = false;
-        while let Some(var) = work.pop() {
+        let mut escaped = BTreeSet::new();
+        let mut objects = Vec::new();
+        loop {
+            for var in escaping.drain(..) {
+                objects.extend(self.sets.get(&var).into_iter().flatten().copied());
+            }
+            if let Some(object) = objects.pop() {
+                if !escaped.insert(object) {
+                    continue;
+                }
+                for slot in self
+                    .slots
+                    .get(&object)
+                    .into_iter()
+                    .flat_map(|slots| slots.values())
+                {
+                    work.push(*slot);
+                    escaping.push(*slot);
+                }
+                if let Some(signature) = self.signatures.get(&object) {
+                    work.extend(
+                        signature
+                            .params
+                            .values()
+                            .chain(signature.rest.iter())
+                            .chain(signature.this.iter())
+                            .map(|place| place.var),
+                    );
+                    escaping.extend(signature.ret.iter().map(|place| place.var));
+                }
+                continue;
+            }
+            let Some(var) = work.pop() else {
+                break;
+            };
             if !open.insert(var) {
                 continue;
             }
@@ -664,16 +715,53 @@ impl<'a> Solver<'a> {
                 }
             }
             for store in self.stores.get(&var).into_iter().flatten() {
+                escaping.push(store.var);
                 if let Some(slots) = self.slots_by_field.get(&store.field) {
                     work.extend(slots.iter().copied());
                 }
             }
-            if !passed_values && self.passes_values(var) {
-                passed_values = true;
-                work.extend(self.signature_inputs());
+            for index in self.calls_by_callee.get(&var).into_iter().flatten() {
+                let call = &self.calls[*index];
+                escaping.extend(call.receiver.iter().chain(&call.arguments).copied());
             }
         }
         open
+    }
+
+    /// True when a call's callee set is missing or holds an object without a
+    /// signature, so the call may run code the constraints do not describe.
+    fn callees_unresolved(&self, call: &PointsToCall) -> bool {
+        self.sets.get(&call.callee).is_none_or(|objects| {
+            objects
+                .iter()
+                .any(|object| !self.signatures.contains_key(object))
+        })
+    }
+
+    /// The arguments of a call that some callee receives in no parameter:
+    /// spread arguments, and arguments at a position its signature does not
+    /// bind. Such a callee can still read them, through its rest parameter or
+    /// `arguments`.
+    fn unbound_arguments<'c>(
+        &'c self,
+        call: &'c PointsToCall,
+    ) -> impl Iterator<Item = PtVarId> + 'c {
+        let bound = call.spread_from.map_or(call.arguments.len(), |spread| {
+            spread.min(call.arguments.len())
+        });
+        let callees = self.sets.get(&call.callee);
+        call.arguments
+            .iter()
+            .enumerate()
+            .filter(move |(position, _)| {
+                *position >= bound
+                    || callees.into_iter().flatten().any(|object| {
+                        self.signatures
+                            .get(object)
+                            .is_none_or(|signature| !signature.params.contains_key(position))
+                    })
+            })
+            .map(|(_, argument)| *argument)
     }
 
     /// True when a call through `callee` passes a receiver or an argument.
@@ -866,7 +954,7 @@ impl<'a> Solver<'a> {
         };
         let incomplete = self.incomplete_variables();
         let mut precisions = self.precisions();
-        for variable in self.open_variables() {
+        for variable in self.open_variables(&precisions) {
             if self.sets.contains_key(&variable) {
                 raise(
                     precisions

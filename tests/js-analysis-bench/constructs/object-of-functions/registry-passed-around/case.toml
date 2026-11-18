@@ -1,0 +1,3 @@
+construct = "object-of-functions"
+held_out = true
+description = "A registry object of functions is passed to a function that calls one of its members."

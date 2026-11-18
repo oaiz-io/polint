@@ -1,0 +1,3 @@
+construct = "prototype"
+held_out = false
+description = "An exported factory returns an instance to outside code; its method calls a sibling method the instance inherits from its prototype."

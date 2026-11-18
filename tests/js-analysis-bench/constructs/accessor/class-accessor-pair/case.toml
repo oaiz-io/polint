@@ -1,0 +1,3 @@
+construct = "accessor"
+held_out = true
+description = "A class getter and setter pair; the setter stores a function that a method calls back through the getter."

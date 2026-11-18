@@ -227,29 +227,40 @@ fn ts_direct_bindings_fixture_emits_resolved_copy_and_call_constraints() {
     let constraints = observed["constraints"]
         .as_array()
         .expect("constraints array");
-    let ts_direct_rows = constraints
+    // Module-linked rows name imported callees too, so they replace
+    // every resolved direct-binding call and its callee copy in this fixture.
+    assert!(
+        !constraints
+            .iter()
+            .any(|row| row["source"] == "ts_direct_binding")
+    );
+    let value_flow_rows = constraints
         .iter()
-        .filter(|row| row["source"] == "ts_direct_binding")
+        .filter(|row| {
+            row["stable_key"]
+                .as_str()
+                .is_some_and(|key| key.contains("value_flow:"))
+        })
         .collect::<Vec<_>>();
     assert!(
-        ts_direct_rows
+        value_flow_rows
             .iter()
             .any(|row| row["kind"].as_str() == Some("copy_edge")),
-        "ts_direct_bindings: expected a TS direct-binding CopyEdge row: {observed:#}"
+        "ts_direct_bindings: expected a value-flow CopyEdge row: {observed:#}"
     );
     assert!(
-        ts_direct_rows
+        value_flow_rows
             .iter()
             .any(|row| row["kind"].as_str() == Some("call_constraint")),
-        "ts_direct_bindings: expected a TS direct-binding CallConstraint row: {observed:#}"
+        "ts_direct_bindings: expected a value-flow CallConstraint row: {observed:#}"
     );
-    for row in ts_direct_rows {
+    for row in value_flow_rows {
         let refs = row["referenced_nodes"]
             .as_array()
             .expect("referenced_nodes array");
         assert!(
             !refs.is_empty(),
-            "ts_direct_bindings: TS direct row must reference graph nodes: {row:#}"
+            "ts_direct_bindings: value-flow row must reference graph nodes: {row:#}"
         );
         for node in refs {
             let node = node.as_u64().expect("node ref is u64");
@@ -297,7 +308,9 @@ fn ts_direct_bindings_fixture_asserts_each_claimed_binding_form_projects_to_cons
                 expected.callsite
             );
         }
-        if expected.status == TsDirectBindingStatus::Resolved {
+        if expected.status == TsDirectBindingStatus::Resolved && expected.named_by_value_flow {
+            assert_value_flow_names_callee(&output, &observed, binding, expected.callsite);
+        } else if expected.status == TsDirectBindingStatus::Resolved {
             assert_ts_direct_constraint(
                 &output.db.stable_key_interner(),
                 &observed,
@@ -394,6 +407,9 @@ struct TsDirectBindingExpectation {
     reason: Option<TsDirectBindingReason>,
     target: Option<&'static str>,
     emits_copy_edge: bool,
+    /// The value flow of the file describes the call's callee completely, so
+    /// its call replaces the binding's constraints at the site.
+    named_by_value_flow: bool,
 }
 
 fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
@@ -412,6 +428,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("localTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "namedAlias",
@@ -420,6 +437,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("namedTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "defaultTarget",
@@ -428,6 +446,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("defaultTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "ns.namespaceTarget",
@@ -436,6 +455,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("namespaceTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "viaBarrel",
@@ -444,6 +464,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("namedTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "aliasTarget",
@@ -452,6 +473,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("aliasTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "cjsMember",
@@ -460,6 +482,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("cjsTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "destructured",
@@ -468,6 +491,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: None,
             target: Some("localTarget"),
             emits_copy_edge: true,
+            named_by_value_flow: true,
         },
         TsDirectBindingExpectation {
             callsite: "import:<dynamic>",
@@ -476,6 +500,7 @@ fn ts_direct_binding_expectations() -> [TsDirectBindingExpectation; 9] {
             reason: Some(NonStringDynamicImport),
             target: None,
             emits_copy_edge: false,
+            named_by_value_flow: false,
         },
     ]
 }
@@ -493,6 +518,66 @@ fn binding_for_callsite<'a>(
                 .contains(callsite)
         })
         .unwrap_or_else(|| panic!("missing direct binding for callsite {callsite}: {bindings:#?}"))
+}
+
+/// At a call site the value flow names, the binding's constraints are gone and
+/// the value flow's call, with a callee, stands at the site's node.
+fn assert_value_flow_names_callee(
+    output: &KernelOutput,
+    observed: &serde_json::Value,
+    binding: &TsDirectBindingFact,
+    callsite: &str,
+) {
+    use crate::analysis_neutral::semantic_graph::build::node_key_from_identity;
+    use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
+
+    let db = &output.db;
+    let interner = db.stable_key_interner();
+    let binding_key =
+        crate::analysis_api::compact_key_reference(interner.resolve(binding.stable_key).as_ref())
+            .into_owned();
+    let constraints = observed["constraints"]
+        .as_array()
+        .expect("constraints array");
+    assert!(
+        !constraints.iter().any(|row| {
+            row["source"] == "ts_direct_binding"
+                && row["stable_key"]
+                    .as_str()
+                    .is_some_and(|stable_key| stable_key.contains(&binding_key))
+        }),
+        "ts_direct_bindings: {callsite}: the value flow names the callee, so the binding's constraints are replaced: {observed:#}"
+    );
+
+    let source = std::fs::read_to_string(fixture_dir("ts_direct_bindings").join("repo/src/app.ts"))
+        .expect("read fixture source");
+    let call = format!("{callsite}(input)");
+    let start = u32::try_from(source.find(&call).expect("call is in the fixture"))
+        .expect("offset fits u32");
+    let end = start + u32::try_from(call.len()).expect("length fits u32");
+    let site = db
+        .call_sites()
+        .iter()
+        .find(|site| site.span.start_byte == start && site.span.end_byte == end)
+        .unwrap_or_else(|| panic!("ts_direct_bindings: no call site for {call}"));
+    let node_key = node_key_from_identity("callsite", &interner.resolve(site.stable_key));
+    let node = db
+        .semantic_nodes()
+        .iter()
+        .find(|node| interner.resolve(node.stable_key).as_ref() == node_key)
+        .unwrap_or_else(|| panic!("ts_direct_bindings: no graph node for {call}"))
+        .id;
+    assert!(
+        db.semantic_constraints().iter().any(|constraint| matches!(
+            constraint.kind,
+            ConstraintKind::CallConstraint {
+                callsite,
+                callee: Some(_),
+                ..
+            } if callsite == node
+        )),
+        "ts_direct_bindings: {call}: the value flow's call must stand at the site"
+    );
 }
 
 fn assert_ts_direct_constraint(

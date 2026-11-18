@@ -1,0 +1,3 @@
+construct = "argument-flow"
+held_out = false
+description = "Function values flow into parameters of a `const` arrow and a method, and out through returns."

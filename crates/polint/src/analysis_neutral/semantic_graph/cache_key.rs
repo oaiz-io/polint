@@ -51,6 +51,11 @@ pub const SEMANTIC_GRAPH_SCHEMA_LABEL: &str = "semantic-graph-facts-2";
 /// This is a comment/doc addition only: ZERO deferred inputs are digested here, and
 /// the runtime behavior is unchanged.
 pub fn semantic_graph_provider_parameter_digest() -> Digest {
+    semantic_graph_digest_with_platform(crate::analysis_neutral::adaptation::platform::SOURCE)
+}
+
+fn semantic_graph_digest_with_platform(platform: &str) -> Digest {
+    let platform_digest = crate::analysis_neutral::adaptation::platform::digest(platform);
     Digest::from_parts(
         DigestKind::ProviderParameters,
         "semantic_graph_provider_parameters",
@@ -64,12 +69,14 @@ pub fn semantic_graph_provider_parameter_digest() -> Digest {
             "constraint_projection_v2",
             "ts_direct_binding_output",
             "ts_direct_binding_projection_v1",
-            "ts_token_source_flow_projection_v1",
+            "ts_value_flow_projection_v2",
+            "ts_platform_model_projection_v1",
             "ts_callable_flow_projection_v1",
             "go_semantic_output_digest",
             "go_semantic_projection_v1",
             "ts_object_model_projection_v4",
             "adaptation_model_v1",
+            platform_digest.value.as_str(),
         ],
     )
 }
@@ -77,6 +84,19 @@ pub fn semantic_graph_provider_parameter_digest() -> Digest {
 #[cfg(test)]
 mod tests {
     use crate::analysis_api::{Digest, DigestKind};
+
+    #[test]
+    fn platform_behavior_changes_the_semantic_graph_cache_key() {
+        let source = crate::analysis_neutral::adaptation::platform::SOURCE;
+        assert_eq!(
+            super::semantic_graph_provider_parameter_digest(),
+            super::semantic_graph_digest_with_platform(source)
+        );
+        assert_ne!(
+            super::semantic_graph_provider_parameter_digest(),
+            super::semantic_graph_digest_with_platform(&source.replace("$param0", "$param2"))
+        );
+    }
 
     #[test]
     fn semantic_graph_provider_parameter_digest_locks_parts_list() {
@@ -95,12 +115,18 @@ mod tests {
                     "constraint_projection_v2",
                     "ts_direct_binding_output",
                     "ts_direct_binding_projection_v1",
-                    "ts_token_source_flow_projection_v1",
+                    "ts_value_flow_projection_v2",
+                    "ts_platform_model_projection_v1",
                     "ts_callable_flow_projection_v1",
                     "go_semantic_output_digest",
                     "go_semantic_projection_v1",
                     "ts_object_model_projection_v4",
                     "adaptation_model_v1",
+                    crate::analysis_neutral::adaptation::platform::digest(
+                        crate::analysis_neutral::adaptation::platform::SOURCE
+                    )
+                    .value
+                    .as_str(),
                 ],
             )
         );

@@ -1,0 +1,3 @@
+construct = "argument-flow"
+held_out = true
+description = "A rest parameter collects function values and a spread argument fills parameters."

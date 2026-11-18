@@ -1,0 +1,54 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..64",
+      "name": "double"
+    },
+    {
+      "function": "main.js@156..264",
+      "name": "applyTwice"
+    },
+    {
+      "function": "main.js@66..154",
+      "name": "apply"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@217..245",
+      "syntax": "identifier",
+      "callee": "main.js@66..154",
+      "callee_name": "apply"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@223..240",
+      "syntax": "identifier",
+      "callee": "main.js@66..154",
+      "callee_name": "apply"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@266..292",
+      "syntax": "identifier",
+      "callee": "main.js@156..264",
+      "callee_name": "applyTwice"
+    },
+    {
+      "kind": "callback",
+      "site": "main.js@117..131",
+      "syntax": "member",
+      "callee": "main.js@12..64",
+      "callee_name": "double"
+    }
+  ]
+}

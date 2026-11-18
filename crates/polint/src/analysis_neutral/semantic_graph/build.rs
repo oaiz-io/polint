@@ -191,6 +191,30 @@ impl SemanticGraphBuilder {
         self.nodes.len()
     }
 
+    /// The constraints projected so far, in projection order.
+    pub(crate) fn constraints(&self) -> &[ConstraintFact] {
+        &self.constraints
+    }
+
+    /// Keeps only the constraints `keep` accepts: a later projection that
+    /// describes a value completely replaces what earlier ones said about it.
+    pub(crate) fn retain_constraints(&mut self, keep: impl FnMut(&ConstraintFact) -> bool) {
+        self.constraints.retain(keep);
+    }
+
+    /// A place id past every place node projected so far, for places that
+    /// stand for no MIR place.
+    pub(crate) fn next_place_id(&self) -> u64 {
+        self.nodes
+            .iter()
+            .filter_map(|node| match node.kind {
+                NodeKind::Place(place) => Some(place.0 + 1),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
     // -- node projection ----------------------------------------------------
 
     /// Leaves `language` out of every projection; see `excluded_language`.

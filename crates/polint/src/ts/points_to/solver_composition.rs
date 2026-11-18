@@ -940,6 +940,123 @@ fn input_the_solve_cannot_see_keeps_edges_out_of_the_exact_tier() {
     );
 }
 
+/// Functions and objects handed to code the solve cannot see, beside one that
+/// stays inside the program. `w` has no input at all, so a call of it may run
+/// anything.
+///
+/// - `function g(p) { p() }; g(h1); w(h2)`: `g` never leaves the program.
+/// - `function cb(c) { c() }; cb(h); w(cb)`: `cb` is passed out.
+/// - `o.f = h; w(o); o.f()`: `o` is passed out.
+/// - `function slot_cb(a) { a() }; o2.k = slot_cb; w(o2); slot_cb(h)`: held
+///   by an object that is passed out.
+/// - `function make() { return inner }; function inner(b) { b() }; w(make);
+///   inner(h)`: returned by a function that is passed out.
+/// - `function one(x) {}; one(h, extra_cb); function extra_cb(e) { e() };
+///   extra_cb(h)`: passed where no parameter receives it.
+/// - `function sink(s) { s.f = store_cb }; function store_cb(t) { t() };
+///   store_cb(h)`: stored into an object nothing describes.
+/// - `function heur_cb(d) { d() }; heur_cb(h); f = heuristic g2; f(heur_cb)`:
+///   passed to a callee set read from a heuristic input.
+fn escape_fixture() -> Fixture {
+    let mut fixture = Fixture::new();
+    for function in [
+        "main", "g", "h", "h1", "h2", "cb", "slot_cb", "make", "inner", "one", "extra_cb", "sink",
+        "store_cb", "heur_cb", "g2",
+    ] {
+        fixture.function(function);
+    }
+    let call = |fixture: &mut Fixture, caller: &str, site: &str, callee: &str, arguments| {
+        fixture.call(
+            caller,
+            site,
+            Call {
+                callee,
+                arguments,
+                ..Call::default()
+            },
+        );
+    };
+    let p = fixture.param("g", 0);
+    call(&mut fixture, "g", "p()", &p, vec![]);
+    call(&mut fixture, "main", "g(h1)", "g", vec!["h1"]);
+    call(&mut fixture, "main", "w(h2)", "w", vec!["h2"]);
+
+    let c = fixture.param("cb", 0);
+    call(&mut fixture, "cb", "c()", &c, vec![]);
+    call(&mut fixture, "main", "cb(h)", "cb", vec!["h"]);
+    call(&mut fixture, "main", "w(cb)", "w", vec!["cb"]);
+
+    fixture.alloc("o", "o:object");
+    fixture.store("o", "f", "h");
+    call(&mut fixture, "main", "w(o)", "w", vec!["o"]);
+    fixture.load("o.f", "o", "f");
+    call(&mut fixture, "main", "o.f()", "o.f", vec![]);
+
+    let a = fixture.param("slot_cb", 0);
+    call(&mut fixture, "slot_cb", "a()", &a, vec![]);
+    fixture.alloc("o2", "o2:object");
+    fixture.store("o2", "k", "slot_cb");
+    call(&mut fixture, "main", "w(o2)", "w", vec!["o2"]);
+    call(&mut fixture, "main", "slot_cb(h)", "slot_cb", vec!["h"]);
+
+    let make_return = fixture.return_of("make");
+    fixture.copy(&make_return, "inner");
+    let b = fixture.param("inner", 0);
+    call(&mut fixture, "inner", "b()", &b, vec![]);
+    call(&mut fixture, "main", "w(make)", "w", vec!["make"]);
+    call(&mut fixture, "main", "inner(h)", "inner", vec!["h"]);
+
+    fixture.param("one", 0);
+    call(
+        &mut fixture,
+        "main",
+        "one(h, extra_cb)",
+        "one",
+        vec!["h", "extra_cb"],
+    );
+    let e = fixture.param("extra_cb", 0);
+    call(&mut fixture, "extra_cb", "e()", &e, vec![]);
+    call(&mut fixture, "main", "extra_cb(h)", "extra_cb", vec!["h"]);
+
+    let s = fixture.param("sink", 0);
+    fixture.store(&s, "f", "store_cb");
+    let t = fixture.param("store_cb", 0);
+    call(&mut fixture, "store_cb", "t()", &t, vec![]);
+    call(&mut fixture, "main", "store_cb(h)", "store_cb", vec!["h"]);
+
+    let d = fixture.param("heur_cb", 0);
+    call(&mut fixture, "heur_cb", "d()", &d, vec![]);
+    call(&mut fixture, "main", "heur_cb(h)", "heur_cb", vec!["h"]);
+    fixture.param("g2", 0);
+    fixture.heuristic_copy("f", "g2");
+    call(&mut fixture, "main", "f(heur_cb)", "f", vec!["heur_cb"]);
+    fixture
+}
+
+/// A parameter is open only when its function can be called by code the
+/// solve cannot see: a function that escapes, through an argument, a slot of
+/// an escaped object, the return of an escaped function, an argument no
+/// parameter receives, or a store into an object nothing describes. A call of
+/// an unresolved callee elsewhere does not open every parameter.
+#[test]
+fn only_an_escaped_function_has_open_parameters() {
+    let fixture = escape_fixture();
+    let result = fixture.solve(&SolverBudget::default());
+    let heuristic = (PointsToStatus::Present, PointsToPrecision::Heuristic);
+    assert_eq!(
+        fixture.targets(&result, "p()"),
+        BTreeMap::from([("h1".to_string(), EXACT)]),
+        "`g` never leaves the program, so its parameter holds only `h1`"
+    );
+    for site in ["c()", "o.f()", "a()", "b()", "e()", "t()", "d()"] {
+        assert_eq!(
+            fixture.targets(&result, site),
+            BTreeMap::from([("h".to_string(), heuristic)]),
+            "`{site}` reads a place that code the solve cannot see may fill"
+        );
+    }
+}
+
 /// Copies and calls only: no field slot, no budget event.
 fn copy_only_fixture() -> Fixture {
     let mut fixture = Fixture::new();
