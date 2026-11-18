@@ -154,6 +154,37 @@ The invalidation frontier is the practical payoff of this milestone. It is a fir
 - [ ] **VAL-08**: Cache/status/clean/prune behavior accounts for semantic-store generations, payloads, search indexes, stale rows, WAL/checkpoint policy, and orphaned payload cleanup.
 - [ ] **VAL-09**: External temp-repo tests continue to prove repo-local rules import only `polint::sdk::prelude::*`, register through `polint::runner::run_cli`, consume public typed views, and observe unchanged `polint check --format json` behavior.
 
+## v2.1 Requirements: Package Graphs, Iteration 1 (classical)
+
+**Defined:** 2026-11-17. Source: `research/package-graphs/` (README, PACKAGE-GRAPH, ITERATION-1-CLASSICAL, DIAGNOSIS, BASELINES, HELD-OUT, TIERS, STORAGE-A, TARGETS). The direction is decided in `AGENTS.md` ("Engine Direction: Package Graphs"); these requirements are the first iteration of it and run as a parallel track to the v2.0 store work. Nothing here adds a public CLI command, flag, SDK view or output format.
+
+### Measurement
+
+- **PG-01**: The JS/TS bench reports recall per tier (exact-complete, exact, exact plus conservative), executed-site precision per tier, targets per resolved site (mean, p95), open sites by reason, solver budget events per package, refined edges by tier/algorithm/status/precision, and sites gained by the refined plan grouped by file and intersected with executed sites, for the tune set and the held-out set apart. The `CallPrecision` to tier mapping is a closed list pinned by a test.
+- **PG-02**: The outside-tool columns (Jelly static, Jelly `--approx`) are reproducible from tracked files: the scorer lives in the bench, the tools run only inside the bench sandbox, and the report labels every deviation from the bench's own scorer.
+- **PG-03**: The held-out set of `research/package-graphs/HELD-OUT.md` is pinned in `inputs.toml` with `held_out = true`, its observed calls are recorded once under the authorship rule, driver coverage is reported per package, and a CI check refuses a pull request that touches both analysis code and held-out observed files.
+
+### Extraction
+
+- **PG-04**: Functions under a unary operator, functions declared in `try`/`catch`/`if` blocks, calls in exported initialisers, sequence-expression callees `(0, f)(x)`, and a package's own `vendor/` directory when the package is the unit are extracted; `not_extracted`, `not_analysed` and `sequence_interop` are 0 on the tune set apart from exclusions written in the report's decisions.
+
+### Solver and lowering
+
+- **PG-05**: The TS/JS points-to solve has no global latch: a budget event ends the solve, keeps every set and edge derived so far, and reports the reason per package; it never blanks the result. The solver has the call rule (arguments to parameters, return to result, receiver to `this`) over per-function parameter, rest, `this` and return places; field slots are keyed by stable `(object identity, field)`; the solve is order-independent.
+- **PG-06**: Every construct in the closed list of `research/package-graphs/TIERS.md` (c) is lowered into constraints from MIR, each with two construct fixtures (one held out); the walker (`ts/callable_flow`) is retired construct by construct, `Heuristic` edges on the tune set are 0, and the `semantic_graph` provider is removed or at most 10% of the refined plan's time.
+- **PG-07**: The solve reaches a fixed point with no budget event on every tune-set package; the cost targets of `research/package-graphs/TARGETS.md` hold (zod ≤ 20 s and ≤ 2 GB, axios ≤ 1.5 s, refined ≤ 3× base everywhere); every site is assigned a tier and, when exact-complete, its assumption ids from the closed list of TIERS.md (b); held-out recall is within 5 points of the tune set.
+- **PG-08**: The type checker's facts feed the one solver as filters and seeds; the typed plan finds every edge the no-types plan finds and claims no wrong exact target at an executed site; a `Declared` dispatch whose declaration is not a function in the tree, or whose receiver is a union or structural pick, yields no exact edge.
+
+### Package graph
+
+- **PG-09**: A package graph (storage option A under the preconditions of `research/package-graphs/STORAGE-A.md`) is exported crate-privately through the bench dump for one package, stitched against a resolved dependency tree, and the composition test (fixture of one application and two libraries with callbacks both ways; three real trees) gives equal edge sets at both tiers and equal open sites with reasons; function and call-site identities are equal across two scans and across machines; size and stitch time are measured and committed.
+- **PG-10**: The bench's recorded edges for one package load as corrections with evidence kind `observed`, applied after the engine output and before stitching: recall over observed edges is 100% for that package, every added edge is marked observed, the engine output without the layer is byte-identical to before, and a change to one function reports its corrections stale.
+
+### Boundaries
+
+- **PG-11**: Public surface unchanged: no new CLI command, flag, SDK view, generated skill text or output format; new modules are `pub(crate)`; the public-surface leak gate is green at every phase boundary; `polint::sdk` and `polint::runner` consumers see no change.
+- **PG-12**: No change is tuned on the held-out set and no recogniser is added for one benchmark package; a pattern of one library is a package model, and it moves into the engine only when a second library needs it.
+
 ## Future Requirements
 
 Deferred to later milestones unless explicitly pulled forward.
