@@ -1,8 +1,8 @@
 # Dense-id sweep baseline. Plan section 2.1 standing rule.
 # Regenerate: POLINT_UPDATE_DENSE_ID_BASELINE=1 cargo test -p polint --test internal_architecture dense_id_sweep --locked
 # Entry: <sha256 of (repo-relative path, enclosing fn/impl item, whitespace-collapsed line)>  <command>  <scope>  <count>
-# dot0: 156 hits, 41 test-only, 115 non-test
-# debug: 613 hits, 272 test-only, 341 non-test
+# dot0: 159 hits, 41 test-only, 118 non-test
+# debug: 619 hits, 275 test-only, 344 non-test
 # raw: 0 hits, 0 test-only, 0 non-test
 # other-debug: 134 hits, 134 test-only, 0 non-test
 0038500d6decf3dbeb069116d00d773912c3b88e191bbf9f87efeb9a70451dd1  debug  non-test  1
@@ -229,6 +229,7 @@
 43c29c2cc19483b95edd5319d97e98817ed001ee6e1096daf0a4888b8265691f  debug  non-test  1
 43f7ae87b2e755d039bb66729b2b1f9dc2748090b798a99480a66d0bc89960d7  dot0  non-test  1
 445b11313d55d2642ed5dd3e1af9726adbb0bde03b649170a25845709792d4f3  debug  non-test  1
+446133236199756651076f8542f94a55fa5da6e9b60da16f87c01308e027610a  debug  test  1
 448d77bda7139810066c41a9575a5a038ef0edfb4c79090842163fe879a8d5fe  debug  test  1
 448f5f7fb14798e1924902e01955ae95b2bcbd44cb81794d7ca1f050259b90e0  debug  non-test  1
 44a211742890af3e26d4ad8d71b695c9b4540fc02a61edfd28325a27fcd8ad05  debug  test  1
@@ -262,6 +263,7 @@
 4d7f8e51e4f0ad8292273040de0eaca96a1c1fbc40d1c63a0383fae554190b65  debug  test  1
 4d855e10f38755d4db81827ea12396583dbccb2c864b417d8b3f0df64e3268ae  other-debug  test  1
 4e0eeab484e66ab80c56c1113105b45167fbb544d55ed854dba6e0fb8a25d6ce  debug  non-test  1
+4eb03155ecf2eca8ccc980f29ea6f07a425ffeee27af60dff85179d4a7ec8b75  debug  test  1
 4eb20f80874d667a2531c6829a2831872706a6f1dd0b11e3719c42d866fac9d3  debug  non-test  1
 4eb91acc79c13f14efdd904dce1d9ab8a37c2c18281142ae731b84dcdd4c9f08  debug  test  1
 4ecf9b79cc89a687228b8b0c87ca230aaa26fc48ac9b81750e7d625843fb2e06  debug  non-test  1
@@ -337,6 +339,7 @@
 6468befe52ba083f9bb8d341fd868bc96272e54cf5470902009cce9eddea621a  debug  non-test  1
 646aeed0cb69b9958b544cb04f9a4d2c3ec05bb1e8b9d1b419de52918809c299  dot0  test  1
 64ab19045257df71b8d6f87f559651a471385c44eb4b4ad4c77825987a768806  dot0  non-test  1
+64cc3dd67667293ce70990d5caba5454104a3aef3d6775a00eda64f19017b69c  dot0  non-test  1
 64d488b9602df1059668261f00e6ba6b5e3697d84e21e06bdd6a1d76f0684526  other-debug  test  1
 654ba9fab85af94b9c0ee84b423228101336a67f103cd7dec1a0c4b860fd5eb5  dot0  non-test  1
 65a836afe5aa1f91fffc2e28c4c03d1ef288aa1af3bdd528c68ed02c33bc1ebd  other-debug  test  1
@@ -391,6 +394,8 @@
 74796eaeff9c20dd2eb9ac87a1f9706c5c5c53dfd50a82c41621b745f182be2c  debug  test  1
 74d99220595a53d10462ff006518c7b227b164a2daa183efaa0d437f9f824102  debug  test  1
 74e1b765f5c78f64c1866f01b12a8b9de369989040a00a86d291f677dfd45591  debug  test  1
+74e2564e7f90d27272730d71a44715d64ef1a6d1932de6a98545ece08e8ff268  dot0  non-test  1
+74fb6640e54b31358fb393739ae11edce4cbda4e0d472e88ce3e91c4d3af5b86  debug  test  1
 756bb00d80adfefd5d8168282dcfe90d23ce84126794d34f1073239e639dff99  debug  non-test  1
 75a3edb5dbd4d442a1e697522eff0990610f737d88c1937c81cb55a04c5c1c26  debug  non-test  1
 75c5edc4aafa93484245057d3c2a6d23cf6b80ee55b362e9ab42fe8cf85bd61b  other-debug  test  1
@@ -587,6 +592,7 @@ ad0f8e49e6e46bbdef55230ca99250db7bd29c9223643b52d59f276448458fda  dot0  test  1
 ad1ffb7d10cf3cb9af60bd3bd28cda185831162cdd26c910e77ee055115079e0  debug  non-test  1
 ad33fd1cc5f16727fad6b28909b4c8c55c234e84e2ad4286671d84c40f66e39b  dot0  non-test  1
 ad5b3ef722817a5b12ec80d3deeec143a2702896cddd84b5e12f7183c06d2811  debug  test  1
+adf523b6349bf11ebdd0eeb8f71c556b374047b420d23215080248a5388fab9e  debug  non-test  1
 adf7b82ddeacbb617e9ca7eb1e198f8ee347001042dd6d4964b2188f4e3741e2  other-debug  test  1
 aebaf7e34a57e10c3955be9b35394b5e0c78d0889f041211378787813a667a01  debug  non-test  1
 aec1d4e2d15106535ebd5e724415b77e5918eae2466d31075606b4b062db8df6  debug  test  1
@@ -624,12 +630,14 @@ b9df546cc4d094183c6f525d500f3fb828f130b8642dee07c1d18285f781ee2c  debug  non-tes
 bae1fa620486e6ec005c68967022adb49fade67b4f44bfb8bff6c1c3ecf91684  debug  test  1
 bb1b6641616ab14d5b7f4521d6cffbe0af63925d8831c34dac85e35e5b8108b6  debug  test  1
 bbaabd196cca5195feb4540c75d280bf7539704e9f049c17aa2d0d02fd8f8dfb  debug  test  1
+bbd5598caf2a6be94aae99b22ef6fbad89dfc450a980bc54208d9da6c4544752  debug  non-test  1
 bbeaa7022c94294f824a1a634b712db7ecde944e6ed4d10bd65c06efa2b52a87  debug  non-test  1
 bbeedd59b33b4ab43f9218ae70b7912cca8fe63cbb06991fc66879a8b056f3d8  debug  non-test  1
 bbfa5b6c51484c31eecc8d449474be5721336d148625becd83b68a4686684c46  debug  non-test  1
 bd335446aa7e648f8e06975001eb9741bb9ea5ec12ccabfcc937e7532f69b444  debug  test  1
 bd81d157eae91094f48134b47fe92e8dfee9d742ee7fcc9a2d220268fffef1f5  debug  non-test  1
 bd962533c52437bad5fb4a813e7d4f291d035b0872edeac61b6885bb1b16149f  debug  non-test  1
+bdede2da74d20932be431de82f3762e4727b09948979a23066f06889b51ddf91  dot0  non-test  1
 be1eded2d6c513a78e91c9b938c7e2773faa8acffac9878003f01cc034724349  debug  non-test  1
 bea72d4a3ef0fcf4df57caae72342d34b5858cf91d8d172e33f3c9cafa9d8efc  debug  test  1
 becf5dfd39ceae5023a6cab94b8c84bdc4c23ee4abc55ebe5926fcd9f3391a84  debug  non-test  1
@@ -641,6 +649,7 @@ c279c0908775f855d9ce16606ad72ddf35a83213ade48b8b84c07dfad155c117  debug  test  4
 c2a5050d6c9e2c811ab7c0a4c39146850934936255d7d11a8288fb9dd876d0de  dot0  test  1
 c2a786f0ebba637a518d70d7843a826a979bc6200cc2ae913f43549db0b25874  debug  test  1
 c2adbfd351d1f10c2418384a2664bf702ca981027ffc8c08873faa551cc58dab  debug  test  1
+c35710e93ae137a37eced6369b1d8ff4a2f80b00f8665bf8515a5aa94970263c  debug  non-test  1
 c37141269791a11d8252884f57c43254602c943500d31f206c97cad0f3e772b5  debug  test  3
 c3a759e74a1227a475c588aa42e365ef6affd5980a07e77e85a45ee339c6b64c  debug  non-test  1
 c48d9eddcb2d17bd09ee23a7c26349469ea744e2af141d30cc721b181c707279  debug  test  1
