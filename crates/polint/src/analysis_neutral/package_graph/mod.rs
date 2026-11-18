@@ -11,8 +11,8 @@ mod identity;
 mod layout;
 
 pub(crate) use format::{
-    Boundary, BudgetEntry, CallsiteEntry, ConstraintEntry, FunctionEntry, ImportEntry,
-    PACKAGE_GRAPH_SCHEMA, PackageGraph, SignatureEntry, SiteEntry,
+    Boundary, BudgetEntry, CallsiteEntry, ConstraintEntry, FunctionEntry, ImportEntry, ModuleEntry,
+    ModuleValue, PACKAGE_GRAPH_SCHEMA, PackageGraph, SignatureEntry, SiteEntry,
 };
 pub(crate) use identity::{CallsiteIdentity, EntryConfig, FunctionIdentity, PackageIdentity};
 pub(crate) use layout::package_of;

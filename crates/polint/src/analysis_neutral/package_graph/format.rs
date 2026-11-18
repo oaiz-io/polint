@@ -16,7 +16,7 @@ use crate::analysis_neutral::points_to::tiers::EdgeClaim;
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 
 /// The version of the stored form. It changes whenever a field changes.
-pub(crate) const PACKAGE_GRAPH_SCHEMA: u32 = 0;
+pub(crate) const PACKAGE_GRAPH_SCHEMA: u32 = 1;
 
 /// The call graph of one package version, its constraints and its boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,15 +96,44 @@ pub(crate) struct SiteEntry {
 /// What the package reads from other packages and offers them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Boundary {
+    /// Each import whose module the package does not hold, sorted.
     pub(crate) imports: Vec<ImportEntry>,
+    /// The places holding each file's module values, sorted by file.
+    pub(crate) modules: Vec<ModuleEntry>,
+    /// The parameters a call the value flow does not describe fills with an
+    /// open value: as many as the most any function of the package declares.
+    /// A stitch fills that many for the union of the packages.
+    pub(crate) guard_arguments: u8,
 }
 
-/// One import of another package: the specifier as written and the place
-/// that receives the imported module.
+/// Which value of a module an import receives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ModuleValue {
+    /// `module.exports`, what `require` returns.
+    Module,
+    /// The ES module namespace object.
+    Namespace,
+}
+
+/// One import of another package: the importing file, the specifier as
+/// written, and the place that receives the imported module. Analysed alone
+/// the place receives an open value, through a copy from `open`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) struct ImportEntry {
+    pub(crate) file: String,
     pub(crate) specifier: String,
+    pub(crate) value: ModuleValue,
     pub(crate) place: u32,
+    pub(crate) open: u32,
+}
+
+/// The places of one file's module values, where the graph holds them.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub(crate) struct ModuleEntry {
+    pub(crate) file: String,
+    pub(crate) module: Option<u32>,
+    pub(crate) namespace: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

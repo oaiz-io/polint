@@ -12,11 +12,14 @@ use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::ids::SemanticNodeId;
 use crate::analysis_neutral::package_graph::{
     Boundary, BudgetEntry, CallsiteEntry, CallsiteIdentity, ConstraintEntry, FunctionEntry,
-    FunctionIdentity, PackageGraph, PackageIdentity, SignatureEntry, SiteEntry,
+    FunctionIdentity, ImportEntry, ModuleEntry, ModuleValue, PackageGraph, PackageIdentity,
+    SignatureEntry, SiteEntry,
 };
+use crate::analysis_neutral::semantic_graph::build::node_key_from_identity;
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::analysis_neutral::solver::budget::SolverBudget;
+use crate::ts::constraints::lower_ts_source_value_flows;
 
 /// The package graph of the package analysed into `db`, rooted at `root`.
 /// `integrity` is the registry integrity value of the package tarball, when
@@ -213,6 +216,7 @@ pub(crate) fn export(
         crate::ts::module_graph::EXPORT_CONDITIONS,
         &crate::analysis_neutral::adaptation::platform::digest_evidence(),
     );
+    let boundary = boundary(db, &texts, &constraint_entries);
     Ok(PackageGraph {
         identity,
         nodes: texts.into_iter().map(|(text, _)| text).collect(),
@@ -221,12 +225,89 @@ pub(crate) fn export(
         signatures: signature_entries,
         constraints: constraint_entries,
         sites,
-        boundary: Boundary::default(),
+        boundary,
         budget: BudgetEntry {
             status: result.points_to.budget_status,
             events: result.points_to.budget_reasons.iter().cloned().collect(),
         },
     })
+}
+
+/// The imports the package does not hold, its module places and the width
+/// of its value-flow guards. The value flow of each file is lowered again for
+/// the requests it names: the facts keep only their places.
+fn boundary(
+    db: &impl AnalysisHost,
+    texts: &[(String, SemanticNodeId)],
+    constraints: &[ConstraintEntry],
+) -> Boundary {
+    let number = texts
+        .iter()
+        .enumerate()
+        .map(|(index, (text, _))| {
+            let number = u32::try_from(index).expect("node count fits u32");
+            (text.as_str(), number)
+        })
+        .collect::<BTreeMap<_, _>>();
+    let place = |identity: String| {
+        number
+            .get(node_key_from_identity("value_flow", &identity).as_str())
+            .copied()
+    };
+    let copies = constraints
+        .iter()
+        .filter_map(|constraint| match constraint.kind {
+            ConstraintKind::CopyEdge { dst, src } => {
+                Some((ConstraintEntry::node(dst), ConstraintEntry::node(src)))
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+
+    let mut boundary = Boundary::default();
+    for file in db.files() {
+        if !file.language.is_ts_family() {
+            continue;
+        }
+        let flows = lower_ts_source_value_flows(file);
+        let widest = flows.functions.iter().map(|function| function.params).max();
+        boundary.guard_arguments = boundary.guard_arguments.max(widest.unwrap_or(0));
+        let path = db.path_for(file.id);
+        let module = place(format!("{path}#module"));
+        let namespace = place(format!("{path}#namespace"));
+        if module.is_some() || namespace.is_some() {
+            boundary.modules.push(ModuleEntry {
+                file: path.clone(),
+                module,
+                namespace,
+            });
+        }
+        let Some(open) = place(format!("{path}#open")) else {
+            continue;
+        };
+        for (request, specifier) in flows.requests.iter().enumerate() {
+            for (value, name) in [
+                (ModuleValue::Module, "module"),
+                (ModuleValue::Namespace, "namespace"),
+            ] {
+                let Some(at) = place(format!("{path}#request#{name}#{request}")) else {
+                    continue;
+                };
+                if copies.contains(&(at, open)) {
+                    boundary.imports.push(ImportEntry {
+                        file: path.clone(),
+                        specifier: specifier.to_string(),
+                        value,
+                        place: at,
+                        open,
+                    });
+                }
+            }
+        }
+    }
+    boundary.imports.sort();
+    boundary.modules.sort();
+    boundary
 }
 
 enum Place {
