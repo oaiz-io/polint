@@ -3,7 +3,7 @@
 These are the semantics of refined call edges derived by the TypeScript /
 JavaScript points-to solve. They are internal fact semantics: no SDK view
 exposes them, and their shape may change. The closed lists they implement are
-in [`research/package-graphs/TIERS.md`](../../research/package-graphs/TIERS.md).
+in [TIERS.md](TIERS.md).
 
 ## Tiers
 
