@@ -361,7 +361,6 @@ fn site_claim(
 /// What a solve answers at one call site: the claim its edges carry and the
 /// functions its callee set holds. A site the solve left no set for answers
 /// `Unknown` with no claim and no targets.
-#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SiteAnswer {
     pub(crate) callsite: SemanticNodeId,
@@ -371,7 +370,6 @@ pub(crate) struct SiteAnswer {
 }
 
 /// The answer of every call site of `inputs`, in the order of its call sites.
-#[cfg(test)]
 pub(crate) fn site_answers(
     inputs: &TsPointsToInputs,
     result: &TsPointsToSolveResult,
@@ -626,6 +624,7 @@ pub fn budget_status(result: &PointsToSolveResult) -> BudgetStatus {
     BudgetStatus::from_points_to(result.budget_status)
 }
 
+pub(crate) mod package_graph;
 #[cfg(test)]
 mod solver_composition;
 
