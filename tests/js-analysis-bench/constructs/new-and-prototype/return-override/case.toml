@@ -1,0 +1,3 @@
+construct = "new-and-prototype"
+held_out = true
+description = "A constructor returns an object, which replaces the instance; a factory returns the constructor that `new` is applied to."

@@ -1,0 +1,3 @@
+construct = "destructuring"
+held_out = false
+description = "Functions reach calls through object destructuring with a default, a rename and a rest element."

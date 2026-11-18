@@ -1,0 +1,37 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "lib.js",
+    "main.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "lib.js@146..193",
+      "name": "get"
+    },
+    {
+      "function": "lib.js@19..75",
+      "name": "helper"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@55..68",
+      "syntax": "member",
+      "callee": "lib.js@146..193",
+      "callee_name": "get"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@55..68",
+      "syntax": "member",
+      "callee": "lib.js@19..75",
+      "callee_name": "helper"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+construct = "await"
+held_out = false
+description = "An async function resolves to a function value; the caller awaits it and calls the result."

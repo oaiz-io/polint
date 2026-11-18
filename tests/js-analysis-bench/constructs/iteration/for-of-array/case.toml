@@ -1,0 +1,3 @@
+construct = "iteration"
+held_out = false
+description = "`for…of` over an array of functions and over an array filled with `push`."

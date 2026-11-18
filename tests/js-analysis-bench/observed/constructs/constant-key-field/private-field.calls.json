@@ -1,0 +1,36 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@104..173",
+      "name": "tick"
+    },
+    {
+      "function": "main.js@12..64",
+      "name": "onTick"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@136..151",
+      "syntax": "member",
+      "callee": "main.js@12..64",
+      "callee_name": "onTick"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@204..216",
+      "syntax": "member",
+      "callee": "main.js@104..173",
+      "callee_name": "tick"
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 6,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..72",
+      "name": "fallback"
+    },
+    {
+      "function": "main.js@138..183",
+      "name": "left"
+    },
+    {
+      "function": "main.js@185..232",
+      "name": "right"
+    },
+    {
+      "function": "main.js@234..351",
+      "name": "pick"
+    },
+    {
+      "function": "main.js@353..469",
+      "name": "choose"
+    },
+    {
+      "function": "main.js@74..136",
+      "name": "primary"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@315..321",
+      "syntax": "identifier",
+      "callee": "main.js@12..72",
+      "callee_name": "fallback"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@315..321",
+      "syntax": "identifier",
+      "callee": "main.js@74..136",
+      "callee_name": "primary"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@437..445",
+      "syntax": "identifier",
+      "callee": "main.js@138..183",
+      "callee_name": "left"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@437..445",
+      "syntax": "identifier",
+      "callee": "main.js@185..232",
+      "callee_name": "right"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@529..541",
+      "syntax": "identifier",
+      "callee": "main.js@138..183",
+      "callee_name": "left"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@587..597",
+      "syntax": "identifier",
+      "callee": "main.js@185..232",
+      "callee_name": "right"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@651..660",
+      "syntax": "identifier",
+      "callee": "main.js@12..72",
+      "callee_name": "fallback"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@681..694",
+      "syntax": "identifier",
+      "callee": "main.js@234..351",
+      "callee_name": "pick"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@711..726",
+      "syntax": "identifier",
+      "callee": "main.js@234..351",
+      "callee_name": "pick"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@743..768",
+      "syntax": "identifier",
+      "callee": "main.js@353..469",
+      "callee_name": "choose"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@787..813",
+      "syntax": "identifier",
+      "callee": "main.js@353..469",
+      "callee_name": "choose"
+    }
+  ]
+}
