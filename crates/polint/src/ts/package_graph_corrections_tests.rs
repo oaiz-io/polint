@@ -10,11 +10,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::analysis_kernel::{AnalysisKernel, KernelInput};
-use crate::analysis_neutral::package_graph::PackageGraph;
 use crate::analysis_neutral::package_graph::corrections::{
     Anchor, ApplyReport, CorrectedGraph, Correction, CorrectionEvidence, Loaded, Op, apply,
     observed_corrections, recording_id,
 };
+use crate::analysis_neutral::package_graph::{FunctionIdentity, PackageGraph};
 use crate::analysis_neutral::points_to::tiers::EdgeClaim;
 use crate::analysis_plan::AnalysisPlan;
 use crate::cache::Cache;
@@ -190,14 +190,31 @@ fn assert_observed_conservative(corrected: &CorrectedGraph<'_>, run: &str, drive
 }
 
 /// The corrections an edit to `edited` must make stale: those anchored to,
-/// or targeting, a function whose text contains it.
+/// or targeting, a function whose text contains it, or a function the edit
+/// moved whose text another function of its file shares, which is found
+/// only at its own span.
 fn expected_stale(
+    graph: &PackageGraph,
     corrections: &[Correction],
-    edited: &crate::analysis_neutral::package_graph::FunctionIdentity,
+    edited: &FunctionIdentity,
 ) -> Vec<usize> {
-    let encloses = |function: &crate::analysis_neutral::package_graph::FunctionIdentity| {
+    let encloses = |function: &FunctionIdentity| {
         function.path == edited.path && function.start <= edited.start && edited.end <= function.end
     };
+    let moved =
+        |function: &FunctionIdentity| function.path == edited.path && function.start >= edited.end;
+    let shared = |function: &FunctionIdentity| {
+        graph
+            .functions
+            .iter()
+            .filter(|other| {
+                other.identity.path == function.path && other.identity.body == function.body
+            })
+            .count()
+            > 1
+    };
+    let lost =
+        |function: &FunctionIdentity| encloses(function) || (moved(function) && shared(function));
     corrections
         .iter()
         .enumerate()
@@ -207,17 +224,14 @@ fn expected_stale(
             else {
                 return false;
             };
-            encloses(function) || encloses(target)
+            lost(function) || lost(target)
         })
         .map(|(index, _)| index)
         .collect()
 }
 
 /// Appends `void 0;` to the body of `function` in the package at `root`.
-fn append_statement(
-    root: &Path,
-    function: &crate::analysis_neutral::package_graph::FunctionIdentity,
-) {
+fn append_statement(root: &Path, function: &FunctionIdentity) {
     let path = root.join(&function.path);
     let mut source = std::fs::read_to_string(&path).expect("read the edited file");
     let close = function.end as usize - 1;
@@ -288,9 +302,49 @@ fn an_edit_stales_exactly_the_corrections_of_the_edited_function() {
     append_statement(temp.path(), &run);
     let edited = package_graph_of(temp.path());
     let (_, report) = apply(&edited, &loaded.corrections);
-    assert_eq!(report.stale, expected_stale(&loaded.corrections, &run));
+    assert_eq!(
+        report.stale,
+        expected_stale(&graph, &loaded.corrections, &run)
+    );
     assert_eq!(report.stale.len(), 2, "{report:?}");
     assert_eq!((report.applied, report.derived), (0, 1), "{report:?}");
+}
+
+/// An edit that keeps every span still changes the text: a correction aimed
+/// at the edited function is stale, though a function sits at its span.
+#[test]
+fn an_edit_of_the_same_length_stales_the_corrections_aimed_at_it() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_fixture(temp.path(), FIXTURE);
+    let graph = package_graph_of(temp.path());
+    let loaded = load_fixture(&graph);
+    let b = graph
+        .functions
+        .iter()
+        .find(|function| function.name == "b")
+        .map(|function| function.identity.clone())
+        .expect("the fixture's b function");
+
+    write_fixture(
+        temp.path(),
+        &FIXTURE.replace("function b() { return 2; }", "function b() { return 3; }"),
+    );
+    let edited = package_graph_of(temp.path());
+    assert!(
+        edited
+            .functions
+            .iter()
+            .any(|function| function.identity.path == b.path
+                && function.identity.start == b.start
+                && function.identity.end == b.end)
+    );
+    let (corrected, report) = apply(&edited, &loaded.corrections);
+    assert_eq!(
+        report.stale,
+        expected_stale(&graph, &loaded.corrections, &b)
+    );
+    assert_eq!(report.stale.len(), 1, "{report:?}");
+    assert!(corrected.corrections.is_empty(), "{report:?}");
 }
 
 #[test]
@@ -311,7 +365,7 @@ fn a_correction_for_another_package_is_not_applied() {
     let graph = package_graph_of(temp.path());
     let mut corrections = load_fixture(&graph).corrections;
     for correction in &mut corrections {
-        correction.graph.name = "another".to_string();
+        correction.graph.name = Some("another".to_string());
     }
     let (corrected, report) = apply(&graph, &corrections);
     assert!(corrected.corrections.is_empty());
@@ -453,14 +507,13 @@ fn commander_recording_completes_its_package_graph() {
     );
 
     // Edit the innermost function with the most corrections anchored in it.
-    let mut anchored_in =
-        BTreeMap::<&crate::analysis_neutral::package_graph::FunctionIdentity, usize>::new();
+    let mut anchored_in = BTreeMap::<&FunctionIdentity, usize>::new();
     for correction in &loaded.corrections {
         if let Anchor::CallSite { function, .. } = &correction.anchor {
             *anchored_in.entry(function).or_default() += 1;
         }
     }
-    let innermost = |function: &crate::analysis_neutral::package_graph::FunctionIdentity| {
+    let innermost = |function: &FunctionIdentity| {
         !graph.functions.iter().any(|other| {
             other.identity != *function
                 && other.identity.path == function.path
@@ -479,7 +532,7 @@ fn commander_recording_completes_its_package_graph() {
     let changed = package_graph_of(temp.path());
     let (_, report) = apply(&changed, &loaded.corrections);
     print_report("commander after the edit", &report);
-    let expected = expected_stale(&loaded.corrections, &edited);
+    let expected = expected_stale(&graph, &loaded.corrections, &edited);
     assert!(!expected.is_empty());
     assert_eq!(report.stale, expected);
     assert_eq!(
