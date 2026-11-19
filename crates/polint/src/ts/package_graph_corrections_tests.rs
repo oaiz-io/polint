@@ -263,7 +263,11 @@ fn recorded_edges_complete_the_graph_beside_the_engine_answers() {
     assert_eq!(loaded.corrections.len(), 3);
 
     let (corrected, report) = apply(&graph, &loaded.corrections);
-    assert_eq!((report.applied, report.derived), (1, 2), "{report:?}");
+    assert_eq!(
+        (report.applied.len(), report.derived.len()),
+        (1, 2),
+        "{report:?}"
+    );
     assert!(report.stale.is_empty(), "{report:?}");
     assert!(missed(&graph, &corrected, &loaded.corrections).is_empty());
     assert_observed_conservative(&corrected, RUN, DRIVER);
@@ -307,7 +311,11 @@ fn an_edit_stales_exactly_the_corrections_of_the_edited_function() {
         expected_stale(&graph, &loaded.corrections, &run)
     );
     assert_eq!(report.stale.len(), 2, "{report:?}");
-    assert_eq!((report.applied, report.derived), (0, 1), "{report:?}");
+    assert_eq!(
+        (report.applied.len(), report.derived.len()),
+        (0, 1),
+        "{report:?}"
+    );
 }
 
 /// An edit that keeps every span still changes the text: a correction aimed
@@ -448,8 +456,8 @@ fn stage_commander(into: &Path) {
 fn print_report(label: &str, report: &ApplyReport) {
     println!(
         "{label}: applied {}, derived {}, stale {}, not applied {}, other package {}",
-        report.applied,
-        report.derived,
+        report.applied.len(),
+        report.derived.len(),
         report.stale.len(),
         report.not_applied,
         report.other_package
@@ -491,7 +499,7 @@ fn commander_recording_completes_its_package_graph() {
     print_report("commander", &report);
     assert!(report.stale.is_empty(), "{report:?}");
     assert_eq!(
-        report.applied + report.derived,
+        report.applied.len() + report.derived.len(),
         loaded.corrections.len(),
         "{report:?}"
     );
@@ -536,7 +544,7 @@ fn commander_recording_completes_its_package_graph() {
     assert!(!expected.is_empty());
     assert_eq!(report.stale, expected);
     assert_eq!(
-        report.applied + report.derived + report.stale.len(),
+        report.applied.len() + report.derived.len() + report.stale.len(),
         loaded.corrections.len(),
         "{report:?}"
     );

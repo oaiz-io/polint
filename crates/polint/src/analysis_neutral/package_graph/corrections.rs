@@ -366,13 +366,13 @@ pub(crate) struct CorrectedGraph<'a> {
 /// What became of each correction.
 #[derive(Debug, Default, Serialize)]
 pub(crate) struct ApplyReport {
-    /// Added an edge the engine's answer does not hold.
-    pub(crate) applied: usize,
+    /// Added an edge the engine's answer does not hold, by correction index.
+    pub(crate) applied: Vec<usize>,
     /// The engine's answer already claims the edge: the correction can be
-    /// retired and kept as a fixture.
-    pub(crate) derived: usize,
+    /// retired and kept as a fixture. By correction index.
+    pub(crate) derived: Vec<usize>,
     /// Its function, call site or target is no longer in the graph with the
-    /// same text; the correction is not applied.
+    /// same text; the correction is not applied. By correction index.
     pub(crate) stale: Vec<usize>,
     /// An operation this layer records but does not carry out: an edge is
     /// only ever added, never removed or closed.
@@ -426,10 +426,10 @@ pub(crate) fn apply<'a>(
             .get(&callsite)
             .is_some_and(|answer| claims(answer, target))
         {
-            report.derived += 1;
+            report.derived.push(index);
             continue;
         }
-        report.applied += 1;
+        report.applied.push(index);
         edges.insert(CorrectedEdge {
             callsite,
             target,
