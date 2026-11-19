@@ -1,5 +1,5 @@
-//! The call-graph fact view: resolved call edges between functions, each with
-//! the precision and the algorithm behind it.
+//! The call-graph fact view: the call edges the engine resolved, each with the
+//! precision it claims and the algorithm behind it.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -10,12 +10,23 @@ use crate::core::{AnalysisDb, FileId, FunctionId, Span, SymbolId};
 /// Call-graph fact view. Requesting this view maps to the `call_graph`
 /// capability.
 ///
-/// Every edge is one resolved candidate callee of one call site. For Go, the
-/// typed frontend resolves static calls exactly and narrows dynamic calls
-/// (interface methods, function values) by variable-type analysis, falling back
-/// to the class hierarchy; a call whose candidates the hierarchy cannot list
-/// names its abstract callee instead. Edges between functions in the scanned
-/// sources use the same [`FunctionId`]s as the `Functions` view.
+/// Every edge is one callee one call site may reach, with the strongest claim
+/// the engine makes for it: the direct calls the language frontends resolve,
+/// and the edges the refinement stages add on top (value-flow analysis of the
+/// function values that reach a call, function summaries, the declared types of
+/// receivers and package models). For Go, the typed frontend resolves static
+/// calls exactly and narrows dynamic calls (interface methods, function values)
+/// by variable-type analysis, falling back to the class hierarchy; a call whose
+/// candidates the hierarchy cannot list names its abstract callee instead.
+/// Edges between functions in the scanned sources use the same [`FunctionId`]s
+/// as the `Functions` view.
+///
+/// An edge's [`CallEdgePrecision`] is its tier: [`Exact`](CallEdgePrecision::Exact)
+/// and [`SetupAware`](CallEdgePrecision::SetupAware) edges say the call reaches
+/// the callee, [`Conservative`](CallEdgePrecision::Conservative) edges say it
+/// may, and [`Heuristic`](CallEdgePrecision::Heuristic) edges come from names
+/// alone. A weaker claim is never reported as a stronger one. Call sites the
+/// engine could not answer completely, and why, are in the `Calls` view.
 #[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct CallGraph<'a> {
@@ -47,7 +58,8 @@ pub enum CallEdgePrecision {
     /// packages), such as every type variable-type analysis found flowing to
     /// the call.
     SetupAware,
-    /// One of the candidates a hierarchy-based analysis could not narrow.
+    /// A callee the call may reach: one of several candidates an analysis
+    /// could not narrow, or a target whose binding may hold another value.
     Conservative,
     /// An answer from names rather than types.
     Heuristic,
@@ -75,9 +87,17 @@ pub enum CallEdgeAlgorithm {
     TypeHierarchy,
     /// Resolution from names, imports and declarations in the source text.
     Syntactic,
+    /// Value-flow analysis: the function values that reach the call, through
+    /// variables, parameters, returns, object properties and imports.
+    PointsTo,
+    /// A function summary: the callee's summary says which of its parameters
+    /// it calls.
+    Summary,
+    /// A package or framework model states the callee.
+    Model,
 }
 
-/// One resolved call edge.
+/// One call edge.
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct CallGraphEdge<'a> {
@@ -325,11 +345,10 @@ fn precision(precision: CallPrecision) -> CallEdgePrecision {
     match precision {
         CallPrecision::Exact => CallEdgePrecision::Exact,
         CallPrecision::SetupAware => CallEdgePrecision::SetupAware,
-        CallPrecision::Conservative => CallEdgePrecision::Conservative,
-        CallPrecision::Heuristic
-        | CallPrecision::Ambiguous
-        | CallPrecision::Unknown
-        | CallPrecision::Unsupported => CallEdgePrecision::Heuristic,
+        CallPrecision::Conservative | CallPrecision::Ambiguous => CallEdgePrecision::Conservative,
+        CallPrecision::Heuristic | CallPrecision::Unknown | CallPrecision::Unsupported => {
+            CallEdgePrecision::Heuristic
+        }
     }
 }
 
@@ -339,17 +358,15 @@ fn algorithm(algorithm: CallAlgorithm) -> CallEdgeAlgorithm {
         CallAlgorithm::GoVta => CallEdgeAlgorithm::VariableTypeAnalysis,
         CallAlgorithm::GoCha | CallAlgorithm::GoRta => CallEdgeAlgorithm::ClassHierarchy,
         CallAlgorithm::TypeHierarchy => CallEdgeAlgorithm::TypeHierarchy,
-        // Only the refinement tiers label edges with these, and the view reads
-        // the call layer's targets, which carry none of them.
-        CallAlgorithm::PointsTo => CallEdgeAlgorithm::VariableTypeAnalysis,
-        CallAlgorithm::FrameworkModel | CallAlgorithm::RepoModel => CallEdgeAlgorithm::Syntactic,
+        CallAlgorithm::PointsTo => CallEdgeAlgorithm::PointsTo,
+        CallAlgorithm::SummaryAssisted => CallEdgeAlgorithm::Summary,
+        CallAlgorithm::FrameworkModel | CallAlgorithm::RepoModel => CallEdgeAlgorithm::Model,
         CallAlgorithm::SyntaxOnly
         | CallAlgorithm::DirectReference
         | CallAlgorithm::ImportBinding
         | CallAlgorithm::ConstructorBinding
         | CallAlgorithm::StaticMember
         | CallAlgorithm::DirectMember
-        | CallAlgorithm::SummaryAssisted
         | CallAlgorithm::Unsupported => CallEdgeAlgorithm::Syntactic,
     }
 }
