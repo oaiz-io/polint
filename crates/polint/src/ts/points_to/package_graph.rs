@@ -350,5 +350,6 @@ fn signature_places(
 mod stitch;
 pub(crate) use stitch::{OpenImport, StitchError, Stitched, Tree, stitch};
 
-#[cfg(test)]
+// The tests export a TS/JS fixture, which only the TypeScript frontend reads.
+#[cfg(all(test, feature = "lang-typescript"))]
 mod tests;
