@@ -5754,6 +5754,145 @@ export function handleList(): string[] {
     );
 }
 
+fn write_ts_refined_call_graph_rule_repo(root: &Path) {
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_phase41_rule_pack(
+        root,
+        r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::handlers_reach_gates(), rule::handlers_reach_gates_exactly()])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
+
+fn precision_name(precision: CallEdgePrecision) -> &'static str {
+    match precision {
+        CallEdgePrecision::Exact => "exact",
+        CallEdgePrecision::SetupAware => "setup_aware",
+        CallEdgePrecision::Conservative => "conservative",
+        _ => "heuristic",
+    }
+}
+
+fn report_gates(
+    ctx: &mut RuleCtx<'_>,
+    functions: &Functions<'_>,
+    graph: CallGraph<'_>,
+    walk: CallGraphWalk,
+) {
+    let gates = functions
+        .iter()
+        .filter(|function| function.name.starts_with("require"))
+        .collect::<Vec<_>>();
+    for handler in functions.iter().filter(|function| function.name.starts_with("handle")) {
+        let reach = graph.reachable(handler.id, walk);
+        for gate in &gates {
+            let Some(path) = reach.path_to(gate.id) else {
+                continue;
+            };
+            let weakest = path
+                .iter()
+                .map(|edge| edge.precision)
+                .max()
+                .map_or("none", precision_name);
+            ctx.report(
+                Diagnostic::warning(
+                    ctx.rule_id(),
+                    ctx.file_path(handler.file),
+                    handler.span.diagnostic_range(),
+                    format!("{} reaches {}", handler.name, gate.name),
+                )
+                .with_evidence("weakest", weakest),
+            );
+        }
+    }
+}
+
+#[polint::rule(id = "local/handlers-reach-gates", description = "Handlers reach the gates", severity = "warn")]
+pub(crate) fn handlers_reach_gates(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    graph: CallGraph<'_>,
+) -> RuleResult {
+    report_gates(ctx, &functions, graph, CallGraphWalk::new(4));
+    Ok(())
+}
+
+#[polint::rule(id = "local/handlers-reach-gates-exactly", description = "Handlers reach the gates exactly", severity = "warn")]
+pub(crate) fn handlers_reach_gates_exactly(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    graph: CallGraph<'_>,
+) -> RuleResult {
+    let walk = CallGraphWalk::new(4).with_min_precision(CallEdgePrecision::Exact);
+    report_gates(ctx, &functions, graph, walk);
+    Ok(())
+}
+"#,
+    );
+    write_file(
+        &root.join("src/gate.ts"),
+        r#"export function requireAdmin(id: string): void {
+  console.log(id);
+}
+
+export function requireOwner(id: string): void {
+  console.log(id);
+}
+"#,
+    );
+    write_file(
+        &root.join("src/policy.ts"),
+        r#"import { requireAdmin } from "./gate";
+
+export const policy = { check: requireAdmin };
+"#,
+    );
+    write_file(
+        &root.join("src/handlers.ts"),
+        r#"import { requireAdmin, requireOwner } from "./gate";
+import { policy } from "./policy";
+
+function withId(id: string, next: (value: string) => void): void {
+  next(id);
+}
+
+function runCheck(check: (value: string) => void, id: string): void {
+  check(id);
+}
+
+export function handleCallback(id: string): void {
+  withId(id, (value) => requireAdmin(value));
+}
+
+export function handleParameter(id: string): void {
+  runCheck(requireOwner, id);
+}
+
+export function handleImport(id: string): void {
+  policy.check(id);
+}
+
+export function handleEither(id: string, admin: boolean): void {
+  const check = admin ? requireAdmin : requireOwner;
+  check(id);
+}
+"#,
+    );
+}
+
 fn write_symbol_capability_rule_repo(root: &Path) {
     let polint_path = repo_root()
         .join("crates/polint")
@@ -10616,6 +10755,65 @@ mod capability_planning {
                 "handleAudit reaches requireAdmin",
                 "handleList does not reach requireAdmin",
                 "handleSave reaches requireAdmin",
+            ],
+            "{json:#?}"
+        );
+    }
+
+    #[test]
+    fn call_graph_gives_an_outside_rule_the_refined_edges_with_their_tiers() {
+        let temp = tempfile::tempdir().unwrap();
+        write_ts_refined_call_graph_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+        let reached = |rule: &str| {
+            let mut reached = diagnostics_for_rule(&json, rule)
+                .iter()
+                .map(|diagnostic| {
+                    let weakest = diagnostic["evidence"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find(|evidence| evidence["label"] == "weakest")
+                        .and_then(|evidence| evidence["value"].as_str())
+                        .unwrap_or_default();
+                    format!(
+                        "{} ({weakest})",
+                        diagnostic["message"].as_str().unwrap_or_default()
+                    )
+                })
+                .collect::<Vec<_>>();
+            reached.sort();
+            reached
+        };
+
+        // A callback, a function passed as a parameter and a function stored on
+        // an imported object all reach their gate exactly. The variable bound to
+        // one of two functions reaches both, conservatively.
+        assert_eq!(
+            reached("local/handlers-reach-gates"),
+            [
+                "handleCallback reaches requireAdmin (exact)",
+                "handleEither reaches requireAdmin (conservative)",
+                "handleEither reaches requireOwner (conservative)",
+                "handleImport reaches requireAdmin (exact)",
+                "handleParameter reaches requireOwner (exact)",
+            ],
+            "{json:#?}"
+        );
+        // A rule that asks for exact edges never walks a conservative one.
+        assert_eq!(
+            reached("local/handlers-reach-gates-exactly"),
+            [
+                "handleCallback reaches requireAdmin (exact)",
+                "handleImport reaches requireAdmin (exact)",
+                "handleParameter reaches requireOwner (exact)",
             ],
             "{json:#?}"
         );
