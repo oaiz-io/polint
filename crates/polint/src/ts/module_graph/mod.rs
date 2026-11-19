@@ -1861,6 +1861,29 @@ struct TsconfigCompilerOptionsWire {
     paths: Option<BTreeMap<String, Vec<String>>>,
 }
 
+/// The `exports` conditions import resolution matches, in its order.
+pub(crate) const EXPORT_CONDITIONS: &[&str] = &["import", "require", "node", "default"];
+
+/// Resolves import specifiers against the files on disk with the options of
+/// import resolution, for callers that hold no fact database.
+#[cfg(feature = "lang-typescript")]
+pub(crate) struct DiskResolver(Resolver);
+
+#[cfg(feature = "lang-typescript")]
+impl DiskResolver {
+    pub(crate) fn new() -> Self {
+        Self(Resolver::new(resolve_options()))
+    }
+
+    /// The file `specifier` names when the file `importer` imports it.
+    pub(crate) fn resolve(&self, importer: &Path, specifier: &str) -> Option<PathBuf> {
+        self.0
+            .resolve_file(importer, specifier)
+            .ok()
+            .and_then(|resolution| normalize_path(resolution.path()))
+    }
+}
+
 #[cfg(feature = "lang-typescript")]
 fn resolve_options() -> ResolveOptions {
     ResolveOptions {
@@ -1882,12 +1905,10 @@ fn resolve_options() -> ResolveOptions {
             (".mjs".into(), vec![".mjs".into(), ".mts".into()]),
             (".cjs".into(), vec![".cjs".into(), ".cts".into()]),
         ],
-        condition_names: vec![
-            "import".into(),
-            "require".into(),
-            "node".into(),
-            "default".into(),
-        ],
+        condition_names: EXPORT_CONDITIONS
+            .iter()
+            .map(|name| (*name).into())
+            .collect(),
         main_fields: vec!["module".into(), "browser".into(), "main".into()],
         exports_fields: vec![vec!["exports".into()]],
         imports_fields: vec![vec!["imports".into()]],

@@ -23,6 +23,7 @@ write the same scores.
 from __future__ import annotations
 
 import functools
+import gzip
 import json
 import os
 import platform
@@ -292,12 +293,19 @@ def find_typescript(args) -> Path | None:
 
 
 def run_dump(
-    test_binary: Path, tree: Path, plan: str, out: Path, timeout: int, typescript: Path | None = None
+    test_binary: Path,
+    tree: Path,
+    plan: str,
+    out: Path,
+    timeout: int,
+    typescript: Path | None = None,
+    package_graph: bool = False,
 ) -> dict:
     """Dump one tree's facts; return where the dump is, its wall clock and peak RSS.
 
-    `plan` is a key of `PLANS`, or `census` for the syntax census run. The dump
-    is not loaded here: see `load_dump` and `run` for why."""
+    `plan` is a key of `PLANS`, or `census` for the syntax census run. With
+    `package_graph` the run also writes the tree's package graph beside the dump.
+    The dump is not loaded here: see `load_dump` and `run` for why."""
     manifest = out.with_suffix(".manifest")
     manifest.write_text(f"{tree}\t{out}\n")
     env = dict(os.environ)
@@ -313,6 +321,10 @@ def run_dump(
     else:
         # A compiler in the caller's environment must not reach the other plans.
         env.pop(TYPESCRIPT_ENV, None)
+    if package_graph:
+        env[PACKAGE_GRAPH_ENV] = "1"
+    else:
+        env.pop(PACKAGE_GRAPH_ENV, None)
     env["RUST_LOG"] = STAGE_LOG
     env["NO_COLOR"] = "1"
     result = bench_matrix.measure(
@@ -337,6 +349,294 @@ def run_dump(
         ][-8:]
         return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
     return {"dump": out, "cost": cost, "error": None, "ts_type_join": ts_type_join(result.stderr)}
+
+
+# With this set to 1, the refined dump of each tune-set package also writes its
+# package graph; the report stores it compressed beside the report and states
+# its size per MB of source.
+PACKAGE_GRAPH_ENV = "POLINT_JS_BENCH_PACKAGE_GRAPH"
+PACKAGE_GRAPH_PLAN = "refined"
+# The ceiling on a stored package graph, gzip bytes per MB of source.
+PACKAGE_GRAPH_CEILING_PER_MB = 2 * MB
+
+
+def package_graph_sizes(dumps: dict, names: list[str]) -> dict:
+    """Each written package graph, compressed, with its sizes.
+
+    The compressed bytes carry no timestamp, so they are the same on every run."""
+    graphs = {}
+    for name in names:
+        run_entry = dumps.get(("package", name, PACKAGE_GRAPH_PLAN))
+        if not run_entry or run_entry["dump"] is None:
+            continue
+        path = run_entry["dump"].with_suffix(".package-graph.json")
+        if not path.exists():
+            continue
+        raw = path.read_bytes()
+        graphs[name] = {"bytes": len(raw), "gzip": gzip.compress(raw, mtime=0)}
+    return graphs
+
+
+def render_package_graphs(report: dict, add) -> None:
+    graphs = report.get("package_graphs")
+    if not graphs:
+        return
+    add("## Package graphs")
+    add("")
+    add(
+        "The package graph of each tune-set package under the refined plan, the package taken as the tree: "
+        f"JSON and gzip bytes, and gzip bytes per MB of source against the ceiling of "
+        f"{PACKAGE_GRAPH_CEILING_PER_MB / MB:.0f} MB per MB."
+    )
+    add("")
+    add("| package | source KB | graph KB | gzip KB | gzip KB per MB | within the ceiling |")
+    add("|---|---|---|---|---|---|")
+    for name, row in sorted(graphs.items()):
+        add(
+            f"| {name} | {row['source_bytes'] / 1000:.0f} | {row['bytes'] / 1000:.0f} | {row['gzip_bytes'] / 1000:.0f} "
+            f"| {row['gzip_bytes_per_mb'] / 1000:.0f} | {'yes' if row['gzip_bytes_per_mb'] <= PACKAGE_GRAPH_CEILING_PER_MB else 'no'} |"
+        )
+    add("")
+
+
+# Each `[[tree]]` of the inputs is analysed whole and as stitched package
+# graphs by this ignored lib test, when the package graphs are written.
+STITCH_FILTER = "ts::package_graph_composition_tests::stitch_js_bench_trees"
+STITCH_ENV = "POLINT_JS_BENCH_TREE_MANIFEST"
+# The ceiling on stitch time, as a share of the time to analyse the tree whole.
+STITCH_TIME_CEILING = 0.20
+# A module of a tree keeps its shipped JavaScript; its type declarations are not analysed.
+MODULE_SOURCE_SUFFIXES = (".js", ".cjs", ".mjs")
+STITCH_EXAMPLES = 3
+
+
+def copy_files(source: Path, dest: Path, rels: list[str]) -> None:
+    for rel in rels:
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(source / rel, dest / rel)
+
+
+def stage_stitch_trees(scratch: Path, inputs: dict) -> dict:
+    """Lay out each stitched tree the way npm installs it; return {tree: {root, held_out}}.
+
+    A benchmark package keeps its analysed files at the root of its tree and
+    each module its shipped JavaScript and `package.json` at its npm path. A
+    fixture tree is copied whole."""
+    packages = {package["name"]: package for package in inputs["package"]}
+    trees = {}
+    for tree in inputs.get("tree", []):
+        dest = scratch / "trees" / tree["name"]
+        if "fixture" in tree:
+            shutil.copytree(bench.BENCH_DIR / tree["fixture"], dest)
+            trees[tree["name"]] = {"root": dest, "held_out": False}
+            continue
+        package = packages[tree["root_package"]]
+        analysed, _ = bench.package_files(package)
+        copy_files(bench.require_fetched(package), dest, [*analysed, "package.json"])
+        for module in tree.get("module", []):
+            module_root = bench.require_module_fetched(module)
+            shipped = sorted(
+                rel
+                for path in module_root.rglob("*")
+                if path.is_file()
+                and path.suffix in MODULE_SOURCE_SUFFIXES
+                and "node_modules/" not in (rel := path.relative_to(module_root).as_posix())
+                and not bench.is_not_shipped(rel)
+            )
+            copy_files(module_root, dest / module["path"], [*shipped, "package.json"])
+        trees[tree["name"]] = {"root": dest, "held_out": bool(package.get("held_out"))}
+    return trees
+
+
+def run_stitch(test_binary: Path, tree: Path, out: Path, timeout: int) -> dict:
+    """Analyse one tree whole and stitched; return where the answers are and the run's cost."""
+    out.mkdir(parents=True)
+    manifest = out.with_suffix(".manifest")
+    manifest.write_text(f"{tree}\t{out}\n")
+    env = dict(os.environ)
+    env[STITCH_ENV] = str(manifest)
+    env.pop(TYPESCRIPT_ENV, None)
+    env["NO_COLOR"] = "1"
+    load_at_start = os.getloadavg()
+    result = bench_matrix.measure(
+        [str(test_binary), STITCH_FILTER, "--exact", "--ignored", "--test-threads", "1"],
+        bench.REPO_ROOT,
+        env,
+        timeout,
+    )
+    cost = {
+        "wall_ms": round(result.wall_ms),
+        "peak_rss_bytes": result.peak_rss_bytes,
+        "load_average_start": [round(value, 2) for value in load_at_start],
+        "load_average_end": [round(value, 2) for value in os.getloadavg()],
+    }
+    if result.timed_out:
+        return {"out": None, "cost": cost, "error": f"timed out after {timeout} s"}
+    if result.exit_code != 0 or not (out / "answers.json").exists():
+        tail = result.stderr.splitlines()[-8:]
+        return {"out": None, "cost": cost, "error": f"stitch failed: {chr(10).join(tail)}"}
+    return {"out": out, "cost": cost, "error": None}
+
+
+def package_source_bytes(root: Path) -> int:
+    """The bytes of the source files of the package at `root`, without the packages nested in it."""
+    return sum(
+        path.stat().st_size
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.name.endswith(bench.SOURCE_SUFFIXES)
+        and "node_modules" not in path.relative_to(root).parts
+    )
+
+
+def answer_sets(answers: dict) -> dict:
+    """The edges of each tier, the open sites and the claim of each site, as comparable sets.
+
+    An edge is exact when its site's claim is exact or complete, and
+    conservative otherwise. A site is open when its claim is open or its
+    solve did not answer it."""
+    sets = {"exact": set(), "conservative": set(), "open_sites": set(), "claims": set()}
+    for site, answer in answers.items():
+        status, _, claim = answer["claim"].partition(" ")
+        tier = "exact" if claim.startswith(("Exact", "Complete")) else "conservative"
+        sets[tier].update(f"{site} -> {target}" for target in answer["targets"])
+        if status != "Present" or claim.startswith("Open"):
+            sets["open_sites"].add(f"{site}: {answer['claim']}")
+        sets["claims"].add(f"{site}: {answer['claim']}")
+    return sets
+
+
+def score_stitched_trees(runs: dict) -> tuple[dict, dict]:
+    """Compare the whole and stitched answers of each tree; return (comparisons, costs).
+
+    The differing sites of a held-out tree are counted and never listed."""
+    scored, costs = {}, {}
+    for name, run_entry in sorted(runs.items()):
+        if run_entry["out"] is None:
+            scored[name] = {"held_out": run_entry["held_out"], "error": run_entry["error"]}
+            continue
+        out = run_entry["out"]
+        answers = json.loads((out / "answers.json").read_text())
+        whole, stitched = answer_sets(answers["whole"]), answer_sets(answers["stitched"])
+        compare = {}
+        for view in whole:
+            only_whole, only_stitched = whole[view] - stitched[view], stitched[view] - whole[view]
+            compare[view] = {
+                "whole": len(whole[view]),
+                "stitched": len(stitched[view]),
+                "only_whole": len(only_whole),
+                "only_stitched": len(only_stitched),
+            }
+            if not run_entry["held_out"]:
+                compare[view]["examples_only_whole"] = sorted(only_whole)[:STITCH_EXAMPLES]
+                compare[view]["examples_only_stitched"] = sorted(only_stitched)[:STITCH_EXAMPLES]
+        packages = []
+        for package in answers["packages"]:
+            raw = (out / "graphs" / package["graph"]).read_bytes()
+            source = package_source_bytes(run_entry["root"] / package["root"])
+            gzip_size = len(gzip.compress(raw, mtime=0))
+            packages.append(
+                {
+                    "name": package["name"],
+                    "source_bytes": source,
+                    "bytes": len(raw),
+                    "gzip_bytes": gzip_size,
+                    "gzip_bytes_per_mb": round(gzip_size / max(source / MB, 1e-9)),
+                }
+            )
+        source = sum(row["source_bytes"] for row in packages)
+        gzip_size = sum(row["gzip_bytes"] for row in packages)
+        scored[name] = {
+            "held_out": run_entry["held_out"],
+            "error": None,
+            "sites": len(answers["whole"]),
+            "compare": compare,
+            "differs": any(row["only_whole"] or row["only_stitched"] for row in compare.values()),
+            "open_imports": dict(sorted(Counter(row["reason"] for row in answers["open_imports"]).items())),
+            "packages": packages,
+            "source_bytes": source,
+            "bytes": sum(row["bytes"] for row in packages),
+            "gzip_bytes": gzip_size,
+            "gzip_bytes_per_mb": round(gzip_size / max(source / MB, 1e-9)),
+        }
+        costs[name] = {
+            **run_entry["cost"],
+            "whole_ms": answers["whole_ms"],
+            "package_graphs_ms": sum(package["build_ms"] for package in answers["packages"]),
+            "stitch_ms": answers["stitch_ms"],
+        }
+    return scored, costs
+
+
+def render_stitched_trees(report: dict, add) -> None:
+    trees = report.get("stitched_trees")
+    if not trees:
+        return
+    add("## Stitched trees")
+    add("")
+    add(
+        "Each tree analysed as one program, and as one package graph per package, each stored, read back and "
+        "stitched. Every column compares the answers at the call sites of the two: whole / stitched / in one "
+        "and not the other. The difference must be empty. A held-out tree is compared only; its differing "
+        "sites are counted, never listed."
+    )
+    add("")
+    add("| tree | packages | sites | exact edges | conservative edges | open sites | site claims | unlinked imports |")
+    add("|---|---|---|---|---|---|---|---|")
+    for name, row in trees.items():
+        label = f"{name} (held out)" if row["held_out"] else name
+        if row["error"]:
+            add(f"| {label} | failed: {cell(row['error'].splitlines()[0])} | | | | | | |")
+            continue
+        views = " | ".join(
+            f"{c['whole']} / {c['stitched']} / {c['only_whole'] + c['only_stitched']}"
+            for c in (row["compare"][view] for view in ("exact", "conservative", "open_sites", "claims"))
+        )
+        unlinked = sum(row["open_imports"].values())
+        add(f"| {label} | {len(row['packages'])} | {row['sites']} | {views} | {unlinked} |")
+    add("")
+    for name, row in trees.items():
+        for view, compare in (row.get("compare") or {}).items():
+            for side in ("only_whole", "only_stitched"):
+                for example in compare.get(f"examples_{side}", []):
+                    add(f"- {name}, {view}, {side.replace('_', ' ')}: `{example}`")
+    add("")
+    add(
+        "Stored size: every package graph of the tree as JSON and gzip, against the source it describes, and "
+        f"the package with the most gzip bytes. The ceiling is {PACKAGE_GRAPH_CEILING_PER_MB / MB:.0f} MB per MB."
+    )
+    add("")
+    add("| tree | source KB | graph KB | gzip KB | gzip KB per MB | within the ceiling | largest package: gzip KB, per MB |")
+    add("|---|---|---|---|---|---|---|")
+    for name, row in trees.items():
+        if row["error"]:
+            continue
+        largest = max(row["packages"], key=lambda package: (package["gzip_bytes"], package["name"]))
+        add(
+            f"| {name} | {row['source_bytes'] / 1000:.0f} | {row['bytes'] / 1000:.0f} | {row['gzip_bytes'] / 1000:.0f} "
+            f"| {row['gzip_bytes_per_mb'] / 1000:.0f} | {'yes' if row['gzip_bytes_per_mb'] <= PACKAGE_GRAPH_CEILING_PER_MB else 'no'} "
+            f"| {largest['name']}: {largest['gzip_bytes'] / 1000:.0f}, {largest['gzip_bytes_per_mb'] / 1000:.0f} |"
+        )
+    add("")
+    costs = report.get("stitch_cost") or {}
+    if not costs:
+        return
+    add(
+        "Time, one run each: analysing the tree whole, building every package graph, and reading the stored "
+        f"graphs back and stitching them, against the ceiling of {STITCH_TIME_CEILING:.0%} of the whole. "
+        "Load average 1 / 5 / 15 min at the start and end of the run."
+    )
+    add("")
+    add("| tree | whole ms | package graphs ms | stitch ms | stitch / whole | within the ceiling | load at start | load at end |")
+    add("|---|---|---|---|---|---|---|---|")
+    for name, cost in costs.items():
+        share = cost["stitch_ms"] / max(cost["whole_ms"], 1)
+        add(
+            f"| {name} | {cost['whole_ms']} | {cost['package_graphs_ms']} | {cost['stitch_ms']} | {share:.0%} "
+            f"| {'yes' if share <= STITCH_TIME_CEILING else 'no'} | {load_line(cost['load_average_start'])} "
+            f"| {load_line(cost['load_average_end'])} |"
+        )
+    add("")
 
 
 # The kernel's per-provider stage log: one `stage done` line per provider run,
@@ -2966,6 +3266,9 @@ def render_markdown(report: dict) -> str:
         )
     add("")
 
+    render_package_graphs(report, add)
+    render_stitched_trees(report, add)
+
     add("## Cost")
     add("")
     cost = report.get("cost")
@@ -3176,6 +3479,8 @@ def run(args) -> int:
         trees = [("case", case_id, tree) for case_id, tree in case_trees.items()]
         trees += [("package", name, tree) for name, tree in package_trees.items()]
         trees += [(PREVIOUS_SET, name, tree) for name, tree in previous_trees.items()]
+        held_out_names = {package["name"] for package in inputs["package"] if package.get("held_out")}
+        with_package_graph = os.environ.get(PACKAGE_GRAPH_ENV) == "1"
         for kind, name, tree in trees:
             for plan in PLANS:
                 out = scratch / "dumps" / f"{kind}-{name.replace('/', '__')}-{plan}.json"
@@ -3185,7 +3490,15 @@ def run(args) -> int:
                         "typed": True,
                     }
                 else:
-                    dumps[(kind, name, plan)] = run_dump(test_binary, tree, plan, out, args.dump_timeout)
+                    package_graph = (
+                        with_package_graph
+                        and kind == "package"
+                        and plan == PACKAGE_GRAPH_PLAN
+                        and name not in held_out_names
+                    )
+                    dumps[(kind, name, plan)] = run_dump(
+                        test_binary, tree, plan, out, args.dump_timeout, package_graph=package_graph
+                    )
                 if dumps[(kind, name, plan)]["error"]:
                     print(f"{kind} {name} {plan}: {dumps[(kind, name, plan)]['error']}", file=sys.stderr)
             if kind == "package":
@@ -3194,6 +3507,15 @@ def run(args) -> int:
                 if dumps[(kind, name, "census")]["error"]:
                     print(f"{kind} {name} census: {dumps[(kind, name, 'census')]['error']}", file=sys.stderr)
                 print(f"dumped {name}", file=sys.stderr)
+
+        stitch_runs = {}
+        if with_package_graph:
+            for name, tree in stage_stitch_trees(scratch, inputs).items():
+                out = scratch / "stitched" / name
+                stitch_runs[name] = {**run_stitch(test_binary, tree["root"], out, args.dump_timeout), **tree}
+                if stitch_runs[name]["error"]:
+                    print(f"tree {name}: {stitch_runs[name]['error']}", file=sys.stderr)
+                print(f"stitched {name}", file=sys.stderr)
 
         over_budget = [
             f"{name} {plan}: {run_entry['cost']['wall_ms'] / 1000:.1f} s, budget {budgets[name]} s"
@@ -3216,6 +3538,8 @@ def run(args) -> int:
             cost_trees = {"constructs (all cases)": constructs_tree, **{name: package_trees[name] for name in tune_names}}
             check_cost = measure_cost(polint, cost_trees, scratch, args.cost_runs, args.dump_timeout)
         launcher_peak_rss_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+        package_graphs = package_graph_sizes(dumps, tune_names)
+        stitched_trees, stitch_cost = score_stitched_trees(stitch_runs)
         if args.keep_dumps:
             shutil.copytree(scratch / "dumps", Path(args.keep_dumps), dirs_exist_ok=True)
         for run_entry in dumps.values():
@@ -3274,6 +3598,23 @@ def run(args) -> int:
             "decisions": DECISIONS,
             "cost": None,
         }
+        if package_graphs:
+            report["package_graphs"] = {
+                name: {
+                    "bytes": graph["bytes"],
+                    "gzip_bytes": len(graph["gzip"]),
+                    "source_bytes": report["packages"][name].get("source_bytes", 0),
+                    "gzip_bytes_per_mb": round(
+                        len(graph["gzip"]) / max(report["packages"][name].get("source_bytes", 0) / MB, 1e-9)
+                    ),
+                }
+                for name, graph in package_graphs.items()
+            }
+
+        if stitched_trees:
+            report["stitched_trees"] = stitched_trees
+            # Times stay under their own key, so every other key is the same on every run.
+            report["stitch_cost"] = stitch_cost
 
         if check_cost is not None:
             add_per_mb(
@@ -3298,6 +3639,8 @@ def run(args) -> int:
 
     out_dir = Path(args.out) if args.out else bench.BASELINE
     out_dir.mkdir(parents=True, exist_ok=True)
+    for name, graph in package_graphs.items():
+        (out_dir / f"{name.replace('/', '__')}.package-graph.json.gz").write_bytes(graph["gzip"])
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     (out_dir / "report.md").write_text(render_markdown(report))
     print(f"wrote {out_dir / 'report.json'} and {out_dir / 'report.md'}", file=sys.stderr)
@@ -3306,6 +3649,10 @@ def run(args) -> int:
         for (kind, name, plan), run_entry in sorted(dumps.items())
         if run_entry["error"]
     ]
+    failed += [f"tree {name}: {row['error']}" for name, row in report.get("stitched_trees", {}).items() if row["error"]]
+    differs = [name for name, row in report.get("stitched_trees", {}).items() if row.get("differs")]
+    if differs:
+        print("stitched trees whose answers differ from the whole program:\n" + "\n".join(differs), file=sys.stderr)
     if failed:
         print("fact dumps that failed:\n" + "\n".join(failed), file=sys.stderr)
     if over_budget:
@@ -3313,4 +3660,4 @@ def run(args) -> int:
     lost = report.get("types_never_lose", [])
     if lost:
         print(f"the {TYPED_PLAN} plan found fewer observed edges than refined:\n" + "\n".join(lost), file=sys.stderr)
-    return 1 if failed or over_budget or lost else 0
+    return 1 if failed or over_budget or lost or differs else 0

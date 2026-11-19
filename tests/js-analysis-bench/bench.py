@@ -184,46 +184,80 @@ def fetch(args: argparse.Namespace) -> int:
     inputs = load_inputs()
     PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
     for package in select_packages(inputs, args.only):
-        dest = package_dir(package)
-        marker = dest / FETCH_MARKER
-        pinned = package.get("sha256")
-        if pinned is not None and marker.exists() and marker.read_text().strip() == pinned:
-            print(f"ok {dest.name} (already fetched)", file=sys.stderr)
-            continue
-        tarball = PACKAGES_DIR / f"{dest.name}.tgz"
-        if not tarball.exists():
-            print(f"downloading {package['origin']}", file=sys.stderr)
-            with urllib.request.urlopen(package["origin"], timeout=120) as response:
-                tarball.write_bytes(response.read())
-        data = tarball.read_bytes()
-        sha256 = hashlib.sha256(data).hexdigest()
-        algorithm, _, expected = package["integrity"].partition("-")
-        integrity = base64.b64encode(hashlib.new(algorithm, data).digest()).decode()
-        if (pinned is not None and sha256 != pinned) or integrity != expected:
-            tarball.unlink()
-            raise SystemExit(f"{dest.name}: content hash mismatch; refusing to unpack")
-        if pinned is None:
+        sha256 = fetch_tarball(package_dir(package), package["origin"], package["integrity"], package.get("sha256"))
+        if package.get("sha256") is None:
             # A new package is pinned by its registry integrity; the first
             # download that matches it records the sha256 every later fetch checks.
             pin_sha256(package["name"], sha256)
-        if dest.exists():
-            shutil.rmtree(dest)
-        dest.mkdir()
-        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
-            members = []
-            for member in archive.getmembers():
-                head, _, rest = member.name.partition("/")
-                if head != "package" or not rest:
-                    continue
-                member.name = rest
-                members.append(member)
-            archive.extractall(dest, members=members, filter="data")
-        marker.write_text(sha256 + "\n")
-        print(f"ok {dest.name}", file=sys.stderr)
     for package in select_packages(inputs, args.only):
         if package.get("tests_from"):
             fetch_tests(inputs, package)
+    if not args.only:
+        for module in tree_modules(inputs):
+            fetch_tarball(module_dir(module), module["origin"], module["integrity"], module["sha256"])
     return 0
+
+
+def fetch_tarball(dest: Path, origin: str, integrity: str, pinned: str | None) -> str:
+    """Download `origin` once, check it against its pins, unpack its `package/`
+    directory into `dest`; return its sha256."""
+    marker = dest / FETCH_MARKER
+    if pinned is not None and marker.exists() and marker.read_text().strip() == pinned:
+        print(f"ok {dest.name} (already fetched)", file=sys.stderr)
+        return pinned
+    tarball = PACKAGES_DIR / f"{dest.name}.tgz"
+    if not tarball.exists():
+        print(f"downloading {origin}", file=sys.stderr)
+        with urllib.request.urlopen(origin, timeout=120) as response:
+            tarball.write_bytes(response.read())
+    data = tarball.read_bytes()
+    sha256 = hashlib.sha256(data).hexdigest()
+    algorithm, _, expected = integrity.partition("-")
+    digest = base64.b64encode(hashlib.new(algorithm, data).digest()).decode()
+    if (pinned is not None and sha256 != pinned) or digest != expected:
+        tarball.unlink()
+        raise SystemExit(f"{dest.name}: content hash mismatch; refusing to unpack")
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        members = []
+        for member in archive.getmembers():
+            head, _, rest = member.name.partition("/")
+            if head != "package" or not rest:
+                continue
+            member.name = rest
+            members.append(member)
+        archive.extractall(dest, members=members, filter="data")
+    marker.write_text(sha256 + "\n")
+    print(f"ok {dest.name}", file=sys.stderr)
+    return sha256
+
+
+def module_name(module: dict) -> str:
+    """The package name of a tree module: its path after the last `node_modules/`."""
+    return module["path"].rpartition("node_modules/")[2]
+
+
+def module_dir(module: dict) -> Path:
+    return PACKAGES_DIR / f"module-{module_name(module).replace('/', '__')}-{module['version']}"
+
+
+def tree_modules(inputs: dict) -> list[dict]:
+    """Every module of every stitched tree, once per name and version."""
+    modules = {}
+    for tree in inputs.get("tree", []):
+        for module in tree.get("module", []):
+            modules.setdefault((module_name(module), module["version"]), module)
+    return [modules[key] for key in sorted(modules)]
+
+
+def require_module_fetched(module: dict) -> Path:
+    root = module_dir(module)
+    marker = root / FETCH_MARKER
+    if not marker.exists() or marker.read_text().strip() != module["sha256"]:
+        raise SystemExit(f"{root} is missing or stale; run `bench.py fetch` first")
+    return root
 
 
 def test_manifest(package: dict) -> tuple[Path, Path]:

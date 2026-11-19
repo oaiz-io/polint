@@ -18,6 +18,7 @@ use crate::analysis_api::{FunctionFact, ResolutionStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::platform;
 use crate::analysis_neutral::ids::{PlaceId, SemanticNodeId};
+use crate::analysis_neutral::package_graph::package_of;
 use crate::analysis_neutral::points_to::facts::PointsToPrecision;
 use crate::analysis_neutral::semantic_graph::build::{function_node_key, node_key_from_identity};
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
@@ -192,9 +193,17 @@ impl GraphBuilder {
                 .or_default()
                 .insert(target);
         }
-        let requests = flows
+        // A request into another package is described as outside code, as
+        // the package's own graph describes it, and linked beside its open
+        // value: the program then answers as the stitch of its packages.
+        let packages = file_paths
             .iter()
-            .map(|(file, file_flows)| {
+            .map(|path| package_of(path).0)
+            .collect::<Vec<_>>();
+        let (requests, links): (Vec<_>, Vec<_>) = flows
+            .iter()
+            .enumerate()
+            .map(|(index, (file, file_flows))| {
                 file_flows
                     .requests
                     .iter()
@@ -209,9 +218,13 @@ impl GraphBuilder {
                             .flatten()
                             .filter(|&target| flows[target].1.lowered)
                     })
-                    .collect::<Vec<_>>()
+                    .map(|target| match target {
+                        Some(target) if packages[target] != packages[index] => (None, Some(target)),
+                        target => (target, None),
+                    })
+                    .unzip::<_, _, Vec<_>, Vec<_>>()
             })
-            .collect::<Vec<_>>();
+            .unzip();
         let flow_refs = flows.iter().map(|(_, flows)| *flows).collect::<Vec<_>>();
         let described = describe_program(
             &flow_refs,
@@ -272,6 +285,7 @@ impl GraphBuilder {
                 file_paths: &file_paths,
                 file_index,
                 requests: &requests[file_index],
+                links: &links[file_index],
                 earlier_callees: &earlier_callees,
                 places: BTreeMap::new(),
                 next_place: &mut next_place,
@@ -355,6 +369,9 @@ struct FileProjection<'b, 'n> {
     file_paths: &'n [String],
     file_index: usize,
     requests: &'n [Option<usize>],
+    /// The file of another package each request names, linked beside the
+    /// request's open value.
+    links: &'n [Option<usize>],
     earlier_callees: &'n BTreeSet<SemanticNodeId>,
     places: BTreeMap<(FlowVar, bool), SemanticNodeId>,
     next_place: &'b mut u64,
@@ -618,19 +635,26 @@ impl FileProjection<'_, '_> {
                     "request#{}#{request}",
                     if namespace { "namespace" } else { "module" }
                 ));
-                let src = match self.requests.get(request as usize).copied().flatten() {
-                    Some(target) => self.builder.value_flow_place(
-                        self.interner,
-                        self.next_place,
+                let module_place = |this: &mut Self, target: usize| {
+                    this.builder.value_flow_place(
+                        this.interner,
+                        this.next_place,
                         format!(
                             "{}#{}",
-                            self.file_paths[target],
+                            this.file_paths[target],
                             if namespace { "namespace" } else { "module" }
                         ),
-                    ),
+                    )
+                };
+                let src = match self.requests.get(request as usize).copied().flatten() {
+                    Some(target) => module_place(self, target),
                     None => self.var(FlowVar::Open, false),
                 };
                 self.push(ConstraintKind::CopyEdge { dst, src });
+                if let Some(target) = self.links.get(request as usize).copied().flatten() {
+                    let src = module_place(self, target);
+                    self.push(ConstraintKind::CopyEdge { dst, src });
+                }
                 dst
             }
             FlowVar::Local(symbol) => self.place(format!("local#{symbol}")),
