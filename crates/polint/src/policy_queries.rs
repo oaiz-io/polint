@@ -5131,6 +5131,41 @@ mod tests {
         db
     }
 
+    #[test]
+    fn call_graph_serves_an_ambiguous_exact_answer_as_conservative() {
+        let mut db = AnalysisDb::new();
+        let file = db.add_file(
+            PathBuf::from("src/main.go"),
+            "src/main.go".to_string(),
+            "package main\nfunc main() { run() }\nfunc run() {}\n".to_string(),
+        );
+        let main = push_test_function(&mut db, file, "main", 1, false);
+        let run = push_test_function(&mut db, file, "run", 2, false);
+        let site = call_site(0, file, main, "run");
+        db.replace_call_facts(CallOutput {
+            sites: vec![site.clone()],
+            targets: Vec::new(),
+            unresolved: Vec::new(),
+        })
+        .expect("valid call facts");
+        let mut edge = refined_edge(0, site.id, main, run, "run");
+        edge.base_target = None;
+        edge.status = CallTargetStatus::Ambiguous;
+        edge.precision = CallPrecision::Exact;
+        db.replace_refined_call_facts(RefinedCallOutput { edges: vec![edge] })
+            .expect("valid refined call facts");
+
+        let index = db.call_graph_index();
+        let served = index.by_caller[&main]
+            .iter()
+            .map(|&edge| {
+                let edge = index.edge(&db, edge);
+                (edge.function, edge.precision)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(served, [(Some(run), CallPrecision::Conservative)]);
+    }
+
     fn policy_query_db_with_unresolved_target() -> AnalysisDb {
         let mut db = AnalysisDb::new();
         let file = db.add_file(
