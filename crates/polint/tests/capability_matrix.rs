@@ -38,12 +38,7 @@ fn unique_rule_pack_manifest_contents<'a>(path: &Path, contents: &'a str) -> Cow
         return Cow::Borrowed(contents);
     }
 
-    let mut hash = 0xcbf29ce484222325_u64;
-    for byte in path.to_string_lossy().as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    let suffix = format!("{hash:016x}");
+    let suffix = rule_pack_suffix(path);
     let mut changed = false;
     let rewritten = contents
         .lines()
@@ -66,6 +61,44 @@ fn unique_rule_pack_manifest_contents<'a>(path: &Path, contents: &'a str) -> Cow
     } else {
         Cow::Borrowed(contents)
     }
+}
+
+/// The suffix that names the rule pack at `path` in the shared rules target
+/// directory.
+///
+/// It is the same for the same test, test binary, and fixture layout on every
+/// run, so a re-run rebuilds that test's rule host in place rather than adding
+/// another one per temporary directory; tests that run at the same time get
+/// different names, so they never build over each other's host. A path outside
+/// a temporary directory, or code not running on a named test thread, falls
+/// back to a suffix of the whole path.
+fn rule_pack_suffix(path: &Path) -> String {
+    let thread = std::thread::current();
+    let test = thread.name().filter(|name| *name != "main");
+    let mut components = path.components();
+    let in_temp_dir = components
+        .by_ref()
+        .any(|component| component.as_os_str().to_string_lossy().starts_with(".tmp"));
+    let fixture = components.as_path();
+    let identity = match test {
+        Some(test) if in_temp_dir => {
+            let binary = std::env::current_exe()
+                .ok()
+                .and_then(|exe| {
+                    exe.file_stem()
+                        .map(|stem| stem.to_string_lossy().into_owned())
+                })
+                .unwrap_or_default();
+            format!("{binary}\0{test}\0{}", fixture.to_string_lossy())
+        }
+        _ => path.to_string_lossy().into_owned(),
+    };
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in identity.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
 
 fn stdout_json(assert: assert_cmd::assert::Assert) -> serde_json::Value {

@@ -36,7 +36,7 @@ oxc_resolver = { workspace = true, optional = true }
 oxc_semantic = { workspace = true, optional = true }
 oxc_span = { workspace = true, optional = true }
 petgraph.workspace = true
-polint-macros = { path = "../polint-macros", version = "0.5.3" }
+polint-macros = { path = "../polint-macros", version = "0.5.4" }
 rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -60,11 +60,13 @@ libc.workspace = true
 rustix.workspace = true
 
 # Windows-only: Job Objects keep spawned Go process trees contained after the
-# direct process exits or the runner reaches its timeout.
+# direct process exits or the runner reaches its timeout, and file IDs let the
+# rule-host disk budget count a hard-linked host binary once.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Storage_FileSystem",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
 ] }

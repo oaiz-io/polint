@@ -244,7 +244,10 @@ action then reports the size and refuses the save above it.
 
 Cargo does not remove superseded units from a target directory, so the entry
 grows as dependency sets change. The dev profile (`POLINT_RULES_PROFILE=dev`)
-grows fastest. To retire entries deliberately, bump `cache-key-prefix`.
+grows fastest. polint itself keeps the rules target directory within
+`POLINT_RULES_TARGET_MAX_MB` (default 4096 MiB) by evicting its least recently
+used rule hosts, as described in [CACHE.md](CACHE.md#disk-budget). To retire
+entries deliberately, bump `cache-key-prefix`.
 
 Use `polint cache status` locally or in CI to inspect the restored cache, and
 `polint cache prune` / `polint cache clean` when you need explicit cleanup.
