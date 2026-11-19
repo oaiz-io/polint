@@ -222,13 +222,13 @@ Dump time and peak RSS are one fact dump each, sidecar included.
 
 | package | recall refined | recall typed | false-complete refined / typed | type callsite rows | dump s refined / typed | dump peak MB refined / typed |
 |---|---|---|---|---|---|---|
-| axios | 604/675 (89%) | 606/675 (90%) | 0 / 0 | 2098 | 2.9 / 3.7 | 402.2 / 400.3 |
-| zod | 1181/1308 (90%) | 1189/1308 (91%) | 0 / 0 | 6125 | 17.1 / 19.2 | 1468.3 / 1407.7 |
-| commander | 183/318 (58%) | 306/318 (96%) | 0 / 0 | 814 | 1.9 / 2.5 | 190.1 / 234.2 |
-| async | 631/637 (99%) | 631/637 (99%) | 0 / 0 | 1605 | 11.8 / 11.9 | 1597.4 / 1591.1 |
-| chalk | 56/72 (78%) | 56/72 (78%) | 0 / 0 | 144 | 0.2 / 0.8 | 67.9 / 221.0 |
-| dayjs | 88/112 (79%) | 88/112 (79%) | 0 / 0 | 181 | 0.3 / 0.8 | 70.5 / 223.4 |
-| underscore | 250/260 (96%) | 250/260 (96%) | 0 / 0 | 455 | 0.9 / 1.4 | 170.1 / 226.6 |
+| axios | 604/675 (89%) | 606/675 (90%) | 0 / 0 | 2098 | 2.9 / 3.7 | 414.8 / 391.5 |
+| zod | 1181/1308 (90%) | 1189/1308 (91%) | 0 / 0 | 6125 | 16.8 / 18.6 | 1456.2 / 1412.8 |
+| commander | 183/318 (58%) | 306/318 (96%) | 0 / 0 | 814 | 1.8 / 2.5 | 190.1 / 233.1 |
+| async | 631/637 (99%) | 631/637 (99%) | 0 / 0 | 1605 | 11.8 / 11.8 | 1594.3 / 1601.8 |
+| chalk | 56/72 (78%) | 56/72 (78%) | 0 / 0 | 144 | 0.2 / 0.7 | 69.3 / 223.0 |
+| dayjs | 88/112 (79%) | 88/112 (79%) | 0 / 0 | 181 | 0.3 / 0.8 | 70.3 / 222.8 |
+| underscore | 250/260 (96%) | 250/260 (96%) | 0 / 0 | 455 | 0.8 / 1.4 | 172.0 / 221.4 |
 
 How the type rows joined the syntax facts. A callsite row joins a call site by span and adds nothing when it does not. A deferred callsite joined but sits in a file dense with `any` and is not resolved, so it adds nothing either. A callee row joins a function by span, then by name for the kinds a call runs (an accessor joins by span only); a callee outside the tree counts as matched. An unmatched callee is a declaration in the tree that names no function polint extracted, and adds no edge.
 
@@ -765,12 +765,12 @@ scored both ways once, so this report reads against them. Every other table uses
 
 | package | set | files | source KB | plan | recall | exact / exact + conservative | wrong targets single / multi | wrong exact targets | call sites | dump s | dump peak MB |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| zod | globs alone | 332 | 3088 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 49016 | 11.5 | 1371 |
-| zod | globs alone | 332 | 3088 | refined | 1190/1308 (91%) | 674 / 763 | 0 / 40 | 0 | 49016 | 59.3 | 4829 |
-| zod | globs alone | 332 | 3088 | typed | 1197/1308 (92%) | 674 / 771 | 0 / 40 | 0 | 49016 | 66.7 | 5248 |
-| zod | shipped | 125 | 1354 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 6109 | 4.0 | 534 |
-| zod | shipped | 125 | 1354 | refined | 1181/1308 (90%) | 674 / 763 | 0 / 40 | 0 | 6109 | 17.1 | 1468 |
-| zod | shipped | 125 | 1354 | typed | 1189/1308 (91%) | 674 / 771 | 0 / 40 | 0 | 6109 | 19.2 | 1408 |
+| zod | globs alone | 332 | 3088 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 49016 | 11.4 | 1364 |
+| zod | globs alone | 332 | 3088 | refined | 1190/1308 (91%) | 674 / 763 | 0 / 40 | 0 | 49016 | 57.5 | 4821 |
+| zod | globs alone | 332 | 3088 | typed | 1197/1308 (92%) | 674 / 771 | 0 / 40 | 0 | 49016 | 65.7 | 5220 |
+| zod | shipped | 125 | 1354 | base | 721/1308 (55%) | 670 / 670 | 0 / 0 | 0 | 6109 | 3.8 | 533 |
+| zod | shipped | 125 | 1354 | refined | 1181/1308 (90%) | 674 / 763 | 0 / 40 | 0 | 6109 | 16.8 | 1456 |
+| zod | shipped | 125 | 1354 | typed | 1189/1308 (91%) | 674 / 771 | 0 / 40 | 0 | 6109 | 18.6 | 1413 |
 
 ## Outside tools
 
@@ -1319,6 +1319,22 @@ The package graph of each tune-set package under the refined plan, the package t
 | underscore | 69 | 2814 | 198 | 2875 | no |
 | zod | 1354 | 48954 | 3467 | 2560 | no |
 
+## Corrections
+
+Each tune-set package's recorded calls loaded as corrections to its package graph under the refined plan and applied beside it. Applied: the layer adds the edge, tier conservative. Derived: the engine's answer already claims it, so the correction can be retired. Stale: its function, call site or target is not in the graph with the same text. Unanchored: a recorded edge with no call expression, call site or function to anchor to, by reason.
+
+Recall with corrections counts the recorded call and callback edges the bench places that the layer applied or found derived. It is 100% by construction, since the corrections come from the same recording, and is not an accuracy number: it proves the layer, nothing else.
+
+| package | corrections | applied | derived | stale | unanchored | recall with corrections |
+|---|---|---|---|---|---|---|
+| async | 637 | 212 | 425 | 0 | no call expression 4 | 637/637 (100%) |
+| axios | 675 | 155 | 520 | 0 | no call expression 6 | 675/675 (100%) |
+| chalk | 72 | 17 | 55 | 0 | no call expression 1 | 72/72 (100%) |
+| commander | 318 | 282 | 36 | 0 | – | 318/318 (100%) |
+| dayjs | 112 | 26 | 86 | 0 | no call expression 12 | 112/112 (100%) |
+| underscore | 260 | 26 | 234 | 0 | no call expression 2 | 260/260 (100%) |
+| zod | 1308 | 836 | 472 | 0 | no call expression 18 | 1308/1308 (100%) |
+
 ## Stitched trees
 
 Each tree analysed as one program, and as one package graph per package, each stored, read back and stitched. Every column compares the answers at the call sites of the two: whole / stitched / in one and not the other. The difference must be empty. A held-out tree is compared only; its differing sites are counted, never listed.
@@ -1342,39 +1358,39 @@ Time, one run each: analysing the tree whole, building every package graph, and 
 
 | tree | whole ms | package graphs ms | stitch ms | stitch / whole | within the ceiling | load at start | load at end |
 |---|---|---|---|---|---|---|---|
-| axios | 4088 | 4975 | 356 | 9% | yes | 21.44 / 12.19 / 8.52 | 20.83 / 12.36 / 8.62 |
-| composition | 40 | 36 | 1 | 2% | yes | 21.44 / 12.19 / 8.52 | 21.44 / 12.19 / 8.52 |
-| express | 8836 | 10748 | 775 | 9% | yes | 20.83 / 12.36 / 8.62 | 17.35 / 12.13 / 8.62 |
+| axios | 4059 | 4978 | 365 | 9% | yes | 24.58 / 13.46 / 10.04 | 25.40 / 13.99 / 10.25 |
+| composition | 47 | 35 | 1 | 2% | yes | 24.58 / 13.46 / 10.04 | 24.58 / 13.46 / 10.04 |
+| express | 8831 | 10527 | 715 | 8% | yes | 25.40 / 13.99 / 10.25 | 24.86 / 14.65 / 10.54 |
 
 ## Cost
 
-The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit d465309346b6, load average 4.41 / 5.63 / 6.14 at the start and 10.09 / 10.99 / 8.45 at the end (1, 5, 15 minutes).
+The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 5fa6e3a6512d, load average 7.51 / 8.55 / 8.24 at the start and 12.98 / 14.61 / 11.16 at the end (1, 5, 15 minutes).
 
 `polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 30 MB; the analysis column has no such floor.
 
 | tree | source KB | cold analysis ms (per MB) | cold process ms | warm analysis ms (per MB) | warm process ms | cold peak RSS MB (analysis / process) | warm peak RSS MB | stored bytes per MB (gzip) |
 |---|---|---|---|---|---|---|---|---|
-| constructs (all cases) | 41 | 197 (4839) | 327 | 121 (2972) | 242 | 73 / 73 | 72 / 72 | 103501327 (9812568) |
-| axios | 282 | 681 (2415) | 806 | 447 (1585) | 574 | 102 / 102 | 103 / 103 | 75884595 (5415395) |
-| zod | 1354 | 4063 (3000) | 4213 | 2560 (1890) | 2714 | 525 / 525 | 668 / 668 | 127822333 (10464690) |
-| commander | 127 | 254 (2006) | 369 | 186 (1469) | 300 | 73 / 73 | 74 / 74 | 44296764 (3204199) |
-| async | 321 | 423 (1320) | 535 | 296 (923) | 424 | 80 / 80 | 79 / 79 | 44447687 (3482287) |
-| chalk | 22 | 70 (3246) | 185 | 40 (1855) | 155 | 73 / 73 | 73 / 73 | 78773646 (5811805) |
-| dayjs | 7 | 65 (9077) | 180 | 48 (6703) | 168 | 74 / 74 | 73 / 73 | 228136294 (13651585) |
-| underscore | 69 | 207 (3004) | 321 | 150 (2177) | 269 | 73 / 73 | 73 / 73 | 91434282 (5881609) |
+| constructs (all cases) | 41 | 192 (4717) | 312 | 115 (2825) | 231 | 73 / 73 | 73 / 73 | 103501327 (9812568) |
+| axios | 282 | 633 (2245) | 755 | 435 (1542) | 550 | 103 / 103 | 103 / 103 | 75884595 (5415395) |
+| zod | 1354 | 4039 (2983) | 4177 | 2549 (1882) | 2705 | 525 / 525 | 668 / 668 | 127822333 (10464689) |
+| commander | 127 | 243 (1920) | 361 | 181 (1430) | 305 | 73 / 73 | 73 / 73 | 44296764 (3204199) |
+| async | 321 | 426 (1329) | 558 | 299 (933) | 420 | 79 / 79 | 79 / 79 | 44447687 (3482287) |
+| chalk | 22 | 66 (3060) | 179 | 40 (1855) | 156 | 72 / 72 | 73 / 73 | 78773646 (5811805) |
+| dayjs | 7 | 71 (9915) | 187 | 46 (6424) | 160 | 73 / 73 | 73 / 73 | 228136294 (13651585) |
+| underscore | 69 | 202 (2931) | 320 | 146 (2119) | 256 | 74 / 74 | 73 / 73 | 91434282 (5881595) |
 
 Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is
 the only way to time the refined plan, because no public view asks for it.
 
 | tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |
 |---|---|---|---|---|---|
-| axios | 661 | 123 | 2871 | 402 | none |
-| zod | 3958 | 534 | 17113 | 1468 | 180 |
-| commander | 246 | 63 | 1879 | 190 | none |
-| async | 445 | 96 | 11804 | 1597 | none |
-| chalk | 70 | 37 | 241 | 68 | none |
-| dayjs | 70 | 37 | 315 | 70 | none |
-| underscore | 201 | 56 | 884 | 170 | none |
+| axios | 627 | 121 | 2867 | 415 | none |
+| zod | 3818 | 533 | 16807 | 1456 | 180 |
+| commander | 274 | 62 | 1826 | 190 | none |
+| async | 423 | 96 | 11821 | 1594 | none |
+| chalk | 77 | 37 | 250 | 69 | none |
+| dayjs | 70 | 38 | 288 | 70 | none |
+| underscore | 204 | 55 | 850 | 172 | none |
 
 ### Stage times
 
@@ -1382,54 +1398,54 @@ Every fact dump runs with `RUST_LOG=polint::kernel::stage=info,polint::points_to
 
 | tree | plan | stage total s | largest stages: s (peak MB) | semantic_graph share |
 |---|---|---|---|---|
-| axios | base | 0.6 | `symbol_graph` 0.3 (88), `semantic_mir` 0.2 (88), `cfg` 0.1 (107) | n/a |
-| axios | refined | 2.4 | `evidence` 0.5 (321), `semantic_graph` 0.4 (233), `solver` 0.3 (248) | 16% |
-| axios | typed | 3.5 | `ts.types` 0.9 (137), `evidence` 0.5 (343), `semantic_graph` 0.4 (243) | n/a |
-| zod | base | 3.7 | `symbol_graph` 2.1 (508), `semantic_mir` 1.2 (508), `cfg` 0.2 (508) | n/a |
-| zod | refined | 14.9 | `semantic_graph` 4.5 (872), `evidence` 2.1 (1139), `symbol_graph` 2.0 (510) | 30% |
-| zod | typed | 18.2 | `semantic_graph` 4.5 (912), `ts.types` 2.9 (510), `evidence` 2.1 (1196) | n/a |
-| commander | base | 0.2 | `semantic_mir` 0.1 (46), `symbol_graph` 0.1 (43), `cfg` 0.0 (56) | n/a |
-| commander | refined | 1.7 | `semantic_graph` 0.9 (147), `cfg` 0.1 (82), `abstract_domains` 0.1 (118) | 54% |
-| commander | typed | 2.4 | `semantic_graph` 0.9 (149), `ts.types` 0.7 (85), `type_value_alias` 0.1 (149) | n/a |
-| async | base | 0.4 | `symbol_graph` 0.2 (67), `semantic_mir` 0.1 (67), `cfg` 0.1 (84) | n/a |
-| async | refined | 9.4 | `evidence` 3.6 (1254), `data_flow` 2.2 (1254), `solver` 1.3 (356) | 9% |
-| async | typed | 10.3 | `evidence` 3.7 (1258), `data_flow` 2.2 (1258), `solver` 1.3 (361) | n/a |
-| chalk | base | 0.1 | `symbol_graph` 0.0 (31), `cfg` 0.0 (33), `module_graph` 0.0 (25) | n/a |
-| chalk | refined | 0.2 | `cfg` 0.0 (38), `semantic_graph` 0.0 (53), `evidence` 0.0 (59) | 13% |
-| chalk | typed | 0.7 | `ts.types` 0.5 (41), `cfg` 0.0 (40), `semantic_graph` 0.0 (56) | n/a |
-| dayjs | base | 0.1 | `symbol_graph` 0.0 (31), `semantic_mir` 0.0 (32), `cfg` 0.0 (34) | n/a |
-| dayjs | refined | 0.3 | `semantic_graph` 0.1 (53), `cfg` 0.0 (38), `evidence` 0.0 (61) | 27% |
-| dayjs | typed | 0.8 | `ts.types` 0.5 (41), `semantic_graph` 0.1 (54), `cfg` 0.0 (39) | n/a |
+| axios | base | 0.6 | `symbol_graph` 0.3 (88), `semantic_mir` 0.2 (88), `cfg` 0.1 (106) | n/a |
+| axios | refined | 2.5 | `evidence` 0.5 (333), `semantic_graph` 0.4 (238), `type_value_alias` 0.3 (228) | 16% |
+| axios | typed | 3.4 | `ts.types` 0.9 (136), `evidence` 0.5 (334), `semantic_graph` 0.4 (242) | n/a |
+| zod | base | 3.6 | `symbol_graph` 2.0 (508), `semantic_mir` 1.2 (508), `cfg` 0.2 (508) | n/a |
+| zod | refined | 14.7 | `semantic_graph` 4.4 (869), `evidence` 2.1 (1141), `symbol_graph` 2.0 (510) | 30% |
+| zod | typed | 17.7 | `semantic_graph` 4.5 (899), `ts.types` 2.6 (512), `evidence` 2.1 (1201) | n/a |
+| commander | base | 0.2 | `semantic_mir` 0.1 (46), `symbol_graph` 0.1 (42), `cfg` 0.0 (55) | n/a |
+| commander | refined | 1.7 | `semantic_graph` 0.9 (146), `cfg` 0.1 (82), `abstract_domains` 0.1 (118) | 54% |
+| commander | typed | 2.4 | `semantic_graph` 0.9 (149), `ts.types` 0.6 (86), `type_value_alias` 0.1 (149) | n/a |
+| async | base | 0.4 | `symbol_graph` 0.2 (68), `semantic_mir` 0.1 (68), `cfg` 0.1 (84) | n/a |
+| async | refined | 9.4 | `evidence` 3.6 (1252), `data_flow` 2.2 (1252), `solver` 1.3 (356) | 9% |
+| async | typed | 10.2 | `evidence` 3.6 (1270), `data_flow` 2.2 (1270), `solver` 1.3 (361) | n/a |
+| chalk | base | 0.1 | `symbol_graph` 0.0 (31), `module_graph` 0.0 (26), `cfg` 0.0 (34) | n/a |
+| chalk | refined | 0.2 | `cfg` 0.0 (40), `semantic_graph` 0.0 (55), `evidence` 0.0 (60) | 13% |
+| chalk | typed | 0.7 | `ts.types` 0.5 (40), `cfg` 0.0 (39), `semantic_graph` 0.0 (55) | n/a |
+| dayjs | base | 0.1 | `symbol_graph` 0.0 (31), `semantic_mir` 0.0 (33), `cfg` 0.0 (34) | n/a |
+| dayjs | refined | 0.2 | `semantic_graph` 0.1 (52), `cfg` 0.0 (38), `symbol_graph` 0.0 (30) | 26% |
+| dayjs | typed | 0.7 | `ts.types` 0.5 (41), `semantic_graph` 0.1 (55), `cfg` 0.0 (39) | n/a |
 | underscore | base | 0.2 | `symbol_graph` 0.1 (44), `semantic_mir` 0.1 (44), `cfg` 0.0 (50) | n/a |
-| underscore | refined | 0.8 | `cfg` 0.1 (73), `evidence` 0.1 (144), `symbol_graph` 0.1 (44) | 11% |
-| underscore | typed | 1.3 | `ts.types` 0.6 (77), `cfg` 0.1 (75), `evidence` 0.1 (148) | n/a |
-| co | base | 0.0 | `symbol_graph` 0.0 (27), `cfg` 0.0 (29), `semantic_mir` 0.0 (28) | n/a |
-| co | refined | 0.0 | `cfg` 0.0 (30), `semantic_graph` 0.0 (36), `evidence` 0.0 (38) | 14% |
-| co | typed | 0.5 | `ts.types` 0.4 (32), `cfg` 0.0 (30), `evidence` 0.0 (39) | n/a |
-| pako | base | 0.7 | `symbol_graph` 0.5 (59), `semantic_mir` 0.2 (59), `cfg` 0.1 (68) | n/a |
-| pako | refined | 4.5 | `semantic_graph` 2.9 (231), `symbol_graph` 0.5 (60), `type_value_alias` 0.3 (231) | 64% |
-| pako | typed | 5.3 | `semantic_graph` 2.9 (233), `ts.types` 0.6 (77), `symbol_graph` 0.5 (60) | n/a |
-| nanostores | base | 0.1 | `symbol_graph` 0.0 (31), `module_graph` 0.0 (25), `semantic_mir` 0.0 (32) | n/a |
-| nanostores | refined | 0.2 | `cfg` 0.0 (39), `semantic_graph` 0.0 (55), `symbol_graph` 0.0 (32) | 13% |
-| nanostores | typed | 0.7 | `ts.types` 0.5 (42), `cfg` 0.0 (40), `semantic_graph` 0.0 (55) | n/a |
-| express | base | 0.1 | `symbol_graph` 0.0 (35), `semantic_mir` 0.0 (38), `cfg` 0.0 (42) | n/a |
-| express | refined | 0.4 | `cfg` 0.1 (54), `type_value_alias` 0.1 (91), `semantic_graph` 0.1 (91) | 13% |
-| express | typed | 1.0 | `ts.types` 0.5 (56), `cfg` 0.1 (54), `semantic_graph` 0.1 (93) | n/a |
-| immer | base | 0.2 | `symbol_graph` 0.1 (54), `semantic_mir` 0.0 (54), `cfg` 0.0 (54) | n/a |
-| immer | refined | 0.7 | `symbol_graph` 0.1 (54), `evidence` 0.1 (139), `cfg` 0.1 (71) | 10% |
-| immer | typed | 1.4 | `ts.types` 0.7 (75), `symbol_graph` 0.1 (57), `evidence` 0.1 (142) | n/a |
-| js-yaml | base | 0.3 | `symbol_graph` 0.1 (53), `semantic_mir` 0.1 (53), `cfg` 0.1 (63) | n/a |
-| js-yaml | refined | 1.1 | `abstract_domains` 0.2 (128), `evidence` 0.2 (168), `type_value_alias` 0.1 (168) | 11% |
-| js-yaml | typed | 1.7 | `ts.types` 0.6 (76), `abstract_domains` 0.2 (132), `evidence` 0.2 (170) | n/a |
-| acorn | base | 0.6 | `semantic_mir` 0.3 (75), `symbol_graph` 0.2 (64), `cfg` 0.1 (96) | n/a |
-| acorn | refined | 2.8 | `semantic_graph` 0.6 (255), `evidence` 0.5 (341), `type_value_alias` 0.4 (255) | 20% |
-| acorn | typed | 3.5 | `ts.types` 0.7 (116), `semantic_graph` 0.6 (257), `evidence` 0.5 (346) | n/a |
-| node-forge | base | 1.7 | `symbol_graph` 0.8 (192), `semantic_mir` 0.6 (192), `cfg` 0.2 (253) | n/a |
-| node-forge | refined | 7.4 | `semantic_graph` 1.2 (564), `type_value_alias` 1.2 (561), `solver` 1.2 (644) | 16% |
-| node-forge | typed | 8.8 | `semantic_graph` 1.3 (571), `ts.types` 1.2 (291), `solver` 1.2 (655) | n/a |
-| zod, globs alone | base | 10.1 | `symbol_graph` 3.9 (878), `semantic_mir` 3.7 (878), `calls` 1.4 (1028) | n/a |
-| zod, globs alone | refined | 53.7 | `semantic_graph` 14.6 (2885), `solver` 7.5 (3148), `evidence` 6.6 (3729) | 27% |
-| zod, globs alone | typed | 60.1 | `semantic_graph` 14.6 (2957), `solver` 7.5 (3211), `evidence` 7.4 (3926) | n/a |
+| underscore | refined | 0.7 | `cfg` 0.1 (75), `evidence` 0.1 (145), `symbol_graph` 0.1 (44) | 9% |
+| underscore | typed | 1.3 | `ts.types` 0.5 (77), `cfg` 0.1 (75), `evidence` 0.1 (146) | n/a |
+| co | base | 0.0 | `symbol_graph` 0.0 (27), `cfg` 0.0 (29), `semantic_mir` 0.0 (29) | n/a |
+| co | refined | 0.0 | `cfg` 0.0 (31), `semantic_graph` 0.0 (37), `evidence` 0.0 (40) | 15% |
+| co | typed | 0.5 | `ts.types` 0.4 (33), `cfg` 0.0 (31), `semantic_graph` 0.0 (38) | n/a |
+| pako | base | 0.7 | `symbol_graph` 0.5 (60), `semantic_mir` 0.2 (60), `cfg` 0.1 (68) | n/a |
+| pako | refined | 4.6 | `semantic_graph` 2.9 (231), `symbol_graph` 0.5 (61), `type_value_alias` 0.3 (231) | 64% |
+| pako | typed | 5.2 | `semantic_graph` 2.9 (232), `ts.types` 0.6 (78), `symbol_graph` 0.5 (62) | n/a |
+| nanostores | base | 0.1 | `symbol_graph` 0.0 (34), `module_graph` 0.0 (26), `cfg` 0.0 (37) | n/a |
+| nanostores | refined | 0.2 | `cfg` 0.0 (40), `semantic_graph` 0.0 (55), `evidence` 0.0 (62) | 13% |
+| nanostores | typed | 0.7 | `ts.types` 0.5 (42), `cfg` 0.0 (41), `semantic_graph` 0.0 (57) | n/a |
+| express | base | 0.1 | `symbol_graph` 0.0 (36), `semantic_mir` 0.0 (39), `cfg` 0.0 (43) | n/a |
+| express | refined | 0.4 | `cfg` 0.1 (55), `type_value_alias` 0.1 (93), `abstract_domains` 0.1 (75) | 12% |
+| express | typed | 1.0 | `ts.types` 0.6 (58), `cfg` 0.1 (57), `abstract_domains` 0.1 (77) | n/a |
+| immer | base | 0.2 | `symbol_graph` 0.1 (55), `semantic_mir` 0.0 (55), `cfg` 0.0 (55) | n/a |
+| immer | refined | 0.7 | `symbol_graph` 0.1 (56), `cfg` 0.1 (72), `evidence` 0.1 (141) | 12% |
+| immer | typed | 1.4 | `ts.types` 0.7 (76), `symbol_graph` 0.1 (56), `cfg` 0.1 (74) | n/a |
+| js-yaml | base | 0.3 | `symbol_graph` 0.1 (53), `semantic_mir` 0.1 (53), `cfg` 0.0 (62) | n/a |
+| js-yaml | refined | 1.1 | `abstract_domains` 0.2 (129), `evidence` 0.1 (168), `type_value_alias` 0.1 (168) | 11% |
+| js-yaml | typed | 1.6 | `ts.types` 0.6 (75), `abstract_domains` 0.2 (132), `evidence` 0.1 (169) | n/a |
+| acorn | base | 0.6 | `semantic_mir` 0.3 (76), `symbol_graph` 0.2 (65), `cfg` 0.1 (98) | n/a |
+| acorn | refined | 2.7 | `semantic_graph` 0.5 (256), `evidence` 0.5 (343), `type_value_alias` 0.4 (256) | 20% |
+| acorn | typed | 3.5 | `ts.types` 0.7 (118), `semantic_graph` 0.5 (260), `evidence` 0.5 (327) | n/a |
+| node-forge | base | 1.8 | `symbol_graph` 0.8 (192), `semantic_mir` 0.6 (192), `cfg` 0.2 (253) | n/a |
+| node-forge | refined | 7.6 | `solver` 1.2 (657), `semantic_graph` 1.2 (569), `type_value_alias` 1.2 (566) | 16% |
+| node-forge | typed | 8.6 | `ts.types` 1.2 (290), `semantic_graph` 1.2 (574), `solver` 1.1 (656) | n/a |
+| zod, globs alone | base | 10.1 | `symbol_graph` 4.0 (879), `semantic_mir` 3.6 (879), `calls` 1.4 (1016) | n/a |
+| zod, globs alone | refined | 52.0 | `semantic_graph` 13.9 (2866), `solver` 7.7 (3131), `evidence` 6.5 (3715) | 27% |
+| zod, globs alone | typed | 59.1 | `semantic_graph` 14.1 (2920), `solver` 7.8 (3188), `evidence` 7.2 (3899) | n/a |
 
 ## Solver
 
@@ -1437,77 +1453,77 @@ Every fact dump logs one `points_to solve` line per solve under `polint::points_
 
 | tree | plan | solve | constraints | calls | variables | objects | slots | copy edges | pops | collapsed | largest set | sets > 64 | sets > 1,024 | ms (input / worklist / result) | RSS growth MB | peak MB | budget |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| axios | refined | alias | 7,676 | 0 | 7,273 | 2,735 | 227 | 1,247 | 2,728 | 0 | 5 | 0 | 0 | 2 / 0 / 3 | 0 | 167 | WithinBudget |
-| axios | refined | call graph | 40,548 | 3,804 | 26,188 | 2,229 | 3,797 | 35,467 | 12,624 | 124 | 137 | 3 | 0 | 17 / 5 / 47 | 10 | 248 | WithinBudget |
-| axios | refined | call graph | 40,548 | 3,804 | 26,188 | 2,229 | 3,797 | 35,467 | 12,624 | 124 | 137 | 3 | 0 | 21 / 4 / 39 | 8 | 373 | WithinBudget |
-| axios | typed | alias | 7,676 | 0 | 7,273 | 2,735 | 227 | 1,247 | 2,728 | 0 | 5 | 0 | 0 | 1 / 0 / 3 | 0 | 175 | WithinBudget |
-| axios | typed | call graph | 40,548 | 3,804 | 26,188 | 2,229 | 3,797 | 35,467 | 12,624 | 124 | 137 | 3 | 0 | 24 / 7 / 48 | 14 | 269 | WithinBudget |
-| zod | refined | alias | 32,608 | 0 | 26,996 | 8,514 | 465 | 3,004 | 8,495 | 0 | 23 | 0 | 0 | 16 / 0 / 14 | 7 | 520 | WithinBudget |
-| zod | refined | call graph | 162,839 | 11,265 | 126,934 | 10,123 | 41,007 | 358,325 | 80,330 | 2,862 | 920 | 6,090 | 0 | 126 / 127 / 382 | 32 | 895 | WithinBudget |
-| zod | refined | call graph | 162,839 | 11,265 | 126,934 | 10,123 | 41,007 | 358,325 | 80,330 | 2,862 | 920 | 6,090 | 0 | 123 / 116 / 353 | 20 | 1370 | WithinBudget |
-| zod | typed | alias | 32,608 | 0 | 26,996 | 8,514 | 465 | 3,004 | 8,495 | 0 | 23 | 0 | 0 | 17 / 0 / 17 | 9 | 536 | WithinBudget |
-| zod | typed | call graph | 162,839 | 11,265 | 126,934 | 10,123 | 41,007 | 358,325 | 80,330 | 2,862 | 920 | 6,090 | 0 | 143 / 134 / 357 | 27 | 914 | WithinBudget |
-| commander | refined | alias | 4,037 | 0 | 3,462 | 1,073 | 100 | 514 | 1,062 | 0 | 3 | 0 | 0 | 1 / 0 / 1 | 0 | 120 | WithinBudget |
-| commander | refined | call graph | 17,626 | 1,665 | 10,255 | 828 | 1,308 | 14,549 | 3,390 | 53 | 309 | 2 | 0 | 9 / 2 / 16 | 4 | 147 | WithinBudget |
-| commander | refined | call graph | 17,626 | 1,665 | 10,255 | 828 | 1,308 | 14,549 | 3,390 | 53 | 309 | 2 | 0 | 6 / 0 / 11 | 4 | 178 | WithinBudget |
-| commander | typed | alias | 4,037 | 0 | 3,462 | 1,073 | 100 | 514 | 1,062 | 0 | 3 | 0 | 0 | 1 / 0 / 19 | 0 | 121 | WithinBudget |
-| commander | typed | call graph | 17,626 | 1,665 | 10,255 | 828 | 1,308 | 14,549 | 3,390 | 53 | 309 | 2 | 0 | 6 / 0 / 9 | 6 | 149 | WithinBudget |
-| async | refined | alias | 6,082 | 0 | 6,602 | 1,857 | 33 | 1,444 | 1,863 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 0 | 259 | WithinBudget |
-| async | refined | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 65,114 | 1,460 | 253 | 5,090 | 0 | 9 / 287 / 206 | 4 | 264 | WithinBudget |
-| async | refined | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 65,114 | 1,460 | 253 | 5,090 | 0 | 13 / 321 / 209 | 6 | 1516 | WithinBudget |
-| async | typed | alias | 6,082 | 0 | 6,602 | 1,857 | 33 | 1,444 | 1,863 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 0 | 265 | WithinBudget |
-| async | typed | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 65,114 | 1,460 | 253 | 5,090 | 0 | 7 / 292 / 204 | 0 | 301 | WithinBudget |
-| chalk | refined | alias | 627 | 0 | 575 | 203 | 13 | 72 | 199 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 46 | WithinBudget |
-| chalk | refined | call graph | 4,467 | 249 | 2,864 | 374 | 773 | 2,972 | 1,420 | 0 | 90 | 1 | 0 | 1 / 0 / 3 | 0 | 54 | WithinBudget |
-| chalk | refined | call graph | 4,467 | 249 | 2,864 | 374 | 773 | 2,972 | 1,420 | 0 | 90 | 1 | 0 | 1 / 0 / 3 | 0 | 63 | WithinBudget |
+| axios | refined | alias | 7,676 | 0 | 7,273 | 2,735 | 227 | 1,247 | 2,728 | 0 | 5 | 0 | 0 | 1 / 0 / 3 | 0 | 168 | WithinBudget |
+| axios | refined | call graph | 40,548 | 3,804 | 26,188 | 2,229 | 3,797 | 35,467 | 12,624 | 124 | 137 | 3 | 0 | 15 / 4 / 48 | 10 | 261 | WithinBudget |
+| axios | refined | call graph | 40,548 | 3,804 | 26,188 | 2,229 | 3,797 | 35,467 | 12,624 | 124 | 137 | 3 | 0 | 22 / 5 / 39 | 13 | 390 | WithinBudget |
+| axios | typed | alias | 7,676 | 0 | 7,273 | 2,735 | 227 | 1,247 | 2,728 | 0 | 5 | 0 | 0 | 1 / 0 / 3 | 0 | 174 | WithinBudget |
+| axios | typed | call graph | 40,548 | 3,804 | 26,188 | 2,229 | 3,797 | 35,467 | 12,624 | 124 | 137 | 3 | 0 | 27 / 7 / 46 | 10 | 257 | WithinBudget |
+| zod | refined | alias | 32,608 | 0 | 26,996 | 8,514 | 465 | 3,004 | 8,495 | 0 | 23 | 0 | 0 | 14 / 0 / 17 | 7 | 522 | WithinBudget |
+| zod | refined | call graph | 162,839 | 11,265 | 126,934 | 10,123 | 41,007 | 358,325 | 80,330 | 2,862 | 920 | 6,090 | 0 | 122 / 117 / 363 | 32 | 897 | WithinBudget |
+| zod | refined | call graph | 162,839 | 11,265 | 126,934 | 10,123 | 41,007 | 358,325 | 80,330 | 2,862 | 920 | 6,090 | 0 | 119 / 116 / 323 | 20 | 1370 | WithinBudget |
+| zod | typed | alias | 32,608 | 0 | 26,996 | 8,514 | 465 | 3,004 | 8,495 | 0 | 23 | 0 | 0 | 18 / 1 / 18 | 9 | 536 | WithinBudget |
+| zod | typed | call graph | 162,839 | 11,265 | 126,934 | 10,123 | 41,007 | 358,325 | 80,330 | 2,862 | 920 | 6,090 | 0 | 139 / 123 / 391 | 29 | 919 | WithinBudget |
+| commander | refined | alias | 4,037 | 0 | 3,462 | 1,073 | 100 | 514 | 1,062 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 0 | 119 | WithinBudget |
+| commander | refined | call graph | 17,626 | 1,665 | 10,255 | 828 | 1,308 | 14,549 | 3,390 | 53 | 309 | 2 | 0 | 5 / 0 / 9 | 4 | 146 | WithinBudget |
+| commander | refined | call graph | 17,626 | 1,665 | 10,255 | 828 | 1,308 | 14,549 | 3,390 | 53 | 309 | 2 | 0 | 7 / 1 / 11 | 4 | 177 | WithinBudget |
+| commander | typed | alias | 4,037 | 0 | 3,462 | 1,073 | 100 | 514 | 1,062 | 0 | 3 | 0 | 0 | 1 / 0 / 21 | 0 | 121 | WithinBudget |
+| commander | typed | call graph | 17,626 | 1,665 | 10,255 | 828 | 1,308 | 14,549 | 3,390 | 53 | 309 | 2 | 0 | 9 / 1 / 17 | 6 | 149 | WithinBudget |
+| async | refined | alias | 6,082 | 0 | 6,602 | 1,857 | 33 | 1,444 | 1,863 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 0 | 258 | WithinBudget |
+| async | refined | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 65,114 | 1,460 | 253 | 5,090 | 0 | 8 / 300 / 195 | 5 | 262 | WithinBudget |
+| async | refined | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 65,114 | 1,460 | 253 | 5,090 | 0 | 11 / 297 / 197 | 6 | 1513 | WithinBudget |
+| async | typed | alias | 6,082 | 0 | 6,602 | 1,857 | 33 | 1,444 | 1,863 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 0 | 263 | WithinBudget |
+| async | typed | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 65,114 | 1,460 | 253 | 5,090 | 0 | 8 / 287 / 202 | 4 | 268 | WithinBudget |
+| chalk | refined | alias | 627 | 0 | 575 | 203 | 13 | 72 | 199 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 47 | WithinBudget |
+| chalk | refined | call graph | 4,467 | 249 | 2,864 | 374 | 773 | 2,972 | 1,420 | 0 | 90 | 1 | 0 | 1 / 0 / 3 | 0 | 57 | WithinBudget |
+| chalk | refined | call graph | 4,467 | 249 | 2,864 | 374 | 773 | 2,972 | 1,420 | 0 | 90 | 1 | 0 | 1 / 0 / 3 | 1 | 65 | WithinBudget |
 | chalk | typed | alias | 627 | 0 | 575 | 203 | 13 | 72 | 199 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 48 | WithinBudget |
-| chalk | typed | call graph | 4,467 | 249 | 2,864 | 374 | 773 | 2,972 | 1,420 | 0 | 90 | 1 | 0 | 1 / 0 / 4 | 0 | 57 | WithinBudget |
-| dayjs | refined | alias | 872 | 0 | 788 | 257 | 31 | 138 | 263 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 47 | WithinBudget |
-| dayjs | refined | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 1 / 0 / 3 | 1 | 55 | WithinBudget |
-| dayjs | refined | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 1 / 0 / 4 | 1 | 66 | WithinBudget |
+| chalk | typed | call graph | 4,467 | 249 | 2,864 | 374 | 773 | 2,972 | 1,420 | 0 | 90 | 1 | 0 | 1 / 0 / 3 | 0 | 56 | WithinBudget |
+| dayjs | refined | alias | 872 | 0 | 788 | 257 | 31 | 138 | 263 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 46 | WithinBudget |
+| dayjs | refined | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 0 / 0 / 2 | 1 | 54 | WithinBudget |
+| dayjs | refined | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 0 / 0 / 2 | 1 | 66 | WithinBudget |
 | dayjs | typed | alias | 872 | 0 | 788 | 257 | 31 | 138 | 263 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 48 | WithinBudget |
-| dayjs | typed | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 1 / 0 / 2 | 1 | 55 | WithinBudget |
-| underscore | refined | alias | 1,661 | 0 | 1,721 | 626 | 49 | 391 | 630 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 98 | WithinBudget |
-| underscore | refined | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,319 | 177 | 227 | 1 | 0 | 2 / 1 / 9 | 1 | 119 | WithinBudget |
-| underscore | refined | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,319 | 177 | 227 | 1 | 0 | 2 / 1 / 10 | 1 | 159 | WithinBudget |
+| dayjs | typed | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 0 / 0 / 2 | 1 | 56 | WithinBudget |
+| underscore | refined | alias | 1,661 | 0 | 1,721 | 626 | 49 | 391 | 630 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 101 | WithinBudget |
+| underscore | refined | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,319 | 177 | 227 | 1 | 0 | 2 / 1 / 9 | 1 | 121 | WithinBudget |
+| underscore | refined | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,319 | 177 | 227 | 1 | 0 | 2 / 1 / 8 | 1 | 161 | WithinBudget |
 | underscore | typed | alias | 1,661 | 0 | 1,721 | 626 | 49 | 391 | 630 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 102 | WithinBudget |
-| underscore | typed | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,319 | 177 | 227 | 1 | 0 | 2 / 1 / 9 | 1 | 122 | WithinBudget |
-| co | refined | alias | 174 | 0 | 172 | 60 | 0 | 14 | 60 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 33 | WithinBudget |
-| co | refined | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 286 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 36 | WithinBudget |
-| co | typed | alias | 174 | 0 | 172 | 60 | 0 | 14 | 60 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 34 | WithinBudget |
-| co | typed | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 286 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 37 | WithinBudget |
-| pako | refined | alias | 3,618 | 0 | 2,668 | 688 | 21 | 578 | 642 | 1 | 14 | 0 | 0 | 1 / 0 / 1 | 0 | 152 | WithinBudget |
-| pako | refined | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,947 | 5 | 136 | 1 | 0 | 3 / 0 / 11 | 0 | 231 | WithinBudget |
-| pako | typed | alias | 3,618 | 0 | 2,668 | 688 | 21 | 578 | 642 | 1 | 14 | 0 | 0 | 1 / 0 / 1 | 0 | 154 | WithinBudget |
-| pako | typed | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,947 | 5 | 136 | 1 | 0 | 4 / 0 / 11 | 0 | 233 | WithinBudget |
+| underscore | typed | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,319 | 177 | 227 | 1 | 0 | 2 / 1 / 10 | 0 | 123 | WithinBudget |
+| co | refined | alias | 174 | 0 | 172 | 60 | 0 | 14 | 60 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 35 | WithinBudget |
+| co | refined | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 286 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 38 | WithinBudget |
+| co | typed | alias | 174 | 0 | 172 | 60 | 0 | 14 | 60 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 35 | WithinBudget |
+| co | typed | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 286 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 38 | WithinBudget |
+| pako | refined | alias | 3,618 | 0 | 2,668 | 688 | 21 | 578 | 642 | 1 | 14 | 0 | 0 | 1 / 0 / 1 | 0 | 153 | WithinBudget |
+| pako | refined | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,947 | 5 | 136 | 1 | 0 | 3 / 1 / 10 | 0 | 231 | WithinBudget |
+| pako | typed | alias | 3,618 | 0 | 2,668 | 688 | 21 | 578 | 642 | 1 | 14 | 0 | 0 | 1 / 0 / 1 | 0 | 155 | WithinBudget |
+| pako | typed | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,947 | 5 | 136 | 1 | 0 | 4 / 0 / 11 | 0 | 232 | WithinBudget |
 | nanostores | refined | alias | 761 | 0 | 698 | 270 | 14 | 90 | 277 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 47 | WithinBudget |
 | nanostores | refined | call graph | 3,945 | 312 | 2,589 | 325 | 247 | 3,158 | 1,361 | 12 | 31 | 0 | 0 | 1 / 0 / 3 | 1 | 57 | WithinBudget |
-| nanostores | typed | alias | 761 | 0 | 698 | 270 | 14 | 90 | 277 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 48 | WithinBudget |
-| nanostores | typed | call graph | 3,945 | 312 | 2,589 | 325 | 247 | 3,158 | 1,361 | 12 | 31 | 0 | 0 | 1 / 0 / 3 | 1 | 57 | WithinBudget |
-| express | refined | alias | 2,022 | 0 | 1,892 | 614 | 61 | 381 | 611 | 0 | 3 | 0 | 0 | 0 / 0 / 9 | 0 | 76 | WithinBudget |
-| express | refined | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 1 / 0 / 3 | 0 | 91 | WithinBudget |
-| express | typed | alias | 2,022 | 0 | 1,892 | 614 | 61 | 381 | 611 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 77 | WithinBudget |
-| express | typed | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 1 / 0 / 3 | 0 | 93 | WithinBudget |
-| immer | refined | alias | 2,267 | 0 | 2,006 | 727 | 61 | 336 | 721 | 0 | 3 | 0 | 0 | 0 / 0 / 1 | 0 | 91 | WithinBudget |
-| immer | refined | call graph | 11,476 | 890 | 7,256 | 571 | 888 | 9,502 | 3,056 | 77 | 59 | 0 | 0 | 2 / 0 / 8 | 0 | 123 | WithinBudget |
-| immer | typed | alias | 2,267 | 0 | 2,006 | 727 | 61 | 336 | 721 | 0 | 3 | 0 | 0 | 0 / 0 / 1 | 0 | 94 | WithinBudget |
-| immer | typed | call graph | 11,476 | 890 | 7,256 | 571 | 888 | 9,502 | 3,056 | 77 | 59 | 0 | 0 | 3 / 1 / 11 | 3 | 125 | WithinBudget |
-| js-yaml | refined | alias | 3,230 | 0 | 2,822 | 933 | 92 | 612 | 914 | 0 | 16 | 0 | 0 | 0 / 0 / 1 | 0 | 129 | WithinBudget |
-| js-yaml | refined | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,267 | 39 | 41 | 0 | 0 | 3 / 1 / 12 | 0 | 168 | WithinBudget |
-| js-yaml | typed | alias | 3,230 | 0 | 2,822 | 933 | 92 | 612 | 914 | 0 | 16 | 0 | 0 | 1 / 0 / 1 | 0 | 133 | WithinBudget |
-| js-yaml | typed | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,267 | 39 | 41 | 0 | 0 | 3 / 0 / 10 | 0 | 170 | WithinBudget |
+| nanostores | typed | alias | 761 | 0 | 698 | 270 | 14 | 90 | 277 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 49 | WithinBudget |
+| nanostores | typed | call graph | 3,945 | 312 | 2,589 | 325 | 247 | 3,158 | 1,361 | 12 | 31 | 0 | 0 | 1 / 0 / 3 | 1 | 59 | WithinBudget |
+| express | refined | alias | 2,022 | 0 | 1,892 | 614 | 61 | 381 | 611 | 0 | 3 | 0 | 0 | 0 / 0 / 9 | 0 | 77 | WithinBudget |
+| express | refined | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 1 / 0 / 3 | 0 | 93 | WithinBudget |
+| express | typed | alias | 2,022 | 0 | 1,892 | 614 | 61 | 381 | 611 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 79 | WithinBudget |
+| express | typed | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 2 / 0 / 3 | 0 | 94 | WithinBudget |
+| immer | refined | alias | 2,267 | 0 | 2,006 | 727 | 61 | 336 | 721 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 91 | WithinBudget |
+| immer | refined | call graph | 11,476 | 890 | 7,256 | 571 | 888 | 9,502 | 3,056 | 77 | 59 | 0 | 0 | 2 / 0 / 8 | 0 | 122 | WithinBudget |
+| immer | typed | alias | 2,267 | 0 | 2,006 | 727 | 61 | 336 | 721 | 0 | 3 | 0 | 0 | 0 / 0 / 1 | 0 | 96 | WithinBudget |
+| immer | typed | call graph | 11,476 | 890 | 7,256 | 571 | 888 | 9,502 | 3,056 | 77 | 59 | 0 | 0 | 3 / 0 / 10 | 0 | 126 | WithinBudget |
+| js-yaml | refined | alias | 3,230 | 0 | 2,822 | 933 | 92 | 612 | 914 | 0 | 16 | 0 | 0 | 0 / 0 / 1 | 0 | 131 | WithinBudget |
+| js-yaml | refined | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,267 | 39 | 41 | 0 | 0 | 3 / 0 / 10 | 0 | 168 | WithinBudget |
+| js-yaml | typed | alias | 3,230 | 0 | 2,822 | 933 | 92 | 612 | 914 | 0 | 16 | 0 | 0 | 0 / 0 / 1 | 0 | 134 | WithinBudget |
+| js-yaml | typed | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,267 | 39 | 41 | 0 | 0 | 4 / 1 / 11 | 0 | 169 | WithinBudget |
 | acorn | refined | alias | 10,718 | 0 | 8,202 | 2,263 | 111 | 1,191 | 2,264 | 2 | 3 | 0 | 0 | 3 / 0 / 3 | 0 | 167 | WithinBudget |
-| acorn | refined | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 21 / 7 / 91 | 13 | 255 | WithinBudget |
-| acorn | typed | alias | 10,718 | 0 | 8,202 | 2,263 | 111 | 1,191 | 2,264 | 2 | 3 | 0 | 0 | 3 / 0 / 3 | 0 | 169 | WithinBudget |
-| acorn | typed | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 18 / 6 / 78 | 13 | 257 | WithinBudget |
-| node-forge | refined | alias | 34,331 | 0 | 26,963 | 7,229 | 1,371 | 5,976 | 7,194 | 4 | 16 | 0 | 0 | 22 / 1 / 18 | 10 | 361 | WithinBudget |
-| node-forge | refined | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 43,245 | 514 | 412 | 1,715 | 0 | 78 / 52 / 205 | 24 | 644 | WithinBudget |
-| node-forge | typed | alias | 34,331 | 0 | 26,963 | 7,229 | 1,371 | 5,976 | 7,194 | 4 | 16 | 0 | 0 | 17 / 0 / 16 | 10 | 371 | WithinBudget |
-| node-forge | typed | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 43,245 | 514 | 412 | 1,715 | 0 | 79 / 54 / 224 | 24 | 655 | WithinBudget |
-| zod, globs alone | refined | alias | 157,403 | 0 | 139,918 | 60,145 | 2,430 | 10,863 | 60,170 | 1 | 23 | 0 | 0 | 131 / 4 / 159 | 39 | 1544 | WithinBudget |
-| zod, globs alone | refined | call graph | 693,639 | 96,148 | 469,440 | 43,112 | 95,800 | 1,057,363 | 237,788 | 3,701 | 1,417 | 14,092 | 2 | 670 / 629 / 1237 | 161 | 3148 | WithinBudget |
-| zod, globs alone | typed | alias | 157,403 | 0 | 139,918 | 60,145 | 2,430 | 10,863 | 60,170 | 1 | 23 | 0 | 0 | 141 / 4 / 170 | 52 | 1626 | WithinBudget |
-| zod, globs alone | typed | call graph | 693,639 | 96,148 | 469,440 | 43,112 | 95,800 | 1,057,363 | 237,788 | 3,701 | 1,417 | 14,092 | 2 | 675 / 621 / 1249 | 154 | 3211 | WithinBudget |
+| acorn | refined | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 24 / 8 / 82 | 13 | 256 | WithinBudget |
+| acorn | typed | alias | 10,718 | 0 | 8,202 | 2,263 | 111 | 1,191 | 2,264 | 2 | 3 | 0 | 0 | 3 / 0 / 3 | 0 | 172 | WithinBudget |
+| acorn | typed | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 22 / 8 / 97 | 13 | 260 | WithinBudget |
+| node-forge | refined | alias | 34,331 | 0 | 26,963 | 7,229 | 1,371 | 5,976 | 7,194 | 4 | 16 | 0 | 0 | 16 / 1 / 18 | 10 | 362 | WithinBudget |
+| node-forge | refined | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 43,245 | 514 | 412 | 1,715 | 0 | 85 / 57 / 215 | 34 | 657 | WithinBudget |
+| node-forge | typed | alias | 34,331 | 0 | 26,963 | 7,229 | 1,371 | 5,976 | 7,194 | 4 | 16 | 0 | 0 | 18 / 1 / 16 | 12 | 372 | WithinBudget |
+| node-forge | typed | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 43,245 | 514 | 412 | 1,715 | 0 | 75 / 50 / 227 | 22 | 656 | WithinBudget |
+| zod, globs alone | refined | alias | 157,403 | 0 | 139,918 | 60,145 | 2,430 | 10,863 | 60,170 | 1 | 23 | 0 | 0 | 135 / 4 / 158 | 39 | 1545 | WithinBudget |
+| zod, globs alone | refined | call graph | 693,639 | 96,148 | 469,440 | 43,112 | 95,800 | 1,057,363 | 237,788 | 3,701 | 1,417 | 14,092 | 2 | 755 / 630 / 1310 | 162 | 3131 | WithinBudget |
+| zod, globs alone | typed | alias | 157,403 | 0 | 139,918 | 60,145 | 2,430 | 10,863 | 60,170 | 1 | 23 | 0 | 0 | 122 / 4 / 161 | 39 | 1619 | WithinBudget |
+| zod, globs alone | typed | call graph | 693,639 | 96,148 | 469,440 | 43,112 | 95,800 | 1,057,363 | 237,788 | 3,701 | 1,417 | 14,092 | 2 | 730 / 625 / 1315 | 167 | 3188 | WithinBudget |
 
 ## Decisions recorded by this run
 
