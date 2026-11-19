@@ -8,7 +8,7 @@
 - [x] **v1.3 Graph Engine Precision** - shared semantic graph, reachability/root semantics, Go RTA, JS/TS token/object models, adaptation, unknown taxonomy, budgets, and benchmark promotion gates. Archive: [v1.3 roadmap](milestones/v1.3-ROADMAP.md).
 - [x] **v1.4 Policy Query Surface** - preview SDK views and typed query objects for realistic repo-local policies over calls, control flow, and data flow. Completed 2026-06-20. Archive: [v1.4 roadmap](milestones/v1.4-ROADMAP.md).
 - [ ] **v2.0 Static Analysis 2.0 Implementation** - durable, queryable local semantic layer: private SQLite/rusqlite store, summary persistence and invalidation frontier, warm `polint review` payoff, internal query engine, exploratory `polint graph` CLI, lexical-search boundary, and scale/recovery gates. 9 phases (63-71).
-- [ ] **v2.1 Package Graphs, Iteration 1 (classical)** - the engine direction of `AGENTS.md`: stages 0 and 1 of the accuracy ladder made as accurate as classical analysis allows on JS/TS, the first package graph and stitch, and the smallest proof of the correction layer. A parallel track to v2.0 with no public surface change. 8 phases (72-79), one pull request each, stacked on `research/package-graph-pipeline` (#141). Plan: `research/package-graphs/implementation/README.md`.
+- [ ] **v2.1 Package Graphs, Iteration 1 (classical)** - the engine direction of `AGENTS.md`: stages 0 and 1 of the accuracy ladder made as accurate as classical analysis allows on JS/TS, the first package graph and stitch, and the smallest proof of the correction layer. A parallel track to v2.0; every result reaches rules through the SDK view that serves it (`AGENTS.md`, No Side Engines). 8 phases (72-79), one pull request each, stacked on `research/package-graph-pipeline` (#141). Plan: `research/package-graphs/implementation/README.md`.
 
 ## Current Status
 
@@ -234,7 +234,7 @@ Plans:
 
 ## Phases (v2.1 Package Graphs, Iteration 1)
 
-Planned 2026-11-17 from `research/package-graphs/`. Numbering continues from v2.0's last phase 71. Each phase is one pull request; 73 and 74 run in parallel after 72, 77 and 78 in parallel after 76. Every phase keeps the public surface unchanged (PG-11) and the held-out rule (PG-12).
+Planned 2026-11-17 from `research/package-graphs/`. Numbering continues from v2.0's last phase 71. Each phase is one pull request; 73 and 74 run in parallel after 72, 77 and 78 in parallel after 76. Every phase keeps the SDK's shape unbroken and serves its results through the existing views (PG-11), and keeps the held-out rule (PG-12).
 
 - [ ] **Phase 72: Package-Graph Measurement Baseline** - tiers, executed-site precision, targets per site, open sites, budget events, refined-edge census, outside-tool columns from a tracked scorer, the held-out set recorded, cost re-measured on a quiet machine. *(PG-01, PG-02, PG-03)*
 - [ ] **Phase 73: Read All the Code** - unary IIFEs, block-level functions, exported initialisers, sequence callees, a package's own `vendor/`. *(PG-04)*

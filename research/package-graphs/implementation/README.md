@@ -25,8 +25,10 @@ Rules every pull request follows (from `AGENTS.md` and
 [../README.md](../README.md)): evidence on every edge; two tiers never
 mixed; wrong exact claims stay at 0 on every plan; no tuning on the held-out
 set and no recogniser for one benchmark package; a model for one library, the
-engine for two; public surface unchanged (no CLI command, flag, SDK view or
-output format; everything crate-private; the leak gate green); the bench's
+engine for two; every result reaches rule authors through the SDK view that
+serves its question, in the same iteration (the "No Side Engines" section of
+`AGENTS.md`, set by the owner), with no breaking change to the SDK's shape,
+no unfinished CLI command or debug helper exposed, and the leak gate green; the bench's
 `make js-bench` run and its report diff attached to the pull request; the
 Rust and polint skills consulted before Rust changes; no project-management
 references in shipped comments.
