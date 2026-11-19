@@ -433,7 +433,8 @@ def score_corrections(dumps: dict, names: list[str]) -> dict:
             if site is None or callee is None:
                 continue
             placed += 1
-            covered += (site["key"], callee["key"]) in corrected
+            # A function's dump key carries its name; a correction names the span alone.
+            covered += (site["key"], f"{callee['file']}@{callee['start']}..{callee['end']}") in corrected
         unanchored = Counter(row["reason"] for row in document["unanchored"])
         scored[name] = {
             "corrections": document["corrections"],
