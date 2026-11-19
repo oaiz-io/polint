@@ -280,8 +280,10 @@ constraints and its solved state, under the preconditions
 identities, no walker rows, no stored copy closure, solution stored for
 stitch-readable nodes only).
 
-- Export a package graph for one package, crate-private, through the bench
-  dump only. No public command and no SDK surface in this iteration.
+- Export a package graph for one package. Its edges reach rules through the
+  `CallGraph` view; a public surface for the export itself (and for the
+  stitcher and the correction layer) is an open question for the owner, not
+  a scope limit.
 - Stitch package graphs against a resolved dependency tree.
 - The composition test: a fixture of one application and two libraries with
   callbacks that cross both ways, analysed together and analysed apart then
@@ -375,9 +377,10 @@ measurement sets the budget for the next iteration.
 
 - Building stages 2 to 5. Only WP6 touches them.
 - A registry, a scanning service, or agents.
-- Any new public CLI command, flag or SDK view. Everything stays crate-private
-  and is read through the bench dump, by the public-surface rules in
-  `AGENTS.md`.
+- An unfinished public CLI command, flag or debug helper. Every analysis
+  result this iteration builds reaches rules through the SDK view that serves
+  its question, by the "No Side Engines" section of `AGENTS.md`; a result that
+  needs a public surface not yet designed is an open question for the owner.
 - Go. The same design applies; this iteration proves it on JS/TS.
 - Replacing the Node type sidecar with TypeScript 7. Its stable API comes in
   7.1.

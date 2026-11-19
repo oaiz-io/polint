@@ -26,7 +26,8 @@ The cases are the ones the tier rules exist for:
   conservative view, on a tune or a held-out package, is reported;
 - the authorship guard refuses analysis code and held-out files in one change,
   and accepts either alone and recorder or tune-set files that only share
-  letters with a held-out name.
+  letters with a held-out name (`held_out_guard_test.py` runs it against a git
+  base, where only held-out files the base already has count).
 """
 
 from __future__ import annotations

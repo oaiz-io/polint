@@ -10,10 +10,12 @@ Two plans are read:
 
   base     syntax, call_graph, symbols, references: what a rule that asks for
            `CallGraph`, `Symbols` and `References` gets. Its call edges are the
-           rows the public `CallGraph` view serves.
-  refined  adds calls, control_flow and dataflow, which turns on the refined
-           call-edge layer. Refined edges have no public view; they are read
-           through the same internal dump and shown in their own column.
+           rows the public `CallGraph` view serves: the refined call-edge rows
+           that claim a target, one per site and callee, at the tier the view
+           reports.
+  refined  adds calls, control_flow and dataflow. Its call edges are the raw
+           refined rows, every status included, read through the same internal
+           dump and shown in their own column.
 
 Everything except the `cost` section is a pure function of the committed
 inputs, the fetched packages and polint's analysis, so two runs on one commit
@@ -870,6 +872,13 @@ TYPED_CANDIDATE_DISPATCH = {"implementation", "union_member", "inferred"}
 CLAIMING_STATUS = {"Resolved": None, "Ambiguous": "conservative"}
 
 
+TIER_RANK = {"none": 0, "apart": 1, "conservative": 2, "exact": 3}
+
+
+def tier_rank(tier: str) -> int:
+    return TIER_RANK[tier]
+
+
 def tier_of(precision: str) -> str:
     """The tier a precision claims; an unknown precision is an error."""
     try:
@@ -881,14 +890,22 @@ def tier_of(precision: str) -> str:
 def edge_tier(edge: dict) -> str:
     """The tier the bench counts an edge in: its precision's tier, checked
     against the engine's, never exact for a typed candidate, and exact for a
-    points-to edge exactly when it names the assumptions it rests on."""
+    points-to edge exactly when it names the assumptions it rests on. A
+    `CallGraph` row may report a weaker precision than the row it serves
+    (`row_precision`); the assumptions follow the row's own claim."""
     tier = tier_of(edge["precision"])
     if edge.get("claim_tier") != tier:
         raise SystemExit(
             f"edge at {edge['site']}: the engine says {edge.get('claim_tier')!r} for {edge['precision']}, "
             f"the bench says {tier!r}"
         )
-    points_to_exact = tier == "exact" and edge["algorithm"] == "PointsTo"
+    row_tier = tier_of(edge.get("row_precision", edge["precision"]))
+    if tier_rank(tier) > tier_rank(row_tier):
+        raise SystemExit(
+            f"edge at {edge['site']}: the view reports {edge['precision']}, stronger than its row's "
+            f"{edge.get('row_precision')}"
+        )
+    points_to_exact = row_tier == "exact" and edge["algorithm"] == "PointsTo"
     if points_to_exact != bool(edge.get("assumptions")):
         raise SystemExit(
             f"edge at {edge['site']}: a {edge['algorithm']} edge claiming {edge['precision']} records "
@@ -904,7 +921,19 @@ def edge_tier(edge: dict) -> str:
 def claimed_tier(edge: dict, refined: bool) -> str:
     """The tier an edge row claims for its target, `none` when it claims none."""
     tier = edge_tier(edge)
-    if not refined or tier == "none":
+    if not refined:
+        # A `CallGraph` row serves a refined row that claims its target, at no
+        # more than the claim its status allows.
+        if "status" in edge:
+            if edge["status"] not in CLAIMING_STATUS:
+                raise SystemExit(f"edge at {edge['site']}: CallGraph serves a {edge['status']} row")
+            cap = CLAIMING_STATUS[edge["status"]]
+            if cap is not None and tier_rank(tier) > tier_rank(cap):
+                raise SystemExit(
+                    f"edge at {edge['site']}: CallGraph reports {edge['precision']} for a {edge['status']} row"
+                )
+        return tier
+    if tier == "none":
         return tier
     if edge["status"] not in CLAIMING_STATUS:
         return "none"
@@ -1019,7 +1048,6 @@ class Facts(Spans):
         self.plan = plan
         self.dump = dump
         self.files = {row["path"] for row in dump["files"]}
-        self.unresolved_sites = {row["site"] for row in dump["unresolved_calls"]}
 
         # Edges this plan's answer gives: site -> {target function key}.
         self.targets: dict[str, set[str]] = defaultdict(set)
@@ -1041,30 +1069,32 @@ class Facts(Spans):
                 tier = claimed_tier(edge, refined=False)
                 if edge["function"] is not None and tier != "none":
                     self.tier_targets[edge["site"]][tier].add(edge["function"])
-            for row in dump["unresolved_calls"]:
-                self.open_reasons[row["site"]].add(row["reason"])
         else:
-            refined_sites = {edge["site"] for edge in dump["refined_edges"] if edge["site"] is not None}
             for edge in dump["refined_edges"]:
                 if edge["site"] is None:
                     continue
                 tier = claimed_tier(edge, refined=True)
                 if edge["function"] is not None and tier != "none":
                     self.tier_targets[edge["site"]][tier].add(edge["function"])
-                if edge["status"] != "Resolved":
-                    self.open_reasons[edge["site"]].add(edge["reason"] or f"status {edge['status']}")
-            for row in dump["unresolved_calls"]:
-                if row["site"] not in refined_sites:
-                    self.open_reasons[row["site"]].add(row["reason"])
+        # Both plans read open sites the way `polint unknowns` reports them: the
+        # refined rows that are not resolved, and the unresolved calls the refined
+        # layer has no row for.
+        refined_sites = {edge["site"] for edge in dump["refined_edges"] if edge["site"] is not None}
+        for edge in dump["refined_edges"]:
+            if edge["site"] is not None and edge["status"] != "Resolved":
+                self.open_reasons[edge["site"]].add(edge["reason"] or f"status {edge['status']}")
+                self.marked_unresolved.add(edge["site"])
+        for row in dump["unresolved_calls"]:
+            if row["site"] not in refined_sites:
+                self.open_reasons[row["site"]].add(row["reason"])
+                self.marked_unresolved.add(row["site"])
         if plan == "base":
             for edge in dump["base_edges"]:
                 if edge["function"] is not None:
                     self.targets[edge["site"]].add(edge["function"])
                     if edge["precision"] != "Heuristic":
                         self.claimed_targets[edge["site"]].add(edge["function"])
-            self.marked_unresolved = set(self.unresolved_sites)
         else:
-            resolved_sites = set()
             for edge in dump["refined_edges"]:
                 if edge["site"] is None:
                     continue
@@ -1072,14 +1102,6 @@ class Facts(Spans):
                     self.targets[edge["site"]].add(edge["function"])
                     if edge["status"] == "Resolved" and edge["precision"] != "Heuristic":
                         self.claimed_targets[edge["site"]].add(edge["function"])
-                if edge["status"] == "Resolved":
-                    resolved_sites.add(edge["site"])
-                else:
-                    self.marked_unresolved.add(edge["site"])
-            # The refined layer answers for every site it has a row for; sites it
-            # has no row for keep the base layer's unresolved marker.
-            refined_sites = {edge["site"] for edge in dump["refined_edges"]}
-            self.marked_unresolved |= self.unresolved_sites - refined_sites
         # A site is complete when it claims at least one exact or conservative
         # target and its answer has no unresolved row; every other site is open.
         self.complete_sites = {
@@ -3169,8 +3191,9 @@ def render_markdown(report: dict) -> str:
     add("There is no overall accuracy number on purpose: read the rows.")
     add("")
     add("- **base** is what a rule gets from `CallGraph` (capabilities `syntax, call_graph, symbols, references`).")
-    add("- **refined** is the refined call-edge layer (adds `calls, control_flow, dataflow`). It has no public view;")
-    add("  it is read through the internal benchmark dump only.")
+    add("- **refined** is the raw refined call-edge rows, every status included (adds `calls, control_flow,")
+    add("  dataflow`). `CallGraph` serves the rows of this layer that claim a target, so the two columns differ only")
+    add("  where a row's status withholds or weakens its claim.")
     add("- Precision is measured against hand labels only. **Observed calls give recall, never precision**:")
     add("  a run sees the paths it exercised, so an edge polint reports that the run did not take is not wrong.")
     add("")
@@ -3410,8 +3433,8 @@ def render_markdown(report: dict) -> str:
                 f"| {row['stored_bytes_per_mb']} ({row['stored_gzip_bytes_per_mb']}) |"
             )
         add("")
-        add("Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is")
-        add("the only way to time the refined plan, because no public view asks for it.")
+        add("Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): the")
+        add("base plan is what a `CallGraph` rule pays; the refined plan adds the capabilities that read the raw rows.")
         add("")
         add("| tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |")
         add("|---|---|---|---|---|---|")

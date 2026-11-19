@@ -88,7 +88,13 @@ fit.
    own suite, and the first recording are committed before the analysis
    change starts, in their own pull request. A CI check refuses a pull
    request that touches both `crates/polint/src/{ts,analysis*,graph}` and
-   held-out files under `tests/js-analysis-bench/observed/`.
+   held-out files under `tests/js-analysis-bench/observed/` that already
+   exist on the base branch: changing, renaming or deleting a held-out file
+   goes in its own pull request. A first add of a held-out file is not
+   refused, so a pull request that lands a stack can carry held-out files
+   committed apart from the analysis change, together with that change. The
+   check cannot tell whether a first add was written apart; the authors still
+   must. (Set by the owner on 2026-11-19.)
 3. Drivers come from the package's documentation and public API, never from
    polint's miss buckets. A driver may be extended only to raise coverage of
    the package, as a separate observed-file commit with the coverage number

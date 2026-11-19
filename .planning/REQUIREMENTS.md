@@ -182,7 +182,7 @@ The invalidation frontier is the practical payoff of this milestone. It is a fir
 
 ### Boundaries
 
-- **PG-11**: Public surface unchanged: no new CLI command, flag, SDK view, generated skill text or output format; new modules are `pub(crate)`; the public-surface leak gate is green at every phase boundary; `polint::sdk` and `polint::runner` consumers see no change.
+- **PG-11**: Every analysis result reaches rule authors through the SDK view that serves its question, in the iteration that builds it (`AGENTS.md`, No Side Engines, set by the owner on 2026-11-19); the call edges reach rules through `CallGraph<'_>`. No breaking change to the SDK's shape: no public item removed or renamed, no signature changed, no type narrowed. Unfinished CLI commands, flags and debug helpers stay hidden; internal modules stay `pub(crate)`; the public-surface leak gate is green at every phase boundary. A result that needs a public surface not yet designed is an open question for the owner.
 - **PG-12**: No change is tuned on the held-out set and no recogniser is added for one benchmark package; a pattern of one library is a package model, and it moves into the engine only when a second library needs it.
 
 ## Future Requirements

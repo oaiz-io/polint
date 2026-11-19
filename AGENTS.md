@@ -148,6 +148,35 @@ polint is the engine and the formats. A service that scans packages at scale,
 stores their graphs or runs review agents is a consumer of polint and is not
 built in this repository.
 
+## No Side Engines
+
+Set by the owner on 2026-11-19. It outranks any plan, research document or agent brief.
+
+- An engine improvement is done when a rule can use it. Every improvement to analysis
+  reaches rule authors through the SDK views they already call, in the same iteration
+  that builds it. A layer that only a benchmark or a test can read is unfinished work.
+- One answer per question. Improve what the existing view returns. Do not build a
+  second, better layer beside the one users call, and do not leave the old path in
+  place: delete what the change supersedes in the same pull request.
+- Brave changes are wanted. A view that returns more edges or better targets after an
+  upgrade is the product improving. Do not hold an improvement back because rule
+  results change. Label every edge with its tier so a rule can choose, and never
+  present a weaker claim as an exact one.
+- No breaking changes to the SDK's shape: do not remove or rename a public item,
+  change a signature or narrow a type. Add; do not break.
+- A plan names, for each result it builds, the public view that serves it. A plan must
+  not contain "no public surface change" or "crate-private only" as a rule. If a result
+  needs a new public surface that is not designed yet, the plan says so as an open
+  question for the owner; it does not ship the result unreachable.
+- Do not invent a scope limit the owner did not state. Ask.
+- A rule that an agent wrote, in research, a plan, a brief or a CI check, is a proposal.
+  It is not the owner's requirement. Before a rule is used as a constraint, say who set it.
+- A check made by an agent may protect quality, for example the held-out guard against
+  tuning on test data. It never decides how work merges. Scope or change the check; do
+  not shape the delivery around it.
+- One iteration lands as one pull request to `main`, with the view that serves its
+  results to users in it. Split only when the owner asks.
+
 ## Rust Skill Usage
 
 Before writing, reviewing, or refactoring Rust code, consult and apply

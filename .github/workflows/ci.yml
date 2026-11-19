@@ -277,7 +277,11 @@ jobs:
       - name: refuse analysis code and held-out bench files in one pull request
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: git diff --name-only "$BASE_SHA...HEAD" | python3 tests/js-analysis-bench/held_out_guard.py
+        run: >-
+          git diff --name-only --no-renames "$BASE_SHA...HEAD"
+          | python3 tests/js-analysis-bench/held_out_guard.py --base "$BASE_SHA"
+      - name: authorship guard test
+        run: python3 tests/js-analysis-bench/held_out_guard_test.py
       - name: bench report self-test
         run: python3 tests/js-analysis-bench/selftest.py
 

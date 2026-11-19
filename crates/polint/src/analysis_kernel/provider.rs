@@ -1277,7 +1277,7 @@ const DEEP_PROVIDER_SEEDS: &[&str] = &[
     "polint.solver",
 ];
 
-const DEEP_TRIGGER_CAPABILITIES: &[&str] = &["calls", "control_flow", "dataflow"];
+const DEEP_TRIGGER_CAPABILITIES: &[&str] = &["calls", "control_flow", "dataflow", "call_graph"];
 
 /// Provider set enabled by the historical boolean pipeline gates for `requested`.
 pub(crate) fn providers_enabled_by_boolean_gates(
@@ -1317,15 +1317,6 @@ pub(crate) fn providers_enabled_by_boolean_gates(
     if requested.contains("dataflow") {
         enabled.extend(["polint.data_flow", "polint.evidence"]);
     }
-    if requested.contains("call_graph") {
-        enabled.extend([
-            "polint.module_topology",
-            "polint.semantic_mir",
-            "polint.cfg",
-            "polint.calls",
-            "polint.go.semantic",
-        ]);
-    }
     if requested.contains("go_types") || requested.contains("routes") {
         enabled.insert("polint.go.semantic");
     }
@@ -1336,7 +1327,7 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
     match capability {
         "resolved_imports" | "module_graph" => &["polint.module_graph"],
         "symbols" | "references" => &["polint.symbol_graph"],
-        "calls" | "control_flow" => DEEP_PROVIDER_SEEDS,
+        "calls" | "control_flow" | "call_graph" => DEEP_PROVIDER_SEEDS,
         "dataflow" => {
             const DATAFLOW_SEEDS: &[&str] = &[
                 "polint.calls",
@@ -1350,7 +1341,6 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
             DATAFLOW_SEEDS
         }
         "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
-        "call_graph" => &["polint.calls"],
         "go_types" | "routes" => &["polint.go.semantic"],
         _ => &[],
     }
