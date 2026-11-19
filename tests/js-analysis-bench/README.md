@@ -291,6 +291,18 @@ census parses each file again on its own, reads no analysis store and feeds
 nothing back. The report runs it as a separate dump so the timed dumps are
 unchanged.
 
+With `POLINT_JS_BENCH_PACKAGE_GRAPH=1` the refined dump of each tune-set
+package also writes its package graph; the report stores it compressed and
+states its size, and stitches the trees in `inputs.toml`.
+
+With `POLINT_JS_BENCH_CORRECTIONS=1` the refined dump of each tune-set package
+loads the package's own recorded calls as corrections to its package graph,
+applies them after the export and writes what became of each. The report's
+`## Corrections` section counts them: applied, derived, stale and unanchored.
+Its recall with corrections is 100% by construction, because the corrections
+come from the recording it is checked against; it proves the correction layer
+and is not an accuracy number. Neither flag changes any other section.
+
 ## Limits
 
 - Labels are per line, so two sites on one line calling the same callee count

@@ -54,6 +54,8 @@ mod tests;
 mod direct_call_tests;
 #[cfg(all(test, feature = "lang-typescript"))]
 mod package_graph_composition_tests;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod package_graph_corrections_tests;
 
 thread_local! {
     static FRONTEND_STABLE_KEYS: RefCell<Option<StableKeyInterner>> = const { RefCell::new(None) };

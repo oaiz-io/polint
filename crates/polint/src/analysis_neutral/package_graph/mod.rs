@@ -6,6 +6,7 @@
 //! so the graph of the same package content, engine and model set is the same
 //! bytes on any machine and in any checkout.
 
+pub(crate) mod corrections;
 mod format;
 mod identity;
 mod layout;
