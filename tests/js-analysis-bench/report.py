@@ -300,14 +300,21 @@ def run_dump(
     timeout: int,
     typescript: Path | None = None,
     package_graph: bool = False,
+    recording: tuple[Path, str] | None = None,
 ) -> dict:
     """Dump one tree's facts; return where the dump is, its wall clock and peak RSS.
 
     `plan` is a key of `PLANS`, or `census` for the syntax census run. With
     `package_graph` the run also writes the tree's package graph beside the dump.
+    With `recording`, the recorded calls of the tree's package and the driver
+    that ran them, the run applies them to the package graph as corrections and
+    writes the outcome beside the dump.
     The dump is not loaded here: see `load_dump` and `run` for why."""
     manifest = out.with_suffix(".manifest")
-    manifest.write_text(f"{tree}\t{out}\n")
+    if recording:
+        manifest.write_text(f"{tree}\t{out}\t{recording[0]}\t{recording[1]}\n")
+    else:
+        manifest.write_text(f"{tree}\t{out}\n")
     env = dict(os.environ)
     env["POLINT_JS_BENCH_MANIFEST"] = str(manifest)
     if plan == "census":
@@ -325,6 +332,10 @@ def run_dump(
         env[PACKAGE_GRAPH_ENV] = "1"
     else:
         env.pop(PACKAGE_GRAPH_ENV, None)
+    if recording:
+        env[CORRECTIONS_ENV] = "1"
+    else:
+        env.pop(CORRECTIONS_ENV, None)
     env["RUST_LOG"] = STAGE_LOG
     env["NO_COLOR"] = "1"
     result = bench_matrix.measure(
@@ -348,7 +359,10 @@ def run_dump(
             if "stage done" not in line and SOLVE_EVENT not in line and TYPE_JOIN_EVENT not in line
         ][-8:]
         return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
-    return {"dump": out, "cost": cost, "error": None, "ts_type_join": ts_type_join(result.stderr)}
+    run_entry = {"dump": out, "cost": cost, "error": None, "ts_type_join": ts_type_join(result.stderr)}
+    if recording:
+        run_entry["corrections"] = out.with_suffix(".corrections.json")
+    return run_entry
 
 
 # With this set to 1, the refined dump of each tune-set package also writes its
@@ -375,6 +389,98 @@ def package_graph_sizes(dumps: dict, names: list[str]) -> dict:
         raw = path.read_bytes()
         graphs[name] = {"bytes": len(raw), "gzip": gzip.compress(raw, mtime=0)}
     return graphs
+
+
+# With this set to 1, the refined dump of each tune-set package also loads the
+# package's own recorded calls as corrections to its package graph and applies
+# them. The report shows what became of them apart from every accuracy number.
+CORRECTIONS_ENV = "POLINT_JS_BENCH_CORRECTIONS"
+CORRECTIONS_SCHEMA = "polint-js-bench-corrections-1"
+# The recorded edges the correction layer anchors to a call site.
+CORRECTION_KINDS = ("call", "callback")
+
+
+def score_corrections(dumps: dict, names: list[str]) -> dict:
+    """What became of each tune package's recorded calls as corrections.
+
+    Recall with the corrections is checked through the bench's own matching
+    rule: each recorded call or callback edge the refined facts can place is
+    looked up among the pairs the layer applied or found derived. It is 100%
+    by construction, since the corrections come from the same recording; a
+    lower value means the layer and the bench place an edge differently."""
+    scored = {}
+    for name in names:
+        run_entry = dumps.get(("package", name, PACKAGE_GRAPH_PLAN))
+        if not run_entry or run_entry["dump"] is None or "corrections" not in run_entry:
+            continue
+        path = run_entry["corrections"]
+        if not path.exists():
+            scored[name] = {"error": "no corrections written"}
+            continue
+        document = json.loads(path.read_text())
+        if document.get("schema") != CORRECTIONS_SCHEMA:
+            raise SystemExit(f"unexpected corrections schema in {path}")
+        observed_calls = json.loads((bench.OBSERVED / "packages" / f"{name}.calls.json").read_text())
+        spans = Spans(run_entry["dump"]["call_sites"], run_entry["dump"]["functions"])
+        corrected = {(row["site"], row["target"]) for row in document["applied"] + document["derived"]}
+        edges = placed = covered = 0
+        for edge in observed_calls["edges"]:
+            if edge["kind"] not in CORRECTION_KINDS:
+                continue
+            edges += 1
+            site = spans.site_for(edge["site"])
+            callee = spans.function_for(edge["callee"], edge["callee_name"])
+            if site is None or callee is None:
+                continue
+            placed += 1
+            covered += (site["key"], callee["key"]) in corrected
+        unanchored = Counter(row["reason"] for row in document["unanchored"])
+        scored[name] = {
+            "corrections": document["corrections"],
+            "applied": len(document["applied"]),
+            "derived": len(document["derived"]),
+            "stale": len(document["stale"]),
+            "not_applied": document["not_applied"],
+            "other_package": document["other_package"],
+            "unanchored": dict(sorted(unanchored.items())),
+            "recall": {"edges": edges, "placed": placed, "covered": covered},
+        }
+    return scored
+
+
+def render_corrections(report: dict, add) -> None:
+    corrections = report.get("corrections")
+    if not corrections:
+        return
+    add("## Corrections")
+    add("")
+    add(
+        "Each tune-set package's recorded calls loaded as corrections to its package graph under the refined plan "
+        "and applied beside it. Applied: the layer adds the edge, tier conservative. Derived: the engine's answer "
+        "already claims it, so the correction can be retired. Stale: its function, call site or target is not in "
+        "the graph with the same text. Unanchored: a recorded edge with no call expression, call site or function "
+        "to anchor to, by reason."
+    )
+    add("")
+    add(
+        "Recall with corrections counts the recorded call and callback edges the bench places that the layer "
+        "applied or found derived. It is 100% by construction, since the corrections come from the same "
+        "recording, and is not an accuracy number: it proves the layer, nothing else."
+    )
+    add("")
+    add("| package | corrections | applied | derived | stale | unanchored | recall with corrections |")
+    add("|---|---|---|---|---|---|---|")
+    for name, row in sorted(corrections.items()):
+        if "error" in row:
+            add(f"| {name} | error: {row['error']} | | | | | |")
+            continue
+        unanchored = ", ".join(f"{reason} {count}" for reason, count in row["unanchored"].items()) or "–"
+        recall = row["recall"]
+        add(
+            f"| {name} | {row['corrections']} | {row['applied']} | {row['derived']} | {row['stale']} | {unanchored} "
+            f"| {frac(recall['covered'], recall['placed'])} |"
+        )
+    add("")
 
 
 def render_package_graphs(report: dict, add) -> None:
@@ -3267,6 +3373,7 @@ def render_markdown(report: dict) -> str:
     add("")
 
     render_package_graphs(report, add)
+    render_corrections(report, add)
     render_stitched_trees(report, add)
 
     add("## Cost")
@@ -3481,6 +3588,8 @@ def run(args) -> int:
         trees += [(PREVIOUS_SET, name, tree) for name, tree in previous_trees.items()]
         held_out_names = {package["name"] for package in inputs["package"] if package.get("held_out")}
         with_package_graph = os.environ.get(PACKAGE_GRAPH_ENV) == "1"
+        with_corrections = os.environ.get(CORRECTIONS_ENV) == "1"
+        drivers = {package["name"]: package["driver"] for package in inputs["package"]}
         for kind, name, tree in trees:
             for plan in PLANS:
                 out = scratch / "dumps" / f"{kind}-{name.replace('/', '__')}-{plan}.json"
@@ -3490,14 +3599,20 @@ def run(args) -> int:
                         "typed": True,
                     }
                 else:
-                    package_graph = (
-                        with_package_graph
-                        and kind == "package"
-                        and plan == PACKAGE_GRAPH_PLAN
-                        and name not in held_out_names
+                    tune_graph = kind == "package" and plan == PACKAGE_GRAPH_PLAN and name not in held_out_names
+                    recording = (
+                        (bench.OBSERVED / "packages" / f"{name}.calls.json", drivers[name])
+                        if with_corrections and tune_graph
+                        else None
                     )
                     dumps[(kind, name, plan)] = run_dump(
-                        test_binary, tree, plan, out, args.dump_timeout, package_graph=package_graph
+                        test_binary,
+                        tree,
+                        plan,
+                        out,
+                        args.dump_timeout,
+                        package_graph=with_package_graph and tune_graph,
+                        recording=recording,
                     )
                 if dumps[(kind, name, plan)]["error"]:
                     print(f"{kind} {name} {plan}: {dumps[(kind, name, plan)]['error']}", file=sys.stderr)
@@ -3610,6 +3725,10 @@ def run(args) -> int:
                 }
                 for name, graph in package_graphs.items()
             }
+
+        corrections = score_corrections(dumps, tune_names)
+        if corrections:
+            report["corrections"] = corrections
 
         if stitched_trees:
             report["stitched_trees"] = stitched_trees
