@@ -527,8 +527,9 @@ impl<'a> Dump<'a> {
         }));
 
         let index = db.call_graph_index();
-        let base_edges = sorted((0..index.edges.len()).map(|edge| {
-            let edge = index.edge(db, u32::try_from(edge).expect("edge index fits u32"));
+        let base_edges = sorted((0..index.edges.len()).map(|position| {
+            let row = &db.refined_call_edges()[index.edges[position]];
+            let edge = index.edge(db, u32::try_from(position).expect("edge index fits u32"));
             json!({
                 "site": self.span_key(edge.span),
                 "caller": self.function_key(edge.caller),
@@ -538,6 +539,9 @@ impl<'a> Dump<'a> {
                 "precision": debug(&edge.precision),
                 "claim_tier": edge.precision.tier().as_str(),
                 "algorithm": debug(&edge.algorithm),
+                "row_precision": debug(&row.precision),
+                "status": debug(&row.status),
+                "assumptions": row.assumptions.iter().map(|a| a.id()).collect::<Vec<_>>(),
             })
         }));
 
