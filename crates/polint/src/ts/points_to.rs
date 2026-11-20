@@ -20,7 +20,9 @@ use crate::analysis_neutral::points_to::solver::{
     solve_points_to_logged,
 };
 use crate::analysis_neutral::points_to::tiers::{Assumption, EdgeClaim};
-use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
+use crate::analysis_neutral::semantic_graph::constraints::{
+    ConstraintFact, ConstraintKind, Invocable, invocations,
+};
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::analysis_neutral::solver::budget::{BudgetStatus, SolverBudget};
 use crate::analysis_neutral::solver::facts::DerivedEdgeFact;
@@ -44,6 +46,9 @@ pub struct TsPointsToInputs {
     /// The parameter, rest, `this` and return places of each function, keyed
     /// by the function's object.
     signatures: BTreeMap<ObjectTokenId, PointsToSignature>,
+    /// How each function can be invoked, and how each call site invokes, by
+    /// node; see [`invocations`].
+    invocations: BTreeMap<SemanticNodeId, Invocable>,
 }
 
 impl TsPointsToInputs {
@@ -153,12 +158,30 @@ impl TsPointsToInputs {
             }
         }
 
+        let constraints = db.semantic_constraints().to_vec();
         Self {
-            constraints: db.semantic_constraints().to_vec(),
+            invocations: invocations(&constraints),
+            constraints,
             callable_objects,
             callsites,
             signatures,
         }
+    }
+}
+
+/// Whether the site invokes `target` in a way the target accepts. A site or a
+/// target whose invocation is not known never does.
+fn invokes_compatibly(
+    inputs: &TsPointsToInputs,
+    callsite: SemanticNodeId,
+    target: SemanticNodeId,
+) -> bool {
+    match (
+        inputs.invocations.get(&callsite),
+        inputs.invocations.get(&target),
+    ) {
+        (Some(&site), Some(target)) => target.admits(site),
+        _ => false,
     }
 }
 
@@ -309,6 +332,10 @@ pub fn solve_ts_points_to(
 /// went through. That the import links and the exported paths the site
 /// reads stay as they are is assumed too; the solve does not record it.
 ///
+/// A site that calls a function only `new` may invoke, or constructs with
+/// one that cannot be constructed, throws before the function runs: it claims
+/// nothing, and so does a site or a function whose invocation is not known.
+///
 /// The same site holding several functions is complete: it reaches some of
 /// them and nothing else. A site values from outside can reach is open, with
 /// the most specific way they reach it. Any other site claims nothing beyond
@@ -342,6 +369,16 @@ fn site_claim(
     }
     match set.objects.len() {
         0 => EdgeClaim::Unassigned,
+        1 if !set.objects.iter().all(|object| {
+            invokes_compatibly(
+                inputs,
+                callsite.callsite_node,
+                inputs.callable_objects[object].0,
+            )
+        }) =>
+        {
+            EdgeClaim::Unassigned
+        }
         1 => {
             let mut assumptions = vec![
                 Assumption::SealedBindings,
@@ -532,7 +569,8 @@ fn project_constraints(
             }
             ConstraintKind::CallConstraint { .. }
             | ConstraintKind::ModelEdge { .. }
-            | ConstraintKind::TypeConstraint { .. } => {}
+            | ConstraintKind::TypeConstraint { .. }
+            | ConstraintKind::Invocation { .. } => {}
         }
     }
 
@@ -710,6 +748,7 @@ mod tests {
                 })
                 .collect(),
             signatures: BTreeMap::new(),
+            invocations: BTreeMap::new(),
         };
         let result = solve_ts_points_to(&interner, &inputs, &SolverBudget::default());
         assert_eq!(budget_status(&result.points_to), BudgetStatus::WithinBudget);

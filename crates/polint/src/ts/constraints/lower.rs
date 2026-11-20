@@ -28,7 +28,9 @@ use oxc_ast::ast::{
 use oxc_semantic::{AstNodes, Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
 
-use super::{FlowCall, FlowObject, FlowRow, FlowSpan, FlowVar, LoweredFunction, TsValueFlows};
+use super::{
+    FlowCall, FlowObject, FlowRow, FlowSpan, FlowVar, Invocable, LoweredFunction, TsValueFlows,
+};
 use crate::analysis_api::SourceFile;
 use crate::ts::parse::parse_ts_file;
 use crate::ts::sealed_bindings::bindings_written_by_block_functions;
@@ -367,8 +369,10 @@ impl Lowerer<'_> {
     }
 
     /// Lowers a function with a body at `span`, the span the frontend gives
-    /// its function, and returns its function object.
-    fn function(&mut self, span: Span, function: &Function<'_>) -> FlowVar {
+    /// its function, and returns its function object. `invocable` says how
+    /// its syntactic position lets it be invoked: an async function or a
+    /// generator can never be constructed.
+    fn function(&mut self, span: Span, function: &Function<'_>, invocable: Invocable) -> FlowVar {
         let Some(body) = &function.body else {
             return FlowVar::Open;
         };
@@ -403,7 +407,15 @@ impl Lowerer<'_> {
         self.bind_params(span, &function.params);
         self.statements(&body.statements);
         self.frames.pop();
-        self.flows.functions.push(LoweredFunction { span, params });
+        let invocable = Invocable {
+            construct: invocable.construct && !function.r#async && !function.generator,
+            ..invocable
+        };
+        self.flows.functions.push(LoweredFunction {
+            span,
+            params,
+            invocable,
+        });
         FlowVar::Function(span)
     }
 
@@ -430,7 +442,11 @@ impl Lowerer<'_> {
             self.statements(&arrow.body.statements);
         }
         self.frames.pop();
-        self.flows.functions.push(LoweredFunction { span, params });
+        self.flows.functions.push(LoweredFunction {
+            span,
+            params,
+            invocable: Invocable::CALL,
+        });
         FlowVar::Function(span)
     }
 
@@ -476,9 +492,11 @@ impl Lowerer<'_> {
         });
         lower(self);
         self.frames.pop();
-        self.flows
-            .functions
-            .push(LoweredFunction { span, params: 0 });
+        self.flows.functions.push(LoweredFunction {
+            span,
+            params: 0,
+            invocable: Invocable::NEVER,
+        });
     }
 
     // Classes.
@@ -533,6 +551,11 @@ impl Lowerer<'_> {
                             class_method_function_span(method, self.source)
                         },
                         &method.value,
+                        if constructor {
+                            Invocable::CONSTRUCT
+                        } else {
+                            Invocable::CALL
+                        },
                     );
                     let base = if method.r#static { value } else { prototype };
                     if !constructor {
@@ -601,9 +624,11 @@ impl Lowerer<'_> {
         }
         if !explicit {
             // The frontend emits a class callable even for an implicit constructor.
-            self.flows
-                .functions
-                .push(LoweredFunction { span, params: 0 });
+            self.flows.functions.push(LoweredFunction {
+                span,
+                params: 0,
+                invocable: Invocable::CONSTRUCT,
+            });
             if class.super_class.is_some() {
                 let result = self.temp();
                 self.flows.calls.push(FlowCall {
@@ -616,6 +641,7 @@ impl Lowerer<'_> {
                     spread_from: Some(0),
                     result,
                     constructs: None,
+                    construct: true,
                     model: None,
                 });
                 self.copy(FlowVar::Return(span), result);
@@ -852,7 +878,7 @@ impl Lowerer<'_> {
             }
             return local.unwrap_or(FlowVar::Open);
         }
-        let value = self.function(function.span, function);
+        let value = self.function(function.span, function, Invocable::PLAIN);
         if let Some(local) = local {
             if let FlowVar::Local(symbol) = local {
                 self.bodied.insert(symbol);
@@ -1348,7 +1374,9 @@ impl Lowerer<'_> {
                 let alternate = self.expression(&conditional.alternate);
                 self.join(consequent, alternate)
             }
-            Expression::FunctionExpression(function) => self.function(function.span, function),
+            Expression::FunctionExpression(function) => {
+                self.function(function.span, function, Invocable::PLAIN)
+            }
             Expression::ImportExpression(import) => {
                 let mut arguments = vec![self.expression(&import.source)];
                 if let Some(options) = &import.options {
@@ -1363,6 +1391,7 @@ impl Lowerer<'_> {
                     spread_from: None,
                     result,
                     constructs: None,
+                    construct: false,
                     model: None,
                 });
                 result
@@ -1634,6 +1663,7 @@ impl Lowerer<'_> {
             spread_from,
             result,
             constructs: None,
+            construct: matches!(call.callee.get_inner_expression(), Expression::Super(_)),
             model: None,
         });
         result
@@ -1675,6 +1705,7 @@ impl Lowerer<'_> {
             spread_from,
             result,
             constructs: Some(object),
+            construct: true,
             model: None,
         });
         self.join(instance, result)
@@ -1695,6 +1726,7 @@ impl Lowerer<'_> {
             spread_from: None,
             result,
             constructs: None,
+            construct: false,
             model: None,
         });
         result
@@ -1727,15 +1759,22 @@ impl Lowerer<'_> {
         let field = self.key_field(&property.key, property.computed);
         if property.kind != PropertyKind::Init {
             // An accessor runs when the field is read or written.
-            let value = self.expression(&property.value);
+            let value = match &property.value {
+                Expression::FunctionExpression(function) => {
+                    self.function(function.span, function, Invocable::CALL)
+                }
+                value => self.expression(value),
+            };
             self.sink(value);
             self.sink(instance);
             return;
         }
         let value = match &property.value {
-            Expression::FunctionExpression(function) if property.method => {
-                self.function(object_method_function_span(property), function)
-            }
+            Expression::FunctionExpression(function) if property.method => self.function(
+                object_method_function_span(property),
+                function,
+                Invocable::CALL,
+            ),
             value => self.expression(value),
         };
         let sets_prototype = !property.computed

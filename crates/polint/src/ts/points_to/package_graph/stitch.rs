@@ -18,7 +18,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::super::{TsPointsToCallsite, TsPointsToInputs, object_for_node, var_for_node};
-use super::super::{site_answers, solve_ts_points_to};
+use super::super::{invocations, site_answers, solve_ts_points_to};
 use crate::analysis_neutral::ids::{SemanticConstraintId, SemanticNodeId};
 use crate::analysis_neutral::package_graph::{
     ConstraintEntry, ImportEntry, ModuleValue, PackageGraph, SiteEntry,
@@ -240,6 +240,7 @@ pub(crate) fn stitch(
         })
         .collect::<Vec<_>>();
     let mut inputs = TsPointsToInputs {
+        invocations: invocations(&constraints),
         constraints,
         ..TsPointsToInputs::default()
     };

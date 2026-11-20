@@ -666,7 +666,7 @@ impl<'a> Solve<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ts::constraints::{FlowCall, LoweredFunction};
+    use crate::ts::constraints::{FlowCall, Invocable, LoweredFunction};
 
     const F: FlowSpan = (10, 20);
     const G: FlowSpan = (30, 40);
@@ -679,8 +679,16 @@ mod tests {
             rows,
             calls,
             functions: vec![
-                LoweredFunction { span: F, params: 1 },
-                LoweredFunction { span: G, params: 0 },
+                LoweredFunction {
+                    span: F,
+                    params: 1,
+                    invocable: Invocable::PLAIN,
+                },
+                LoweredFunction {
+                    span: G,
+                    params: 0,
+                    invocable: Invocable::PLAIN,
+                },
             ],
             ..TsValueFlows::default()
         }
@@ -695,6 +703,7 @@ mod tests {
             spread_from: None,
             result: FlowVar::Temp(99),
             constructs: None,
+            construct: false,
             model: None,
         }
     }

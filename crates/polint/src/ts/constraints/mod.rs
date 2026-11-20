@@ -17,6 +17,7 @@ pub(crate) mod described;
 mod lower;
 pub(crate) mod platform;
 
+pub(crate) use crate::analysis_neutral::semantic_graph::constraints::Invocable;
 #[cfg(feature = "lang-typescript")]
 pub(crate) use lower::{lower_ts_program_value_flows, lower_ts_source_value_flows};
 
@@ -98,6 +99,9 @@ pub(crate) struct FlowCall {
     pub(crate) result: FlowVar,
     /// The object a `new` allocates, passed as the receiver.
     pub(crate) constructs: Option<FlowSpan>,
+    /// The site constructs with its callee instead of calling it: a `new`, a
+    /// `super()` call or the parent call of an implicit derived constructor.
+    pub(crate) construct: bool,
     /// A platform invocation stays conservative, even with one known target.
     pub(crate) model: Option<Box<str>>,
 }
@@ -108,6 +112,7 @@ pub(crate) struct LoweredFunction {
     pub(crate) span: FlowSpan,
     /// Positional parameters, each a [`FlowVar::Param`].
     pub(crate) params: u8,
+    pub(crate) invocable: Invocable,
 }
 
 /// The lowered value flow of one file.

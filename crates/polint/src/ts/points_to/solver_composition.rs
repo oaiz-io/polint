@@ -257,6 +257,12 @@ impl Fixture {
                 })
                 .collect(),
             signatures: self.signatures.clone(),
+            invocations: self
+                .functions
+                .iter()
+                .map(|&node| (node, Invocable::PLAIN))
+                .chain(self.sites.values().map(|site| (site.node, Invocable::CALL)))
+                .collect(),
         }
     }
 

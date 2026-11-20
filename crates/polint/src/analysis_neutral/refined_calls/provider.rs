@@ -184,6 +184,17 @@ pub fn derive_refined_calls_with_cache_stats(
     tier_edges("solver", &output.edges);
     let unclaimed = unclaimed_site_edges(db, interner, &output.edges, &call_sites);
     output.edges.extend(unclaimed);
+    let unproven =
+        crate::analysis_neutral::refined_calls::invocation::hold_exact_edges_to_invocation(
+            db,
+            &mut output.edges,
+        );
+    tracing::debug!(
+        target: "polint::kernel::stage",
+        provider = REFINED_CALLS_PROVIDER_ID,
+        unproven,
+        "invocation check"
+    );
     // Types weigh the other tiers' answer last, once it is whole: they move an
     // exact claim the checker's declarations contradict to the conservative
     // tier, list candidates at open sites, and answer sites no tier reached.

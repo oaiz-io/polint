@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::analysis_neutral::ids::{SemanticConstraintId, SemanticNodeId, TypeFactId};
@@ -9,7 +11,7 @@ use crate::internal_core::StableKeyId;
 // ---------------------------------------------------------------------------
 
 /// The unified, closed constraint vocabulary the whole frontend graph emits into
-/// (GRAPH-02). Exactly 7 roadmap-named variants in pinned declaration order so the
+/// (GRAPH-02). Its variants keep a pinned declaration order so the
 /// derived `Ord` and serde representation are declaration-driven and byte-stable,
 /// matching the established `RootKind`/`PointsToConstraintKind` convention. No
 /// `#[repr(u8)]` — byte-stability is achieved purely via pinned order + derived
@@ -97,6 +99,16 @@ pub enum ConstraintKind {
         node: SemanticNodeId,
         type_fact: TypeFactId,
     },
+    /// How `node` is invoked. On a function node, the ways the function can be
+    /// invoked without throwing: called, constructed with `new`, both or
+    /// neither. On a call site node, the one way the site invokes its callee.
+    /// A call site or a function without this constraint invokes, or can be
+    /// invoked, in a way the frontend does not know.
+    Invocation {
+        node: SemanticNodeId,
+        call: bool,
+        construct: bool,
+    },
 }
 
 impl ConstraintKind {
@@ -122,6 +134,7 @@ impl ConstraintKind {
             Self::CallConstraint { .. } => "call_constraint",
             Self::ModelEdge { .. } => "model_edge",
             Self::TypeConstraint { .. } => "type_constraint",
+            Self::Invocation { .. } => "invocation",
         }
     }
 
@@ -169,6 +182,11 @@ impl ConstraintKind {
                 evidence: _,
             } => vec![*source, *target],
             Self::TypeConstraint { node, type_fact: _ } => vec![*node],
+            Self::Invocation {
+                node,
+                call: _,
+                construct: _,
+            } => vec![*node],
         }
     }
 
@@ -233,6 +251,13 @@ impl ConstraintKind {
             Self::TypeConstraint { node, type_fact: _ } => {
                 *node = map(*node);
             }
+            Self::Invocation {
+                node,
+                call: _,
+                construct: _,
+            } => {
+                *node = map(*node);
+            }
         }
     }
 }
@@ -260,6 +285,71 @@ pub struct ConstraintFact {
     /// Built from the referenced existing identity (D-06), never run-local dense
     /// IDs. Populated by `build_semantic_graph`.
     pub stable_key: StableKeyId,
+}
+
+/// The ways a function can be invoked without throwing a `TypeError`.
+///
+/// A plain function can be called and constructed. An arrow, a method, an
+/// accessor, an async function and a generator can only be called; a class
+/// can only be constructed; the code the frontend makes of a class member
+/// is never invoked by a call site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct Invocable {
+    pub(crate) call: bool,
+    pub(crate) construct: bool,
+}
+
+impl Invocable {
+    pub(crate) const PLAIN: Self = Self {
+        call: true,
+        construct: true,
+    };
+    pub(crate) const CALL: Self = Self {
+        call: true,
+        construct: false,
+    };
+    pub(crate) const CONSTRUCT: Self = Self {
+        call: false,
+        construct: true,
+    };
+    pub(crate) const NEVER: Self = Self {
+        call: false,
+        construct: false,
+    };
+
+    /// Whether a site that invokes as `site` can run a function invocable as
+    /// `self`.
+    pub(crate) fn admits(self, site: Self) -> bool {
+        (site.call && self.call) || (site.construct && self.construct)
+    }
+}
+
+/// The invocation constraints of `constraints`, by node. A node whose
+/// constraints disagree is left out, as one with no constraint is.
+pub(crate) fn invocations(constraints: &[ConstraintFact]) -> BTreeMap<SemanticNodeId, Invocable> {
+    let mut by_node = BTreeMap::<SemanticNodeId, Option<Invocable>>::new();
+    for constraint in constraints {
+        if let ConstraintKind::Invocation {
+            node,
+            call,
+            construct,
+        } = constraint.kind
+        {
+            let invocable = Invocable { call, construct };
+            by_node
+                .entry(node)
+                .and_modify(|known| {
+                    if *known != Some(invocable) {
+                        *known = None;
+                    }
+                })
+                .or_insert(Some(invocable));
+        }
+    }
+    by_node
+        .into_iter()
+        .filter_map(|(node, invocable)| Some((node, invocable?)))
+        .collect()
 }
 
 #[cfg(test)]
@@ -296,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn constraint_kind_has_exactly_7_variants() {
+    fn constraint_kind_has_exactly_8_variants() {
         // Compile-time exhaustive match over every arm; the array length lock fails
         // to compile if a variant is added without updating this test.
         fn assert_all(kind: &ConstraintKind) -> &'static str {
@@ -308,6 +398,7 @@ mod tests {
                 ConstraintKind::CallConstraint { .. } => "call_constraint",
                 ConstraintKind::ModelEdge { .. } => "model_edge",
                 ConstraintKind::TypeConstraint { .. } => "type_constraint",
+                ConstraintKind::Invocation { .. } => "invocation",
             }
         }
         let variants = [
@@ -335,8 +426,13 @@ mod tests {
                 node: SemanticNodeId(0),
                 type_fact: TypeFactId(1),
             }),
+            assert_all(&ConstraintKind::Invocation {
+                node: SemanticNodeId(0),
+                call: true,
+                construct: false,
+            }),
         ];
-        assert_eq!(variants.len(), 7);
+        assert_eq!(variants.len(), 8);
     }
 
     #[test]
@@ -345,6 +441,11 @@ mod tests {
         // ordering is declaration-driven, so kind ordering is stable regardless of
         // payload values.
         let mut kinds = [
+            ConstraintKind::Invocation {
+                node: SemanticNodeId(0),
+                call: false,
+                construct: false,
+            },
             ConstraintKind::TypeConstraint {
                 node: SemanticNodeId(0),
                 type_fact: TypeFactId(0),
@@ -382,6 +483,7 @@ mod tests {
                 "call_constraint",
                 "model_edge",
                 "type_constraint",
+                "invocation",
             ]
         );
     }

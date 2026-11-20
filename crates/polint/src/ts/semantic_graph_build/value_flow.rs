@@ -334,7 +334,8 @@ impl GraphBuilder {
                 ConstraintKind::CallConstraint { callsite, .. } => !named.contains(callsite),
                 ConstraintKind::FieldStore { .. }
                 | ConstraintKind::ModelEdge { .. }
-                | ConstraintKind::TypeConstraint { .. } => true,
+                | ConstraintKind::TypeConstraint { .. }
+                | ConstraintKind::Invocation { .. } => true,
             });
         for (kind, identity) in constraints {
             self.push_constraint(interner, kind, &identity);
@@ -413,6 +414,11 @@ impl FileProjection<'_, '_> {
             let Some(node) = nodes.function(function.span) else {
                 continue;
             };
+            self.push(ConstraintKind::Invocation {
+                node: node.node,
+                call: function.invocable.call,
+                construct: function.invocable.construct,
+            });
             let ret = self.signature_node(node, "function_return", None);
             self.pending.returns.insert(ret);
             let this = self.signature_node(node, "function_this", None);
@@ -582,6 +588,13 @@ impl FileProjection<'_, '_> {
             }
         }
         let real_site = self.nodes.callsite(call.site);
+        if let Some(real_site) = real_site {
+            self.push(ConstraintKind::Invocation {
+                node: real_site,
+                call: !call.construct,
+                construct: call.construct,
+            });
+        }
         let site = real_site.filter(|site| named.is_some() || !self.earlier_callees.contains(site));
         if let (Some(params), None) = (named, call.spread_from) {
             // A parameter the call leaves out is `undefined`.

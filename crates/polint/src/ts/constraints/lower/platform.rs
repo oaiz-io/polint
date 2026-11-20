@@ -123,6 +123,7 @@ impl Lowerer<'_> {
                 spread_from: spread,
                 result: ordinary,
                 constructs: None,
+                construct: false,
                 model: None,
             });
             return Some(self.join(value, ordinary));
@@ -147,6 +148,7 @@ impl Lowerer<'_> {
             spread_from,
             result,
             constructs: None,
+            construct: false,
             model: None,
         });
         result
@@ -234,6 +236,7 @@ impl Lowerer<'_> {
             spread_from,
             result,
             constructs: None,
+            construct: false,
             model: Some(model.into()),
         });
         result

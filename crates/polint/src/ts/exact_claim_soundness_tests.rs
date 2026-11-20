@@ -274,3 +274,87 @@ fn a_block_function_of_strict_code_leaves_the_outer_binding_exact() {
                   if(true){function f(){console.log('b')}} f();\n";
     assert_eq!(exact_targets("annex-strict.cjs", source, "f()"), only("a"));
 }
+
+/// Node prints `TypeError`: an arrow cannot be constructed, so `new` throws
+/// before the arrow runs.
+#[test]
+fn a_new_of_an_arrow_claims_no_exact_target() {
+    let source = "const arrow=()=>console.log('arrow entered'); \
+                  try{new arrow()}catch(e){console.log(e.name)}\n";
+    assert_eq!(
+        exact_targets("new-arrow.mjs", source, "new arrow()"),
+        none()
+    );
+}
+
+/// Node prints `TypeError`: a class can only be constructed.
+#[test]
+fn a_call_of_a_class_claims_no_exact_target() {
+    let source = "class C {constructor(){console.log('constructor entered')}} \
+                  try{C()}catch(e){console.log(e.name)}\n";
+    assert_eq!(exact_targets("call-class.mjs", source, "C()"), none());
+}
+
+/// Node prints `TypeError`: a class without a constructor is still a class.
+#[test]
+fn a_call_of_a_class_with_an_implicit_constructor_claims_no_exact_target() {
+    let source = "class C {m(){}} try{C()}catch(e){console.log(e.name)}\n";
+    assert_eq!(exact_targets("call-implicit.mjs", source, "C()"), none());
+}
+
+/// Node prints `TypeError`: a generator cannot be constructed.
+#[test]
+fn a_new_of_a_generator_claims_no_exact_target() {
+    let source = "function* g(){console.log('generator entered')} \
+                  try{new g()}catch(e){console.log(e.name)}\n";
+    assert_eq!(
+        exact_targets("new-generator.mjs", source, "new g()"),
+        none()
+    );
+}
+
+/// Node prints `TypeError`: an async function cannot be constructed.
+#[test]
+fn a_new_of_an_async_function_claims_no_exact_target() {
+    let source = "async function a(){console.log('async entered')} \
+                  try{new a()}catch(e){console.log(e.name)}\n";
+    assert_eq!(exact_targets("new-async.mjs", source, "new a()"), none());
+}
+
+/// Node prints `TypeError`: a method of an object literal cannot be
+/// constructed.
+#[test]
+fn a_new_of_an_object_method_claims_no_exact_target() {
+    let source = "const o={m(){console.log('method entered')}}; const m=o.m; \
+                  try{new m()}catch(e){console.log(e.name)}\n";
+    assert_eq!(exact_targets("new-method.mjs", source, "new m()"), none());
+}
+
+/// Node prints `TypeError`: neither can a method of a class.
+#[test]
+fn a_new_of_a_class_method_claims_no_exact_target() {
+    let source = "class C {m(){console.log('method entered')}} const m=C.prototype.m; \
+                  try{new m()}catch(e){console.log(e.name)}\n";
+    assert_eq!(
+        exact_targets("new-class-method.mjs", source, "new m()"),
+        none()
+    );
+}
+
+/// Node prints `entered` twice: a plain function can be called and
+/// constructed, so both sites keep their exact target.
+#[test]
+fn a_plain_function_is_exact_when_called_and_constructed() {
+    let source = "function F(){console.log('entered')} new F(); F();\n";
+    assert_eq!(exact_targets("plain-new.mjs", source, "new F()"), only("F"));
+    assert_eq!(exact_targets("plain-call.mjs", source, "F()"), only("F"));
+}
+
+/// Node prints `constructor entered`: constructing a class runs its
+/// constructor, which the site may claim exactly, and never anything else.
+#[test]
+fn a_new_of_a_class_claims_no_wrong_target() {
+    let source = "class C {constructor(){console.log('constructor entered')}} new C();\n";
+    let targets = exact_targets("new-class.mjs", source, "new C()");
+    assert!(targets == none() || targets == only("C"), "{targets:?}");
+}
