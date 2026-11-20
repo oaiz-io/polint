@@ -33,15 +33,22 @@ use crate::ts::parse::parse_ts_source;
 /// Code that is a string literal is parsed: it writes only the names it
 /// assigns or declares, and exposes the values of the names it reads. Any
 /// other code may name every binding the call can see, and may
-/// read `this`, `arguments` and the function or class around the call. Any
+/// read `this`, `arguments` and the function or class around the call. In a
+/// CommonJS file the call can also see the parameters of the module wrapper,
+/// `require`, `module` and `exports`, and `this` at the top of the file is
+/// `module.exports`: code that may name them may rewrite what the file
+/// exports and what any of its `require` calls return, while the bindings of
+/// scopes the call is not inside stay sealed. Any
 /// call through an identifier named `eval` counts, since a parameter or local
 /// of that name may hold the global; a call of `eval` under any other name is
 /// indirect and runs as global code, as another script would.
 #[derive(Debug, Default)]
 pub(crate) struct DynamicScope {
-    /// A `with` statement, or an eval that can name the module wrapper's
-    /// `require`, `module` or `exports`, or `this` at the top of a CommonJS file.
+    /// A `with` statement.
     whole_file: bool,
+    /// An eval that can name the module wrapper's `require`, `module` or
+    /// `exports`, or `this` at the top of a CommonJS file.
+    wrapper: bool,
     /// Bindings an eval can write, or shadow for some of their references.
     bindings: BTreeSet<OxcSymbolId>,
     /// Bindings whose value an eval can read.
@@ -56,6 +63,13 @@ impl DynamicScope {
     /// Whether no binding of the file can be claimed to hold one value.
     pub(crate) fn whole_file(&self) -> bool {
         self.whole_file
+    }
+
+    /// Whether an eval of a CommonJS file may rewrite `module`, `exports` or
+    /// `require`, so neither what the file exports nor what one of its
+    /// `require` calls returns is decided by the syntax.
+    pub(crate) fn opens_wrapper(&self) -> bool {
+        self.whole_file || self.wrapper
     }
 
     /// Whether an eval or `with` statement may write or shadow `symbol`.
@@ -125,12 +139,7 @@ pub(crate) fn dynamic_scope(
                 .any(|name| named.contains(*name)),
             Reach::Everything => true,
         };
-        if wrapper_named && !module {
-            return DynamicScope {
-                whole_file: true,
-                ..DynamicScope::default()
-            };
-        }
+        scope.wrapper |= wrapper_named && !module;
         let call_scope = node.scope_id();
         for ancestor in scoping.scope_ancestors(call_scope) {
             for symbol in scoping.iter_bindings_in(ancestor) {

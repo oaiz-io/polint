@@ -56,13 +56,28 @@ struct ExactTargets {
 }
 
 fn exact_targets(path: &str, source: &str, site: &str) -> ExactTargets {
+    exact_targets_in(&[(path, source)], site)
+}
+
+/// [`exact_targets`] of a program of several `files`, for the last call site
+/// whose text is `site` in the first file.
+fn exact_targets_in(files: &[(&str, &str)], site: &str) -> ExactTargets {
     let temp = tempfile::tempdir().expect("temp dir");
-    std::fs::write(temp.path().join(path), source).expect("write source");
+    for (path, source) in files {
+        std::fs::write(temp.path().join(path), source).expect("write source");
+    }
+    let (path, source) = files[0];
     let start = u32::try_from(source.rfind(site).expect("the site is in the source"))
         .expect("small source");
     let end = start + u32::try_from(site.len()).expect("small site");
     let output = run(temp.path());
     let db = &output.db;
+    let file = db
+        .files()
+        .iter()
+        .find(|file| file.relative_path == path)
+        .expect("the site's file is analysed")
+        .id;
 
     let function_name = db
         .functions()
@@ -72,7 +87,9 @@ fn exact_targets(path: &str, source: &str, site: &str) -> ExactTargets {
     let site_ids = db
         .call_sites()
         .iter()
-        .filter(|call| call.span.start_byte == start && call.span.end_byte == end)
+        .filter(|call| {
+            call.span.file == file && call.span.start_byte == start && call.span.end_byte == end
+        })
         .map(|call| call.id)
         .collect::<BTreeSet<_>>();
     assert!(!site_ids.is_empty(), "no call site spans {site:?}");
@@ -123,7 +140,8 @@ fn exact_targets(path: &str, source: &str, site: &str) -> ExactTargets {
                 .iter()
                 .find(|function| function.node == entry.caller)
                 .expect("a call site's caller is a function");
-            caller.identity.start + entry.identity.start == start
+            caller.identity.path == path
+                && caller.identity.start + entry.identity.start == start
                 && caller.identity.start + entry.identity.end == end
         })
         .map(|entry| entry.node)
@@ -149,7 +167,8 @@ fn exact_targets(path: &str, source: &str, site: &str) -> ExactTargets {
     let index = db.call_graph_index();
     for id in 0..u32::try_from(index.edges.len()).expect("few edges") {
         let edge = index.edge(db, id);
-        if edge.span.start_byte != start
+        if edge.span.file != file
+            || edge.span.start_byte != start
             || edge.span.end_byte != end
             || edge.precision.tier() != ClaimTier::Exact
         {
@@ -325,6 +344,61 @@ fn a_call_after_an_eval_behind_an_erased_type_wrapper_claims_no_exact_target() {
         );
         assert_eq!(exact_targets(path, &source, "f()"), none(), "{callee}");
     }
+}
+
+/// Node prints `h` for the CommonJS file, as for the control without the
+/// eval and the module: eval code the call does not spell out reaches the
+/// bindings of the scopes around the call and the module wrapper, not a
+/// function declared inside another function.
+#[test]
+fn an_eval_of_unknown_code_keeps_a_call_in_an_unrelated_function_exact() {
+    let source = "function isolated(code){eval(code)} \
+                  function g(){function h(){console.log('h')}h()} isolated('void 0');g();\n";
+    let control = source.replace("eval(code)", "void code");
+    assert_eq!(exact_targets("control.cjs", &control, "h()"), only("h"));
+    assert_eq!(exact_targets("isolated.mjs", source, "h()"), only("h"));
+    assert_eq!(exact_targets("isolated.cjs", source, "h()"), only("h"));
+}
+
+/// Node prints `b` for each: eval code the call does not spell out may
+/// rewrite the CommonJS `exports`, `module.exports`, `require` or the
+/// module's `this`, which every file that loads the module sees.
+#[test]
+fn an_eval_of_unknown_code_leaves_the_commonjs_wrapper_open() {
+    let ab = "function a(){console.log('a')} function b(){console.log('b')}\n";
+    let exports =
+        format!("{ab}exports.run=a; function g(code){{eval(code)}} g('exports.run=b');\n");
+    let module = format!(
+        "{ab}module.exports={{run:a}}; function g(code){{eval(code)}} g('module.exports={{run:b}}');\n"
+    );
+    let main = "require('./lib.cjs').run();\n";
+    assert_eq!(
+        exact_targets_in(
+            &[("main.cjs", main), ("lib.cjs", &exports)],
+            "require('./lib.cjs').run()"
+        ),
+        none()
+    );
+    assert_eq!(
+        exact_targets_in(
+            &[("main.cjs", main), ("lib.cjs", &module)],
+            "require('./lib.cjs').run()"
+        ),
+        none()
+    );
+    let require = format!(
+        "{ab}function g(code){{eval(code)}} g('require=function(){{return {{run:b}}}}');\n\
+         const dep=require('./dep.cjs'); dep.run();\n"
+    );
+    let dep = "exports.run=function a(){console.log('a')};\n";
+    assert_eq!(
+        exact_targets_in(&[("lib.cjs", &require), ("dep.cjs", dep)], "dep.run()"),
+        none()
+    );
+    let this = format!(
+        "{ab}exports.run=a; function g(code){{eval(code)}} g.call(this, 'this.run=b'); exports.run();\n"
+    );
+    assert_eq!(exact_targets("this.cjs", &this, "exports.run()"), none());
 }
 
 /// Node prints `a`: an eval whose code names no binding leaves every call of

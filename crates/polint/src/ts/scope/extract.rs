@@ -141,8 +141,14 @@ pub fn extract_ts_scope_from_program(
                 )
             })
             .collect::<BTreeSet<_>>();
+        // An eval that may name the module wrapper may also rewrite what the
+        // file exports and what its `require` calls load.
         for binding in &mut bindings {
-            if dynamic.whole_file() || reached.contains(&(binding.scope_key, binding.name.as_str()))
+            let through_wrapper = dynamic.opens_wrapper()
+                && (binding.module_source.is_some() || binding.exported_name.is_some());
+            if dynamic.whole_file()
+                || through_wrapper
+                || reached.contains(&(binding.scope_key, binding.name.as_str()))
             {
                 mark_binding_dynamic(binding, DYNAMIC_SCOPE_REASON);
             }

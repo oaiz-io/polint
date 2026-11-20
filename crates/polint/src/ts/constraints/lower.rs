@@ -109,6 +109,14 @@ pub(crate) fn lower_ts_program_value_flows(
     if lowerer.dynamic.whole_file() {
         lowerer.abort();
     }
+    // An eval that may name the module wrapper may rewrite `module` and
+    // `exports` and the objects they hold, and what `require` returns.
+    if lowerer.dynamic.opens_wrapper() && !lowerer.aborted {
+        for wrapper in [FlowVar::Module, FlowVar::Exports] {
+            lowerer.copy(wrapper, FlowVar::Open);
+            lowerer.sink(wrapper);
+        }
+    }
     let written = lowerer.dynamic.bindings().clone();
     let exposed = lowerer.dynamic.exposed().clone();
     for symbol in written.union(&exposed) {
@@ -1739,6 +1747,7 @@ impl Lowerer<'_> {
     fn builtin_call(&mut self, call: &CallExpression<'_>) -> Option<FlowVar> {
         if let Expression::Identifier(reference) = call.callee.get_inner_expression()
             && reference.name == "require"
+            && !self.dynamic.opens_wrapper()
             && self.reference_local(reference).is_none()
             && let [argument] = call.arguments.as_slice()
             && let Some(Expression::StringLiteral(specifier)) = argument.as_expression()
@@ -2262,10 +2271,26 @@ mod tests {
     }
 
     #[test]
-    fn with_and_an_eval_that_may_name_the_module_wrapper_stop_the_walk() {
+    fn a_with_stops_the_walk_and_an_eval_that_may_name_the_module_wrapper_opens_it() {
         assert!(!lower("with (o) { f(); }\n").lowered);
-        assert!(!lower("function g() { eval('exports.f = 1'); }\n").lowered);
-        assert!(!lower("function g(code) { eval(code); }\n").lowered);
+        for eval in ["eval('exports.f = 1')", "eval(code)"] {
+            let source = format!(
+                "function a() {{}}\nexports.f = a;\nfunction g(code) {{ {eval}; }}\nexports.f();\nfunction k() {{\n  function h() {{}}\n  h();\n}}\n"
+            );
+            let flows = lower(&source);
+            assert!(flows.lowered);
+            let described = describe(&flows, |_| true);
+            assert!(
+                !described
+                    .named
+                    .contains_key(&site_of(&flows, &source, "exports.f()"))
+            );
+            assert!(
+                described
+                    .named
+                    .contains_key(&site_of(&flows, &source, "h();"))
+            );
+        }
         assert!(lower("function f() {}\neval('f()');\n").lowered);
         assert!(lower("const e = eval;\ne('1');\n").lowered);
     }
