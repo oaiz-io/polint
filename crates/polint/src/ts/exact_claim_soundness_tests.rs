@@ -231,3 +231,46 @@ fn a_method_written_through_a_with_parameter_claims_no_exact_target() {
                   const o={g:a}; function w(x){ with (x) { g=b; } } w(o); o.g();\n";
     assert_eq!(exact_targets("with-param.cjs", source, "o.g()"), none());
 }
+
+/// Node prints `b`: running the block also assigns its function to the `var`.
+#[test]
+fn a_call_of_a_var_a_block_function_overwrites_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} var f=a; \
+                  if(true){function f(){console.log('b')}} f();\n";
+    assert_eq!(exact_targets("annex.cjs", source, "f()"), none());
+}
+
+/// Node prints `b`: the block function overwrites the outer declaration too.
+#[test]
+fn a_call_of_a_declaration_a_block_function_overwrites_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function f(){console.log('a2')} \
+                  if(true){function f(){console.log('b')}} f();\n";
+    assert_eq!(exact_targets("annex-declared.cjs", source, "f()"), none());
+}
+
+/// Node prints `b`: the same happens in a function scope.
+#[test]
+fn a_call_in_a_function_whose_var_a_block_function_overwrites_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} \
+                  function g(){ var f=a; { function f(){console.log('b')} } f(); } g();\n";
+    assert_eq!(exact_targets("annex-function.cjs", source, "f()"), none());
+}
+
+/// Node prints `a`: an alias read before the block runs keeps its value. It
+/// may still claim no exact target, but never `b`.
+#[test]
+fn an_alias_read_before_the_block_function_runs_claims_no_wrong_target() {
+    let source = "function a(){console.log('a')} var f=a; var h=f; \
+                  if(true){function f(){console.log('b')}} h();\n";
+    let targets = exact_targets("annex-alias.cjs", source, "h()");
+    assert!(targets == none() || targets == only("a"), "{targets:?}");
+}
+
+/// In strict code a block function stays in its block, so the call keeps its
+/// exact target.
+#[test]
+fn a_block_function_of_strict_code_leaves_the_outer_binding_exact() {
+    let source = "'use strict'; function a(){console.log('a')} let f=a; \
+                  if(true){function f(){console.log('b')}} f();\n";
+    assert_eq!(exact_targets("annex-strict.cjs", source, "f()"), only("a"));
+}

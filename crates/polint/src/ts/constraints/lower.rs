@@ -25,12 +25,13 @@ use oxc_ast::ast::{
     TSModuleReference, TaggedTemplateExpression, UnaryOperator, UpdateExpression,
     VariableDeclaration, VariableDeclarationKind,
 };
-use oxc_semantic::{Scoping, SemanticBuilder};
+use oxc_semantic::{AstNodes, Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
 
 use super::{FlowCall, FlowObject, FlowRow, FlowSpan, FlowVar, LoweredFunction, TsValueFlows};
 use crate::analysis_api::SourceFile;
 use crate::ts::parse::parse_ts_file;
+use crate::ts::sealed_bindings::bindings_written_by_block_functions;
 use crate::ts::spans::{
     normalized_call_expression_span, normalized_new_expression_span,
     normalized_tagged_template_span,
@@ -46,7 +47,12 @@ pub(crate) fn lower_ts_source_value_flows(file: &SourceFile) -> TsValueFlows {
         return TsValueFlows::default();
     }
     let semantic = SemanticBuilder::new().build(parsed.program()).semantic;
-    lower_ts_program_value_flows(file.source.as_ref(), parsed.program(), semantic.scoping())
+    lower_ts_program_value_flows(
+        file.source.as_ref(),
+        parsed.program(),
+        semantic.scoping(),
+        semantic.nodes(),
+    )
 }
 
 /// Lowers a fully parsed program with its scopes.
@@ -54,6 +60,7 @@ pub(crate) fn lower_ts_program_value_flows(
     source: &str,
     program: &Program<'_>,
     scoping: &Scoping,
+    nodes: &AstNodes<'_>,
 ) -> TsValueFlows {
     let mut lowerer = Lowerer {
         source,
@@ -81,6 +88,15 @@ pub(crate) fn lower_ts_program_value_flows(
             )
         )
     });
+    // A block function also writes the same-named binding of its function
+    // scope when its block runs, which no reference shows: the binding may
+    // hold a value the rows do not describe.
+    for symbol in bindings_written_by_block_functions(scoping, nodes) {
+        let local = lowerer.local(symbol);
+        if !lowerer.aborted {
+            lowerer.copy(local, FlowVar::Open);
+        }
+    }
     lowerer.statements(&program.body);
     lowerer.finish()
 }

@@ -71,7 +71,7 @@ pub(super) fn analyze_parsed_ts_file(
         mark_object_model_partial_ast(&mut object_model);
     }
     let value_flows = if parsed.fully_parsed {
-        lower_ts_program_value_flows(source, parsed.program(), semantic.scoping())
+        lower_ts_program_value_flows(source, parsed.program(), semantic.scoping(), nodes)
     } else {
         TsValueFlows::default()
     };
