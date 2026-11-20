@@ -432,7 +432,7 @@ mod tests {
         let mut changed = rows.clone();
         changed[17] = 20_001;
         assert_ne!(digest(&changed, 4), expected);
-        let mut fewer = rows.clone();
+        let mut fewer = rows;
         fewer.pop();
         assert_ne!(digest(&fewer, 4), expected);
     }
