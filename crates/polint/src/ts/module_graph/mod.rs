@@ -170,7 +170,20 @@ pub fn resolve_ts_import(
         input.import.syntax,
     ) {
         ModeResolution::One(resolution) => resolution,
-        ModeResolution::Split => {
+        // A package outside the analysed files is named by its specifier,
+        // which every mode shares.
+        ModeResolution::Split(paths)
+            if is_external_package_specifier(&input.import.path)
+                && !tsconfig_path_alias_matches(context, &importer_path, &input.import.path)
+                && paths.iter().all(|path| {
+                    normalize_path(path).is_some_and(|path| {
+                        !context.file_by_absolute_normalized_path.contains_key(&path)
+                    })
+                }) =>
+        {
+            return external_draft(input.import.path.clone(), input.import.language);
+        }
+        ModeResolution::Split(_) => {
             return ResolvedImportDraft::unresolved(UnresolvedReason::ModeDependent);
         }
     };
@@ -1872,6 +1885,11 @@ struct TsconfigCompilerOptionsWire {
 /// mode an import loads in, then the rest in this order.
 pub(crate) const EXPORT_CONDITIONS: &[&str] = &["import", "require", "node", "default"];
 
+/// The package fields a bundler reads, in its order, where a package has no
+/// `exports`.
+#[cfg(feature = "lang-typescript")]
+const BUNDLER_MAIN_FIELDS: &[&str] = &["module", "browser", "main"];
+
 /// The `exports` conditions of one mode: its own condition and the shared
 /// ones, so an `exports` map that names both modes gives each its file.
 #[cfg(feature = "lang-typescript")]
@@ -1883,21 +1901,46 @@ fn mode_conditions(own: &str) -> Vec<String> {
         .collect()
 }
 
-/// The resolvers of the two modes a file loads in, sharing one cache.
+/// The resolvers of the two modes a file loads in, under Node and under a
+/// bundler, sharing one cache.
 #[cfg(feature = "lang-typescript")]
 pub(crate) struct ModeResolvers {
     import: Resolver,
     require: Resolver,
+    /// The import and require modes of a bundler, which reads a package's
+    /// `module` and `browser` fields before its `main`.
+    bundled_import: Resolver,
+    bundled_require: Resolver,
     /// Reads the module format of an importing file.
     format: Resolver,
 }
 
 /// What resolving an import gives: the answer of every mode the import may
-/// load in, or `Split` where those modes give different answers.
+/// load in, or `Split`, with the files any of them names, where those modes
+/// give different answers.
 #[cfg(feature = "lang-typescript")]
 pub(crate) enum ModeResolution {
     One(Result<oxc_resolver::Resolution, ResolveError>),
-    Split,
+    Split(Vec<PathBuf>),
+}
+
+/// The answer two ways of loading an import agree on, or `Split`.
+#[cfg(feature = "lang-typescript")]
+fn agree(
+    left: Result<oxc_resolver::Resolution, ResolveError>,
+    right: Result<oxc_resolver::Resolution, ResolveError>,
+) -> ModeResolution {
+    match (&left, &right) {
+        (Ok(one), Ok(other)) if one.path() == other.path() => ModeResolution::One(left),
+        (Err(_), Err(_)) => ModeResolution::One(left),
+        _ => ModeResolution::Split(
+            [left, right]
+                .into_iter()
+                .flatten()
+                .map(|resolution| resolution.into_path_buf())
+                .collect(),
+        ),
+    }
 }
 
 #[cfg(feature = "lang-typescript")]
@@ -1905,6 +1948,15 @@ impl ModeResolvers {
     pub(crate) fn new() -> Self {
         let import = Resolver::new(resolve_options(mode_conditions("import")));
         let require = import.clone_with_options(resolve_options(mode_conditions("require")));
+        let bundled = |own| ResolveOptions {
+            main_fields: BUNDLER_MAIN_FIELDS
+                .iter()
+                .map(|field| (*field).to_string())
+                .collect(),
+            ..resolve_options(mode_conditions(own))
+        };
+        let bundled_import = import.clone_with_options(bundled("import"));
+        let bundled_require = import.clone_with_options(bundled("require"));
         let format = import.clone_with_options(ResolveOptions {
             module_type: true,
             ..resolve_options(mode_conditions("import"))
@@ -1912,6 +1964,8 @@ impl ModeResolvers {
         Self {
             import,
             require,
+            bundled_import,
+            bundled_require,
             format,
         }
     }
@@ -1921,24 +1975,38 @@ impl ModeResolvers {
     /// where the importer runs as an ES module (`.mjs`, `.mts`, or a `.js`
     /// or `.ts` file of a `"type": "module"` package); elsewhere a compiler
     /// may turn it into a `require`, so both modes must give one answer.
+    /// Node and a bundler must give one answer too: Node loads a package's
+    /// `main` where it has no `exports`, a bundler its `module` or `browser`.
     pub(crate) fn resolve(
         &self,
         importer: &Path,
         specifier: &str,
         syntax: ImportSyntax,
     ) -> ModeResolution {
+        let in_mode = |node: &Resolver, bundled: &Resolver| {
+            agree(
+                node.resolve_file(importer, specifier),
+                bundled.resolve_file(importer, specifier),
+            )
+        };
         if syntax == ImportSyntax::Require {
-            return ModeResolution::One(self.require.resolve_file(importer, specifier));
+            return in_mode(&self.require, &self.bundled_require);
         }
-        let import = self.import.resolve_file(importer, specifier);
+        let import = in_mode(&self.import, &self.bundled_import);
         if self.runs_as_module(importer) {
-            return ModeResolution::One(import);
+            return import;
         }
-        let require = self.require.resolve_file(importer, specifier);
-        match (&import, &require) {
-            (Ok(left), Ok(right)) if left.path() != right.path() => ModeResolution::Split,
-            (Ok(_), Err(_)) | (Err(_), Ok(_)) => ModeResolution::Split,
-            _ => ModeResolution::One(import),
+        match (import, in_mode(&self.require, &self.bundled_require)) {
+            (ModeResolution::One(import), ModeResolution::One(require)) => agree(import, require),
+            (ModeResolution::Split(mut paths), ModeResolution::Split(more)) => {
+                paths.extend(more);
+                ModeResolution::Split(paths)
+            }
+            (ModeResolution::Split(mut paths), ModeResolution::One(one))
+            | (ModeResolution::One(one), ModeResolution::Split(mut paths)) => {
+                paths.extend(one.map(|resolution| resolution.into_path_buf()));
+                ModeResolution::Split(paths)
+            }
         }
     }
 
@@ -1975,7 +2043,7 @@ impl DiskResolver {
     ) -> Option<PathBuf> {
         match self.0.resolve(importer, specifier, syntax) {
             ModeResolution::One(Ok(resolution)) => normalize_path(resolution.path()),
-            ModeResolution::One(Err(_)) | ModeResolution::Split => None,
+            ModeResolution::One(Err(_)) | ModeResolution::Split(_) => None,
         }
     }
 }
@@ -2002,7 +2070,7 @@ fn resolve_options(condition_names: Vec<String>) -> ResolveOptions {
             (".cjs".into(), vec![".cjs".into(), ".cts".into()]),
         ],
         condition_names,
-        main_fields: vec!["module".into(), "browser".into(), "main".into()],
+        main_fields: vec!["main".into()],
         exports_fields: vec![vec!["exports".into()]],
         imports_fields: vec![vec!["imports".into()]],
         builtin_modules: true,

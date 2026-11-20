@@ -12052,6 +12052,57 @@ go 1.24
     }
 
     #[test]
+    fn an_import_node_and_a_bundler_load_from_different_files_names_no_one_file() {
+        let temp = tempfile::tempdir().unwrap();
+        write_module_relationship_rule_repo(temp.path());
+        let fields =
+            r#"{"name":"fields","version":"1.0.0","main":"./main.js","module":"./module.js"}"#;
+        for (path, text) in [
+            ("node_modules/fields/package.json", fields),
+            ("node_modules/fields/main.js", "export const run = 1;\n"),
+            ("node_modules/fields/module.js", "export const run = 2;\n"),
+            ("src/vendored/package.json", fields),
+            ("src/vendored/main.js", "export const run = 1;\n"),
+            ("src/vendored/module.js", "export const run = 2;\n"),
+            (
+                "src/ui/package.ts",
+                "import { run } from \"fields\";\nexport const packaged = run;\n",
+            ),
+            (
+                "src/ui/vendored.ts",
+                "import { run } from \"../vendored\";\nexport const vendored = run;\n",
+            ),
+        ] {
+            write_file(&temp.path().join(path), text);
+        }
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let unresolved = diagnostics_for_rule(&json, "local/unresolved-import");
+        let from = |file: &str| {
+            unresolved
+                .iter()
+                .filter(|diagnostic| diagnostic["file"] == file)
+                .collect::<Vec<_>>()
+        };
+        assert!(
+            from("src/ui/package.ts").is_empty(),
+            "a package outside the analysed files stays external: {json:#?}"
+        );
+        let vendored = from("src/ui/vendored.ts");
+        assert!(
+            vendored.len() == 1 && diagnostic_has_evidence(vendored[0], "reason", "ModeDependent"),
+            "an analysed package whose fields name two files resolves to neither: {json:#?}"
+        );
+    }
+
+    #[test]
     fn module_relationship_setup_missing_and_determinism() {
         let temp = tempfile::tempdir().unwrap();
         write_go_relationship_setup_missing_rule_repo(temp.path());

@@ -205,6 +205,11 @@ of a package with `"type": "module"`. Elsewhere a compiler may turn the import
 into a `require`, so the import resolves only when both modes name the same
 file; otherwise it is `Unresolved` with reason `ModeDependent`.
 
+A package without `exports` loads its `main` under Node, but its `module` or
+`browser` field first under a bundler, so an import resolves only when Node
+and a bundler name the same file as well. A package specifier whose files are
+not analysed stays `External` either way, since its label is the specifier.
+
 ## Setup-Sensitive Behavior
 
 - TS/JS resolution uses `oxc_resolver` with project-aware settings such as

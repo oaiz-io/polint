@@ -560,6 +560,80 @@ fn an_import_and_a_require_of_one_package_reach_the_files_of_their_modes() {
 }
 
 #[test]
+fn a_package_whose_main_and_module_fields_differ_claims_neither_file_exactly() {
+    // Node loads `main` for an import and a require alike; a bundler loads
+    // `module` or `browser` first, so no one file is the package's.
+    let import = "import fields from \"fields\";\nfields.run();\n";
+    let require = "const fields = require(\"fields\");\nfields.run();\n";
+    let run = |text: &str| text.find("fields.run").expect("a run call");
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(
+        temp.path(),
+        &[
+            ("package.json", r#"{"name":"app","version":"1.0.0"}"#),
+            ("main.mjs", import),
+            ("main.cjs", require),
+            (
+                "node_modules/fields/package.json",
+                r#"{"name":"fields","version":"1.0.0","main":"./main.cjs","module":"./module.mjs","browser":"./browser.cjs"}"#,
+            ),
+            (
+                "node_modules/fields/main.cjs",
+                "function mainRun() {}\nmodule.exports = { run: mainRun };\n",
+            ),
+            (
+                "node_modules/fields/module.mjs",
+                "function moduleRun() {}\nexport default { run: moduleRun };\n",
+            ),
+            (
+                "node_modules/fields/browser.cjs",
+                "function browserRun() {}\nmodule.exports = { run: browserRun };\n",
+            ),
+        ],
+    );
+    let whole = whole_program_answers(temp.path());
+    let packages = [
+        (".", temp.path().to_path_buf()),
+        (
+            "node_modules/fields",
+            temp.path().join("node_modules/fields"),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, root)| {
+        let graph = package_graph_of(&root).expect("package graph");
+        (name.to_string(), root, graph)
+    })
+    .collect::<Vec<_>>();
+    let graphs = named(&packages);
+    let stitched = stitch(&graphs, &tree_of(&packages)).expect("stitch");
+    assert_eq!(stitched_portable(&stitched, &graphs), whole);
+
+    for (file, text) in [("main.mjs", import), ("main.cjs", require)] {
+        let answer = answer_in(&whole, &format!(".:{file}"), run(text));
+        assert!(
+            !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
+            "{file}: {answer:?}"
+        );
+        assert!(
+            answer
+                .targets
+                .iter()
+                .all(|target| !target.ends_with("#moduleRun") && !target.ends_with("#browserRun")),
+            "{file}: {answer:?}"
+        );
+        assert!(
+            stitched
+                .open_imports
+                .iter()
+                .any(|open| open.file == file && open.specifier == "fields"),
+            "the import of {file} is left open: {:?}",
+            stitched.open_imports
+        );
+    }
+}
+
+#[test]
 fn the_stitch_refuses_a_graph_its_budget_cut_short() {
     let temp = tempfile::tempdir().expect("tempdir");
     stage(temp.path());
