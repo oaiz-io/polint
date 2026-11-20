@@ -328,6 +328,7 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
             invocations: HashMap::new(),
             invocation_walks: 0,
             tree_walks: 0,
+            invoking: Vec::new(),
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -401,7 +402,8 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     /// every walk at one level computes the same answer. With it an input is
     /// walked at most twice while the tables do not change, and an input that
     /// comes only once costs no copy of its env. A call tree keys its walks
-    /// only after `INVOCATION_KEYING_AFTER_WALKS` of them. Emptied when the
+    /// only after `INVOCATION_KEYING_AFTER_WALKS` of them, or from its first
+    /// recursive call (see `invoking`). Emptied when the
     /// outermost walk returns, so it holds one call tree at a time. Only looked
     /// up, never iterated, so it cannot affect row order.
     invocations: HashMap<u64, Option<Box<InvocationRecord>>>,
@@ -412,6 +414,13 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     /// than wraps: it is only compared with `keying_after_walks()`, and a
     /// wrapped count would turn keying off again partway through a tree.
     tree_walks: usize,
+    /// The functions whose bodies the callee-body walks in flight are walking,
+    /// outermost first. A walk of a function already on it is a recursive
+    /// call, which is keyed in `invocations` at once: each level of a function
+    /// that calls itself `k` times multiplies the walks below it by `k`, so a
+    /// recursive call tree reaches `INVOCATION_KEYING_AFTER_WALKS` within a few
+    /// levels and every walk it makes before then is a repeat.
+    invoking: Vec<FunctionId>,
     /// Program-global positional index of every `receiver.next()` call: maps the
     /// `.next()` call's `span.start` to its 0-based ordinal among `.next()` calls
     /// on the same receiver name (in source order). Used to sequence generator
@@ -557,6 +566,7 @@ fn compute_module_export_summaries<'ast>(
                 invocations: HashMap::new(),
                 invocation_walks: 0,
                 tree_walks: 0,
+                invoking: Vec::new(),
                 iterator_next_ordinals: BTreeMap::new(),
                 iterator_next_starts: BTreeMap::new(),
                 rows: Vec::new(),
@@ -634,6 +644,7 @@ fn compute_function_return_summaries(
                 invocations: HashMap::new(),
                 invocation_walks: 0,
                 tree_walks: 0,
+                invoking: Vec::new(),
                 iterator_next_ordinals: BTreeMap::new(),
                 iterator_next_starts: BTreeMap::new(),
                 rows: Vec::new(),
@@ -4595,11 +4606,13 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // invocations run one level deeper, so a walk never meets its own input
         // while in flight. The outermost walk has nothing to reuse and nothing
         // to share, so it is not keyed, and neither are the first walks of its
-        // call tree.
+        // call tree unless they walk a function already being walked.
         let outermost = self.invocation_walks == 0;
         // A finished call tree leaves nothing for the next one to replay.
         debug_assert!(!outermost || (self.invocations.is_empty() && self.tree_walks == 0));
-        let keyed = !outermost && self.tree_walks >= keying_after_walks();
+        let keyed = !outermost
+            && (self.tree_walks >= keying_after_walks()
+                || self.invoking.contains(&flow.function.id));
         let key = keyed.then(|| {
             let input = InvocationInput {
                 function: flow.function.id,
@@ -4651,6 +4664,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let walks_before = self.tree_walks;
         self.invocation_depth += 1;
         self.invocation_walks += 1;
+        self.invoking.push(flow.function.id);
         self.tree_walks = self.tree_walks.saturating_add(1);
         // Calls in the invoked body belong to `flow.function`, which is the
         // owner every model row emitted from it names.
@@ -4660,6 +4674,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         } else {
             self.collect_invocation_statements(&flow.body.statements, flow.function, env)
         };
+        self.invoking.pop();
         self.invocation_walks -= 1;
         self.invocation_depth -= 1;
         match (key, env_before) {
