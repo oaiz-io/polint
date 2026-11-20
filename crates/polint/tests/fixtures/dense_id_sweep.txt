@@ -2,7 +2,7 @@
 # Regenerate: POLINT_UPDATE_DENSE_ID_BASELINE=1 cargo test -p polint --test internal_architecture dense_id_sweep --locked
 # Entry: <sha256 of (repo-relative path, enclosing fn/impl item, whitespace-collapsed line)>  <command>  <scope>  <count>
 # dot0: 159 hits, 41 test-only, 118 non-test
-# debug: 646 hits, 301 test-only, 345 non-test
+# debug: 649 hits, 304 test-only, 345 non-test
 # raw: 0 hits, 0 test-only, 0 non-test
 # other-debug: 134 hits, 134 test-only, 0 non-test
 0038500d6decf3dbeb069116d00d773912c3b88e191bbf9f87efeb9a70451dd1  debug  non-test  1
@@ -355,6 +355,7 @@
 654ba9fab85af94b9c0ee84b423228101336a67f103cd7dec1a0c4b860fd5eb5  dot0  non-test  1
 65a836afe5aa1f91fffc2e28c4c03d1ef288aa1af3bdd528c68ed02c33bc1ebd  other-debug  test  1
 65af18ae8872a9e2e3220fbd5c102cf1ef06d7a8a0259d91f8a4f7b6857f27ff  debug  test  1
+65f6477ac6ebb84eceb6a3e2493914bafa0bc293701e7e2b1fb572cbb85495d7  debug  test  1
 676d8c07295b358c498f3f2fb0bf408a6a696ae67c07015996b3b4bee5721e63  debug  test  1
 677507739aa8c60d37ace8abe9d6021b360bbbc56262bcb2fd615acd5328cf9f  debug  test  1
 678e84f93841bb820e359e217c5364d51e94e7c65bd655ade3ece6d06a305880  debug  non-test  1
@@ -555,6 +556,7 @@
 9e1b074a16c37f052358b99bd0b1c80067eb2e5382b42492987407e6e508ed54  other-debug  test  1
 9e23f4366495aaf109639b61bcdbc9819e893665f991b9b5d2b71f8e9eaa301a  debug  non-test  1
 9e5b20c45cc2a03313b1ac431c24cf229a8f6da14498a40e99345f1b7925e200  debug  non-test  1
+9edde5b2a887f1c853db1b72b9ec7171f4036f56aa4659ac35fd34e37798b3e8  debug  test  1
 9ee928b759656d714bb7845ab4bfcdf492967f91992afe2bba66b3f62fe15366  debug  non-test  1
 9f0102dbfc18fec074b0e781b71845cab5b4d230af56d6b85f9079cf0dd06aba  debug  test  1
 9f7a480be9615f5b4f3b1b48e29efdd3ac285a0fd53162f90869abbaedede09d  debug  test  1
@@ -673,6 +675,7 @@ c35710e93ae137a37eced6369b1d8ff4a2f80b00f8665bf8515a5aa94970263c  debug  non-tes
 c37141269791a11d8252884f57c43254602c943500d31f206c97cad0f3e772b5  debug  test  3
 c3a759e74a1227a475c588aa42e365ef6affd5980a07e77e85a45ee339c6b64c  debug  non-test  1
 c48d9eddcb2d17bd09ee23a7c26349469ea744e2af141d30cc721b181c707279  debug  test  1
+c4c2ad2ab15d250db013a628239492c1ee2d6860573bdfe1592c837ee853da08  debug  test  1
 c4d255a1b21bf4f86bfdc11018860aabf0deefd57d87bc744bcf82240acfe0c2  debug  non-test  1
 c5138425c33985cfd5ef794b02cd970a08bf796f0d3118ff134b2a470c596dda  debug  non-test  1
 c54da245d8bcf3589cbb3021434be8b3b872f1d1df984b91d5df1aef312c29e0  debug  non-test  1

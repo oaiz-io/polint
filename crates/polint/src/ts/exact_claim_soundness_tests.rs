@@ -449,3 +449,33 @@ fn a_call_of_a_property_a_defined_setter_takes_claims_no_wrong_target() {
     let targets = exact_targets("defined-setter.cjs", source, "o.w()");
     assert!(targets == none() || targets == only("b"), "{targets:?}");
 }
+
+/// Node prints `b`: in sloppy code `arguments[0]` and the parameter are one
+/// binding, so the store replaces the function the caller passed.
+#[test]
+fn a_call_of_a_parameter_arguments_writes_claims_no_wrong_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  function g(f){ arguments[0]=b; f(); } g(a);\n";
+    let targets = exact_targets("arguments-write.cjs", source, "f()");
+    assert!(targets == none() || targets == only("b"), "{targets:?}");
+}
+
+/// Node prints `b`: the other way round, an assignment to the parameter is
+/// read through `arguments`.
+#[test]
+fn a_call_through_arguments_of_a_written_parameter_claims_no_wrong_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  function g(f){ f=b; arguments[0](); } g(a);\n";
+    let targets = exact_targets("arguments-read.cjs", source, "arguments[0]()");
+    assert!(targets == none() || targets == only("b"), "{targets:?}");
+}
+
+/// Node prints `b`: the `arguments` object escapes to a function that writes
+/// the parameter through it.
+#[test]
+fn a_call_of_a_parameter_whose_arguments_escape_claims_no_wrong_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  function w(x){ x[0]=b; } function g(f){ w(arguments); f(); } g(a);\n";
+    let targets = exact_targets("arguments-escape.cjs", source, "f()");
+    assert!(targets == none() || targets == only("b"), "{targets:?}");
+}
