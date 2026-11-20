@@ -338,9 +338,7 @@ impl GraphBuilder {
                 | ConstraintKind::TypeConstraint { .. }
                 | ConstraintKind::Invocation { .. } => true,
             });
-        for (kind, identity) in constraints {
-            self.push_constraint(interner, kind, &identity);
-        }
+        self.inner.push_constraints(interner, constraints);
     }
 
     /// A place of the value flow that stands for no MIR place.

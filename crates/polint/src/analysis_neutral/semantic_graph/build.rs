@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::analysis_api::{FactFamily, FunctionFact, PackageFact};
+use rayon::prelude::*;
+
+use crate::analysis_api::{FactFamily, FunctionFact, PackageFact, stable_key_text_from_parts};
 use crate::internal_core::{StableKeyId, StableKeyInterner};
 
 use crate::analysis_neutral::AnalysisHost;
@@ -169,6 +171,37 @@ impl SemanticGraphBuilder {
             precision,
             stable_key,
         });
+    }
+
+    /// Pushes flow-insensitive constraints in the order given. Their keys are
+    /// written in parallel and interned in that order, so the interner sees the
+    /// keys a push of each one would give.
+    pub(crate) fn push_constraints(
+        &mut self,
+        interner: &StableKeyInterner,
+        constraints: Vec<(ConstraintKind, String)>,
+    ) {
+        let keys = constraints
+            .par_iter()
+            .map(|(kind, identity)| {
+                stable_key_text_from_parts(
+                    FactFamily::PointsToConstraint,
+                    &[
+                        ("constraint_kind", kind.as_str()),
+                        ("identity", identity.as_str()),
+                    ],
+                )
+            })
+            .collect::<Vec<_>>();
+        for ((kind, _), key) in constraints.into_iter().zip(keys) {
+            self.constraints.push(ConstraintFact {
+                id: Default::default(),
+                kind,
+                status: PointsToStatus::Present,
+                precision: PointsToPrecision::FlowInsensitive,
+                stable_key: interner.intern(key),
+            });
+        }
     }
 
     /// Resolves a pre-sort node id back to its stable key in O(1) via the

@@ -223,7 +223,8 @@ impl<'a> Solve<'a> {
     fn edge(&mut self, src: usize, dst: usize) {
         if src != dst && self.edges.insert((src, dst)) {
             self.successors[src].push(dst);
-            for token in self.sets[src].clone() {
+            let tokens = self.sets[src].iter().copied().collect::<Vec<_>>();
+            for token in tokens {
                 self.add(dst, token);
             }
         }
@@ -498,18 +499,25 @@ impl<'a> Solve<'a> {
     fn propagate(&mut self) {
         while let Some(node) = self.queue.pop_front() {
             let delta = std::mem::take(&mut self.delta[node]);
+            // Loads, stores and calls are fixed once seeded, so the node's
+            // lists are set aside while its tokens run. Successors may grow:
+            // a new one receives the whole set when its edge is added.
+            let loads = std::mem::take(&mut self.loads_by_base[node]);
+            let stores = std::mem::take(&mut self.stores_by_base[node]);
+            let calls = std::mem::take(&mut self.calls_by_callee[node]);
             for token in delta {
-                for dst in self.successors[node].clone() {
+                for index in 0..self.successors[node].len() {
+                    let dst = self.successors[node][index];
                     self.add(dst, token);
                 }
-                for load in self.loads_by_base[node].clone() {
+                for &load in &loads {
                     self.load(load, token);
                 }
-                for store in self.stores_by_base[node].clone() {
+                for &store in &stores {
                     self.store(store, token);
                 }
-                for call in self.calls_by_callee[node].clone() {
-                    self.call(&call, token);
+                for call in &calls {
+                    self.call(call, token);
                 }
                 if node == self.sink {
                     self.boundary(token, true);
@@ -518,6 +526,9 @@ impl<'a> Solve<'a> {
                     self.boundary(token, false);
                 }
             }
+            self.loads_by_base[node] = loads;
+            self.stores_by_base[node] = stores;
+            self.calls_by_callee[node] = calls;
         }
     }
 
