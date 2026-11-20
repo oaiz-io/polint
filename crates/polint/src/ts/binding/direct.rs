@@ -1,6 +1,6 @@
 #![allow(dead_code, reason = "kept for private internal consumers")]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis_api::{
     ImportFact, ModuleNode, ModuleNodeKind, ResolutionStatus, ResolvedImportFact,
@@ -543,23 +543,41 @@ impl<'a> ModuleBindingIndex<'a> {
         module_node: ModuleNodeId,
         export_name: &str,
     ) -> Option<ModuleFunctionTarget<'a>> {
-        self.exported_function_inner(module_node, export_name, 0)
+        let mut search = ExportSearch::default();
+        let found = self.exported_function_inner(module_node, export_name, 0, &mut search);
+        found.filter(|_| !search.exhausted)
     }
 
+    /// The function `module_node` exports as `export_name`, following its
+    /// re-exports. Each module and name is searched once: a second search
+    /// finds what the first did not. Past nine hops or [`MAX_EXPORT_LOOKUPS`]
+    /// lookups the search stops with no answer, as a later match would stand
+    /// in for one the cut branch might have found first.
     fn exported_function_inner(
         &self,
         module_node: ModuleNodeId,
         export_name: &str,
         depth: usize,
+        search: &mut ExportSearch,
     ) -> Option<ModuleFunctionTarget<'a>> {
-        if depth > 8 {
+        if search.exhausted {
+            return None;
+        }
+        if depth > 8 || search.seen.len() >= MAX_EXPORT_LOOKUPS {
+            search.exhausted = true;
+            return None;
+        }
+        if !search.seen.insert((module_node, export_name.to_string())) {
             return None;
         }
 
         let module = self.module_file_by_node.get(&module_node)?;
+        let mut explicit = false;
         for binding in &module.scope.bindings {
-            if binding.exported_name.as_deref() == Some(export_name)
-                && let Some(function_key) = binding.inventory_function_key
+            if binding.exported_name.as_deref() != Some(export_name) {
+                continue;
+            }
+            if let Some(function_key) = binding.inventory_function_key
                 && let Some(declaration) = module
                     .inventory
                     .functions
@@ -576,8 +594,7 @@ impl<'a> ModuleBindingIndex<'a> {
                     via_reexport: false,
                 });
             }
-            if binding.exported_name.as_deref() == Some(export_name)
-                && binding.module_source.is_none()
+            if binding.module_source.is_none()
                 && let Some(imported_name) = binding.imported_name.as_deref()
                 && let Some(function) = function_for_local_export(
                     module.inventory,
@@ -592,32 +609,79 @@ impl<'a> ModuleBindingIndex<'a> {
                     via_reexport: false,
                 });
             }
-            if matches!(binding.binding_kind, TsBindingKind::ReExport)
-                && (binding.exported_name.as_deref() == Some(export_name)
-                    || binding.exported_name.as_deref() == Some("*"))
-                && let Some(source) = binding.module_source.as_ref()
-                && let Some(reexport) = self
-                    .resolved_by_file_source
-                    .get(&(binding.file, source.clone()))
-                && reexport.status == ResolutionStatus::Resolved
-                && let Some(target_node) = reexport.target_node
-            {
-                let target_name = binding
-                    .imported_name
-                    .as_deref()
-                    .filter(|name| *name != "*")
-                    .unwrap_or(export_name);
-                if let Some(mut function) =
-                    self.exported_function_inner(target_node, target_name, depth + 1)
+            if let Some(function) = self.reexported_function(binding, export_name, depth, search) {
+                return Some(function);
+            }
+            explicit = true;
+        }
+        // A name the module exports itself hides the `export *` ones, and two
+        // `export *` that give one name different bindings give it none.
+        if explicit {
+            return None;
+        }
+        let mut found: Option<ModuleFunctionTarget<'a>> = None;
+        for binding in &module.scope.bindings {
+            if binding.exported_name.as_deref() != Some("*") {
+                continue;
+            }
+            let Some(function) = self.reexported_function(binding, export_name, depth, search)
+            else {
+                continue;
+            };
+            match &found {
+                Some(first)
+                    if first.module_node != function.module_node
+                        || first.function.stable_key != function.function.stable_key =>
                 {
-                    function.via_reexport = true;
-                    return Some(function);
+                    search.exhausted = true;
+                    return None;
                 }
+                Some(_) => {}
+                None => found = Some(function),
             }
         }
-
-        None
+        found.filter(|_| !search.exhausted)
     }
+
+    /// The function the re-export `binding` gives `export_name`, where it is
+    /// a re-export of a resolved module.
+    fn reexported_function(
+        &self,
+        binding: &TsBindingFact,
+        export_name: &str,
+        depth: usize,
+        search: &mut ExportSearch,
+    ) -> Option<ModuleFunctionTarget<'a>> {
+        if !matches!(binding.binding_kind, TsBindingKind::ReExport) {
+            return None;
+        }
+        let source = binding.module_source.as_ref()?;
+        let reexport = self
+            .resolved_by_file_source
+            .get(&(binding.file, source.clone()))?;
+        if reexport.status != ResolutionStatus::Resolved {
+            return None;
+        }
+        let target_node = reexport.target_node?;
+        let target_name = binding
+            .imported_name
+            .as_deref()
+            .filter(|name| *name != "*")
+            .unwrap_or(export_name);
+        let mut function =
+            self.exported_function_inner(target_node, target_name, depth + 1, search)?;
+        function.via_reexport = true;
+        Some(function)
+    }
+}
+
+/// Bound on the module and name pairs one export search looks up.
+const MAX_EXPORT_LOOKUPS: usize = 512;
+
+#[derive(Default)]
+struct ExportSearch {
+    seen: BTreeSet<(ModuleNodeId, String)>,
+    exhausted: bool,
 }
 
 struct ModuleFunctionTarget<'a> {

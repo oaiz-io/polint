@@ -1899,6 +1899,11 @@ const BUNDLER_MAIN_FIELDS: &[&str] = &["module", "main"];
 #[cfg(feature = "lang-typescript")]
 const BROWSER_MAIN_FIELDS: &[&str] = &["browser", "module", "main"];
 
+/// The most importer and specifier pairs one resolution follows through the
+/// targets of condition maps.
+#[cfg(feature = "lang-typescript")]
+const MAX_FOLLOWED_ALTERNATIVES: usize = 64;
+
 /// The `exports` conditions of one mode: its own condition and the shared
 /// ones, so an `exports` map that names both modes gives each its file.
 #[cfg(feature = "lang-typescript")]
@@ -2080,6 +2085,23 @@ impl ModeResolvers {
 
     /// The answer every loader gives `specifier` in `mode`, or `Split`.
     fn resolve_in(&self, importer: &Path, specifier: &str, mode: LoadMode) -> ModeResolution {
+        self.resolve_alternatives(importer, specifier, mode, &mut BTreeSet::new())
+    }
+
+    /// [`Self::resolve_in`], where `seen` holds the importers and specifiers
+    /// already followed. A target of a condition map may name another
+    /// specifier, even the one it came from; each pair is followed once, as
+    /// its files are already among the answers where it was first followed.
+    /// Past [`MAX_FOLLOWED_ALTERNATIVES`] pairs the answer is `Split`, an
+    /// open answer, so a crafted manifest cannot make the walk deep or long.
+    fn resolve_alternatives(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        mode: LoadMode,
+        seen: &mut BTreeSet<(PathBuf, String)>,
+    ) -> ModeResolution {
+        seen.insert((importer.to_path_buf(), specifier.to_string()));
         let loaders = match mode {
             LoadMode::Import => &self.import,
             LoadMode::Require => &self.require,
@@ -2100,7 +2122,14 @@ impl ModeResolvers {
         };
         let mut paths = Vec::new();
         for (root, target) in targets {
-            match self.resolve_in(&root.join("package.json"), &target, mode) {
+            let importer = root.join("package.json");
+            if seen.contains(&(importer.clone(), target.clone())) {
+                continue;
+            }
+            if seen.len() >= MAX_FOLLOWED_ALTERNATIVES {
+                return ModeResolution::Split(vec![resolution.into_path_buf()]);
+            }
+            match self.resolve_alternatives(&importer, &target, mode, seen) {
                 ModeResolution::One(Ok(other)) if other.path() == resolution.path() => {}
                 ModeResolution::One(Ok(other)) => paths.push(other.into_path_buf()),
                 ModeResolution::One(Err(_)) => {}

@@ -826,6 +826,179 @@ fn a_conditional_package_import_claims_neither_file_exactly() {
     );
 }
 
+/// A target of an `imports` or `exports` map may name the specifier it
+/// came from, directly or through another package. Node fails to load such a
+/// branch and takes the other; the resolver follows each alternative once.
+#[test]
+fn a_cycle_in_an_inactive_conditional_branch_resolves_the_active_target() {
+    let import = "import { f } from \"#entry\";\nf();\nimport { f as g } from \"#a\";\ng();\nimport x from \"x\";\nx.run();\n";
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(
+        temp.path(),
+        &[
+            (
+                "package.json",
+                r##"{"name":"app","version":"1.0.0","imports":{"#entry":{"worker":"#entry","default":"./target.mjs"},"#a":{"worker":"#b","default":"./target.mjs"},"#b":{"worker":"#a","default":"./target.mjs"}}}"##,
+            ),
+            ("main.mjs", import),
+            ("target.mjs", "export function f() {}\n"),
+            (
+                "node_modules/x/package.json",
+                r#"{"name":"x","version":"1.0.0","exports":{"worker":"y","default":"./x.cjs"}}"#,
+            ),
+            (
+                "node_modules/x/x.cjs",
+                "function xRun() {}\nmodule.exports = { run: xRun };\n",
+            ),
+            (
+                "node_modules/y/package.json",
+                r#"{"name":"y","version":"1.0.0","exports":{"worker":"x","default":"./y.cjs"}}"#,
+            ),
+            (
+                "node_modules/y/y.cjs",
+                "function yRun() {}\nmodule.exports = { run: yRun };\n",
+            ),
+        ],
+    );
+    let whole = whole_program_answers(temp.path());
+    let f = answer_in(&whole, ".:main.mjs", import.find("f()").expect("a call"));
+    assert!(
+        f.targets.iter().any(|target| target.ends_with("#f")),
+        "{f:?}"
+    );
+    let g = answer_in(&whole, ".:main.mjs", import.find("g()").expect("a call"));
+    assert!(
+        g.targets.iter().any(|target| target.ends_with("#f")),
+        "{g:?}"
+    );
+    let run = answer_in(&whole, ".:main.mjs", import.find("x.run").expect("a call"));
+    assert!(
+        run.targets.iter().any(|target| target.ends_with("#xRun")),
+        "{run:?}"
+    );
+}
+
+/// Re-exports and `require` chains may name each other in a cycle, and a
+/// chain or a lattice of re-exports may be long. Node rejects or settles
+/// each of them; the analysis finishes and keeps the target it can name.
+#[test]
+fn cycles_and_long_chains_of_modules_and_configs_finish() {
+    const CHAIN: usize = 64;
+    let main = "import { f } from \"./star-a.mjs\";\nf();\nimport { g } from \"./named-a.mjs\";\ng();\nimport * as ns from \"./ns-a.mjs\";\nns.ns.ns.h();\nimport { deep } from \"./chain/m0.mjs\";\ndeep();\nimport { wide } from \"./fan/l0_0.mjs\";\nwide();\nimport { shadow } from \"./shadow-a.mjs\";\nshadow();\n";
+    let mut chain = (0..CHAIN)
+        .map(|index| {
+            (
+                format!("chain/m{index}.mjs"),
+                format!("export * from \"./m{}.mjs\";\n", index + 1),
+            )
+        })
+        .collect::<Vec<_>>();
+    chain.push((
+        format!("chain/m{CHAIN}.mjs"),
+        "export function deep() {}\n".to_string(),
+    ));
+    // Every file of a level re-exports every file of the next one, so the
+    // paths through the levels are many more than the files.
+    const LEVELS: usize = 12;
+    const WIDTH: usize = 12;
+    for level in 0..LEVELS {
+        for index in 0..WIDTH {
+            let text = (0..WIDTH)
+                .map(|next| format!("export * from \"./l{}_{next}.mjs\";\n", level + 1))
+                .collect::<String>();
+            chain.push((format!("fan/l{level}_{index}.mjs"), text));
+        }
+    }
+    for index in 0..WIDTH {
+        let text = if index == WIDTH - 1 {
+            "export function wide() {}\n"
+        } else {
+            ""
+        };
+        chain.push((format!("fan/l{LEVELS}_{index}.mjs"), text.to_string()));
+    }
+    let mut files = vec![
+        ("package.json", r#"{"name":"app","version":"1.0.0"}"#),
+        ("main.mjs", main),
+        (
+            "star-a.mjs",
+            "export * from \"./star-b.mjs\";\nexport function f() {}\n",
+        ),
+        ("star-b.mjs", "export * from \"./star-a.mjs\";\n"),
+        ("named-a.mjs", "export { g } from \"./named-b.mjs\";\n"),
+        ("named-b.mjs", "export { g } from \"./named-a.mjs\";\n"),
+        (
+            "ns-a.mjs",
+            "export * as ns from \"./ns-a.mjs\";\nexport function h() {}\n",
+        ),
+        (
+            "shadow-a.mjs",
+            "export * from \"./shadow-b.mjs\";\nexport function shadow() {}\n",
+        ),
+        ("shadow-b.mjs", "export function shadow() {}\n"),
+        ("req-a.cjs", "module.exports = require(\"./req-b.cjs\");\n"),
+        ("req-b.cjs", "module.exports = require(\"./req-a.cjs\");\n"),
+        ("req.cjs", "const r = require(\"./req-a.cjs\");\nr.run();\n"),
+        (
+            "types.ts",
+            "import { k } from \"./types-b\";\nexport { k };\nk();\n",
+        ),
+        ("types-b.ts", "export { k } from \"./types\";\n"),
+    ];
+    files.extend(
+        chain
+            .iter()
+            .map(|(path, text)| (path.as_str(), text.as_str())),
+    );
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(temp.path(), &files);
+    let whole = whole_program_answers(temp.path());
+    for (call, target) in [
+        ("f()", ".:star-a.mjs@"),
+        ("ns.ns.ns.h()", ".:ns-a.mjs@"),
+        ("wide()", ".:fan/l12_11.mjs@"),
+        ("shadow()", ".:shadow-a.mjs@"),
+        ("deep()", ".:chain/"),
+    ] {
+        let answer = answer_in(&whole, ".:main.mjs", main.find(call).expect("a call"));
+        assert!(
+            answer.targets.iter().all(|name| name.starts_with(target)),
+            "{call}: {answer:?}"
+        );
+        assert!(
+            call == "deep()" || !answer.targets.is_empty(),
+            "{call}: {answer:?}"
+        );
+    }
+}
+
+/// TypeScript rejects a `tsconfig.json` whose `extends` come back to it;
+/// the analysis finishes and links no import through it.
+#[test]
+fn a_cycle_of_tsconfig_extends_finishes() {
+    let main = "import { f } from \"./lib\";\nf();\n";
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(
+        temp.path(),
+        &[
+            ("package.json", r#"{"name":"app","version":"1.0.0"}"#),
+            ("tsconfig.json", r#"{"extends":"./base.json"}"#),
+            ("base.json", r#"{"extends":"./tsconfig.json"}"#),
+            ("main.ts", main),
+            ("lib.ts", "export function f() {}\n"),
+        ],
+    );
+    let whole = whole_program_answers(temp.path());
+    let answer = answer_in(&whole, ".:main.ts", main.find("f()").expect("a call"));
+    assert!(
+        answer
+            .targets
+            .iter()
+            .all(|name| name.starts_with(".:lib.ts@")),
+        "{answer:?}"
+    );
+}
+
 #[test]
 fn the_stitch_refuses_a_graph_its_budget_cut_short() {
     let temp = tempfile::tempdir().expect("tempdir");
