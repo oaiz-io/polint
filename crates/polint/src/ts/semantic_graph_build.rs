@@ -21,6 +21,8 @@ use std::sync::Arc;
 use oxc_allocator::Allocator;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 use oxc_semantic::SemanticBuilder;
+#[cfg(feature = "lang-typescript")]
+use rayon::prelude::*;
 
 use crate::analysis_api::FactFamily;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
@@ -315,6 +317,16 @@ fn collect_ts_file_analyses(
         .iter()
         .filter(|file| file.language.is_ts_family())
         .collect::<Vec<_>>();
+    // An Oxc tree cannot cross threads, so each file is analyzed on the thread
+    // that parses it, and the trees the callable flows read are parsed again.
+    let analyses = files
+        .par_iter()
+        .map(|file| {
+            let arena = Allocator::default();
+            let parsed = parse_ts_file(&arena, file);
+            crate::ts::semantic_graph::analyze_parsed_ts_file(&interner, file, &parsed)
+        })
+        .collect();
     let arenas = files
         .iter()
         .map(|_| Allocator::default())
@@ -324,13 +336,6 @@ fn collect_ts_file_analyses(
         .zip(&arenas)
         .map(|(file, arena)| parse_ts_file(arena, file))
         .collect::<Vec<_>>();
-    let analyses = files
-        .iter()
-        .zip(&parsed)
-        .map(|(file, parsed)| {
-            crate::ts::semantic_graph::analyze_parsed_ts_file(&interner, file, parsed)
-        })
-        .collect();
     let programs = files
         .iter()
         .zip(&parsed)
