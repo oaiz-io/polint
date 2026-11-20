@@ -73,7 +73,7 @@ mod value_flow;
 /// the default dense ID and a composed stable key. The caller runs `normalized()` and
 /// `SemanticGraphStore::from_output` to sort by stable key and assign dense IDs.
 #[cfg(all(test, feature = "lang-typescript"))]
-pub(crate) fn build_semantic_graph(db: &impl AnalysisHost) -> SemanticGraphOutput {
+pub(crate) fn build_semantic_graph(db: &(impl AnalysisHost + Sync)) -> SemanticGraphOutput {
     let ts_direct_bindings = collect_ts_direct_binding_collection(db);
     build_semantic_graph_with_ts_direct_binding_collection(
         db,
@@ -288,7 +288,7 @@ impl TsDirectBindingCollection {
 }
 
 pub(crate) fn collect_ts_direct_binding_collection(
-    db: &impl AnalysisHost,
+    db: &(impl AnalysisHost + Sync),
 ) -> TsDirectBindingCollection {
     let (analyses, callable_flows) = collect_ts_file_analyses(db);
     let output = collect_ts_direct_bindings_from_analyses(db, &analyses);
@@ -306,7 +306,9 @@ pub(crate) fn collect_ts_direct_bindings(db: &impl AnalysisHost) -> TsDirectBind
 }
 
 #[cfg(feature = "lang-typescript")]
-fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
+fn collect_ts_file_analyses(
+    db: &(impl AnalysisHost + Sync),
+) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
     let interner = db.stable_key_interner();
     let files = db
         .files()
@@ -340,7 +342,9 @@ fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec
 }
 
 #[cfg(not(feature = "lang-typescript"))]
-fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
+fn collect_ts_file_analyses(
+    db: &(impl AnalysisHost + Sync),
+) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
     let interner = db.stable_key_interner();
     let analyses = db
         .files()

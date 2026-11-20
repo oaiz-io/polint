@@ -130,3 +130,98 @@ fn the_graph_answers_every_call_site_it_holds() {
         assert!(site.targets.iter().all(|target| *target < count));
     }
 }
+
+/// Eight factories, one per file, each returning an object whose methods come
+/// from a prototype module. The calls in `main.js` reach those methods only
+/// through the summary of what each factory returns.
+fn stage_factories(into: &Path) {
+    std::fs::write(
+        into.join("package.json"),
+        r#"{"name":"factories","main":"main.js"}"#,
+    )
+    .expect("write package.json");
+    let mut main = String::new();
+    for i in 0..8 {
+        std::fs::write(
+            into.join(format!("proto{i}.js")),
+            format!("exports.handle{i} = function handle{i}() {{ return {i}; }};\n"),
+        )
+        .expect("write prototype");
+        std::fs::write(
+            into.join(format!("factory{i}.js")),
+            format!(
+                "var proto = require(\"./proto{i}\");\n\
+                 module.exports = function make{i}() {{\n  var app = {{}};\n  \
+                 Object.assign(app, proto);\n  return app;\n}};\n"
+            ),
+        )
+        .expect("write factory");
+        main.push_str(&format!(
+            "var make{i} = require(\"./factory{i}\");\nvar app{i} = make{i}();\napp{i}.handle{i}();\n"
+        ));
+    }
+    std::fs::write(into.join("main.js"), main).expect("write main.js");
+}
+
+/// The functions `main.js` calls in the package graph exported from `root`
+/// on `threads` threads, as `(name, file)` pairs, with the graph itself.
+fn targets_called_from_main(root: &Path, threads: usize) -> (Vec<(String, String)>, String) {
+    let text = exported(root, threads);
+    let graph: serde_json::Value = serde_json::from_str(&text).expect("graph parses");
+    let function = |node: &serde_json::Value| {
+        graph["functions"]
+            .as_array()
+            .expect("functions")
+            .iter()
+            .find(|function| &function["node"] == node)
+            .map(|function| {
+                (
+                    function["name"].as_str().expect("name").to_string(),
+                    function["identity"]["path"]
+                        .as_str()
+                        .expect("path")
+                        .to_string(),
+                )
+            })
+            .expect("target is a function of the graph")
+    };
+    let mut targets = Vec::new();
+    for site in graph["sites"].as_array().expect("sites") {
+        let callsite = graph["callsites"]
+            .as_array()
+            .expect("callsites")
+            .iter()
+            .find(|callsite| callsite["node"] == site["callsite"])
+            .expect("site names a callsite");
+        if function(&callsite["caller"]).1 != "main.js" {
+            continue;
+        }
+        for target in site["targets"].as_array().expect("targets") {
+            targets.push(function(target));
+        }
+    }
+    targets.sort();
+    (targets, text)
+}
+
+#[test]
+fn return_summaries_across_files_do_not_depend_on_the_thread_count() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    stage_factories(dir.path());
+    let (one, one_graph) = targets_called_from_main(dir.path(), 1);
+    let handlers = one
+        .iter()
+        .filter(|(name, _)| name.starts_with("handle"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let expected = (0..8)
+        .map(|i| (format!("handle{i}"), format!("proto{i}.js")))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        handlers, expected,
+        "each call reaches the method its factory returns"
+    );
+    let (eight, eight_graph) = targets_called_from_main(dir.path(), 8);
+    assert_eq!(one, eight);
+    assert_eq!(one_graph, eight_graph);
+}
