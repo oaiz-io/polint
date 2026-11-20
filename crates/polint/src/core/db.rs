@@ -6446,11 +6446,12 @@ impl AnalysisDb {
     }
 
     fn refresh_semantic_graph_metadata(&mut self) {
+        use rayon::prelude::*;
         self.fact_meta.remove_family(FactFamily::SemanticGraph);
         let interner = self.stable_key_interner();
         let mut stable_keys = self
             .semantic_nodes()
-            .iter()
+            .par_iter()
             .map(|row| {
                 format!(
                     "node|{}|{}|{}",
@@ -6460,7 +6461,7 @@ impl AnalysisDb {
                 )
             })
             .collect::<Vec<_>>();
-        stable_keys.extend(self.semantic_edges().iter().map(|row| {
+        stable_keys.par_extend(self.semantic_edges().par_iter().map(|row| {
             format!(
                 "edge|{}|{}|{}",
                 interner.resolve(row.stable_key),
@@ -6468,7 +6469,7 @@ impl AnalysisDb {
                 row.precision.as_str()
             )
         }));
-        stable_keys.extend(self.semantic_constraints().iter().map(|row| {
+        stable_keys.par_extend(self.semantic_constraints().par_iter().map(|row| {
             format!(
                 "constraint|{}|{}|{:?}|{:?}",
                 interner.resolve(row.stable_key),
@@ -6477,10 +6478,14 @@ impl AnalysisDb {
                 row.precision
             )
         }));
-        stable_keys.sort();
+        // Rows that compare equal are identical text, so an unstable sort
+        // orders them exactly as a stable one would.
+        stable_keys.par_sort_unstable();
+        let stable_rows = stable_keys.join("\n");
+        drop(stable_keys);
         let aggregate_text = stable_key_text_from_parts(
             FactFamily::SemanticGraph,
-            &[("rows", stable_keys.join("\n"))],
+            &[("rows", stable_rows.as_str())],
         );
         let aggregate_key = interner.intern(aggregate_text);
         let metadata = fact_meta_from_stable_key(
@@ -6493,7 +6498,7 @@ impl AnalysisDb {
                 ("nodes", self.semantic_nodes().len().to_string()),
                 ("edges", self.semantic_edges().len().to_string()),
                 ("constraints", self.semantic_constraints().len().to_string()),
-                ("stable_rows", stable_keys.join("\n")),
+                ("stable_rows", stable_rows),
             ]),
         );
         self.record_fact_meta(FactFamily::SemanticGraph, 0, metadata);
