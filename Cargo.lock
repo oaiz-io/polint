@@ -1210,6 +1210,7 @@ dependencies = [
  "assert_cmd",
  "cc",
  "clap",
+ "foldhash 0.2.0",
  "globset",
  "ignore",
  "insta",

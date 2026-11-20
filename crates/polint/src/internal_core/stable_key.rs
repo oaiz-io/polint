@@ -32,7 +32,10 @@ impl StableKeyId {
 #[derive(Debug, Default)]
 struct StableKeyInternerState {
     keys: Vec<Arc<str>>,
-    ids: HashMap<Arc<str>, StableKeyId>,
+    /// Hashed with foldhash, seeded per process: ids come from `keys`, so the
+    /// map's order never reaches an id, and every new key is hashed more than
+    /// once on its way in.
+    ids: HashMap<Arc<str>, StableKeyId, foldhash::fast::RandomState>,
 }
 
 impl StableKeyInternerState {

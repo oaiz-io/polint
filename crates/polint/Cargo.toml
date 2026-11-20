@@ -26,6 +26,7 @@ bench = ["all-languages"]
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+foldhash.workspace = true
 globset.workspace = true
 ignore.workspace = true
 json-strip-comments.workspace = true
