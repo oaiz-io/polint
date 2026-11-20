@@ -20,6 +20,7 @@ use crate::internal_core::{
     SymbolId as PolintSymbolId,
 };
 use crate::ts::parse::parse_ts_file;
+use crate::ts::sealed_bindings::{bindings_written_by_block_functions, file_bindings_are_sealed};
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
@@ -496,12 +497,7 @@ fn add_ts_value_function_rows(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
 ) {
-    let bindings_are_sealed = !nodes.iter().any(|node| match node.kind() {
-        AstKind::IdentifierReference(identifier) => identifier.name == "eval",
-        AstKind::WithStatement(_) => true,
-        _ => false,
-    });
-    if !bindings_are_sealed {
+    if !file_bindings_are_sealed(nodes) {
         return;
     }
     let root_is_module_scope = program.body.iter().any(Statement::is_module_declaration);
@@ -561,54 +557,6 @@ fn add_ts_value_function_rows(
             kind,
         });
     }
-}
-
-/// Bindings whose value a function declaration in a nested block of non-strict
-/// code decides in a way no Oxc reference shows.
-///
-/// When such a block runs, its function is also assigned to the same-named
-/// binding of the enclosing function scope. Oxc keeps the block's function a
-/// separate symbol when that scope already binds the name, so the outer symbol
-/// is written without a write reference. Otherwise Oxc moves the block's
-/// function into the function scope, which is wrong when a scope between the
-/// two binds the name: the function then stays in its block.
-fn bindings_written_by_block_functions(
-    scoping: &Scoping,
-    nodes: &AstNodes<'_>,
-) -> BTreeSet<OxcSymbolId> {
-    let mut written = BTreeSet::new();
-    for node in nodes.iter() {
-        let AstKind::Function(function) = node.kind() else {
-            continue;
-        };
-        let Some(id) = &function.id else {
-            continue;
-        };
-        let Some(symbol) = id.symbol_id.get() else {
-            continue;
-        };
-        let scope = scoping.symbol_scope_id(symbol);
-        if scoping.scope_flags(scope).is_strict_mode() {
-            continue;
-        }
-        let outer = scoping
-            .scope_ancestors(scope)
-            .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
-            .and_then(|function_scope| scoping.get_binding(function_scope, id.name));
-        if let Some(outer) = outer.filter(|outer| *outer != symbol) {
-            written.insert(outer);
-        }
-        let declared_in = node.scope_id();
-        if function.is_declaration()
-            && scoping
-                .scope_ancestors(declared_in)
-                .take_while(|ancestor| *ancestor != scope)
-                .any(|between| scoping.get_binding(between, id.name).is_some())
-        {
-            written.insert(symbol);
-        }
-    }
-    written
 }
 
 /// Whether every declaration of `symbol` is a function, or a type-side

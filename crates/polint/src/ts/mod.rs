@@ -31,6 +31,8 @@ pub mod points_to;
 mod repo_fs;
 pub mod scope;
 #[cfg(feature = "lang-typescript")]
+mod sealed_bindings;
+#[cfg(feature = "lang-typescript")]
 pub mod semantic_graph;
 pub(crate) mod semantic_graph_build;
 #[cfg(feature = "lang-typescript")]
@@ -52,6 +54,8 @@ mod tests;
 // The kernel harness lives under `crate::eval`, which needs both languages.
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 mod direct_call_tests;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod exact_claim_soundness_tests;
 #[cfg(all(test, feature = "lang-typescript"))]
 mod package_graph_composition_tests;
 #[cfg(all(test, feature = "lang-typescript"))]
