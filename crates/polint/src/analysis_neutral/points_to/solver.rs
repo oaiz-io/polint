@@ -49,6 +49,7 @@ use crate::analysis_api::{FactFamily, stable_key_from_parts, stable_key_text_fro
 use crate::analysis_neutral::ids::{ObjectTokenId, PointsToSetId, PtVarId};
 use crate::analysis_neutral::solver::budget::BudgetReason;
 use crate::internal_core::StableKeyId;
+use rayon::prelude::*;
 
 /// Ceilings against runaway input, not precision knobs: a solve that reaches
 /// one stops, keeps what it derived and names the sets it left incomplete.
@@ -1544,7 +1545,7 @@ impl<'a> Solver<'a> {
         )
     }
 
-    fn variable_identity(&self, var: usize, objects: &mut HashMap<u32, String>) -> String {
+    fn variable_identity(&self, var: usize, objects: &HashMap<u32, String>) -> String {
         let parts = &self.vars[var].identity;
         assert!(
             !parts.is_empty(),
@@ -1554,19 +1555,13 @@ impl<'a> Solver<'a> {
             .iter()
             .map(|part| match part {
                 IdentityPart::Relation(key, role) => self.relation_fragment(*key, role),
-                IdentityPart::Slot { object, field } => {
-                    let object = objects
-                        .entry(*object)
-                        .or_insert_with(|| self.object_identity(*object))
-                        .clone();
-                    stable_key_text_from_parts(
-                        FactFamily::PointsToSet,
-                        &[
-                            ("object", object),
-                            ("slot", self.fields[*field as usize].clone()),
-                        ],
-                    )
-                }
+                IdentityPart::Slot { object, field } => stable_key_text_from_parts(
+                    FactFamily::PointsToSet,
+                    &[
+                        ("object", objects[object].as_str()),
+                        ("slot", self.fields[*field as usize].as_str()),
+                    ],
+                ),
             })
             .collect();
         semantic_relation_identity(&fragments)
@@ -1619,10 +1614,39 @@ impl<'a> Solver<'a> {
             .filter(|var| incomplete[*var] || bounded[*var] || !self.set(*var).is_empty())
             .collect::<Vec<_>>();
         variables.sort_by_key(|var| self.var_ids[*var]);
-        let mut object_identities = HashMap::new();
+        // Identities are written in parallel and interned in variable order, so
+        // the interner sees the same keys in the same order as a sequential pass.
+        let object_identities = variables
+            .iter()
+            .flat_map(|var| &self.vars[*var].identity)
+            .filter_map(|part| match part {
+                IdentityPart::Slot { object, .. } => Some(*object),
+                IdentityPart::Relation(..) => None,
+            })
+            .collect::<BTreeSet<_>>()
+            .into_par_iter()
+            .map(|object| (object, self.object_identity(object)))
+            .collect::<HashMap<_, _>>();
+        let budget_label = points_to_budget_status_label(budget_status);
+        let keys = variables
+            .par_iter()
+            .map(|&var| {
+                stable_key_text_from_parts(
+                    FactFamily::PointsToSet,
+                    &[
+                        (
+                            "variable",
+                            self.variable_identity(var, &object_identities).as_str(),
+                        ),
+                        ("budget", budget_label),
+                    ],
+                )
+            })
+            .collect::<Vec<_>>();
         let sets = variables
             .into_iter()
-            .map(|var| PointsToSetFact {
+            .zip(keys)
+            .map(|(var, key)| PointsToSetFact {
                 id: PointsToSetId(0),
                 variable: self.var_ids[var],
                 objects: self
@@ -1639,20 +1663,7 @@ impl<'a> Solver<'a> {
                 },
                 precision: precisions[var],
                 budget: budget_status,
-                stable_key: stable_key_from_parts(
-                    self.interner,
-                    FactFamily::PointsToSet,
-                    &[
-                        (
-                            "variable",
-                            self.variable_identity(var, &mut object_identities),
-                        ),
-                        (
-                            "budget",
-                            points_to_budget_status_label(budget_status).to_string(),
-                        ),
-                    ],
-                ),
+                stable_key: self.interner.intern(key),
             })
             .collect();
         let set_sizes = (0..self.vars.len())

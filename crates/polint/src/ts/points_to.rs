@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::analysis_neutral::AnalysisHost;
 
-use crate::analysis_api::{FactFamily, stable_key_from_parts};
+use crate::analysis_api::{FactFamily, stable_key_from_parts, stable_key_text_from_parts};
 use crate::analysis_neutral::ids::{
     DerivedEdgeId, ObjectTokenId, PointsToConstraintId, PtVarId, SemanticNodeId,
 };
@@ -28,6 +28,7 @@ use crate::analysis_neutral::solver::budget::{BudgetStatus, SolverBudget};
 use crate::analysis_neutral::solver::facts::DerivedEdgeFact;
 use crate::analysis_neutral::solver::provenance::{ContributingFact, DerivedEdgeProvenance};
 use crate::internal_core::StableKeyId;
+use rayon::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TsPointsToCallsite {
@@ -464,11 +465,9 @@ fn project_constraints(
     interner: &crate::internal_core::StableKeyInterner,
     inputs: &TsPointsToInputs,
 ) -> Vec<PointsToConstraintFact> {
-    let mut projected = BTreeMap::new();
+    let mut projected = Vec::new();
     for (&object, &(node, node_stable_key)) in &inputs.callable_objects {
-        insert_projected_constraint(
-            interner,
-            &mut projected,
+        projected.push((
             node_stable_key,
             "callable_object",
             PointsToPrecision::FlowInsensitive,
@@ -476,7 +475,7 @@ fn project_constraints(
                 dst: var_for_node(node),
                 object,
             },
-        );
+        ));
     }
     for constraint in &inputs.constraints {
         if constraint.status != PointsToStatus::Present {
@@ -484,9 +483,7 @@ fn project_constraints(
         }
         match &constraint.kind {
             ConstraintKind::CopyEdge { dst, src } => {
-                insert_projected_constraint(
-                    interner,
-                    &mut projected,
+                projected.push((
                     constraint.stable_key,
                     "copy",
                     constraint.precision,
@@ -494,13 +491,11 @@ fn project_constraints(
                         dst: var_for_node(*dst),
                         src: var_for_node(*src),
                     },
-                );
+                ));
             }
             ConstraintKind::Alloc { dst, object } => {
                 let object_token = object_for_node(*object);
-                insert_projected_constraint(
-                    interner,
-                    &mut projected,
+                projected.push((
                     constraint.stable_key,
                     "allocation_object",
                     constraint.precision,
@@ -508,10 +503,8 @@ fn project_constraints(
                         dst: var_for_node(*object),
                         object: object_token,
                     },
-                );
-                insert_projected_constraint(
-                    interner,
-                    &mut projected,
+                ));
+                projected.push((
                     constraint.stable_key,
                     "allocation_destination",
                     constraint.precision,
@@ -519,12 +512,10 @@ fn project_constraints(
                         dst: var_for_node(*dst),
                         object: object_token,
                     },
-                );
+                ));
             }
             ConstraintKind::FieldLoad { dst, base, field } => {
-                insert_projected_constraint(
-                    interner,
-                    &mut projected,
+                projected.push((
                     constraint.stable_key,
                     "field_load",
                     constraint.precision,
@@ -533,12 +524,10 @@ fn project_constraints(
                         base: var_for_node(*base),
                         field: field.clone(),
                     },
-                );
+                ));
             }
             ConstraintKind::FieldStore { base, field, src } => {
-                insert_projected_constraint(
-                    interner,
-                    &mut projected,
+                projected.push((
                     constraint.stable_key,
                     "field_store",
                     constraint.precision,
@@ -547,7 +536,7 @@ fn project_constraints(
                         field: field.clone(),
                         src: var_for_node(*src),
                     },
-                );
+                ));
             }
             ConstraintKind::CallConstraint {
                 callsite,
@@ -555,9 +544,7 @@ fn project_constraints(
                 ..
             } if callsite != callee => {
                 // The callsite's set is the callees: what the callee value holds.
-                insert_projected_constraint(
-                    interner,
-                    &mut projected,
+                projected.push((
                     constraint.stable_key,
                     "call_callee",
                     constraint.precision,
@@ -565,7 +552,7 @@ fn project_constraints(
                         dst: var_for_node(*callsite),
                         src: var_for_node(*callee),
                     },
-                );
+                ));
             }
             ConstraintKind::CallConstraint { .. }
             | ConstraintKind::ModelEdge { .. }
@@ -574,7 +561,36 @@ fn project_constraints(
         }
     }
 
-    projected
+    // Key texts are written in parallel and interned in source order, so the
+    // interner sees the same keys in the same order as a sequential pass.
+    let texts = projected
+        .par_iter()
+        .map(|(source, relation, _, _)| {
+            stable_key_text_from_parts(
+                FactFamily::PointsToConstraint,
+                &[
+                    ("source", interner.resolve(*source).as_ref()),
+                    ("relation", *relation),
+                ],
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut keyed = BTreeMap::new();
+    for (text, (_, _, precision, kind)) in texts.into_iter().zip(projected) {
+        let stable_key = interner.intern(text.as_str());
+        // A key seen twice keeps the weaker precision, so a heuristic source is
+        // never projected as exact.
+        keyed
+            .entry(text)
+            .and_modify(
+                |(_, _, held): &mut (StableKeyId, PointsToConstraintKind, PointsToPrecision)| {
+                    *held = (*held).max(precision)
+                },
+            )
+            .or_insert((stable_key, kind, precision));
+    }
+
+    keyed
         .into_iter()
         .enumerate()
         .map(
@@ -624,30 +640,6 @@ fn project_calls(inputs: &TsPointsToInputs) -> PointsToCallInputs {
         calls,
         signatures: inputs.signatures.clone(),
     }
-}
-
-fn insert_projected_constraint(
-    interner: &crate::internal_core::StableKeyInterner,
-    projected: &mut BTreeMap<String, (StableKeyId, PointsToConstraintKind, PointsToPrecision)>,
-    source_stable_key: StableKeyId,
-    relation: &str,
-    precision: PointsToPrecision,
-    kind: PointsToConstraintKind,
-) {
-    let stable_key = stable_key_from_parts(
-        interner,
-        FactFamily::PointsToConstraint,
-        &[
-            ("source", interner.resolve(source_stable_key).to_string()),
-            ("relation", relation.to_string()),
-        ],
-    );
-    // A key seen twice keeps the weaker precision, so a heuristic source is
-    // never projected as exact.
-    projected
-        .entry(interner.resolve(stable_key).to_string())
-        .and_modify(|(_, _, held)| *held = (*held).max(precision))
-        .or_insert((stable_key, kind, precision));
 }
 
 fn var_for_node(node: SemanticNodeId) -> PtVarId {
