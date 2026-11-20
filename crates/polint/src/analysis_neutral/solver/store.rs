@@ -44,10 +44,7 @@ impl SolverOutput {
     /// [`DerivedEdgeId`]s sequentially by index (dense IDs only after the stable-key
     /// sort, D-08). Shuffling the input rows yields byte-identical normalized output.
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.derived_edges.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.derived_edges, |row| row.stable_key, |row| row.id);
         for (index, edge) in self.derived_edges.iter_mut().enumerate() {
             edge.id = DerivedEdgeId(index as u64);
         }

@@ -72,10 +72,7 @@ pub fn derive_calls_with_cache_stats(
     // Typed facts decide what a covered site calls; a same-named symbol does not.
     targets.retain(|target| !typed_sites.contains(&target.site));
     targets.extend(typed_targets);
-    targets.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.site)
-            .cmp(&(interner.resolve(right.stable_key), right.site))
-    });
+    interner.sort_by_key_text(&mut targets, |row| row.stable_key, |row| row.site);
     targets.dedup_by(|left, right| left.stable_key == right.stable_key);
     for (index, target) in targets.iter_mut().enumerate() {
         target.id = crate::analysis_neutral::ids::CallTargetId(index as u64);

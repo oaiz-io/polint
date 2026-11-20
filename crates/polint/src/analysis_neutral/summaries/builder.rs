@@ -55,12 +55,13 @@ impl DirectSummaryBuilder {
             for op in db.mir_operations() {
                 map.entry(op.body).or_default().push(op);
             }
+            let keys = interner.read_view();
             for ops in map.values_mut() {
                 ops.sort_by(|a, b| {
-                    (a.ordinal, interner.resolve(a.stable_key))
-                        .cmp(&(b.ordinal, interner.resolve(b.stable_key)))
+                    (a.ordinal, keys.text(a.stable_key)).cmp(&(b.ordinal, keys.text(b.stable_key)))
                 });
             }
+            drop(keys);
             map
         };
 

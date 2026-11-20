@@ -22,26 +22,29 @@ impl RefinedCallOutput {
             .into_iter()
             .map(RefinedCallEdgeFact::normalized)
             .collect();
-        self.edges.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.site,
-                left.tier,
-                left.algorithm,
-                left.provenance,
-                left.status,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.site,
-                    right.tier,
-                    right.algorithm,
-                    right.provenance,
-                    right.status,
-                    right.id,
-                ))
-        });
+        {
+            let keys = interner.read_view();
+            self.edges.sort_by(|left, right| {
+                (
+                    keys.text(left.stable_key),
+                    left.site,
+                    left.tier,
+                    left.algorithm,
+                    left.provenance,
+                    left.status,
+                    left.id,
+                )
+                    .cmp(&(
+                        keys.text(right.stable_key),
+                        right.site,
+                        right.tier,
+                        right.algorithm,
+                        right.provenance,
+                        right.status,
+                        right.id,
+                    ))
+            });
+        }
         self
     }
 }

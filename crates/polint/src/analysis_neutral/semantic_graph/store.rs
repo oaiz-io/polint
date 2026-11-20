@@ -34,10 +34,7 @@ impl SemanticGraphOutput {
     /// the pre-sort node IDs to the post-sort dense node IDs so the adjacency stays
     /// consistent after re-densification.
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.nodes.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.nodes, |row| row.stable_key, |row| row.id);
         // Map each node's pre-sort dense id to its post-sort dense id so edges can
         // be rewritten to the new node numbering.
         let mut remap: BTreeMap<SemanticNodeId, SemanticNodeId> = BTreeMap::new();
@@ -56,10 +53,7 @@ impl SemanticGraphOutput {
                 edge.target = new_target;
             }
         }
-        self.edges.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.edges, |row| row.stable_key, |row| row.id);
         for (index, edge) in self.edges.iter_mut().enumerate() {
             edge.id = SemanticEdgeId(index as u64);
         }
@@ -73,10 +67,7 @@ impl SemanticGraphOutput {
                 .kind
                 .remap_nodes(|node| remap.get(&node).copied().unwrap_or(node));
         }
-        self.constraints.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.constraints, |row| row.stable_key, |row| row.id);
         for (index, constraint) in self.constraints.iter_mut().enumerate() {
             constraint.id = SemanticConstraintId(index as u64);
         }

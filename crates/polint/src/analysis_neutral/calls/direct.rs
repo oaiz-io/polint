@@ -133,10 +133,7 @@ pub fn resolve_direct_call_targets(
         });
     }
 
-    rows.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.site)
-            .cmp(&(interner.resolve(right.stable_key), right.site))
-    });
+    interner.sort_by_key_text(&mut rows, |row| row.stable_key, |row| row.site);
     rows.dedup_by(|left, right| left.stable_key == right.stable_key);
     for (index, row) in rows.iter_mut().enumerate() {
         row.id = CallTargetId(index as u64);

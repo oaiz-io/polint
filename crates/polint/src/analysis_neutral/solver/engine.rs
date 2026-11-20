@@ -494,13 +494,16 @@ fn model_edges(
             _ => None,
         })
         .collect::<Vec<_>>();
-    model_constraints.sort_by(|left, right| {
-        (interner.resolve(left.0.stable_key), left.1.0, left.2.0).cmp(&(
-            interner.resolve(right.0.stable_key),
-            right.1.0,
-            right.2.0,
-        ))
-    });
+    {
+        let keys = interner.read_view();
+        model_constraints.sort_by(|left, right| {
+            (keys.text(left.0.stable_key), left.1.0, left.2.0).cmp(&(
+                keys.text(right.0.stable_key),
+                right.1.0,
+                right.2.0,
+            ))
+        });
+    }
 
     for (constraint, source, target, platform) in model_constraints {
         // The adaptation caps bound repo-local model facts. Platform model
