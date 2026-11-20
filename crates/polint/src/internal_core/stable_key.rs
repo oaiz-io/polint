@@ -1,5 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::collections::hash_map::Entry;
+use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
+use std::sync::{Arc, LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(
     Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, serde::Serialize, serde::Deserialize,
@@ -29,28 +31,81 @@ impl StableKeyId {
 /// what makes `resolve` a vector index instead of a map lookup. Splitting this
 /// state across shards would break it, because each shard would number its own
 /// keys from zero.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct StableKeyInternerState {
     keys: Vec<Arc<str>>,
-    /// Hashed with foldhash, seeded per process: ids come from `keys`, so the
-    /// map's order never reaches an id, and every new key is hashed more than
-    /// once on its way in.
-    ids: HashMap<Arc<str>, StableKeyId, foldhash::fast::RandomState>,
+    /// The id of each key under the hash of its text ([`key_hash`]). The table
+    /// keeps the hash, so growing it moves integers instead of hashing every
+    /// key's text again. Ids come from `keys`, so the table's order never
+    /// reaches an id.
+    ids: HashMap<u64, StableKeyId, BuildHasherDefault<KeyHashHasher>>,
+    /// Keys whose hash an earlier key already holds in `ids`.
+    collided: Vec<(u64, StableKeyId)>,
 }
 
 impl StableKeyInternerState {
-    /// Appends `key`, returning the id that now indexes it: its position
-    /// counted from `base`, which is zero except in an overlay.
-    fn push_from(&mut self, base: u32, key: Arc<str>) -> StableKeyId {
+    /// Appends `key`, whose hash is `hash`, returning the id that now indexes
+    /// it: its position counted from `base`, which is zero except in an
+    /// overlay.
+    fn push_from(&mut self, base: u32, hash: u64, key: Arc<str>) -> StableKeyId {
         let id = StableKeyId(
             u32::try_from(self.keys.len())
                 .ok()
                 .and_then(|len| len.checked_add(base))
                 .unwrap_or_else(|| panic!("stable-key interner exhausted u32 ids")),
         );
-        self.keys.push(Arc::clone(&key));
-        self.ids.insert(key, id);
+        self.keys.push(key);
+        match self.ids.entry(hash) {
+            Entry::Vacant(entry) => {
+                entry.insert(id);
+            }
+            Entry::Occupied(_) => self.collided.push((hash, id)),
+        }
         id
+    }
+
+    /// The id of `key`, whose hash is `hash`, when this state holds it.
+    fn find(&self, base: u32, hash: u64, key: &str) -> Option<StableKeyId> {
+        let id = *self.ids.get(&hash)?;
+        if self.text(base, id).as_ref() == key {
+            return Some(id);
+        }
+        self.collided
+            .iter()
+            .find(|(other, id)| *other == hash && self.text(base, *id).as_ref() == key)
+            .map(|(_, id)| *id)
+    }
+
+    fn text(&self, base: u32, id: StableKeyId) -> &Arc<str> {
+        &self.keys[(id.0 - base) as usize]
+    }
+}
+
+/// One hasher for the process, so an overlay and its parent find a key under
+/// the same hash. Seeded at random: no id depends on a hash.
+static KEY_HASHER: LazyLock<foldhash::fast::RandomState> = LazyLock::new(Default::default);
+
+fn key_hash(key: &str) -> u64 {
+    KEY_HASHER.hash_one(key)
+}
+
+/// Passes on the hash an id table is keyed by, which [`key_hash`] made.
+#[derive(Debug, Default)]
+struct KeyHashHasher(u64);
+
+impl Hasher for KeyHashHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = self.0.rotate_left(8) ^ u64::from(*byte);
+        }
+    }
+
+    fn write_u64(&mut self, hash: u64) {
+        self.0 = hash;
     }
 }
 
@@ -96,20 +151,21 @@ impl StableKeyInterner {
     /// allocating, so callers holding a `&str` pay nothing extra on the common
     /// path; the owned form is only materialized when the key is new.
     pub fn intern(&self, key: impl AsRef<str> + Into<String>) -> StableKeyId {
-        if let Some(id) = self.parent_id(key.as_ref()) {
+        let hash = key_hash(key.as_ref());
+        if let Some(id) = self.parent_id(hash, key.as_ref()) {
             return id;
         }
-        if let Some(id) = self.read().ids.get(key.as_ref()) {
-            return *id;
+        let base = self.base();
+        if let Some(id) = self.read().find(base, hash, key.as_ref()) {
+            return id;
         }
 
         let key = key.into();
         let mut state = self.write();
-        if let Some(id) = state.ids.get(key.as_str()) {
-            return *id;
+        if let Some(id) = state.find(base, hash, &key) {
+            return id;
         }
-        let base = self.base();
-        state.push_from(base, key.into())
+        state.push_from(base, hash, key.into())
     }
 
     /// A private interner for one task of a parallel stage.
@@ -168,11 +224,11 @@ impl StableKeyInterner {
         self.parent.as_ref().map_or(0, |parent| parent.base)
     }
 
-    /// The parent's id for `key`, when this is an overlay and the parent had
-    /// the key when the overlay was taken.
-    fn parent_id(&self, key: &str) -> Option<StableKeyId> {
+    /// The parent's id for `key`, whose hash is `hash`, when this is an
+    /// overlay and the parent had the key when the overlay was taken.
+    fn parent_id(&self, hash: u64, key: &str) -> Option<StableKeyId> {
         let parent = self.parent.as_ref()?;
-        let id = *parent.interner.read().ids.get(key)?;
+        let id = parent.interner.read().find(0, hash, key)?;
         (id.0 < parent.base).then_some(id)
     }
 
@@ -182,24 +238,20 @@ impl StableKeyInterner {
     /// the stable-key text is hashed into the payload digest — would otherwise
     /// take the lock twice for one key.
     pub(crate) fn intern_and_resolve(&self, key: &str) -> (StableKeyId, Arc<str>) {
-        if let Some(parent) = &self.parent
-            && let Some((text, id)) = parent
-                .interner
-                .read()
-                .ids
-                .get_key_value(key)
-                .filter(|(_, id)| id.0 < parent.base)
-                .map(|(text, id)| (Arc::clone(text), *id))
-        {
-            return (id, text);
+        let hash = key_hash(key);
+        if let Some(parent) = &self.parent {
+            let state = parent.interner.read();
+            if let Some(id) = state.find(0, hash, key).filter(|id| id.0 < parent.base) {
+                return (id, Arc::clone(state.text(0, id)));
+            }
         }
         let base = self.base();
         let mut state = self.write();
-        if let Some((text, id)) = state.ids.get_key_value(key) {
-            return (*id, Arc::clone(text));
+        if let Some(id) = state.find(base, hash, key) {
+            return (id, Arc::clone(state.text(base, id)));
         }
         let text: Arc<str> = Arc::from(key);
-        let id = state.push_from(base, Arc::clone(&text));
+        let id = state.push_from(base, hash, Arc::clone(&text));
         (id, text)
     }
 
@@ -289,23 +341,8 @@ impl StableKeyInterner {
             self.parent.is_none(),
             "an overlay is folded back with `absorb`, not detached"
         );
-        let state = self.read();
-        let keys = state.keys.clone();
-        let ids = keys
-            .iter()
-            .enumerate()
-            .map(|(index, key)| {
-                (
-                    Arc::clone(key),
-                    StableKeyId(
-                        u32::try_from(index)
-                            .unwrap_or_else(|_| panic!("stable-key interner exhausted u32 ids")),
-                    ),
-                )
-            })
-            .collect();
         Self {
-            state: Arc::new(RwLock::new(StableKeyInternerState { keys, ids })),
+            state: Arc::new(RwLock::new(self.read().clone())),
             parent: None,
         }
     }
@@ -482,5 +519,18 @@ mod tests {
         assert_eq!(detached.resolve(original).as_ref(), "first");
         assert_eq!(second, StableKeyId(1));
         assert_eq!(detached.intern("detached".to_string()), StableKeyId(1));
+    }
+
+    #[test]
+    fn keys_whose_hashes_collide_keep_their_own_ids() {
+        let mut state = StableKeyInternerState::default();
+        let first = state.push_from(0, 7, Arc::from("first"));
+        let second = state.push_from(0, 7, Arc::from("second"));
+
+        assert_ne!(first, second);
+        assert_eq!(state.find(0, 7, "first"), Some(first));
+        assert_eq!(state.find(0, 7, "second"), Some(second));
+        assert_eq!(state.find(0, 7, "third"), None);
+        assert_eq!(state.find(0, 8, "first"), None);
     }
 }
