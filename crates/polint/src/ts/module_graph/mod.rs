@@ -1,3 +1,5 @@
+#[cfg(feature = "lang-typescript")]
+mod conditions;
 mod formats;
 use crate::analysis_api::{
     FactDatabase, ImportSyntax, ModuleEdgeKind, ResolutionPrecision, ResolutionStatus, SourceFile,
@@ -34,6 +36,8 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "lang-typescript")]
+use std::sync::{Arc, Mutex, PoisonError};
 
 #[cfg(test)]
 use std::cell::Cell;
@@ -1885,10 +1889,15 @@ struct TsconfigCompilerOptionsWire {
 /// mode an import loads in, then the rest in this order.
 pub(crate) const EXPORT_CONDITIONS: &[&str] = &["import", "require", "node", "default"];
 
-/// The package fields a bundler reads, in its order, where a package has no
-/// `exports`.
+/// The package fields a bundler for Node reads, in its order, where a package
+/// has no `exports`.
 #[cfg(feature = "lang-typescript")]
-const BUNDLER_MAIN_FIELDS: &[&str] = &["module", "browser", "main"];
+const BUNDLER_MAIN_FIELDS: &[&str] = &["module", "main"];
+
+/// The package fields a bundler for the browser reads, in its order, where a
+/// package has no `exports`.
+#[cfg(feature = "lang-typescript")]
+const BROWSER_MAIN_FIELDS: &[&str] = &["browser", "module", "main"];
 
 /// The `exports` conditions of one mode: its own condition and the shared
 /// ones, so an `exports` map that names both modes gives each its file.
@@ -1901,18 +1910,52 @@ fn mode_conditions(own: &str) -> Vec<String> {
         .collect()
 }
 
+/// The two modes a file loads a specifier in.
+#[cfg(feature = "lang-typescript")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LoadMode {
+    Import,
+    Require,
+}
+
+#[cfg(feature = "lang-typescript")]
+impl LoadMode {
+    fn condition(self) -> &'static str {
+        match self {
+            Self::Import => "import",
+            Self::Require => "require",
+        }
+    }
+
+    fn other(self) -> Self {
+        match self {
+            Self::Import => Self::Require,
+            Self::Require => Self::Import,
+        }
+    }
+}
+
+/// The resolvers of one mode: Node's, and those of a bundler for Node and
+/// for the browser, which read a package's `module` and `browser` fields
+/// before its `main`.
+#[cfg(feature = "lang-typescript")]
+struct LoaderResolvers {
+    node: Resolver,
+    bundled: Resolver,
+    browser: Resolver,
+}
+
 /// The resolvers of the two modes a file loads in, under Node and under a
 /// bundler, sharing one cache.
 #[cfg(feature = "lang-typescript")]
 pub(crate) struct ModeResolvers {
-    import: Resolver,
-    require: Resolver,
-    /// The import and require modes of a bundler, which reads a package's
-    /// `module` and `browser` fields before its `main`.
-    bundled_import: Resolver,
-    bundled_require: Resolver,
+    import: LoaderResolvers,
+    require: LoaderResolvers,
     /// Reads the module format of an importing file.
     format: Resolver,
+    /// The `package.json` files read for their `exports` and `imports` maps,
+    /// by path, or `None` where one cannot be read.
+    manifests: Mutex<BTreeMap<PathBuf, Option<Arc<serde_json::Value>>>>,
 }
 
 /// What resolving an import gives: the answer of every mode the import may
@@ -1943,30 +1986,67 @@ fn agree(
     }
 }
 
+/// The answers of two modes joined: `One` where both are `One` and agree.
+#[cfg(feature = "lang-typescript")]
+fn join(left: ModeResolution, right: ModeResolution) -> ModeResolution {
+    match (left, right) {
+        (ModeResolution::One(left), ModeResolution::One(right)) => agree(left, right),
+        (ModeResolution::Split(mut paths), ModeResolution::Split(more)) => {
+            paths.extend(more);
+            ModeResolution::Split(paths)
+        }
+        (ModeResolution::Split(mut paths), ModeResolution::One(one))
+        | (ModeResolution::One(one), ModeResolution::Split(mut paths)) => {
+            paths.extend(one.map(|resolution| resolution.into_path_buf()));
+            ModeResolution::Split(paths)
+        }
+    }
+}
+
+/// The package a bare specifier names, and the subpath of its `exports` it
+/// asks for: `@scope/name/sub` is `@scope/name` and `./sub`.
+#[cfg(feature = "lang-typescript")]
+fn package_and_subpath(specifier: &str) -> Option<(&str, String)> {
+    let segments = if specifier.starts_with('@') { 2 } else { 1 };
+    let end = specifier
+        .match_indices('/')
+        .nth(segments - 1)
+        .map_or(specifier.len(), |(index, _)| index);
+    let (name, rest) = specifier.split_at(end);
+    (!name.is_empty() && !name.ends_with('/')).then(|| (name, format!(".{rest}")))
+}
+
 #[cfg(feature = "lang-typescript")]
 impl ModeResolvers {
     pub(crate) fn new() -> Self {
-        let import = Resolver::new(resolve_options(mode_conditions("import")));
-        let require = import.clone_with_options(resolve_options(mode_conditions("require")));
-        let bundled = |own| ResolveOptions {
-            main_fields: BUNDLER_MAIN_FIELDS
-                .iter()
-                .map(|field| (*field).to_string())
-                .collect(),
-            ..resolve_options(mode_conditions(own))
+        let node = Resolver::new(resolve_options(mode_conditions("import")));
+        let loaders = |mode: LoadMode| {
+            let conditions = || mode_conditions(mode.condition());
+            let fields =
+                |fields: &[&str]| fields.iter().map(|field| (*field).to_string()).collect();
+            LoaderResolvers {
+                node: node.clone_with_options(resolve_options(conditions())),
+                bundled: node.clone_with_options(ResolveOptions {
+                    main_fields: fields(BUNDLER_MAIN_FIELDS),
+                    ..resolve_options(conditions())
+                }),
+                browser: node.clone_with_options(ResolveOptions {
+                    main_fields: fields(BROWSER_MAIN_FIELDS),
+                    // The object form of the field replaces files of the package.
+                    alias_fields: vec![vec!["browser".into()]],
+                    ..resolve_options(conditions())
+                }),
+            }
         };
-        let bundled_import = import.clone_with_options(bundled("import"));
-        let bundled_require = import.clone_with_options(bundled("require"));
-        let format = import.clone_with_options(ResolveOptions {
+        let format = node.clone_with_options(ResolveOptions {
             module_type: true,
             ..resolve_options(mode_conditions("import"))
         });
         Self {
-            import,
-            require,
-            bundled_import,
-            bundled_require,
+            import: loaders(LoadMode::Import),
+            require: loaders(LoadMode::Require),
             format,
+            manifests: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -1976,38 +2056,127 @@ impl ModeResolvers {
     /// or `.ts` file of a `"type": "module"` package); elsewhere a compiler
     /// may turn it into a `require`, so both modes must give one answer.
     /// Node and a bundler must give one answer too: Node loads a package's
-    /// `main` where it has no `exports`, a bundler its `module` or `browser`.
+    /// `main` where it has no `exports`, a bundler its `module` or `browser`,
+    /// and every condition of an `exports` or `imports` map a loader may
+    /// select must name one file.
     pub(crate) fn resolve(
         &self,
         importer: &Path,
         specifier: &str,
         syntax: ImportSyntax,
     ) -> ModeResolution {
-        let in_mode = |node: &Resolver, bundled: &Resolver| {
-            agree(
-                node.resolve_file(importer, specifier),
-                bundled.resolve_file(importer, specifier),
-            )
-        };
         if syntax == ImportSyntax::Require {
-            return in_mode(&self.require, &self.bundled_require);
+            return self.resolve_in(importer, specifier, LoadMode::Require);
         }
-        let import = in_mode(&self.import, &self.bundled_import);
+        let import = self.resolve_in(importer, specifier, LoadMode::Import);
         if self.runs_as_module(importer) {
             return import;
         }
-        match (import, in_mode(&self.require, &self.bundled_require)) {
-            (ModeResolution::One(import), ModeResolution::One(require)) => agree(import, require),
-            (ModeResolution::Split(mut paths), ModeResolution::Split(more)) => {
-                paths.extend(more);
-                ModeResolution::Split(paths)
-            }
-            (ModeResolution::Split(mut paths), ModeResolution::One(one))
-            | (ModeResolution::One(one), ModeResolution::Split(mut paths)) => {
-                paths.extend(one.map(|resolution| resolution.into_path_buf()));
-                ModeResolution::Split(paths)
+        join(
+            import,
+            self.resolve_in(importer, specifier, LoadMode::Require),
+        )
+    }
+
+    /// The answer every loader gives `specifier` in `mode`, or `Split`.
+    fn resolve_in(&self, importer: &Path, specifier: &str, mode: LoadMode) -> ModeResolution {
+        let loaders = match mode {
+            LoadMode::Import => &self.import,
+            LoadMode::Require => &self.require,
+        };
+        let answer = join(
+            agree(
+                loaders.node.resolve_file(importer, specifier),
+                loaders.bundled.resolve_file(importer, specifier),
+            ),
+            ModeResolution::One(loaders.browser.resolve_file(importer, specifier)),
+        );
+        let ModeResolution::One(Ok(resolution)) = answer else {
+            return answer;
+        };
+        let Some(targets) = self.conditional_targets(importer, specifier, resolution.path(), mode)
+        else {
+            return ModeResolution::One(Ok(resolution));
+        };
+        let mut paths = Vec::new();
+        for (root, target) in targets {
+            match self.resolve_in(&root.join("package.json"), &target, mode) {
+                ModeResolution::One(Ok(other)) if other.path() == resolution.path() => {}
+                ModeResolution::One(Ok(other)) => paths.push(other.into_path_buf()),
+                ModeResolution::One(Err(_)) => {}
+                ModeResolution::Split(more) => paths.extend(more),
             }
         }
+        if paths.is_empty() {
+            return ModeResolution::One(Ok(resolution));
+        }
+        paths.push(resolution.into_path_buf());
+        ModeResolution::Split(paths)
+    }
+
+    /// The targets, each with the package directory it is written in, that
+    /// the `exports` map of the package `specifier` names (or, for a `#`
+    /// specifier, the `imports` map of the importer's package) may give it in
+    /// `mode` under any conditions. `None` where no such map applies;
+    /// `resolved` is the file Node loads.
+    fn conditional_targets(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        resolved: &Path,
+        mode: LoadMode,
+    ) -> Option<Vec<(PathBuf, String)>> {
+        let (root, manifest, key, exports) = if specifier.starts_with('#') {
+            let (root, manifest) = importer
+                .ancestors()
+                .skip(1)
+                .find_map(|directory| Some((directory, self.manifest(directory)?)))?;
+            (root, manifest, specifier.to_string(), false)
+        } else if is_external_package_specifier(specifier) {
+            let (name, subpath) = package_and_subpath(specifier)?;
+            let (root, manifest) = resolved.ancestors().skip(1).find_map(|directory| {
+                let manifest = self.manifest(directory)?;
+                let named = directory.ends_with(Path::new("node_modules").join(name))
+                    || manifest.get("name").and_then(serde_json::Value::as_str) == Some(name);
+                named.then_some((directory, manifest))
+            })?;
+            (root, manifest, subpath, true)
+        } else {
+            return None;
+        };
+        let map = manifest.get(if exports { "exports" } else { "imports" })?;
+        let targets = conditions::reachable_targets(
+            map,
+            &key,
+            exports,
+            mode.condition(),
+            mode.other().condition(),
+        )?;
+        Some(
+            targets
+                .into_iter()
+                // An `exports` target names a file of its package; Node
+                // rejects any other.
+                .filter(|target| !exports || target.starts_with("./"))
+                .map(|target| (root.to_path_buf(), target))
+                .collect(),
+        )
+    }
+
+    /// The `package.json` of `directory`, read once.
+    fn manifest(&self, directory: &Path) -> Option<Arc<serde_json::Value>> {
+        let path = directory.join("package.json");
+        let mut manifests = self
+            .manifests
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        manifests
+            .entry(path)
+            .or_insert_with_key(|path| {
+                let source = fs::read_to_string(path).ok()?;
+                serde_json::from_str(&source).ok().map(Arc::new)
+            })
+            .clone()
     }
 
     fn runs_as_module(&self, importer: &Path) -> bool {

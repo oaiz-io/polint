@@ -633,6 +633,199 @@ fn a_package_whose_main_and_module_fields_differ_claims_neither_file_exactly() {
     }
 }
 
+/// The whole and stitched answers at `run()` of an ES module and a CommonJS
+/// file of an app that loads `specifier` from the package `dual`, which has the
+/// `manifest` and two files whose `run` are `nodeRun` and `browserRun`.
+fn dual_answers(
+    manifest: &str,
+    specifier: &str,
+    nested: &[(&str, &str)],
+) -> (Vec<PortableAnswer>, Vec<(String, String)>) {
+    let import = format!("import dual from \"{specifier}\";\ndual.run();\n");
+    let require = format!("const dual = require(\"{specifier}\");\ndual.run();\n");
+    let node = "function nodeRun() {}\nmodule.exports = { run: nodeRun };\n";
+    let browser = "function browserRun() {}\nmodule.exports = { run: browserRun };\n";
+    let temp = tempfile::tempdir().expect("tempdir");
+    let mut files = vec![
+        ("package.json", r#"{"name":"app","version":"1.0.0"}"#),
+        ("main.mjs", import.as_str()),
+        ("main.cjs", require.as_str()),
+        ("node_modules/dual/package.json", manifest),
+        ("node_modules/dual/node.cjs", node),
+        ("node_modules/dual/browser.cjs", browser),
+    ];
+    files.extend(
+        nested
+            .iter()
+            .map(|(path, kind)| (*path, if *kind == "browser" { browser } else { node })),
+    );
+    write_files(temp.path(), &files);
+    let whole = whole_program_answers(temp.path());
+    let packages = [
+        (".", temp.path().to_path_buf()),
+        ("node_modules/dual", temp.path().join("node_modules/dual")),
+    ]
+    .into_iter()
+    .map(|(name, root)| {
+        let graph = package_graph_of(&root).expect("package graph");
+        (name.to_string(), root, graph)
+    })
+    .collect::<Vec<_>>();
+    let graphs = named(&packages);
+    let stitched = stitch(&graphs, &tree_of(&packages)).expect("stitch");
+    assert_eq!(stitched_portable(&stitched, &graphs), whole);
+    let run = |text: &str| text.find("dual.run").expect("a run call");
+    let answers = [("main.mjs", &import), ("main.cjs", &require)]
+        .into_iter()
+        .map(|(file, text)| answer_in(&whole, &format!(".:{file}"), run(text)).clone())
+        .collect();
+    let open = stitched
+        .open_imports
+        .iter()
+        .map(|open| (open.file.clone(), open.specifier.clone()))
+        .collect();
+    (answers, open)
+}
+
+/// Asserts that neither file of the app claims one target for `run()` and
+/// that the stitch leaves both imports open: Node and a bundler load
+/// different files of `dual`.
+fn assert_split(manifest: &str, specifier: &str, nested: &[(&str, &str)]) {
+    let (answers, open) = dual_answers(manifest, specifier, nested);
+    for (file, answer) in ["main.mjs", "main.cjs"].into_iter().zip(&answers) {
+        assert!(
+            !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
+            "{file}: {answer:?}"
+        );
+        assert!(
+            open.contains(&(file.to_string(), specifier.to_string())),
+            "the import of {file} is left open: {open:?}"
+        );
+    }
+}
+
+/// Node runs `node.cjs`; a bundle for the browser selects the `browser`
+/// condition and runs `browser.cjs`.
+#[test]
+fn an_exports_map_with_a_browser_condition_claims_neither_file_exactly() {
+    assert_split(
+        r#"{"name":"dual","version":"1.0.0","exports":{"browser":"./browser.cjs","node":"./node.cjs","default":"./node.cjs"}}"#,
+        "dual",
+        &[],
+    );
+}
+
+/// A condition nested below `node` is not selected where `node` is not.
+#[test]
+fn an_exports_map_with_nested_conditions_claims_neither_file_exactly() {
+    assert_split(
+        r#"{"name":"dual","version":"1.0.0","exports":{"node":{"import":"./node.cjs","require":"./node.cjs"},"default":"./browser.cjs"}}"#,
+        "dual",
+        &[],
+    );
+}
+
+/// `node --conditions=development` and a bundler in development runs
+/// `browser.cjs`; plain Node runs `node.cjs`. Any condition a loader may be
+/// given counts.
+#[test]
+fn an_exports_map_with_a_custom_condition_claims_neither_file_exactly() {
+    assert_split(
+        r#"{"name":"dual","version":"1.0.0","exports":{"development":"./browser.cjs","default":"./node.cjs"}}"#,
+        "dual",
+        &[],
+    );
+}
+
+/// The conditions below a subpath pattern take part too.
+#[test]
+fn an_exports_pattern_with_a_browser_condition_claims_neither_file_exactly() {
+    assert_split(
+        r#"{"name":"dual","version":"1.0.0","exports":{"./sub/*":{"browser":"./b/*.cjs","default":"./n/*.cjs"}}}"#,
+        "dual/sub/x",
+        &[
+            ("node_modules/dual/b/x.cjs", "browser"),
+            ("node_modules/dual/n/x.cjs", "node"),
+        ],
+    );
+}
+
+/// A bundler for the browser reads `browser` before `module`, so a `module`
+/// that names Node's file does not make the answers agree.
+#[test]
+fn a_browser_field_beside_a_module_field_of_the_main_file_claims_neither_file_exactly() {
+    assert_split(
+        r#"{"name":"dual","version":"1.0.0","main":"./node.cjs","module":"./node.cjs","browser":"./browser.cjs"}"#,
+        "dual",
+        &[],
+    );
+}
+
+/// The object form of the `browser` field replaces a file of the package.
+#[test]
+fn a_browser_field_that_replaces_the_main_file_claims_neither_file_exactly() {
+    assert_split(
+        r#"{"name":"dual","version":"1.0.0","main":"./node.cjs","browser":{"./node.cjs":"./browser.cjs"}}"#,
+        "dual",
+        &[],
+    );
+}
+
+/// Every condition names one file, and the files declared for types load in
+/// no runtime, so both imports link to that file.
+#[test]
+fn an_exports_map_whose_conditions_name_one_file_links_the_import() {
+    let (answers, open) = dual_answers(
+        r#"{"name":"dual","version":"1.0.0","exports":{"types":"./index.d.ts","browser":"./node.cjs","default":"./node.cjs"}}"#,
+        "dual",
+        &[],
+    );
+    assert!(open.is_empty(), "{open:?}");
+    for answer in &answers {
+        assert_eq!(
+            answer.targets,
+            ["node_modules/dual:node.cjs@0..21#nodeRun"],
+            "{answer:?}"
+        );
+    }
+}
+
+/// A package's `imports` map is conditional too: Node runs `n.cjs` and a
+/// bundle for the browser runs `b.cjs`.
+#[test]
+fn a_conditional_package_import_claims_neither_file_exactly() {
+    let import = "import dep from \"#dep\";\ndep.run();\n";
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(
+        temp.path(),
+        &[
+            (
+                "package.json",
+                r##"{"name":"app","version":"1.0.0","imports":{"#dep":{"browser":"./b.cjs","default":"./n.cjs"}}}"##,
+            ),
+            ("main.mjs", import),
+            (
+                "b.cjs",
+                "function browserRun() {}\nmodule.exports = { run: browserRun };\n",
+            ),
+            (
+                "n.cjs",
+                "function nodeRun() {}\nmodule.exports = { run: nodeRun };\n",
+            ),
+        ],
+    );
+    let whole = whole_program_answers(temp.path());
+    let answer = answer_in(
+        &whole,
+        ".:main.mjs",
+        import.find("dep.run").expect("a run call"),
+    );
+    assert!(
+        !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
+        "{answer:?}"
+    );
+}
+
 #[test]
 fn the_stitch_refuses_a_graph_its_budget_cut_short() {
     let temp = tempfile::tempdir().expect("tempdir");
