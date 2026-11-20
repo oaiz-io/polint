@@ -490,8 +490,8 @@ impl GoMirLowering {
     /// The output of everything lowered so far: places, operations and
     /// unsupported rows resolved against each other, and the bodies' blocks,
     /// statements and terminators.
-    fn finish(self, interner: &crate::internal_core::StableKeyInterner) -> MirOutput {
-        let (places, place_types) = self.places.clone().finish_with_types(interner);
+    fn finish(mut self, interner: &crate::internal_core::StableKeyInterner) -> MirOutput {
+        let (places, place_types) = std::mem::take(&mut self.places).finish_with_types(interner);
         let place_ids = places
             .iter()
             .map(|place| (interner.resolve(place.stable_key).to_string(), place.id))

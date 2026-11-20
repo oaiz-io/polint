@@ -59,7 +59,7 @@ pub fn lower_ts_mir(db: &impl AnalysisHost) -> MirOutput {
         lowering.lower_file(interner, db, &index, file);
     }
 
-    let (places, place_types) = lowering.places.clone().finish_with_types(interner);
+    let (places, place_types) = std::mem::take(&mut lowering.places).finish_with_types(interner);
     let place_ids = places
         .iter()
         .map(|place| (interner.resolve(place.stable_key).to_string(), place.id))
