@@ -306,6 +306,27 @@ fn a_call_after_eval_shadows_a_modelled_global_claims_no_exact_target() {
     );
 }
 
+/// Node prints `b` for each callee: a type assertion, `satisfies` or a
+/// non-null assertion is erased before the code runs, so the call is still a
+/// direct `eval` and writes the binding.
+#[test]
+fn a_call_after_an_eval_behind_an_erased_type_wrapper_claims_no_exact_target() {
+    for (path, callee) in [
+        ("eval-as.mts", "(eval as any)"),
+        ("eval-satisfies.mts", "(eval satisfies any)"),
+        ("eval-non-null.mts", "eval!"),
+        ("eval-non-null-parens.mts", "(eval!)"),
+        ("eval-nested-as.mts", "((eval as any) as any)"),
+        ("eval-angle.ts", "(<any>eval)"),
+    ] {
+        let source = format!(
+            "function a(){{console.log('a')}} function b(){{console.log('b')}} \
+             let f=a; {callee}('f=b'); f();\n"
+        );
+        assert_eq!(exact_targets(path, &source, "f()"), none(), "{callee}");
+    }
+}
+
 /// Node prints `a`: an eval whose code names no binding leaves every call of
 /// the file exact.
 #[test]

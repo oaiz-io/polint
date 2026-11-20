@@ -3967,7 +3967,9 @@ impl<'source> FunctionLowering<'source> {
                 (Vec::new(), ConservativeAction::HavocAffectedPlaces),
             );
         }
-        if callee_text(&call.callee).as_deref() == Some("eval") {
+        if callee_text(&call.callee).as_deref() == Some("eval")
+            || crate::ts::sealed_bindings::is_direct_eval(call)
+        {
             self.push_unsupported(
                 interner,
                 operations,

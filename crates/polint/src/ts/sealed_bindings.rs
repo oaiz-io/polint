@@ -165,9 +165,11 @@ pub(crate) fn dynamic_scope(
     scope
 }
 
-/// A call of an identifier named `eval`, parenthesized or not.
+/// A call of an identifier named `eval`, behind any parentheses and any type
+/// wrapper: `as`, `satisfies`, `<T>`, `!` and type arguments are erased before
+/// the code runs, so the call stays a direct `eval`.
 pub(crate) fn is_direct_eval(call: &CallExpression<'_>) -> bool {
-    matches!(call.callee.without_parentheses(), Expression::Identifier(identifier) if identifier.name == "eval")
+    matches!(call.callee.get_inner_expression(), Expression::Identifier(identifier) if identifier.name == "eval")
 }
 
 /// The names the code of an eval call mentions. A call without an argument,
