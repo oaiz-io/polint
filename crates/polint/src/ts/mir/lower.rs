@@ -25,7 +25,7 @@ use crate::analysis_neutral::mir_body::{
 use crate::analysis_neutral::mir_op::{
     AssignMode, BranchNilTest, ConservativeAction, MirAggregateField, MirAggregateKind,
     MirOperation, MirOperationKind, MirValue, UnsupportedDomain, UnsupportedPrecision,
-    UnsupportedSemanticFact,
+    UnsupportedSemanticFact, source_evidence_excerpt,
 };
 use crate::analysis_neutral::places::{
     PlaceInsert, PlaceProjection, PlaceRoot, PlaceStableContext, PlaceStatus, PlaceTableBuilder,
@@ -4695,7 +4695,7 @@ impl UnsupportedDraft {
             file: input.file,
             span: input.span,
             construct: input.construct,
-            source_evidence: input.source_evidence.into().trim().to_string(),
+            source_evidence: source_evidence_excerpt(&input.source_evidence.into()),
             affected_place_keys: input.affected_place_keys,
             affected_domains: input.affected_domains,
             conservative_action: input.conservative_action,
@@ -5876,6 +5876,28 @@ export async function flow(obj, key, promise, value) {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn ts_unsupported_evidence_is_a_bounded_excerpt_of_a_long_construct() {
+        let statements = (0..200)
+            .map(|index| format!("  total = total + {index};\n"))
+            .collect::<String>();
+        let source = format!("var total = 0;\nwith (scope) {{\n{statements}}}\n");
+        let (output, interner) = lower("src/with.js", &source);
+        let row = output
+            .unsupported
+            .iter()
+            .find(|row| row.construct == "with")
+            .expect("with statement is unsupported");
+
+        assert!(row.is_complete());
+        assert!(row.source_evidence.starts_with("with (scope)"));
+        assert!(row.source_evidence.ends_with('…'));
+        assert!(row.source_evidence.len() < 200, "{}", row.source_evidence);
+        let construct_text = &source[row.span.start_byte as usize..row.span.end_byte as usize];
+        assert!(construct_text.ends_with("total = total + 199;\n}"));
+        assert!(interner.resolve(row.stable_key).len() < 1_000);
     }
 
     #[test]

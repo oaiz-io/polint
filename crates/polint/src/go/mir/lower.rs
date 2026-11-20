@@ -16,7 +16,7 @@ use crate::analysis_neutral::mir_body::{
 use crate::analysis_neutral::mir_op::{
     AssignMode, BranchNilTest, ConservativeAction, MirAggregateField, MirAggregateKind,
     MirOperation, MirOperationKind, MirValue, UnsupportedDomain, UnsupportedPrecision,
-    UnsupportedSemanticFact,
+    UnsupportedSemanticFact, source_evidence_excerpt,
 };
 use crate::analysis_neutral::places::{
     PlaceInsert, PlaceProjection, PlaceRoot, PlaceStableContext, PlaceStatus, PlaceTableBuilder,
@@ -2242,7 +2242,7 @@ impl UnsupportedDraft {
             file: input.file,
             span: input.span,
             construct: input.construct,
-            source_evidence: input.source_evidence.as_ref().trim().to_string(),
+            source_evidence: source_evidence_excerpt(input.source_evidence.as_ref()),
             affected_place_keys: Vec::new(),
             affected_domains: input.affected_domains,
             conservative_action: input.conservative_action,
