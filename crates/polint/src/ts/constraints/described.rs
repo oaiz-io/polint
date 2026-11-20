@@ -527,9 +527,13 @@ impl<'a> Solve<'a> {
         for &holder in &found.holders {
             let slot = self.slot(holder, load.field);
             self.edge(slot, load.dst);
-            self.descriptions[load.file]
-                .lookups
-                .insert((load.row, holder));
+            // The load's own row already reads a field the loaded object
+            // stores itself; only a field held up the chain needs a lookup.
+            if holder != token {
+                self.descriptions[load.file]
+                    .lookups
+                    .insert((load.row, holder));
+            }
         }
         if found.unknown {
             self.add(load.dst, Token::Unknown);
@@ -902,6 +906,46 @@ mod tests {
                 .lookups
                 .contains(&(5, Token::Object(0, Obj::Site(PROTO))))
         );
+    }
+
+    #[test]
+    fn an_own_field_under_an_escaped_prototype_is_open_and_needs_no_lookup() {
+        const PROTO: FlowSpan = (80, 90);
+        let rows = vec![
+            FlowRow::Alloc {
+                dst: FlowVar::Local(1),
+                object: FlowObject::Site(PROTO),
+            },
+            copy(FlowVar::Sink, FlowVar::Local(1)),
+            FlowRow::Alloc {
+                dst: FlowVar::Local(0),
+                object: FlowObject::Site(OBJ),
+            },
+            FlowRow::Store {
+                base: FlowVar::Local(0),
+                field: "$proto".into(),
+                src: FlowVar::Local(1),
+            },
+            FlowRow::Store {
+                base: FlowVar::Local(0),
+                field: "exact:run".into(),
+                src: FlowVar::Function(G),
+            },
+            FlowRow::Load {
+                dst: FlowVar::Temp(1),
+                base: FlowVar::Local(0),
+                field: "exact:run".into(),
+            },
+        ];
+        let described = describe(
+            &flows(rows, vec![call(FlowVar::Temp(1), Vec::new())]),
+            |_| true,
+        );
+        // A setter the escaped prototype may gain takes the store, so the
+        // load is open; the load's own row reads the own field.
+        assert!(described.named.is_empty());
+        assert!(described.open.contains(&FlowVar::Temp(1)));
+        assert!(described.lookups.is_empty());
     }
 
     #[test]
