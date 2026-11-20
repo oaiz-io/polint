@@ -94,6 +94,9 @@ pub enum UnresolvedReason {
     UnsupportedImport,
     ResolverError,
     OutsideWorkspace,
+    /// The import may load in import mode or in require mode, and the two
+    /// modes resolve it to different files.
+    ModeDependent,
 }
 impl ModuleNode {
     /// Constructs a module-graph node from its complete fact fields.

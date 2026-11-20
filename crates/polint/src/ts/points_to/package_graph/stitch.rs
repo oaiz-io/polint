@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::super::{TsPointsToCallsite, TsPointsToInputs, object_for_node, var_for_node};
 use super::super::{invocations, site_answers, solve_ts_points_to};
+use crate::analysis_api::ImportSyntax;
 use crate::analysis_neutral::ids::{SemanticConstraintId, SemanticNodeId};
 use crate::analysis_neutral::package_graph::{
     ConstraintEntry, ImportEntry, ModuleValue, PackageGraph, SiteEntry,
@@ -31,11 +32,12 @@ use crate::internal_core::StableKeyInterner;
 /// The key prefix of the calls the value flow does not describe.
 const GUARD_KEY: &str = "value_flow_guard:";
 
-/// Where the imports of a program lead: for each package, importing file and
-/// specifier, the package and the file inside it that the import names.
+/// Where the imports of a program lead: for each package, importing file,
+/// specifier and syntax, the package and the file inside it that the import
+/// names.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Tree {
-    pub(crate) links: BTreeMap<(String, String, String), (String, String)>,
+    pub(crate) links: BTreeMap<(String, String, String, ImportSyntax), (String, String)>,
 }
 
 #[cfg(feature = "lang-typescript")]
@@ -50,7 +52,8 @@ impl Tree {
         let mut tree = Self::default();
         for (name, root, graph) in packages {
             for import in &graph.boundary.imports {
-                let Some(resolved) = resolver.resolve(&root.join(&import.file), &import.specifier)
+                let Some(resolved) =
+                    resolver.resolve(&root.join(&import.file), &import.specifier, import.syntax)
                 else {
                     continue;
                 };
@@ -78,6 +81,7 @@ impl Tree {
                         (*name).to_string(),
                         import.file.clone(),
                         import.specifier.clone(),
+                        import.syntax,
                     ),
                     (target.to_string(), inner),
                 );
@@ -326,6 +330,7 @@ fn link_source(
         package.to_string(),
         import.file.clone(),
         import.specifier.clone(),
+        import.syntax,
     );
     let Some((target, file)) = tree.links.get(&key) else {
         return Err("unlinked_import");

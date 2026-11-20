@@ -296,7 +296,8 @@ fn boundary(
                 if copies.contains(&(at, open)) {
                     boundary.imports.push(ImportEntry {
                         file: path.clone(),
-                        specifier: specifier.to_string(),
+                        specifier: specifier.specifier.to_string(),
+                        syntax: specifier.syntax,
                         value,
                         place: at,
                         open,

@@ -428,6 +428,106 @@ fn the_stitch_keeps_every_edge_a_graph_found_alone() {
     assert!(checked >= 2, "each package found an edge of its own");
 }
 
+/// Writes `files`, each a path under `root` and its text.
+fn write_files(root: &Path, files: &[(&str, &str)]) {
+    for (path, text) in files {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().expect("a parent")).expect("create dir");
+        std::fs::write(path, text).expect("write file");
+    }
+}
+
+/// The answer at the call site that starts at byte `start` of `file`, the
+/// package and path of a portable key.
+fn answer_in<'a>(
+    answers: &'a BTreeMap<String, PortableAnswer>,
+    file: &str,
+    start: usize,
+) -> &'a PortableAnswer {
+    let prefix = format!("{file}@{start}..");
+    let mut found = answers.iter().filter(|(site, _)| site.starts_with(&prefix));
+    let (_, answer) = found.next().expect("a call site starts there");
+    assert!(
+        found.next().is_none(),
+        "one call site starts at {file}@{start}"
+    );
+    answer
+}
+
+/// Node loads an import in import mode from an ES module and a `require` in
+/// require mode, and an `exports` map gives each mode its own file whatever
+/// the order of its keys: `main.mjs` runs `import.cjs` and `main.cjs` runs
+/// `require.cjs`. A `.js` file of a package without a module type may load
+/// either way (Node runs it as an ES module, a compiler may turn its import
+/// into a `require`), so its call has no exact target.
+#[test]
+fn an_import_and_a_require_of_one_package_reach_the_files_of_their_modes() {
+    let import = "import dual from \"dual\";\ndual.run();\n";
+    let require = "const dual = require(\"dual\");\ndual.run();\n";
+    let run = |text: &str| text.find("dual.run").expect("a run call");
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(
+        temp.path(),
+        &[
+            ("package.json", r#"{"name":"app","version":"1.0.0"}"#),
+            ("main.mjs", import),
+            ("main.cjs", require),
+            ("main.js", import),
+            (
+                "node_modules/dual/package.json",
+                r#"{"name":"dual","version":"1.0.0","exports":{"require":"./require.cjs","import":"./import.cjs"}}"#,
+            ),
+            (
+                "node_modules/dual/require.cjs",
+                "function requireRun() {}\nmodule.exports = { run: requireRun };\n",
+            ),
+            (
+                "node_modules/dual/import.cjs",
+                "function importRun() {}\nmodule.exports = { run: importRun };\n",
+            ),
+        ],
+    );
+    let whole = whole_program_answers(temp.path());
+    let packages = [
+        (".", temp.path().to_path_buf()),
+        ("dual", temp.path().join("node_modules/dual")),
+    ]
+    .into_iter()
+    .map(|(name, root)| {
+        let graph = package_graph_of(&root).expect("package graph");
+        (name.to_string(), root, graph)
+    })
+    .collect::<Vec<_>>();
+    let graphs = named(&packages);
+    let stitched = stitch(&graphs, &tree_of(&packages)).expect("stitch");
+    assert_eq!(stitched_portable(&stitched, &graphs), whole);
+
+    let ends_with = |answer: &PortableAnswer, name: &str| {
+        !answer.targets.is_empty()
+            && answer
+                .targets
+                .iter()
+                .all(|target| target.ends_with(&format!("#{name}")))
+    };
+    let esm = answer_in(&whole, ".:main.mjs", run(import));
+    assert!(ends_with(esm, "importRun"), "main.mjs: {esm:?}");
+    let cjs = answer_in(&whole, ".:main.cjs", run(require));
+    assert!(ends_with(cjs, "requireRun"), "main.cjs: {cjs:?}");
+    let either = answer_in(&whole, ".:main.js", run(import));
+    assert!(
+        !either.claim.contains("Exact") && !either.claim.contains("Complete"),
+        "main.js: {either:?}"
+    );
+    assert!(
+        stitched
+            .open_imports
+            .iter()
+            .any(|open| open.file == "main.js" && open.specifier == "dual"),
+        "the import of main.js is left open: {:?}",
+        stitched.open_imports
+    );
+}
+
 #[test]
 fn the_stitch_refuses_a_graph_its_budget_cut_short() {
     let temp = tempfile::tempdir().expect("tempdir");

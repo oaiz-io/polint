@@ -29,9 +29,10 @@ use oxc_semantic::{AstNodes, Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, Span};
 
 use super::{
-    FlowCall, FlowObject, FlowRow, FlowSpan, FlowVar, Invocable, LoweredFunction, TsValueFlows,
+    FlowCall, FlowObject, FlowRequest, FlowRow, FlowSpan, FlowVar, Invocable, LoweredFunction,
+    TsValueFlows,
 };
-use crate::analysis_api::SourceFile;
+use crate::analysis_api::{ImportSyntax, SourceFile};
 use crate::ts::parse::parse_ts_file;
 use crate::ts::sealed_bindings::bindings_written_by_block_functions;
 use crate::ts::spans::{
@@ -209,14 +210,17 @@ impl Lowerer<'_> {
         FlowVar::Open
     }
 
-    fn request(&mut self, specifier: &str, namespace: bool) -> FlowVar {
+    fn request(&mut self, specifier: &str, syntax: ImportSyntax, namespace: bool) -> FlowVar {
         let index = self
             .flows
             .requests
             .iter()
-            .position(|request| request.as_ref() == specifier)
+            .position(|request| request.specifier.as_ref() == specifier && request.syntax == syntax)
             .unwrap_or_else(|| {
-                self.flows.requests.push(specifier.into());
+                self.flows.requests.push(FlowRequest {
+                    specifier: specifier.into(),
+                    syntax,
+                });
                 self.flows.requests.len() - 1
             }) as u32;
         if namespace {
@@ -855,7 +859,11 @@ impl Lowerer<'_> {
                 if let Some(local) = self.binding_local(declaration.id.symbol_id.get()) {
                     let value = match &declaration.module_reference {
                         TSModuleReference::ExternalModuleReference(reference) => {
-                            let module = self.request(reference.expression.value.as_str(), false);
+                            let module = self.request(
+                                reference.expression.value.as_str(),
+                                ImportSyntax::Require,
+                                false,
+                            );
                             self.load(module, "exact:exports".into())
                         }
                         _ => FlowVar::Open,
@@ -909,7 +917,11 @@ impl Lowerer<'_> {
     fn module_declaration(&mut self, declaration: &ModuleDeclaration<'_>) {
         match declaration {
             ModuleDeclaration::ImportDeclaration(declaration) => {
-                let request = self.request(declaration.source.value.as_str(), true);
+                let request = self.request(
+                    declaration.source.value.as_str(),
+                    ImportSyntax::Import,
+                    true,
+                );
                 for specifier in declaration.specifiers.iter().flatten() {
                     let (id, value) = match specifier {
                         ImportDeclarationSpecifier::ImportSpecifier(specifier) => (
@@ -932,7 +944,11 @@ impl Lowerer<'_> {
                 }
             }
             ModuleDeclaration::ExportAllDeclaration(declaration) => {
-                let request = self.request(declaration.source.value.as_str(), true);
+                let request = self.request(
+                    declaration.source.value.as_str(),
+                    ImportSyntax::Import,
+                    true,
+                );
                 let field = declaration.exported.as_ref().map_or_else(
                     || "$proto".into(),
                     |name| format!("exact:{}", name.name()).into(),
@@ -967,7 +983,7 @@ impl Lowerer<'_> {
                 let request = declaration
                     .source
                     .as_ref()
-                    .map(|source| self.request(source.value.as_str(), true));
+                    .map(|source| self.request(source.value.as_str(), ImportSyntax::Import, true));
                 for specifier in &declaration.specifiers {
                     let value = match request {
                         Some(request) => {
@@ -1676,7 +1692,7 @@ impl Lowerer<'_> {
             && let [argument] = call.arguments.as_slice()
             && let Some(Expression::StringLiteral(specifier)) = argument.as_expression()
         {
-            let module = self.request(specifier.value.as_str(), false);
+            let module = self.request(specifier.value.as_str(), ImportSyntax::Require, false);
             return Some(self.load(module, "exact:exports".into()));
         }
         None
@@ -2062,7 +2078,7 @@ mod tests {
             let described = describe_program(
                 &refs,
                 |_, _| true,
-                |file, request| match files[file].requests[request as usize].as_ref() {
+                |file, request| match files[file].requests[request as usize].specifier.as_ref() {
                     "./lib" => Some(0),
                     "./barrel" => Some(1),
                     _ => None,

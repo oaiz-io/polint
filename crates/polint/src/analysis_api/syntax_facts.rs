@@ -140,6 +140,22 @@ pub struct ImportFact {
     pub path: String,
     pub span: Span,
     pub language: Language,
+    /// How the import is written, which decides the mode its file loads in.
+    #[serde(default)]
+    pub(crate) syntax: ImportSyntax,
+}
+
+/// How an import is written. A `require` loads its file in require mode.
+/// Import syntax loads it in import mode where the importing file runs as an
+/// ES module; elsewhere a compiler may turn it into a `require`, so it may
+/// load in either mode.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+pub(crate) enum ImportSyntax {
+    #[default]
+    Import,
+    Require,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -301,7 +317,14 @@ impl ImportFact {
             path,
             span,
             language,
+            syntax: ImportSyntax::Import,
         }
+    }
+
+    /// The same import, written with `syntax`.
+    pub(crate) fn with_syntax(mut self, syntax: ImportSyntax) -> Self {
+        self.syntax = syntax;
+        self
     }
 }
 

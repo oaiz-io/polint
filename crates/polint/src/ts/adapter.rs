@@ -1,10 +1,10 @@
 use crate::analysis_api::{
     AnalysisCache, CacheStats, CachedFileAnalysis, CachedFileFacts, Digest, DigestKind,
     DisabledAnalysisCache, FactDatabase, FileCacheKeyParts, FileCacheReadStatus, FunctionFact,
-    ImportFact, JsxAttributeFact, LayerCacheEntryDigests, LayerCacheKeyParts, LayerCacheKind,
-    LayerCachePrecision, LayerCacheReadStatus, LayerCacheWriteStatus, ProviderRunResult,
-    SourceFile, StringLiteralFact, TS_JS_MODULE_FUNCTION_NAME, TS_PARSER_BACKEND, TsClassFact,
-    TsComponentFact,
+    ImportFact, ImportSyntax, JsxAttributeFact, LayerCacheEntryDigests, LayerCacheKeyParts,
+    LayerCacheKind, LayerCachePrecision, LayerCacheReadStatus, LayerCacheWriteStatus,
+    ProviderRunResult, SourceFile, StringLiteralFact, TS_JS_MODULE_FUNCTION_NAME,
+    TS_PARSER_BACKEND, TsClassFact, TsComponentFact,
 };
 use crate::internal_core::{
     Diagnostic, DiagnosticRange as TextRange, FileId, FunctionId, Language, Span,
@@ -885,7 +885,7 @@ fn collect_require_imports_from_expression(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             collect_require_imports_from_expression(db, ctx, &call.callee);
             for argument in &call.arguments {
@@ -1035,7 +1035,7 @@ fn collect_require_imports_from_export_default(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             for argument in &call.arguments {
                 collect_require_imports_from_argument(db, ctx, argument);
@@ -1122,7 +1122,7 @@ fn collect_require_imports_from_for_init(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             for argument in &call.arguments {
                 collect_require_imports_from_argument(db, ctx, argument);
@@ -1149,7 +1149,7 @@ fn collect_require_imports_from_argument(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             for argument in &call.arguments {
                 collect_require_imports_from_argument(db, ctx, argument);
@@ -1201,14 +1201,38 @@ fn push_module_import(
     span: Span,
     language: Language,
 ) {
-    db.push_import(ImportFact::new(
-        crate::internal_core::ImportId::from_raw(0),
-        file,
-        None,
-        path.to_string(),
-        span,
-        language,
-    ));
+    push_import_written(db, file, path, span, language, ImportSyntax::Import);
+}
+
+fn push_require_import(
+    db: &mut dyn FactDatabase,
+    file: FileId,
+    path: &str,
+    span: Span,
+    language: Language,
+) {
+    push_import_written(db, file, path, span, language, ImportSyntax::Require);
+}
+
+fn push_import_written(
+    db: &mut dyn FactDatabase,
+    file: FileId,
+    path: &str,
+    span: Span,
+    language: Language,
+    syntax: ImportSyntax,
+) {
+    db.push_import(
+        ImportFact::new(
+            crate::internal_core::ImportId::from_raw(0),
+            file,
+            None,
+            path.to_string(),
+            span,
+            language,
+        )
+        .with_syntax(syntax),
+    );
 }
 
 #[derive(Clone, Copy)]

@@ -195,7 +195,15 @@ fn no_ui_to_domain(
 
 `UnresolvedReason` currently includes `NotFound`, `SetupMissing`,
 `DynamicExpression`, `UnsupportedLanguage`, `UnsupportedImport`, `ResolverError`,
-and `OutsideWorkspace`.
+`OutsideWorkspace`, and `ModeDependent`.
+
+TS/JS imports resolve in the mode their file loads in, so an `exports` map
+with `import` and `require` conditions gives each its own file. A `require`
+resolves in require mode. Import syntax resolves in import mode when the
+importing file runs as an ES module: `.mjs`, `.mts`, or a `.js` or `.ts` file
+of a package with `"type": "module"`. Elsewhere a compiler may turn the import
+into a `require`, so the import resolves only when both modes name the same
+file; otherwise it is `Unresolved` with reason `ModeDependent`.
 
 ## Setup-Sensitive Behavior
 

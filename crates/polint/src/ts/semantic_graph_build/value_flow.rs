@@ -14,7 +14,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analysis_api::{FunctionFact, ResolutionStatus};
+use crate::analysis_api::{FunctionFact, ImportSyntax, ResolutionStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::platform;
 use crate::analysis_neutral::ids::{PlaceId, SemanticNodeId};
@@ -179,7 +179,7 @@ impl GraphBuilder {
                 )
             })
             .collect::<BTreeMap<_, _>>();
-        let mut targets = BTreeMap::<(FileId, &str), BTreeSet<Option<usize>>>::new();
+        let mut targets = BTreeMap::<(FileId, &str, ImportSyntax), BTreeSet<Option<usize>>>::new();
         for import in db.imports() {
             let target = resolved
                 .get(&import.id)
@@ -189,7 +189,7 @@ impl GraphBuilder {
                 .and_then(|file| indices.get(file))
                 .copied();
             targets
-                .entry((import.file, &import.path))
+                .entry((import.file, &import.path, import.syntax))
                 .or_default()
                 .insert(target);
         }
@@ -208,7 +208,8 @@ impl GraphBuilder {
                     .requests
                     .iter()
                     .map(|request| {
-                        let candidates = targets.get(&(*file, request.as_ref()))?;
+                        let candidates =
+                            targets.get(&(*file, request.specifier.as_ref(), request.syntax))?;
                         if candidates.len() != 1 {
                             return None;
                         }

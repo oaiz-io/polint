@@ -17,6 +17,7 @@ pub(crate) mod described;
 mod lower;
 pub(crate) mod platform;
 
+use crate::analysis_api::ImportSyntax;
 pub(crate) use crate::analysis_neutral::semantic_graph::constraints::Invocable;
 #[cfg(feature = "lang-typescript")]
 pub(crate) use lower::{lower_ts_program_value_flows, lower_ts_source_value_flows};
@@ -115,12 +116,19 @@ pub(crate) struct LoweredFunction {
     pub(crate) invocable: Invocable,
 }
 
+/// A module a file requests, and how the request is written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FlowRequest {
+    pub(crate) specifier: Box<str>,
+    pub(crate) syntax: ImportSyntax,
+}
+
 /// The lowered value flow of one file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct TsValueFlows {
     /// False when the file was not lowered; it then has no rows.
     pub(crate) lowered: bool,
-    pub(crate) requests: Vec<Box<str>>,
+    pub(crate) requests: Vec<FlowRequest>,
     pub(crate) esm: bool,
     pub(crate) rows: Vec<FlowRow>,
     pub(crate) calls: Vec<FlowCall>,

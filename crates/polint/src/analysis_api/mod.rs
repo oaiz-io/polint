@@ -55,6 +55,7 @@ pub use symbol_facts::{
     SemanticImportKind, SemanticStatus, SymbolFact, SymbolKind, SymbolNamespace, SymbolPrecision,
     SymbolResolutionStatus,
 };
+pub(crate) use syntax_facts::ImportSyntax;
 pub use syntax_facts::{
     BranchObligation, CachedFileAnalysis, CachedFileFacts, CoverageFact, FunctionFact,
     GoTypeDeclFact, GoTypeDeclKind, ImportFact, JsxAttributeFact, PackageFact, StringLiteralFact,

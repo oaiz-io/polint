@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::identity::{CallsiteIdentity, FunctionIdentity, PackageIdentity};
+use crate::analysis_api::ImportSyntax;
 use crate::analysis_neutral::ids::SemanticNodeId;
 use crate::analysis_neutral::points_to::facts::{
     PointsToBudgetStatus, PointsToPrecision, PointsToStatus,
@@ -16,7 +17,7 @@ use crate::analysis_neutral::points_to::tiers::EdgeClaim;
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 
 /// The version of the stored form. It changes whenever a field changes.
-pub(crate) const PACKAGE_GRAPH_SCHEMA: u32 = 1;
+pub(crate) const PACKAGE_GRAPH_SCHEMA: u32 = 2;
 
 /// The call graph of one package version, its constraints and its boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,12 +118,15 @@ pub(crate) enum ModuleValue {
 }
 
 /// One import of another package: the importing file, the specifier as
-/// written, and the place that receives the imported module. Analysed alone
-/// the place receives an open value, through a copy from `open`.
+/// written, how it is written, and the place that receives the imported
+/// module. Analysed alone the place receives an open value, through a copy
+/// from `open`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) struct ImportEntry {
     pub(crate) file: String,
     pub(crate) specifier: String,
+    /// `require` or import syntax: the mode the specifier resolves in.
+    pub(crate) syntax: ImportSyntax,
     pub(crate) value: ModuleValue,
     pub(crate) place: u32,
     pub(crate) open: u32,

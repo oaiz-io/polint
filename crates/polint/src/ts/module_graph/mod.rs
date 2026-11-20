@@ -1,6 +1,6 @@
 mod formats;
 use crate::analysis_api::{
-    FactDatabase, ModuleEdgeKind, ResolutionPrecision, ResolutionStatus, SourceFile,
+    FactDatabase, ImportSyntax, ModuleEdgeKind, ResolutionPrecision, ResolutionStatus, SourceFile,
     UnresolvedReason,
 };
 use crate::analysis_neutral::module_graph::model::{
@@ -92,7 +92,7 @@ pub fn resolve_ts_import(
 
 #[cfg(feature = "lang-typescript")]
 pub struct TsResolverContext {
-    resolver: Resolver,
+    resolver: ModeResolvers,
     root: PathBuf,
     file_by_absolute_normalized_path: BTreeMap<PathBuf, FileId>,
     path_aliases_by_config_dir: BTreeMap<PathBuf, Vec<String>>,
@@ -120,7 +120,7 @@ impl TsResolverContext {
             .collect();
 
         Self {
-            resolver: Resolver::new(resolve_options()),
+            resolver: ModeResolvers::new(),
             path_aliases_by_config_dir: collect_ts_path_aliases(&root, db),
             root,
             file_by_absolute_normalized_path,
@@ -164,10 +164,17 @@ pub fn resolve_ts_import(
         return ResolvedImportDraft::unresolved(UnresolvedReason::NotFound);
     };
 
-    match context
-        .resolver
-        .resolve_file(&importer_path, input.import.path.as_str())
-    {
+    let resolution = match context.resolver.resolve(
+        &importer_path,
+        input.import.path.as_str(),
+        input.import.syntax,
+    ) {
+        ModeResolution::One(resolution) => resolution,
+        ModeResolution::Split => {
+            return ResolvedImportDraft::unresolved(UnresolvedReason::ModeDependent);
+        }
+    };
+    match resolution {
         Ok(resolution) => resolved_path_draft(context, input, resolution.path()),
         Err(ResolveError::Builtin { resolved, .. }) => {
             external_draft(resolved, input.import.language)
@@ -1861,31 +1868,120 @@ struct TsconfigCompilerOptionsWire {
     paths: Option<BTreeMap<String, Vec<String>>>,
 }
 
-/// The `exports` conditions import resolution matches, in its order.
+/// The `exports` conditions import resolution matches: the condition of the
+/// mode an import loads in, then the rest in this order.
 pub(crate) const EXPORT_CONDITIONS: &[&str] = &["import", "require", "node", "default"];
+
+/// The `exports` conditions of one mode: its own condition and the shared
+/// ones, so an `exports` map that names both modes gives each its file.
+#[cfg(feature = "lang-typescript")]
+fn mode_conditions(own: &str) -> Vec<String> {
+    EXPORT_CONDITIONS
+        .iter()
+        .filter(|name| **name == own || !matches!(**name, "import" | "require"))
+        .map(|name| (*name).to_string())
+        .collect()
+}
+
+/// The resolvers of the two modes a file loads in, sharing one cache.
+#[cfg(feature = "lang-typescript")]
+pub(crate) struct ModeResolvers {
+    import: Resolver,
+    require: Resolver,
+    /// Reads the module format of an importing file.
+    format: Resolver,
+}
+
+/// What resolving an import gives: the answer of every mode the import may
+/// load in, or `Split` where those modes give different answers.
+#[cfg(feature = "lang-typescript")]
+pub(crate) enum ModeResolution {
+    One(Result<oxc_resolver::Resolution, ResolveError>),
+    Split,
+}
+
+#[cfg(feature = "lang-typescript")]
+impl ModeResolvers {
+    pub(crate) fn new() -> Self {
+        let import = Resolver::new(resolve_options(mode_conditions("import")));
+        let require = import.clone_with_options(resolve_options(mode_conditions("require")));
+        let format = import.clone_with_options(ResolveOptions {
+            module_type: true,
+            ..resolve_options(mode_conditions("import"))
+        });
+        Self {
+            import,
+            require,
+            format,
+        }
+    }
+
+    /// Resolves `specifier`, written with `syntax` in the file `importer`. A
+    /// `require` loads in require mode. Import syntax loads in import mode
+    /// where the importer runs as an ES module (`.mjs`, `.mts`, or a `.js`
+    /// or `.ts` file of a `"type": "module"` package); elsewhere a compiler
+    /// may turn it into a `require`, so both modes must give one answer.
+    pub(crate) fn resolve(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        syntax: ImportSyntax,
+    ) -> ModeResolution {
+        if syntax == ImportSyntax::Require {
+            return ModeResolution::One(self.require.resolve_file(importer, specifier));
+        }
+        let import = self.import.resolve_file(importer, specifier);
+        if self.runs_as_module(importer) {
+            return ModeResolution::One(import);
+        }
+        let require = self.require.resolve_file(importer, specifier);
+        match (&import, &require) {
+            (Ok(left), Ok(right)) if left.path() != right.path() => ModeResolution::Split,
+            (Ok(_), Err(_)) | (Err(_), Ok(_)) => ModeResolution::Split,
+            _ => ModeResolution::One(import),
+        }
+    }
+
+    fn runs_as_module(&self, importer: &Path) -> bool {
+        let (Some(directory), Some(name)) = (importer.parent(), importer.file_name()) else {
+            return false;
+        };
+        self.format
+            .resolve(directory, &format!("./{}", name.to_string_lossy()))
+            .is_ok_and(|resolution| {
+                resolution.module_type() == Some(oxc_resolver::ModuleType::Module)
+            })
+    }
+}
 
 /// Resolves import specifiers against the files on disk with the options of
 /// import resolution, for callers that hold no fact database.
 #[cfg(feature = "lang-typescript")]
-pub(crate) struct DiskResolver(Resolver);
+pub(crate) struct DiskResolver(ModeResolvers);
 
 #[cfg(feature = "lang-typescript")]
 impl DiskResolver {
     pub(crate) fn new() -> Self {
-        Self(Resolver::new(resolve_options()))
+        Self(ModeResolvers::new())
     }
 
-    /// The file `specifier` names when the file `importer` imports it.
-    pub(crate) fn resolve(&self, importer: &Path, specifier: &str) -> Option<PathBuf> {
-        self.0
-            .resolve_file(importer, specifier)
-            .ok()
-            .and_then(|resolution| normalize_path(resolution.path()))
+    /// The file `specifier` names when the file `importer` imports it with
+    /// `syntax`; `None` where the modes it may load in name different files.
+    pub(crate) fn resolve(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        syntax: ImportSyntax,
+    ) -> Option<PathBuf> {
+        match self.0.resolve(importer, specifier, syntax) {
+            ModeResolution::One(Ok(resolution)) => normalize_path(resolution.path()),
+            ModeResolution::One(Err(_)) | ModeResolution::Split => None,
+        }
     }
 }
 
 #[cfg(feature = "lang-typescript")]
-fn resolve_options() -> ResolveOptions {
+fn resolve_options(condition_names: Vec<String>) -> ResolveOptions {
     ResolveOptions {
         tsconfig: Some(TsconfigDiscovery::Auto),
         extensions: vec![
@@ -1905,10 +2001,7 @@ fn resolve_options() -> ResolveOptions {
             (".mjs".into(), vec![".mjs".into(), ".mts".into()]),
             (".cjs".into(), vec![".cjs".into(), ".cts".into()]),
         ],
-        condition_names: EXPORT_CONDITIONS
-            .iter()
-            .map(|name| (*name).into())
-            .collect(),
+        condition_names,
         main_fields: vec!["module".into(), "browser".into(), "main".into()],
         exports_fields: vec![vec!["exports".into()]],
         imports_fields: vec![vec!["imports".into()]],
