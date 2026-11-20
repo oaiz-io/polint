@@ -34,7 +34,9 @@ use super::{
 };
 use crate::analysis_api::{ImportSyntax, SourceFile};
 use crate::ts::parse::parse_ts_file;
-use crate::ts::sealed_bindings::bindings_written_by_block_functions;
+use crate::ts::sealed_bindings::{
+    DynamicScope, bindings_written_by_block_functions, dynamic_scope, is_direct_eval,
+};
 use crate::ts::spans::{
     normalized_call_expression_span, normalized_new_expression_span,
     normalized_tagged_template_span,
@@ -79,6 +81,7 @@ pub(crate) fn lower_ts_program_value_flows(
         field_sources: BTreeMap::new(),
         bound_values: BTreeMap::new(),
         classes: Vec::new(),
+        dynamic: dynamic_scope(program, scoping, nodes),
     };
     lowerer.flows.esm = program.body.iter().any(|statement| {
         matches!(
@@ -98,6 +101,23 @@ pub(crate) fn lower_ts_program_value_flows(
         let local = lowerer.local(symbol);
         if !lowerer.aborted {
             lowerer.copy(local, FlowVar::Open);
+        }
+    }
+    // A `with` body may read an object property for any name of the file. A
+    // direct eval may write the bindings its code names, and exposes what
+    // they hold to its code.
+    if lowerer.dynamic.whole_file() {
+        lowerer.abort();
+    }
+    let written = lowerer.dynamic.bindings().clone();
+    let exposed = lowerer.dynamic.exposed().clone();
+    for symbol in written.union(&exposed) {
+        let local = lowerer.local(*symbol);
+        if !lowerer.aborted {
+            if written.contains(symbol) {
+                lowerer.copy(local, FlowVar::Open);
+            }
+            lowerer.sink(local);
         }
     }
     lowerer.statements(&program.body);
@@ -151,6 +171,8 @@ struct Lowerer<'s> {
     bound_values: BTreeMap<FlowVar, platform::BoundValue>,
     classes: Vec<ClassFrame>,
     frames: Vec<Frame>,
+    /// What the file's `with` statements and direct `eval` calls reach.
+    dynamic: DynamicScope,
     aborted: bool,
     /// Function declarations with a body, by symbol.
     bodied: BTreeSet<u32>,
@@ -302,11 +324,14 @@ impl Lowerer<'_> {
     }
 
     /// The binding a reference resolves to, if the scopes resolve it.
+    ///
+    /// A global a non-strict eval may declare a `var` over is open.
     fn reference_local(&mut self, reference: &IdentifierReference<'_>) -> Option<FlowVar> {
-        let symbol = reference
-            .reference_id
-            .get()
-            .and_then(|id| self.scoping.get_reference(id).symbol_id());
+        let id = reference.reference_id.get()?;
+        let symbol = self.scoping.get_reference(id).symbol_id();
+        if symbol.is_none() && self.dynamic.shadows(id) {
+            return Some(FlowVar::Open);
+        }
         self.binding_local(symbol)
     }
 
@@ -811,6 +836,7 @@ impl Lowerer<'_> {
             if declaration.kind == VariableDeclarationKind::Const
                 && let BindingPattern::BindingIdentifier(id) = &declarator.id
                 && let Some(symbol) = id.symbol_id.get()
+                && !self.dynamic.reaches(symbol)
                 && let Some(init) = &declarator.init
                 && let Some(value) = self.constant_string(init, 0)
             {
@@ -1144,6 +1170,7 @@ impl Lowerer<'_> {
 
     fn identifier_place(&mut self, reference: &IdentifierReference<'_>) -> Place {
         match self.reference_local(reference) {
+            Some(FlowVar::Open) => Place::Global,
             Some(local) => Place::Var(local),
             None => match reference.name.as_str() {
                 "module" => Place::Var(FlowVar::Module),
@@ -1664,11 +1691,8 @@ impl Lowerer<'_> {
     }
 
     fn call(&mut self, call: &CallExpression<'_>) -> FlowVar {
-        if let Expression::Identifier(reference) = call.callee.get_inner_expression()
-            && reference.name == "eval"
-            && self.reference_local(reference).is_none()
-        {
-            return self.abort();
+        if is_direct_eval(call) {
+            return self.direct_eval(call);
         }
         if let Some(value) = self.platform_call(call) {
             return value;
@@ -1693,6 +1717,23 @@ impl Lowerer<'_> {
             model: None,
         });
         result
+    }
+
+    /// A direct eval: the bindings its code can name are open from the start
+    /// of the walk, see [`DynamicScope`]. Its arguments and, where its code is
+    /// not known, `this` and `arguments` of the function around it escape to
+    /// that code, and what it returns is open.
+    fn direct_eval(&mut self, call: &CallExpression<'_>) -> FlowVar {
+        let (arguments, _) = self.arguments_of(&call.arguments);
+        for argument in arguments {
+            self.sink(argument);
+        }
+        if self.dynamic.opens_context(call.span) {
+            let this = self.this();
+            self.sink(this);
+            self.arguments();
+        }
+        FlowVar::Open
     }
 
     fn builtin_call(&mut self, call: &CallExpression<'_>) -> Option<FlowVar> {
@@ -2221,10 +2262,30 @@ mod tests {
     }
 
     #[test]
-    fn with_and_direct_eval_stop_the_walk() {
+    fn with_and_an_eval_that_may_name_the_module_wrapper_stop_the_walk() {
         assert!(!lower("with (o) { f(); }\n").lowered);
-        assert!(!lower("function f() {}\neval('f()');\n").lowered);
+        assert!(!lower("function g() { eval('exports.f = 1'); }\n").lowered);
+        assert!(!lower("function g(code) { eval(code); }\n").lowered);
+        assert!(lower("function f() {}\neval('f()');\n").lowered);
         assert!(lower("const e = eval;\ne('1');\n").lowered);
+    }
+
+    #[test]
+    fn a_direct_eval_opens_only_the_bindings_its_code_names() {
+        let source = "function a() {}\nfunction b() {}\nlet f = a;\nlet g = b;\neval('f = 1');\nf();\ng();\n";
+        let flows = lower(source);
+        assert!(flows.lowered);
+        let described = describe(&flows, |_| true);
+        assert!(
+            !described
+                .named
+                .contains_key(&site_of(&flows, source, "f()"))
+        );
+        assert!(
+            described
+                .named
+                .contains_key(&site_of(&flows, source, "g()"))
+        );
     }
 
     #[test]

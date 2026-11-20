@@ -23,7 +23,7 @@ use crate::ts::scope::facts::{
     TsScopeFact, TsScopeKind,
 };
 use crate::ts::scope::store::TsScopeOutput;
-use crate::ts::sealed_bindings::{bindings_written_by_block_functions, file_bindings_are_sealed};
+use crate::ts::sealed_bindings::{bindings_written_by_block_functions, dynamic_scope};
 
 pub fn extract_ts_scope(interner: &StableKeyInterner, file: &SourceFile) -> TsScopeOutput {
     let source = file.source.as_ref();
@@ -58,8 +58,8 @@ pub fn mark_scope_partial_ast(output: &mut TsScopeOutput) {
     }
 }
 
-/// The reason a binding of a file with a `with` statement or an `eval`
-/// reference carries: what a name holds there is not decided by its binding.
+/// The reason a binding carries when a `with` statement or a direct `eval`
+/// can reach it: what its name holds there is not decided by the binding.
 const DYNAMIC_SCOPE_REASON: &str = "dynamic-scope: with statement or eval";
 
 /// The reason a binding carries when a block-level function declaration of
@@ -123,10 +123,27 @@ pub fn extract_ts_scope_from_program(
             &bindings,
         ));
 
-        // A `with` body or a direct `eval` can make any name of the file read
-        // another value than its binding holds, so no binding row is claimed.
-        if !file_bindings_are_sealed(nodes) {
-            for binding in &mut bindings {
+        // A `with` body can make any name of the file read another value than
+        // its binding holds, and a direct `eval` any name its call can see.
+        let dynamic = dynamic_scope(program, scoping, nodes);
+        let reached = dynamic
+            .bindings()
+            .iter()
+            .map(|symbol| {
+                (
+                    crate::ts::intern_frontend_stable_key(scope_key_for_symbol(
+                        file,
+                        &scope_keys,
+                        scoping,
+                        *symbol,
+                    )),
+                    scoping.symbol_name(*symbol),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        for binding in &mut bindings {
+            if dynamic.whole_file() || reached.contains(&(binding.scope_key, binding.name.as_str()))
+            {
                 mark_binding_dynamic(binding, DYNAMIC_SCOPE_REASON);
             }
         }

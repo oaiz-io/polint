@@ -604,15 +604,23 @@ mod value_functions {
     }
 
     /// A parameter named `eval` does not make `eval(...)` an indirect call
-    /// the analysis can trust: the argument may still be the global `eval`.
+    /// the analysis can trust: the argument may still be the global `eval`,
+    /// so the binding its code writes has no row.
     #[test]
-    fn an_eval_parameter_drops_every_row() {
+    fn an_eval_parameter_drops_the_row_its_code_writes() {
         let found = rows(
             "src/value.cjs",
             "function run(eval) {\n  let f = () => 1;\n  eval(\"f = () => 2\");\n  return f();\n}\n",
         );
 
-        assert!(found.is_empty(), "{found:?}");
+        assert!(
+            found.iter().all(|(_, _, binding, _)| binding != "f"),
+            "{found:?}"
+        );
+        assert!(
+            found.iter().any(|(_, _, binding, _)| binding == "run"),
+            "{found:?}"
+        );
     }
 
     #[test]

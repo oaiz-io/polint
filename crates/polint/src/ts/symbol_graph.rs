@@ -20,7 +20,7 @@ use crate::internal_core::{
     SymbolId as PolintSymbolId,
 };
 use crate::ts::parse::parse_ts_file;
-use crate::ts::sealed_bindings::{bindings_written_by_block_functions, file_bindings_are_sealed};
+use crate::ts::sealed_bindings::{bindings_written_by_block_functions, dynamic_scope};
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
@@ -490,11 +490,11 @@ fn derive_ts_semantic_index(
 /// A `let`, `var` or function binding that a block-level function declaration
 /// overwrites gets no row: see [`bindings_written_by_block_functions`].
 ///
-/// A file that mentions `eval` or has a `with` statement gets no rows at all:
-/// a direct eval can write a binding or declare a `var` that shadows one, and
-/// a `with` body can see an object property instead of the binding, neither
-/// through a reference Oxc sees. Any call through an identifier named `eval`
-/// counts, since a parameter or local of that name may hold the global.
+/// A binding a direct `eval` can reach gets no row, and a file with a `with`
+/// statement gets no rows at all: an eval can write a binding its call can see
+/// or declare a `var` that shadows one, and a `with` body can see an object
+/// property instead of the binding, neither through a reference Oxc sees. See
+/// [`dynamic_scope`].
 fn add_ts_value_function_rows(
     builder: &mut SemanticIndexBuilder,
     file: &SourceFile,
@@ -502,7 +502,8 @@ fn add_ts_value_function_rows(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
 ) {
-    if !file_bindings_are_sealed(nodes) {
+    let dynamic = dynamic_scope(program, scoping, nodes);
+    if dynamic.whole_file() {
         return;
     }
     let root_is_module_scope = program.body.iter().any(Statement::is_module_declaration);
@@ -574,6 +575,9 @@ fn add_ts_value_function_rows(
             }
             _ => continue,
         };
+        if dynamic.reaches(symbol) {
+            continue;
+        }
         builder.add_value_function(ValueFunctionFact {
             binding: span_from_oxc(file, scoping.symbol_span(symbol)),
             function: span_from_oxc(file, function_span),

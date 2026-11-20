@@ -226,6 +226,117 @@ fn a_call_after_eval_declares_a_shadow_claims_no_exact_target() {
     assert_eq!(exact_targets("eval-shadow.cjs", source, "f()"), none());
 }
 
+/// Node prints `b`: an eval in a nested function writes the module binding.
+#[test]
+fn a_call_after_a_nested_eval_writes_the_module_binding_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  let f=a; function g(){ eval(\"f=b\"); } g(); f();\n";
+    assert_eq!(
+        exact_targets("eval-nested-write.cjs", source, "f()"),
+        none()
+    );
+}
+
+/// Node prints `b`: a `var` of non-strict eval code in a block joins the
+/// function scope, where it shadows the module binding.
+#[test]
+fn a_call_after_eval_declares_a_shadow_from_a_block_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  let f=a; function g(){ { eval(\"var f=b\"); } f(); } g();\n";
+    assert_eq!(
+        exact_targets("eval-block-shadow.cjs", source, "f()"),
+        none()
+    );
+}
+
+/// Node prints `b`: a closure reads the binding the eval wrote.
+#[test]
+fn a_closure_call_of_a_binding_eval_writes_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  function g(){ let f=a; eval(\"f=b\"); return function(){ f(); }; } g()();\n";
+    assert_eq!(exact_targets("eval-closure.cjs", source, "f()"), none());
+}
+
+/// Node prints `b`: the eval writes a field of an object it names.
+#[test]
+fn a_method_call_of_an_object_eval_writes_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  const o={m:a}; function g(){ eval(\"o.m=b\"); } g(); o.m();\n";
+    assert_eq!(exact_targets("eval-field.cjs", source, "o.m()"), none());
+}
+
+/// Node prints `b`: eval code the call does not spell out may write any
+/// binding its call can see, also in a module.
+#[test]
+fn a_call_after_an_eval_of_unknown_code_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  let f=a; function g(code){ eval(code); } g(\"f=b\"); f();\n";
+    assert_eq!(exact_targets("eval-unknown.mjs", source, "f()"), none());
+}
+
+/// Node prints `b`: the eval writes the CommonJS `exports` object.
+#[test]
+fn a_call_of_an_export_eval_writes_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  exports.run=a; function g(){ eval(\"exports.run=b\"); } g(); exports.run();\n";
+    assert_eq!(
+        exact_targets("eval-exports.cjs", source, "exports.run()"),
+        none()
+    );
+}
+
+/// Node prints `b`: the eval writes a field of the method's `this`.
+#[test]
+fn a_method_call_after_eval_writes_this_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  const o={m:a, set(){ eval(\"this.m=b\"); }}; o.set(); o.m();\n";
+    assert_eq!(exact_targets("eval-this.mjs", source, "o.m()"), none());
+}
+
+/// Node prints `b`: a `var` of non-strict eval code shadows the global the
+/// `Object.assign` model describes.
+#[test]
+fn a_call_after_eval_shadows_a_modelled_global_claims_no_exact_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  function g(){ const o={}; eval(\"var Object={assign(t){t.m=b}}\"); \
+                  Object.assign(o,{m:a}); o.m(); } g();\n";
+    assert_eq!(
+        exact_targets("eval-global-shadow.cjs", source, "o.m()"),
+        none()
+    );
+}
+
+/// Node prints `a`: an eval whose code names no binding leaves every call of
+/// the file exact.
+#[test]
+fn an_eval_that_names_no_binding_keeps_the_calls_of_its_file_exact() {
+    let source =
+        "function a(){console.log('a')} function isolated(){eval('void 0')} isolated(); a();\n";
+    assert_eq!(exact_targets("eval-isolated.cjs", source, "a()"), only("a"));
+    assert_eq!(
+        exact_targets("eval-isolated.cjs", source, "isolated()"),
+        only("isolated")
+    );
+}
+
+/// Node prints `h`: eval code the call does not spell out reaches only the
+/// scopes around its call, not a local of another function.
+#[test]
+fn an_eval_of_unknown_code_keeps_a_local_of_another_function_exact() {
+    let source = "function sibling(){ function h(){console.log('h')} h(); } \
+                  function g(code){ eval(code); } g(\"1\"); sibling();\n";
+    assert_eq!(exact_targets("eval-sibling.mjs", source, "h()"), only("h"));
+}
+
+/// Node prints `b` twice: the eval writes the binding it names and no other.
+#[test]
+fn an_eval_keeps_a_binding_its_code_does_not_name_exact() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  function w(){ let f=a, k=b; eval(\"f=b\"); f(); k(); } w();\n";
+    assert_eq!(exact_targets("eval-named.cjs", source, "f()"), none());
+    assert_eq!(exact_targets("eval-named.cjs", source, "k()"), only("b"));
+}
+
 /// Node prints `b`: an assignment in the body of a `with` writes the property
 /// of its object.
 #[test]
