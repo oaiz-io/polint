@@ -16,4 +16,4 @@ pub(crate) use format::{
     ModuleValue, PACKAGE_GRAPH_SCHEMA, PackageGraph, SignatureEntry, SiteEntry,
 };
 pub(crate) use identity::{CallsiteIdentity, EntryConfig, FunctionIdentity, PackageIdentity};
-pub(crate) use layout::package_of;
+pub(crate) use layout::install_of;

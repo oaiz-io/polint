@@ -3,15 +3,16 @@
 //!
 //! The fixture is `tests/js-analysis-bench/composition`: an application and
 //! two dependency packages under `node_modules`, with callbacks, factories,
-//! prototype methods and a re-export crossing the package boundaries. Each
-//! call site is compared by a portable key, the package and the path inside
-//! it, so the two sides agree on names without sharing run-local ids.
+//! prototype methods and a re-export crossing the package boundaries;
+//! `composition-versions` holds two installs of one package. Each call site is
+//! compared by a portable key, the install and the path inside it, so the two
+//! sides agree on names without sharing run-local ids.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::analysis_kernel::{AnalysisKernel, KernelInput, KernelOutput};
-use crate::analysis_neutral::package_graph::{PackageGraph, package_of};
+use crate::analysis_neutral::package_graph::{PackageGraph, install_of};
 use crate::analysis_neutral::points_to::facts::PointsToBudgetStatus;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::analysis_neutral::solver::budget::SolverBudget;
@@ -38,14 +39,16 @@ struct PortableAnswer {
     targets: Vec<String>,
 }
 
-fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/js-analysis-bench/composition")
+fn fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/js-analysis-bench")
+        .join(name)
 }
 
 /// Copies the fixture out of the repository, so the repository's ignore
 /// files do not hide its `node_modules`.
 fn stage(into: &Path) {
-    copy_tree(&fixture(), into);
+    copy_tree(&fixture("composition"), into);
 }
 
 fn copy_tree(from: &Path, into: &Path) {
@@ -98,7 +101,7 @@ fn whole_program_answers(root: &Path) -> BTreeMap<String, PortableAnswer> {
     let path_of = |file| {
         db.file(file)
             .map(|file| {
-                let (package, path) = package_of(&file.relative_path);
+                let (package, path) = install_of(&file.relative_path);
                 (package.to_string(), path.to_string())
             })
             .expect("every fact names an analysed file")
@@ -169,7 +172,7 @@ fn portable(
 
 /// The package roots of a tree laid out like npm lays one out: the root
 /// package `.` first, then each directory with a `package.json` under a
-/// `node_modules`, named the way [`package_of`] names its files.
+/// `node_modules`, named the way [`install_of`] names its files.
 fn package_roots(root: &Path) -> Vec<(String, PathBuf)> {
     let mut roots = vec![(".".to_string(), root.to_path_buf())];
     collect_modules(root, root, &mut roots);
@@ -209,7 +212,7 @@ fn collect_modules(root: &Path, package: &Path, roots: &mut Vec<(String, PathBuf
                 .collect::<Vec<_>>()
                 .join("/");
             let manifest = format!("{relative}/package.json");
-            let (name, _) = package_of(&manifest);
+            let (name, _) = install_of(&manifest);
             roots.push((name.to_string(), module.clone()));
             collect_modules(root, &module, roots);
         }
@@ -329,6 +332,34 @@ fn stitched_package_graphs_answer_as_the_whole_program() {
     assert_eq!(stitched, whole);
 }
 
+/// Two installs of one package, `dual` at the top and another version of it
+/// under `outer`, are two packages: each import reaches the install Node
+/// resolves from its file, and the stitch of their graphs answers as the
+/// whole program.
+#[test]
+fn two_installs_of_one_package_stitch_as_the_whole_program() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    copy_tree(&fixture("composition-versions"), temp.path());
+    let whole = whole_program_answers(temp.path());
+    let stitched = stitched_answers(temp.path()).expect("stitch the package graphs");
+    assert_eq!(stitched, whole);
+
+    let targets = whole
+        .values()
+        .flat_map(|answer| answer.targets.iter().map(String::as_str))
+        .collect::<Vec<_>>();
+    for name in ["runOne", "runTwo", "outerRun"] {
+        assert_eq!(
+            targets
+                .iter()
+                .filter(|target| target.ends_with(&format!("#{name}")))
+                .count(),
+            1,
+            "one call reaches {name}: {whole:?}"
+        );
+    }
+}
+
 #[test]
 fn the_stitch_does_not_depend_on_the_order_of_the_graphs() {
     let temp = tempfile::tempdir().expect("tempdir");
@@ -384,7 +415,7 @@ fn the_stitch_keeps_every_edge_a_graph_found_alone() {
     write_local_calls(temp.path());
     let packages = [
         (".", temp.path().to_path_buf()),
-        ("libx", temp.path().join("node_modules/libx")),
+        ("node_modules/libx", temp.path().join("node_modules/libx")),
     ]
     .into_iter()
     .map(|(name, root)| {
@@ -490,7 +521,7 @@ fn an_import_and_a_require_of_one_package_reach_the_files_of_their_modes() {
     let whole = whole_program_answers(temp.path());
     let packages = [
         (".", temp.path().to_path_buf()),
-        ("dual", temp.path().join("node_modules/dual")),
+        ("node_modules/dual", temp.path().join("node_modules/dual")),
     ]
     .into_iter()
     .map(|(name, root)| {
@@ -539,7 +570,7 @@ fn the_stitch_refuses_a_graph_its_budget_cut_short() {
     assert_eq!(
         stitch(&named(&packages), &tree),
         Err(StitchError::BudgetExceeded {
-            package: "liba".to_string(),
+            package: "node_modules/liba".to_string(),
             events: vec!["iterations".to_string()],
         })
     );
@@ -555,7 +586,9 @@ fn the_stitch_refuses_two_graphs_of_one_package() {
     graphs.push(graphs[1]);
     assert_eq!(
         stitch(&graphs, &tree),
-        Err(StitchError::DuplicatePackage("liba".to_string()))
+        Err(StitchError::DuplicatePackage(
+            "node_modules/liba".to_string()
+        ))
     );
 }
 
@@ -579,7 +612,7 @@ fn the_stitch_reports_the_imports_it_cannot_link() {
         [
             (".", "liba", "unlinked_import"),
             (".", "libb", "unlinked_import"),
-            ("libb", "liba", "unlinked_import"),
+            ("node_modules/libb", "liba", "unlinked_import"),
         ]
     );
 

@@ -18,7 +18,7 @@ use crate::analysis_api::{FunctionFact, ImportSyntax, ResolutionStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::platform;
 use crate::analysis_neutral::ids::{PlaceId, SemanticNodeId};
-use crate::analysis_neutral::package_graph::package_of;
+use crate::analysis_neutral::package_graph::install_of;
 use crate::analysis_neutral::points_to::facts::PointsToPrecision;
 use crate::analysis_neutral::semantic_graph::build::{function_node_key, node_key_from_identity};
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
@@ -198,7 +198,7 @@ impl GraphBuilder {
         // value: the program then answers as the stitch of its packages.
         let packages = file_paths
             .iter()
-            .map(|path| package_of(path).0)
+            .map(|path| install_of(path).0)
             .collect::<Vec<_>>();
         let (requests, links): (Vec<_>, Vec<_>) = flows
             .iter()

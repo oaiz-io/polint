@@ -16,7 +16,7 @@ use oxc_span::GetSpan;
 use crate::analysis_api::{FunctionFact, ResolutionStatus, SourceFile, TS_JS_MODULE_FUNCTION_NAME};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{CallCallee, CallSiteFact};
-use crate::analysis_neutral::package_graph::package_of;
+use crate::analysis_neutral::package_graph::install_of;
 use crate::internal_core::{FileId, FunctionId};
 
 use super::{TsCallableFlow, TsCallableFlowKind};
@@ -475,7 +475,7 @@ enum ParamPattern {
 fn module_resolution_map(db: &impl AnalysisHost) -> BTreeMap<(FileId, String), FileId> {
     let package = |file: FileId| {
         db.file(file)
-            .map(|file| package_of(&file.relative_path).0.to_string())
+            .map(|file| install_of(&file.relative_path).0.to_string())
     };
     let imports = db
         .imports()

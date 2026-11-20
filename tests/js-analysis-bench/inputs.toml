@@ -248,6 +248,10 @@ name = "composition"
 fixture = "composition"
 
 [[tree]]
+name = "composition-versions"
+fixture = "composition-versions"
+
+[[tree]]
 name = "axios"
 root_package = "axios"
 

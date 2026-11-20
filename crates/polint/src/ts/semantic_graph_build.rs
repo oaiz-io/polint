@@ -28,7 +28,7 @@ use crate::analysis_api::SourceFile;
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::store::AdaptationModelStore;
 use crate::analysis_neutral::ids::{ObjectTokenId, PlaceId, SemanticNodeId};
-use crate::analysis_neutral::package_graph::package_of;
+use crate::analysis_neutral::package_graph::install_of;
 use crate::analysis_neutral::semantic_graph::build::TS_DIRECT_BINDING_ORIGIN;
 use crate::analysis_neutral::semantic_graph::build::{
     function_node_key, node_key_from_identity, place_node_key,
@@ -409,7 +409,7 @@ fn analyze_ts_binding_file(
 fn imports_across_packages(db: &impl AnalysisHost) -> BTreeSet<ResolvedImportId> {
     let package = |file: FileId| {
         db.file(file)
-            .map(|file| package_of(&file.relative_path).0.to_string())
+            .map(|file| install_of(&file.relative_path).0.to_string())
     };
     let module_files = db
         .module_nodes()

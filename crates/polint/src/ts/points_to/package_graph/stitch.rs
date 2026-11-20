@@ -5,6 +5,8 @@
 //!
 //! 1. Refuse a graph whose solve its budget cut short: it is not a fixed point.
 //! 2. Name every node by its package and its text, so the graphs share no node.
+//!    A package is one install: two versions of one package in a tree are two
+//!    packages with two names.
 //! 3. Link each import the tree resolves to the module value of the file it
 //!    names: beside the open value the import holds alone, it copies that
 //!    file's module place. The open value stays, because each package was
@@ -43,9 +45,9 @@ pub(crate) struct Tree {
 #[cfg(feature = "lang-typescript")]
 impl Tree {
     /// The tree of packages laid out on disk, each named and rooted at its
-    /// directory: every import of every graph resolved from its file the way
-    /// the module graph resolves it, and named by the package whose root
-    /// holds the resolved file most closely. An import resolving into no
+    /// install directory: every import of every graph resolved from its file
+    /// the way the module graph resolves it, and named by the package whose
+    /// root holds the resolved file most closely. An import resolving into no
     /// package, or into its own, is left out.
     pub(crate) fn on_disk(packages: &[(&str, &std::path::Path, &PackageGraph)]) -> Self {
         let resolver = crate::ts::module_graph::DiskResolver::new();
