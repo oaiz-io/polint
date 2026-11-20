@@ -5,8 +5,12 @@
 //! escapes. Prototype lookup runs after ordinary propagation, respects own
 //! fields, and records the inherited slots the graph must also read.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
+
+// The solve only looks rows up in its hash tables and never iterates them, so
+// the hasher does not change the answer.
+use foldhash::{HashMap, HashMapExt, HashSet, HashSetExt};
 
 use super::{FlowObject, FlowRow, FlowSpan, FlowVar, TsValueFlows};
 
