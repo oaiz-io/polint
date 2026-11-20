@@ -42,13 +42,13 @@ pub fn validate_derived_edges(
     node_ids: &BTreeSet<SemanticNodeId>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let resolved_keys: Vec<String> = derived_edges
+    let resolved_keys: Vec<std::sync::Arc<str>> = derived_edges
         .iter()
-        .map(|row| interner.resolve(row.stable_key).to_string())
+        .map(|row| interner.resolve(row.stable_key))
         .collect();
 
     // Duplicate stable keys (compare by resolved text).
-    check_duplicate_stable_keys(diagnostics, resolved_keys.iter().map(String::as_str));
+    check_duplicate_stable_keys(diagnostics, resolved_keys.iter().map(AsRef::as_ref));
 
     // Dense IDs contiguous (0..n) and stable-key-sorted by resolved text.
     check_dense_ids_sorted(
@@ -56,11 +56,10 @@ pub fn validate_derived_edges(
         derived_edges
             .iter()
             .zip(resolved_keys.iter())
-            .map(|(row, key)| (row.id.0, key.as_str())),
+            .map(|(row, key)| (row.id.0, key.as_ref())),
     );
 
-    for edge in derived_edges {
-        let edge_key = interner.resolve(edge.stable_key);
+    for (edge, edge_key) in derived_edges.iter().zip(&resolved_keys) {
         // Dangling endpoint references.
         if !node_ids.is_empty() {
             if !node_ids.contains(&edge.source) {
