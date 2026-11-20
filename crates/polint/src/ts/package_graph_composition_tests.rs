@@ -725,6 +725,18 @@ fn an_exports_map_with_nested_conditions_claims_neither_file_exactly() {
     );
 }
 
+/// Node runs `node.cjs` and `node --conditions=worker` runs `browser.cjs`: a
+/// nested map that selects none of its conditions selects nothing, and the
+/// loader goes on to the next key of the outer map.
+#[test]
+fn a_nested_condition_map_that_may_select_nothing_claims_neither_file_exactly() {
+    assert_split(
+        r#"{"name":"dual","version":"1.0.0","exports":{"import":{"feature":"./node.cjs"},"worker":"./browser.cjs","default":"./node.cjs"}}"#,
+        "dual",
+        &[],
+    );
+}
+
 /// `node --conditions=development` and a bundler in development runs
 /// `browser.cjs`; plain Node runs `node.cjs`. Any condition a loader may be
 /// given counts.

@@ -4,8 +4,10 @@
 //! Node selects `node` and `default`, a bundler selects `browser`, `module`
 //! or `worker`, and either may be given further conditions such as
 //! `development`. A condition map picks its first key the loader selects, so
-//! every key is reachable up to the first one that is always selected: the
-//! condition of the mode the specifier loads in, or `default`.
+//! every key is reachable up to the first one that is always selected, the
+//! condition of the mode the specifier loads in or `default`, and whose value
+//! surely stops the loader. A nested map that selects nothing lets the loader
+//! go on to the next key.
 
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
@@ -65,36 +67,49 @@ fn entry<'a>(entries: &'a Map<String, Value>, key: &str) -> Option<(&'a Value, O
         .map(|(_, base, trailer, value)| (value, Some(key[base..key.len() - trailer].to_string())))
 }
 
+/// Collects the targets `value` may give into `targets`, and says whether a
+/// loader in the mode of `own` surely stops at `value`. Node's resolver goes
+/// on past a value only where it selects nothing: a condition map none of
+/// whose selected keys gives a target, or a list of such values. A string,
+/// `null` and an invalid target stop it, with a file or with an error.
 fn collect(
     value: &Value,
     matched: Option<&str>,
     own: &str,
     other: &str,
     targets: &mut Vec<String>,
-) {
+) -> bool {
     match value {
-        Value::String(target) if !is_declaration(target) => targets.push(match matched {
-            Some(matched) => target.replace('*', matched),
-            None => target.clone(),
-        }),
+        Value::String(target) => {
+            if !is_declaration(target) {
+                targets.push(match matched {
+                    Some(matched) => target.replace('*', matched),
+                    None => target.clone(),
+                });
+            }
+            true
+        }
         // A loader takes the first target of a list it can load; any may be.
         Value::Array(values) => {
+            let mut stops = values.is_empty();
             for value in values {
-                collect(value, matched, own, other, targets);
+                stops |= collect(value, matched, own, other, targets);
             }
+            stops
         }
         Value::Object(conditions) => {
             for (condition, value) in conditions {
                 if condition == other {
                     continue;
                 }
-                collect(value, matched, own, other, targets);
-                if condition == own || condition == "default" {
-                    break;
+                let stops = collect(value, matched, own, other, targets);
+                if stops && (condition == own || condition == "default") {
+                    return true;
                 }
             }
+            false
         }
-        _ => {}
+        _ => true,
     }
 }
 
@@ -127,6 +142,36 @@ mod tests {
             targets(map, ".", true),
             Some(vec!["./browser.js".into(), "./import.js".into()])
         );
+    }
+
+    #[test]
+    fn a_nested_map_that_may_select_nothing_leaves_the_next_keys_reachable() {
+        let map = json!({
+            "import": { "feature": "./feature.js" },
+            "worker": "./worker.js",
+            "default": "./default.js"
+        });
+        assert_eq!(
+            targets(map, ".", true),
+            Some(vec![
+                "./feature.js".into(),
+                "./worker.js".into(),
+                "./default.js".into()
+            ])
+        );
+        let map = json!({
+            "import": { "feature": "./feature.js", "default": "./import.js" },
+            "worker": "./worker.js"
+        });
+        assert_eq!(
+            targets(map, ".", true),
+            Some(vec!["./feature.js".into(), "./import.js".into()])
+        );
+        let map = json!({
+            "import": [{ "feature": "./feature.js" }, null],
+            "worker": "./worker.js"
+        });
+        assert_eq!(targets(map, ".", true), Some(vec!["./feature.js".into()]));
     }
 
     #[test]
