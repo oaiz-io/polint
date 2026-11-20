@@ -127,20 +127,24 @@ pub fn derive_type_value_alias_with_go_points_to(
         .access_paths
         .extend(ts_js_output.access_paths.access_paths);
     output = output.normalized(interner);
-    let base_merge = super::validate::merge_extension_type_value_alias_base_facts(
-        interner,
-        output,
-        db.extension_facts(),
-    );
-    output = base_merge.output.normalized(interner);
-    diagnostics.extend(base_merge.diagnostics);
-    let relation_merge = super::validate::merge_extension_type_value_alias_relation_facts(
-        interner,
-        output,
-        db.extension_facts(),
-    );
-    output = relation_merge.output;
-    diagnostics.extend(relation_merge.diagnostics);
+    // Each merge returns its output normalized; without extension facts it
+    // would only normalize the normalized output again.
+    if !db.extension_facts().is_empty() {
+        let base_merge = super::validate::merge_extension_type_value_alias_base_facts(
+            interner,
+            output,
+            db.extension_facts(),
+        );
+        output = base_merge.output;
+        diagnostics.extend(base_merge.diagnostics);
+        let relation_merge = super::validate::merge_extension_type_value_alias_relation_facts(
+            interner,
+            output,
+            db.extension_facts(),
+        );
+        output = relation_merge.output;
+        diagnostics.extend(relation_merge.diagnostics);
+    }
     checkpoint("merge_normalize");
     let mut points_to_constraints =
         crate::analysis_neutral::points_to::constraints::derive_points_to_constraints(
