@@ -3381,7 +3381,8 @@ mod direct_calls_core {
 
     #[test]
     fn eval_direct_calls_core_source_documents_supported_language_features() {
-        let markers = fixture_feature_markers(&["service.go", "web/src/app.ts"]);
+        let markers =
+            fixture_feature_markers(&["service.go", "web/src/app.ts", "web/src/evaluated.ts"]);
         let expected = SUPPORTED_DIRECT_CALL_FEATURES
             .iter()
             .map(|feature| feature.marker.to_string())

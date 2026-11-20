@@ -480,7 +480,12 @@ fn derive_ts_semantic_index(
 /// Each function declaration or named function expression gets an
 /// [`ValueFunctionKind::Implementation`] or [`ValueFunctionKind::Signature`]
 /// row from its own body, provided its symbol is never written and every
-/// declaration of the symbol is a function, interface or namespace.
+/// declaration of the symbol is a function, interface or namespace. A class
+/// declaration or named class expression gets the same row for the class,
+/// which is the function a `new` of it runs, provided its symbol is never
+/// written and every declaration is the class, an interface or a namespace;
+/// an ambient (`declare`) class gets a signature row. A variable initialized
+/// with a class expression gets a literal row as for a function.
 ///
 /// A `let`, `var` or function binding that a block-level function declaration
 /// overwrites gets no row: see [`bindings_written_by_block_functions`].
@@ -514,6 +519,7 @@ fn add_ts_value_function_rows(
                 let function_span = match &declarator.init {
                     Some(Expression::ArrowFunctionExpression(function)) => function.span,
                     Some(Expression::FunctionExpression(function)) => function.span,
+                    Some(Expression::ClassExpression(class)) => class.span,
                     _ => continue,
                 };
                 let single_value = match declarator.kind {
@@ -549,6 +555,23 @@ fn add_ts_value_function_rows(
                 };
                 (symbol, function.span, kind)
             }
+            AstKind::Class(class) => {
+                let Some(symbol) = class.id.as_ref().and_then(|id| id.symbol_id.get()) else {
+                    continue;
+                };
+                if scoping.symbol_is_mutated(symbol)
+                    || written_by_block_functions.contains(&symbol)
+                    || !only_class_declarations(scoping, nodes, symbol)
+                {
+                    continue;
+                }
+                let kind = if class.declare {
+                    ValueFunctionKind::Signature
+                } else {
+                    ValueFunctionKind::Implementation
+                };
+                (symbol, class.span, kind)
+            }
             _ => continue,
         };
         builder.add_value_function(ValueFunctionFact {
@@ -571,6 +594,19 @@ fn only_function_declarations(
         matches!(
             nodes.kind(declaration),
             AstKind::Function(_)
+                | AstKind::TSInterfaceDeclaration(_)
+                | AstKind::TSModuleDeclaration(_)
+        )
+    })
+}
+
+/// Whether every declaration of `symbol` is a class, or a type-side interface
+/// or namespace merged with one.
+fn only_class_declarations(scoping: &Scoping, nodes: &AstNodes<'_>, symbol: OxcSymbolId) -> bool {
+    scoping.symbol_declarations(symbol).all(|declaration| {
+        matches!(
+            nodes.kind(declaration),
+            AstKind::Class(_)
                 | AstKind::TSInterfaceDeclaration(_)
                 | AstKind::TSModuleDeclaration(_)
         )

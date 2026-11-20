@@ -124,6 +124,7 @@ struct Solve<'a> {
     loads_of: HashMap<Token, Vec<usize>>,
     lookups: Vec<(Load, Token)>,
     found: HashMap<(Token, usize), Rc<Found>>,
+    inherits_escaped: HashMap<Token, bool>,
     escaped: HashSet<Token>,
     exported: HashSet<Token>,
     descriptions: Vec<Described>,
@@ -156,6 +157,7 @@ impl<'a> Solve<'a> {
             loads_of: HashMap::new(),
             lookups: Vec::new(),
             found: HashMap::new(),
+            inherits_escaped: HashMap::new(),
             escaped: HashSet::new(),
             exported: HashSet::new(),
             descriptions: files.iter().map(|_| Described::default()).collect(),
@@ -569,6 +571,11 @@ impl<'a> Solve<'a> {
         };
         if self.stored.contains(&(token, field)) {
             found.holders.insert(token);
+            // Every getter and setter escapes the object that holds it, and
+            // outside code may define one on an escaped object: a store
+            // through a setter an ancestor holds writes no own field, so the
+            // own value is a candidate beside an unknown one.
+            found.unknown |= self.inherits_escaped(token, 0, &mut HashSet::new());
         } else if let Some(&proto) = self.slots.get(&(token, self.proto))
             && !self.sets[proto].is_empty()
         {
@@ -593,13 +600,44 @@ impl<'a> Solve<'a> {
         found
     }
 
+    /// Whether an object `token` inherits through, past itself, has escaped.
+    /// A chain past the depth limit or through a cycle counts as escaped; an
+    /// outside prototype is one the receiver's claim assumes closed.
+    fn inherits_escaped(&mut self, token: Token, depth: u8, path: &mut HashSet<Token>) -> bool {
+        if let Some(&escaped) = self.inherits_escaped.get(&token) {
+            return escaped;
+        }
+        if depth >= 16 || !path.insert(token) {
+            return true;
+        }
+        let mut escaped = false;
+        if let Some(&proto) = self.slots.get(&(token, self.proto)) {
+            for parent in self.sets[proto].clone() {
+                if matches!(parent, Token::Unknown | Token::Prim) {
+                    continue;
+                }
+                escaped = self.escaped.contains(&parent)
+                    || self.inherits_escaped(parent, depth + 1, path);
+                if escaped {
+                    break;
+                }
+            }
+        }
+        path.remove(&token);
+        self.inherits_escaped.insert(token, escaped);
+        escaped
+    }
+
     fn run(&mut self) {
         loop {
             self.propagate();
             // Propagation may have changed any chain, so walks start afresh.
             self.found.clear();
+            self.inherits_escaped.clear();
             for (load, token) in self.lookups.clone() {
-                if !self.stored.contains(&(token, load.field)) {
+                if !self.stored.contains(&(token, load.field))
+                    || self.inherits_escaped(token, 0, &mut HashSet::new())
+                {
                     self.lookup(load, token);
                 }
             }

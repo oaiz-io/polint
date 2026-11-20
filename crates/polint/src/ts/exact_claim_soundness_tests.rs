@@ -139,15 +139,26 @@ fn exact_targets(path: &str, source: &str, site: &str) -> ExactTargets {
         }
     }
 
+    // A served edge names a function, or only the symbol it binds; a rule
+    // reads either as the exact callee.
+    let symbol_name = db
+        .symbols()
+        .iter()
+        .map(|symbol| (symbol.id, symbol.name.to_string()))
+        .collect::<BTreeMap<_, _>>();
     let index = db.call_graph_index();
     for id in 0..u32::try_from(index.edges.len()).expect("few edges") {
         let edge = index.edge(db, id);
-        if edge.span.start_byte == start
-            && edge.span.end_byte == end
-            && edge.precision.tier() == ClaimTier::Exact
-            && let Some(function) = edge.function
+        if edge.span.start_byte != start
+            || edge.span.end_byte != end
+            || edge.precision.tier() != ClaimTier::Exact
         {
+            continue;
+        }
+        if let Some(function) = edge.function {
             targets.served.insert(function_name[&function].clone());
+        } else if let Some(symbol) = edge.symbol {
+            targets.served.insert(symbol_name[&symbol].clone());
         }
     }
     targets
@@ -357,4 +368,84 @@ fn a_new_of_a_class_claims_no_wrong_target() {
     let source = "class C {constructor(){console.log('constructor entered')}} new C();\n";
     let targets = exact_targets("new-class.mjs", source, "new C()");
     assert!(targets == none() || targets == only("C"), "{targets:?}");
+}
+
+/// Node prints `b`: an assignment replaces the function a declaration bound.
+#[test]
+fn a_call_of_a_reassigned_declaration_claims_no_exact_target() {
+    let source = "function b(){console.log('b')} function g(){console.log('g')} \
+                  g=b; g();\n";
+    assert_eq!(exact_targets("reassign.cjs", source, "g()"), none());
+}
+
+/// Node prints `b`: the binding is written in another function, which runs
+/// before the call.
+#[test]
+fn a_call_of_a_declaration_another_function_writes_claims_no_exact_target() {
+    let source = "function b(){console.log('b')} function later(){console.log('later')} \
+                  function swap(){ later=b; } swap(); later();\n";
+    assert_eq!(
+        exact_targets("reassign-elsewhere.cjs", source, "later()"),
+        none()
+    );
+}
+
+/// Node prints `Z`: an assignment replaces the class a declaration bound.
+#[test]
+fn a_new_of_a_reassigned_class_claims_no_exact_target() {
+    let source = "class K {constructor(){console.log('K')}} \
+                  class Z {constructor(){console.log('Z')}} K=Z; new K();\n";
+    assert_eq!(
+        exact_targets("reassign-class.cjs", source, "new K()"),
+        none()
+    );
+}
+
+/// Node prints `b`: the direct `eval` writes the local declaration.
+#[test]
+fn a_call_of_a_declaration_eval_writes_claims_no_exact_target() {
+    let source = "function b(){console.log('b')} globalThis.b=b; \
+                  function e(){ function local(){console.log('local')} eval(\"local=b\"); local(); } e();\n";
+    assert_eq!(
+        exact_targets("eval-declared.cjs", source, "local()"),
+        none()
+    );
+}
+
+/// Node prints `Z`: the `with` object shadows the class.
+#[test]
+fn a_new_inside_with_claims_no_exact_target() {
+    let source = "class K {constructor(){console.log('K')}} \
+                  class Z {constructor(){console.log('Z')}} with ({K:Z}) { new K(); }\n";
+    assert_eq!(exact_targets("with-new.cjs", source, "new K()"), none());
+}
+
+/// Node prints `b`: the store runs the inherited setter, which drops the
+/// value, and the read runs the inherited getter.
+#[test]
+fn a_call_of_a_property_an_inherited_setter_takes_claims_no_wrong_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  const o=Object.create({set w(v){}, get w(){return b}}); o.w=a; o.w();\n";
+    let targets = exact_targets("inherited-setter.cjs", source, "o.w()");
+    assert!(targets == none() || targets == only("b"), "{targets:?}");
+}
+
+/// Node prints `b`: the same through the setter of a class.
+#[test]
+fn a_call_of_a_property_a_class_setter_takes_claims_no_wrong_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  class L { set x(v){} get x(){return b} } const l=new L(); l.x=a; l.x();\n";
+    let targets = exact_targets("class-setter.cjs", source, "l.x()");
+    assert!(targets == none() || targets == only("b"), "{targets:?}");
+}
+
+/// Node prints `b`: the same through a setter `Object.defineProperty` gives
+/// the prototype.
+#[test]
+fn a_call_of_a_property_a_defined_setter_takes_claims_no_wrong_target() {
+    let source = "function a(){console.log('a')} function b(){console.log('b')} \
+                  const P={}; Object.defineProperty(P,'w',{set(v){}, get(){return b}}); \
+                  const o=Object.create(P); o.w=a; o.w();\n";
+    let targets = exact_targets("defined-setter.cjs", source, "o.w()");
+    assert!(targets == none() || targets == only("b"), "{targets:?}");
 }

@@ -9,7 +9,7 @@ use crate::analysis_api::{SemanticImportKind, SemanticStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallCallee, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact,
-    CallSyntaxKind, CallTargetFact, CallTargetStatus,
+    CallSyntaxKind, CallTargetFact, CallTargetStatus, UnresolvedCallReason,
 };
 use crate::analysis_neutral::ids::CallTargetId;
 use crate::analysis_neutral::mir_op::UnsupportedDomain;
@@ -79,9 +79,16 @@ pub fn resolve_direct_call_targets(
         let Some(symbol) = index.symbols_by_id.get(&target_symbol).copied() else {
             continue;
         };
-        let target_function = match index.function_for_symbol(symbol) {
-            Some(function) => Some(function),
-            None if index.calls_bind_without_a_function(symbol) => None,
+        // A TS/JS binding without one function it holds (one written after
+        // its declaration, or in a file whose bindings `with` or `eval` can
+        // reach) still names the call's callee, but not which value it holds
+        // when the call runs: the edge to the binding may be taken, never
+        // exactly, and the site stays open.
+        let (target_function, held) = match index.function_for_symbol(symbol) {
+            Some(function) => (Some(function), false),
+            None if index.calls_bind_without_a_function(symbol) => {
+                (None, index.binds_a_declared_value(symbol))
+            }
             None => continue,
         };
         if symbol.kind == SymbolKind::Class
@@ -110,10 +117,18 @@ pub fn resolve_direct_call_targets(
             synthetic_target: None,
             edge_kind: edge_kind_for_site(site.kind),
             algorithm,
-            status: CallTargetStatus::Resolved,
-            reason: None,
+            status: if held {
+                CallTargetStatus::Ambiguous
+            } else {
+                CallTargetStatus::Resolved
+            },
+            reason: held.then_some(UnresolvedCallReason::FunctionValue),
             provenance: CallProvenance::NativeDirect,
-            precision: CallPrecision::SetupAware,
+            precision: if held {
+                CallPrecision::Conservative
+            } else {
+                CallPrecision::SetupAware
+            },
             stable_key: target_stable_key(interner, site, algorithm, symbol),
         });
     }
@@ -346,17 +361,25 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
                 .is_none_or(is_direct_callable_symbol)
     }
 
+    /// Whether a call through `symbol` reads a TS/JS binding declared in the
+    /// analysed files, whose value the frontend's rows decide, rather than an
+    /// import that leaves them.
+    fn binds_a_declared_value(&self, symbol: &'db SymbolFact) -> bool {
+        self.declared_symbol_for(symbol).is_some_and(|declared| {
+            declared.language.is_ts_family()
+                && !matches!(declared.kind, SymbolKind::Import | SymbolKind::Method)
+        })
+    }
+
     /// The function a call through a declared (non-import) symbol reaches.
     ///
     /// A TS/JS binding reaches only what the frontend's callee identity rows
-    /// for its own Oxc symbol name: whatever its kind (a function, a variable,
-    /// an interface merged with a function), a binding without a single row
-    /// target has none. Classes and methods, and every Go symbol, resolve to
+    /// for its own Oxc symbol name: whatever its kind (a function, a class, a
+    /// variable, an interface merged with a function), a binding without a
+    /// single row target has none. Methods, and every Go symbol, resolve to
     /// the innermost same-named function around the declared name.
     fn declared_function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
-        if symbol.language.is_ts_family()
-            && !matches!(symbol.kind, SymbolKind::Class | SymbolKind::Method)
-        {
+        if symbol.language.is_ts_family() && symbol.kind != SymbolKind::Method {
             return self
                 .callees_by_binding
                 .get(&span_key(symbol.primary_span.as_ref()?))
@@ -1124,9 +1147,11 @@ mod tests {
                 SymbolPrecision::ExactSemantic,
             ));
             assert_eq!(function.0, id.0 + 1);
-            // The TS/JS frontend names a function declaration's implementation
-            // as the callee of its binding.
-            if self.language.is_ts_family() && kind == SymbolKind::Function {
+            // The TS/JS frontend names a function or class declaration's
+            // implementation as the callee of its binding.
+            if self.language.is_ts_family()
+                && matches!(kind, SymbolKind::Function | SymbolKind::Class)
+            {
                 self.value_functions.push(ValueFunctionFact {
                     binding: span(self.file, line),
                     function: span(self.file, line),
