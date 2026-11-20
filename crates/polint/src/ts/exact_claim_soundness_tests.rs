@@ -479,3 +479,114 @@ fn a_call_of_a_parameter_whose_arguments_escape_claims_no_wrong_target() {
     let targets = exact_targets("arguments-escape.cjs", source, "f()");
     assert!(targets == none() || targets == only("b"), "{targets:?}");
 }
+
+/// Node prints `a`: with no write to the class's prototype link, `super()`
+/// runs the constructor the class extends, and the edge stays exact.
+#[test]
+fn a_super_call_of_a_class_whose_prototype_link_is_not_written_stays_exact() {
+    let source = "class A {constructor(){console.log('a')}} \
+                  class B extends A {constructor(){super()}} new B();\n";
+    let targets = exact_targets("super-plain.mjs", source, "super()");
+    assert!(targets == only("A"), "{targets:?}");
+}
+
+/// Node prints `c`: `super()` runs the constructor's current prototype, and
+/// `Object.setPrototypeOf` replaced it.
+#[test]
+fn a_super_call_after_set_prototype_of_claims_no_wrong_target() {
+    let source = "class A {constructor(){console.log('a')}} class C {constructor(){console.log('c')}} \
+                  class B extends A {constructor(){super()}} Object.setPrototypeOf(B,C); new B();\n";
+    let targets = exact_targets("super-set-prototype.mjs", source, "super()");
+    assert!(targets == none() || targets == only("C"), "{targets:?}");
+}
+
+/// Node prints `c`: the same through a write of `__proto__`.
+#[test]
+fn a_super_call_after_a_proto_write_claims_no_wrong_target() {
+    let source = "class A {constructor(){console.log('a')}} class C {constructor(){console.log('c')}} \
+                  class B extends A {constructor(){super()}} B.__proto__ = C; new B();\n";
+    let targets = exact_targets("super-proto-write.cjs", source, "super()");
+    assert!(targets == none() || targets == only("C"), "{targets:?}");
+}
+
+/// Node prints `r`: the same through `Reflect.setPrototypeOf`.
+#[test]
+fn a_super_call_after_reflect_set_prototype_of_claims_no_wrong_target() {
+    let source = "class A {constructor(){console.log('a')}} class R {constructor(){console.log('r')}} \
+                  class B extends A {constructor(){super()}} Reflect.setPrototypeOf(B, R); new B();\n";
+    let targets = exact_targets("super-reflect.mjs", source, "super()");
+    assert!(targets == none() || targets == only("R"), "{targets:?}");
+}
+
+/// Node prints `x`: `super.run()` reads `run` from the current prototype of
+/// the method's home object, `B.prototype`.
+#[test]
+fn a_super_method_call_after_the_prototype_object_changes_claims_no_wrong_target() {
+    let source = "class A {run(){console.log('a')}} const X = {run: function x(){console.log('x')}}; \
+                  class B extends A {run(){super.run()}} Object.setPrototypeOf(B.prototype, X); \
+                  new B().run();\n";
+    let targets = exact_targets("super-method.mjs", source, "super.run()");
+    assert!(targets == none() || targets == only("x"), "{targets:?}");
+}
+
+/// Node prints `x`: the same through a write of the prototype object's
+/// `__proto__`.
+#[test]
+fn a_super_method_call_after_a_prototype_proto_write_claims_no_wrong_target() {
+    let source = "class A {run(){console.log('a')}} \
+                  class B extends A {run(){super.run()}} \
+                  B.prototype.__proto__ = {run: function x(){console.log('x')}}; new B().run();\n";
+    let targets = exact_targets("super-method-proto.cjs", source, "super.run()");
+    assert!(targets == none() || targets == only("x"), "{targets:?}");
+}
+
+/// Node prints `x`: the same where another function changes the prototype.
+#[test]
+fn a_super_method_call_after_a_function_changes_the_prototype_claims_no_wrong_target() {
+    let source = "class A {run(){console.log('a')}} class B extends A {run(){super.run()}} \
+                  function swap(k){ Object.setPrototypeOf(k.prototype, {run: function x(){console.log('x')}}); } \
+                  swap(B); new B().run();\n";
+    let targets = exact_targets("super-method-swap.mjs", source, "super.run()");
+    assert!(targets == none() || targets == only("x"), "{targets:?}");
+}
+
+/// Node prints `c`: a static method's home object is the class itself.
+#[test]
+fn a_static_super_method_call_after_set_prototype_of_claims_no_wrong_target() {
+    let source = "class A {static run(){console.log('a')}} \
+                  class B extends A {static run(){super.run()}} \
+                  Object.setPrototypeOf(B, {run: function c(){console.log('c')}}); B.run();\n";
+    let targets = exact_targets("super-static.mjs", source, "super.run()");
+    assert!(targets == none() || targets == only("c"), "{targets:?}");
+}
+
+/// Node prints `w`: the parent's method was replaced before the call.
+#[test]
+fn a_super_method_call_of_a_replaced_parent_method_claims_no_wrong_target() {
+    let source = "class A {run(){console.log('a')}} class B extends A {run(){super.run()}} \
+                  A.prototype.run = function w(){console.log('w')}; new B().run();\n";
+    let targets = exact_targets("super-replaced.mjs", source, "super.run()");
+    assert!(targets == none() || targets == only("w"), "{targets:?}");
+}
+
+/// Node prints `x`: the home object of a method of an object literal is the
+/// literal, also inside a class.
+#[test]
+fn a_super_method_call_of_an_object_method_inside_a_class_claims_no_wrong_target() {
+    let source = "class A {n(){console.log('a')}} \
+                  class B extends A { m(){ const o = { __proto__: {n: function x(){console.log('x')}}, \
+                  n(){ super.n() } }; o.n(); } } new B().m();\n";
+    let targets = exact_targets("super-object-in-class.mjs", source, "super.n()");
+    assert!(targets == none() || targets == only("x"), "{targets:?}");
+}
+
+/// Node prints `q`: `super.n()` in an object method reads the literal's
+/// current prototype.
+#[test]
+fn a_super_method_call_of_an_object_method_after_set_prototype_of_claims_no_wrong_target() {
+    let source = "const P = {n: function p(){console.log('p')}}; \
+                  const o = { __proto__: P, n(){ super.n() } }; \
+                  Object.setPrototypeOf(o, {n: function q(){console.log('q')}}); o.n();\n";
+    let targets = exact_targets("super-object.mjs", source, "super.n()");
+    assert!(targets == none() || targets == only("q"), "{targets:?}");
+}

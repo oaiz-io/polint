@@ -130,9 +130,13 @@ enum Place {
     Global,
 }
 
+/// The home object of the code being lowered: a class, or an object literal
+/// for its methods. `super` reads the current
+/// prototype of the constructor or of its prototype object, not the class the
+/// `extends` clause named: `Object.setPrototypeOf` and `__proto__` replace it.
 struct ClassFrame {
-    parent: FlowVar,
-    parent_prototype: FlowVar,
+    constructor: FlowVar,
+    prototype: FlowVar,
     static_member: bool,
 }
 
@@ -520,22 +524,19 @@ impl Lowerer<'_> {
             .super_class
             .as_ref()
             .map_or(FlowVar::Prim, |parent| self.expression(parent));
-        let parent_prototype = if class.super_class.is_some() {
+        if class.super_class.is_some() {
             let parent_prototype = self.load(parent, "exact:prototype".into());
             self.store(value, "$proto".into(), parent);
             self.store(prototype, "$proto".into(), parent_prototype);
-            parent_prototype
-        } else {
-            FlowVar::Prim
-        };
+        }
         for decorator in &class.decorators {
             let decorator = self.expression(&decorator.expression);
             self.sink(decorator);
             self.sink(value);
         }
         self.classes.push(ClassFrame {
-            parent,
-            parent_prototype,
+            constructor: value,
+            prototype,
             static_member: false,
         });
         let mut explicit = false;
@@ -634,10 +635,11 @@ impl Lowerer<'_> {
                 invocable: Invocable::CONSTRUCT,
             });
             if class.super_class.is_some() {
+                let callee = self.load(value, "$proto".into());
                 let result = self.temp();
                 self.flows.calls.push(FlowCall {
                     site: span,
-                    callee: parent,
+                    callee,
                     receiver: Some(FlowVar::This(span)),
                     arguments: Vec::new(),
                     // The implicit constructor forwards its argument list;
@@ -1503,13 +1505,19 @@ impl Lowerer<'_> {
 
     fn member_base(&mut self, object: &Expression<'_>) -> FlowVar {
         if matches!(object, Expression::Super(_)) {
-            self.classes.last().map_or(FlowVar::Open, |frame| {
-                if frame.static_member {
-                    frame.parent
-                } else {
-                    frame.parent_prototype
+            // A method's home object is the class for a static member, and
+            // its prototype object otherwise.
+            match self.classes.last() {
+                Some(frame) if frame.static_member => {
+                    let home = frame.constructor;
+                    self.load(home, "$proto".into())
                 }
-            })
+                Some(frame) => {
+                    let home = frame.prototype;
+                    self.load(home, "$proto".into())
+                }
+                None => FlowVar::Open,
+            }
         } else {
             self.expression(object)
         }
@@ -1590,12 +1598,14 @@ impl Lowerer<'_> {
         let callee = callee.get_inner_expression();
         let member = match callee {
             Expression::Super(_) => {
-                return (
-                    self.classes
-                        .last()
-                        .map_or(FlowVar::Open, |frame| frame.parent),
-                    Some(self.this()),
-                );
+                let parent = match self.classes.last() {
+                    Some(frame) => {
+                        let constructor = frame.constructor;
+                        self.load(constructor, "$proto".into())
+                    }
+                    None => FlowVar::Open,
+                };
+                return (parent, Some(self.this()));
             }
             Expression::ComputedMemberExpression(member) => {
                 Some((&member.object, MemberKey::Computed(&member.expression)))
@@ -1776,9 +1786,9 @@ impl Lowerer<'_> {
         if property.kind != PropertyKind::Init {
             // An accessor runs when the field is read or written.
             let value = match &property.value {
-                Expression::FunctionExpression(function) => {
-                    self.function(function.span, function, Invocable::CALL)
-                }
+                Expression::FunctionExpression(function) => self.with_home(instance, |lowerer| {
+                    lowerer.function(function.span, function, Invocable::CALL)
+                }),
                 value => self.expression(value),
             };
             self.sink(value);
@@ -1786,11 +1796,15 @@ impl Lowerer<'_> {
             return;
         }
         let value = match &property.value {
-            Expression::FunctionExpression(function) if property.method => self.function(
-                object_method_function_span(property),
-                function,
-                Invocable::CALL,
-            ),
+            Expression::FunctionExpression(function) if property.method => {
+                self.with_home(instance, |lowerer| {
+                    lowerer.function(
+                        object_method_function_span(property),
+                        function,
+                        Invocable::CALL,
+                    )
+                })
+            }
             value => self.expression(value),
         };
         let sets_prototype = !property.computed
@@ -1803,6 +1817,19 @@ impl Lowerer<'_> {
                 self.sink(value);
             }
         }
+    }
+
+    /// Lowers a method of an object literal, whose `super` reads the current
+    /// prototype of the literal: the class around it is not its home object.
+    fn with_home(&mut self, home: FlowVar, lower: impl FnOnce(&mut Self) -> FlowVar) -> FlowVar {
+        self.classes.push(ClassFrame {
+            constructor: home,
+            prototype: home,
+            static_member: false,
+        });
+        let value = lower(self);
+        self.classes.pop();
+        value
     }
 
     fn array(&mut self, array: &ArrayExpression<'_>) -> FlowVar {
