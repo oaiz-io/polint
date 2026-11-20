@@ -209,7 +209,8 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   site and callee as polint's scorer. It checks driver coverage, that a
   held-out package's misses lose their causes and examples, that the gate
   leaves a flagged package out of recall but counts its wrong exact targets,
-  and the authorship guard's classification of changed paths.
+  that recall under a recall target is reported as not met, and the
+  authorship guard's classification of changed paths.
 - **Driver coverage** (packages): the functions the recording entered, over
   the census's functions in the analysed files (classes and static blocks
   left out, since no call enters them). An entered function counts once, as
@@ -226,6 +227,11 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   every held-out tier is within 5 points of the tune set and no held-out
   package, flagged or not, has a wrong exact target or a false-complete
   answer. The tune-set tables, cost and outside tools cover the tune set only.
+- **Recall targets**: `## Recall targets` compares the pooled tune-set recall of
+  each plan and tier against the targets of
+  `research/package-graphs/ITERATION-1-CLASSICAL.md`, and each tune package's
+  no-types recall against the per-package target. It is a report: a target
+  not met is a row marked `no` and does not fail the run.
 - **Cost**: `polint check` with the census rule pack in `rule-pack/` (asks for
   `Functions`, `CallGraph`, `Symbols`, `References`), cold and warm, wall time
   and peak RSS from the in-process cost record (`POLINT_GOLDEN_COST_PATH`) and

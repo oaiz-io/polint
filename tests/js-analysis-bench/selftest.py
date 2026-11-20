@@ -380,6 +380,32 @@ def check_types_never_lose(failures: list[str]) -> None:
           "a deleted edge was not reported", failures)
 
 
+def check_recall_targets(failures: list[str]) -> None:
+    """Recall below a target is reported as not met; recall at or above it as met. Neither fails a run."""
+
+    def package(found: int, observed_edges: int) -> dict:
+        tiers = {"found": {"exact_complete": 0, "exact": found, "exact_conservative": found, "apart_only": 0}}
+        return {"refined": {"tiers": tiers, "observed_edges": observed_edges}}
+
+    below = report.recall_targets({"a": package(67, 100), "b": package(68, 100)}, ["base", "refined"])
+    rows = {row["measure"]: row for row in below["overall"]}
+    check(sorted(rows) == ["recall, exact tier alone, no types", "recall, no types", "recall, no types, floor"],
+          f"recall targets without the typed plan: {sorted(rows)}", failures)
+    check(rows["recall, no types"]["recall"] == 0.675 and not rows["recall, no types"]["met"],
+          f"recall under the target reported as met: {rows['recall, no types']}", failures)
+    check(not rows["recall, no types, floor"]["met"], f"recall under the floor reported as met: {rows}", failures)
+    check(rows["recall, exact tier alone, no types"]["met"], f"exact recall over its target not met: {rows}", failures)
+    check(below["per_package"]["packages"] == {"a": {"recall": 0.67, "met": True}, "b": {"recall": 0.68, "met": True}},
+          f"per-package recall targets: {below['per_package']}", failures)
+    above = report.recall_targets({"a": package(80, 100)}, ["refined"])
+    check(all(row["met"] for row in above["overall"]), f"recall at the target not met: {above['overall']}", failures)
+    lines: list[str] = []
+    report.render_recall_targets({"recall_targets": below}, lines.append)
+    text = "\n".join(lines)
+    check("## Recall targets" in text and "| recall, no types | refined | exact + conservative | 67.5% | 80% | no |" in text,
+          f"recall targets not rendered:\n{text}", failures)
+
+
 def check(condition: bool, message: str, failures: list[str]) -> None:
     if not condition:
         failures.append(message)
@@ -441,6 +467,7 @@ def main() -> int:
 
     check_outside(failures)
     check_types_never_lose(failures)
+    check_recall_targets(failures)
     check_held_out(entry, failures)
     check_guard(failures)
     check_exports(failures)

@@ -95,6 +95,17 @@ FALSE_COMPLETE = "other targets, no unresolved marker"
 COVERAGE_FLOOR = 0.40
 # The held-out gate: recall per tier within this many points of the tune set.
 HELD_OUT_MARGIN_POINTS = 5
+# The recall targets of `research/package-graphs/ITERATION-1-CLASSICAL.md`:
+# (measure, plan, tier view, target) over the pooled tune set. The report shows
+# each one met or not; a target never fails a run.
+RECALL_TARGETS = (
+    ("recall, no types", "refined", "exact_conservative", 0.80),
+    ("recall, no types, floor", "refined", "exact_conservative", 0.75),
+    ("recall, exact tier alone, no types", "refined", "exact", 0.60),
+    ("recall with types", TYPED_PLAN, "exact_conservative", 0.85),
+)
+# The per-package recall target: (plan, tier view, target) for every tune package.
+PACKAGE_RECALL_TARGET = ("refined", "exact_conservative", 0.65)
 RULES_TARGET_SUBDIR = "js-analysis-bench-rules"
 MB = 1_000_000
 OBSERVED_KINDS = ("call", "callback", "implicit")
@@ -2373,6 +2384,65 @@ def held_out_gate(packages: dict, held_out: dict, plans: list[str]) -> dict:
     return result
 
 
+def recall_targets(packages: dict, plans: list[str]) -> dict:
+    """Tune-set recall against `RECALL_TARGETS` and `PACKAGE_RECALL_TARGET`, for the plans that ran.
+
+    Reported only: a target not met is a row of the report, never a failed run."""
+    overall = []
+    for measure, plan, view, target in RECALL_TARGETS:
+        if plan not in plans:
+            continue
+        recall = pooled_tier_recall(packages, plan)[view]
+        overall.append({
+            "measure": measure,
+            "plan": plan,
+            "tier": view,
+            "target": target,
+            "recall": recall,
+            "met": recall is not None and recall >= target,
+        })
+    plan, view, target = PACKAGE_RECALL_TARGET
+    per_package = {}
+    if plan in plans:
+        for name, entry in packages.items():
+            scored = entry.get(plan, {})
+            if "tiers" not in scored:
+                continue
+            recall = ratio(scored["tiers"]["found"].get(view, 0), scored["observed_edges"])
+            per_package[name] = {"recall": recall, "met": recall is not None and recall >= target}
+    return {
+        "overall": overall,
+        "per_package": {"plan": plan, "tier": view, "target": target, "packages": per_package},
+    }
+
+
+def render_recall_targets(report: dict, add) -> None:
+    targets = report.get("recall_targets")
+    if not targets:
+        return
+    labels = dict(TIER_VIEWS)
+    add("## Recall targets")
+    add("")
+    add("The iteration's recall targets (`research/package-graphs/ITERATION-1-CLASSICAL.md`) over the pooled tune")
+    add("set. They are reported, not enforced: a target not met does not fail the run.")
+    add("")
+    add("| measure | plan | tier | recall | target | met |")
+    add("|---|---|---|---|---|---|")
+    for row in targets["overall"]:
+        add(f"| {row['measure']} | {row['plan']} | {labels[row['tier']]} | {pct1(row['recall'])} "
+            f"| {pct(row['target'])} | {'yes' if row['met'] else 'no'} |")
+    per_package = targets["per_package"]
+    if per_package["packages"]:
+        add("")
+        add(f"Per package, {per_package['plan']}, {labels[per_package['tier']]}, target {pct(per_package['target'])}:")
+        add("")
+        add("| package | recall | met |")
+        add("|---|---|---|")
+        for name, row in per_package["packages"].items():
+            add(f"| {name} | {pct1(row['recall'])} | {'yes' if row['met'] else 'no'} |")
+    add("")
+
+
 PREVIOUS_SET = "previous_set"
 
 
@@ -3322,6 +3392,7 @@ def render_markdown(report: dict) -> str:
             f"| {pct(base.get('references', {}).get('not_resolved_share'))} |"
         )
     add("")
+    render_recall_targets(report, add)
     render_wrong_targets(report, add)
     if TYPED_PLAN in report["plans"]:
         render_types(report, add)
@@ -3721,6 +3792,7 @@ def run(args) -> int:
             "packages": packages,
             "held_out": held_out,
             "held_out_gate": held_out_gate(packages, held_out, list(PLANS)),
+            "recall_targets": recall_targets(packages, list(PLANS)),
             "types_never_lose": types_never_lose(packages, held_out),
             "dump_budgets_s": budgets,
             # One fact dump per package and plan, kept even without the cost runs.

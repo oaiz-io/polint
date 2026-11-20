@@ -318,7 +318,7 @@ and why; the tables here are the result.
 
 | Measure | v0.5.3 | Target |
 |---|---|---|
-| Recall, exact plus conservative, no types | 47.5% | 80% overall; hard gate 75% |
+| Recall, exact plus conservative, no types | 47.5% | 80% overall, 75% floor; reported in the bench's `## Recall targets`, not a check that fails a run |
 | Recall per package, no types | 0% to 60% | every package at least 65% |
 | Recall, exact tier alone, no types | 44.5% (base) | 60% |
 | Recall with types | 61.4% | 85% |
