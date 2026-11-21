@@ -15,6 +15,7 @@ pub fn abstract_domains_provider_parameter_digest() -> Digest {
         policy.reduction_rounds,
         policy.budget.widening_fuel,
         policy.budget.max_iterations,
+        policy.budget.max_carried_facts,
     )
 }
 
@@ -22,6 +23,7 @@ fn abstract_domains_provider_parameter_digest_for_policy(
     max_reduction_rounds: u32,
     widening_fuel: u32,
     iteration_budget: u32,
+    carried_fact_budget: u64,
 ) -> Digest {
     let parts = [
         format!("schema={ABSTRACT_DOMAIN_SCHEMA_LABEL}:1"),
@@ -56,6 +58,7 @@ fn abstract_domains_provider_parameter_digest_for_policy(
         format!("max_reduction_rounds={max_reduction_rounds}"),
         format!("widening_fuel={widening_fuel}"),
         format!("iteration_budget={iteration_budget}"),
+        format!("carried_fact_budget={carried_fact_budget}"),
     ];
     let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
     Digest::from_parts(
@@ -70,11 +73,13 @@ pub fn abstract_domains_provider_parameter_digest_for_test(
     max_reduction_rounds: u32,
     widening_fuel: u32,
     iteration_budget: u32,
+    carried_fact_budget: u64,
 ) -> Digest {
     abstract_domains_provider_parameter_digest_for_policy(
         max_reduction_rounds,
         widening_fuel,
         iteration_budget,
+        carried_fact_budget,
     )
 }
 
@@ -85,9 +90,22 @@ mod abstract_domains_provider_parameters {
     #[test]
     fn abstract_domains_provider_parameters_change_when_policy_inputs_change() {
         let baseline = abstract_domains_provider_parameter_digest();
-        let changed = abstract_domains_provider_parameter_digest_for_test(99, 8, 10_000);
+        let policy = SolverPolicy::deterministic();
+        let changed = abstract_domains_provider_parameter_digest_for_test(
+            99,
+            8,
+            10_000,
+            policy.budget.max_carried_facts,
+        );
+        let carried_changed = abstract_domains_provider_parameter_digest_for_test(
+            policy.reduction_rounds,
+            policy.budget.widening_fuel,
+            policy.budget.max_iterations,
+            policy.budget.max_carried_facts - 1,
+        );
 
         assert_ne!(baseline, changed);
+        assert_ne!(baseline, carried_changed);
         assert!(baseline.to_string().contains("provider_parameters"));
     }
 }

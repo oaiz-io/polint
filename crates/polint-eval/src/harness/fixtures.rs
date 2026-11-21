@@ -626,6 +626,10 @@ pub(crate) fn run_abstract_domains_core_fixture_for_test(
             crate::analysis_neutral::domains::solver::SolverBudget {
                 max_iterations: 10_000,
                 widening_fuel: 0,
+                max_carried_facts:
+                    crate::analysis_neutral::domains::solver::SolverPolicy::deterministic()
+                        .budget
+                        .max_carried_facts,
             },
         ),
     )?);
@@ -636,6 +640,10 @@ pub(crate) fn run_abstract_domains_core_fixture_for_test(
             crate::analysis_neutral::domains::solver::SolverBudget {
                 max_iterations: 0,
                 widening_fuel: 8,
+                max_carried_facts:
+                    crate::analysis_neutral::domains::solver::SolverPolicy::deterministic()
+                        .budget
+                        .max_carried_facts,
             },
         ),
     )?);

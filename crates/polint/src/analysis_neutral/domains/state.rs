@@ -104,6 +104,15 @@ impl ProductState {
             .insert(place, InitializednessDomain::top(reason));
     }
 
+    /// Place facts this state holds, over every domain.
+    pub fn fact_count(&self) -> usize {
+        self.core.nilness.len()
+            + self.core.truthiness.len()
+            + self.core.constants.len()
+            + self.core.strings.len()
+            + self.core.initializedness.len()
+    }
+
     pub fn observed_places(&self) -> BTreeSet<PlaceId> {
         self.core
             .nilness
