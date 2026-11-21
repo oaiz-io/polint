@@ -1,4 +1,6 @@
 #[cfg(feature = "lang-typescript")]
+mod bounded_fs;
+#[cfg(feature = "lang-typescript")]
 mod conditions;
 mod formats;
 use crate::analysis_api::{
@@ -24,6 +26,12 @@ use crate::ts::repo_fs::{
     read_repo_file_to_string_with_limit, repo_dir_path, repo_file_exists, repo_file_path,
     repo_relative_existing_path,
 };
+use crate::ts::tsconfig_chain::{
+    TsconfigExtendsWire, extended_configs, parse_tsconfig_json, read_tsconfig_json,
+    resolve_tsconfig_file_candidate, walk_tsconfig_chain,
+};
+#[cfg(feature = "lang-typescript")]
+use bounded_fs::BoundedFs;
 use formats::js_lockfile::{
     JsLockfileKind, JsLockfileManifest, JsLockfilePackage, JsPackageManager, parse_js_lockfile,
     unsupported_js_lockfile,
@@ -31,7 +39,11 @@ use formats::js_lockfile::{
 use formats::package_json::{PackageJsonManifest, parse_package_json, unsupported_package_json};
 pub use formats::pnpm_workspace::parse_pnpm_workspace_packages;
 #[cfg(feature = "lang-typescript")]
-use oxc_resolver::{ResolveError, ResolveOptions, Resolver, TsconfigDiscovery};
+use oxc_resolver::{
+    FileSystem as _, ResolveError, ResolveOptions, ResolverGeneric, TsconfigDiscovery,
+};
+#[cfg(feature = "lang-typescript")]
+type Resolver = ResolverGeneric<BoundedFs>;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -1643,133 +1655,83 @@ pub(crate) fn nearest_tsconfig_path(root: &Path, file_path: &Path) -> Option<Pat
 /// A named config that does not exist contributes its absence, so creating it
 /// later is also a change.
 pub(crate) fn tsconfig_chain_digest(root: &Path, relative_config: &str) -> String {
-    let mut visited = BTreeSet::new();
     let mut parts = Vec::new();
-    collect_tsconfig_chain_digest(root, relative_config, &mut visited, &mut parts);
+    collect_tsconfig_chain_digest(root, relative_config, &mut parts);
     parts.sort();
     parts.dedup();
     crate::ts::hash::stable_hash(&parts.iter().map(String::as_str).collect::<Vec<_>>())
 }
 
-fn collect_tsconfig_chain_digest(
-    root: &Path,
-    relative_config: &str,
-    visited: &mut BTreeSet<String>,
-    parts: &mut Vec<String>,
-) {
-    let Some(relative_path) = normalize_repo_relative(relative_config) else {
+fn collect_tsconfig_chain_digest(root: &Path, relative_config: &str, parts: &mut Vec<String>) {
+    let Some(start) = normalize_repo_relative(relative_config) else {
         return;
     };
-    if !visited.insert(relative_path.clone()) {
-        return;
-    }
-    let Ok(source) =
-        read_repo_file_to_string_with_limit(root, &relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
-    else {
-        parts.push(format!("{relative_path}=absent"));
-        return;
-    };
-    parts.push(format!(
-        "{relative_path}={}",
-        crate::ts::hash::stable_hash(&[source.as_str()])
-    ));
-
-    let Some(config) = parse_tsconfig_chain_wire(&source) else {
-        return;
-    };
-    let config_dir = Path::new(&relative_path).parent().unwrap_or(Path::new(""));
-    let extended = config
-        .extends
-        .into_iter()
-        .flat_map(TsconfigExtendsWire::into_specifiers)
-        .filter_map(|specifier| resolve_tsconfig_extends_path(root, config_dir, &specifier));
-    // A referenced project is a config whose own options decide the types of
-    // the files the referencing config delegates to it, so the chain follows
-    // references exactly as it follows `extends`.
-    let referenced = config
-        .references
-        .into_iter()
-        .flatten()
-        .filter_map(|reference| reference.path)
-        .filter_map(|path| {
-            resolve_tsconfig_file_candidate(root, &config_dir.join(Path::new(&path)))
-        });
-    for next in extended.chain(referenced) {
-        collect_tsconfig_chain_digest(root, &next, visited, parts);
+    let chain = walk_tsconfig_chain(start, |relative_path| {
+        let Ok(source) =
+            read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
+        else {
+            parts.push(format!("{relative_path}=absent"));
+            return Vec::new();
+        };
+        parts.push(format!(
+            "{relative_path}={}",
+            crate::ts::hash::stable_hash(&[source.as_str()])
+        ));
+        let Some(config) = parse_tsconfig_json::<TsconfigChainWire>(&source) else {
+            return Vec::new();
+        };
+        let config_dir = Path::new(relative_path).parent().unwrap_or(Path::new(""));
+        // A referenced project is a config whose own options decide the types
+        // of the files the referencing config delegates to it, so the chain
+        // follows references exactly as it follows `extends`.
+        let referenced = config
+            .references
+            .into_iter()
+            .flatten()
+            .filter_map(|reference| reference.path)
+            .filter_map(|path| {
+                resolve_tsconfig_file_candidate(root, &config_dir.join(Path::new(&path)))
+            });
+        let mut next = extended_configs(root, relative_path, config.extends);
+        next.extend(referenced);
+        next
+    });
+    if chain.exceeded {
+        parts.push(format!("{relative_config}=exceeds-config-bound"));
     }
 }
 
-fn parse_tsconfig_chain_wire(source: &str) -> Option<TsconfigChainWire> {
-    let mut source = source.to_string();
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return None;
-    }
-    serde_json::from_str::<TsconfigChainWire>(&source).ok()
-}
-
+/// The `paths` aliases the config at `path` declares or inherits.
+///
+/// A config that reaches more configs than the walk follows gives the aliases
+/// of the configs it read: import resolution loads no such config, so its
+/// imports are unknown whatever the aliases.
 fn read_tsconfig_path_aliases(root: &Path, path: &Path) -> Vec<String> {
-    let mut visited = BTreeSet::new();
-    let Some(relative_path) = repo_relative_existing_path(root, path) else {
+    let Some(start) = repo_relative_existing_path(root, path) else {
         return Vec::new();
     };
-    read_tsconfig_path_aliases_inner(root, &relative_path, &mut visited)
-}
-
-fn read_tsconfig_path_aliases_inner(
-    root: &Path,
-    relative_path: &str,
-    visited: &mut BTreeSet<String>,
-) -> Vec<String> {
-    let Ok(path) = repo_file_path(root, relative_path) else {
-        return Vec::new();
-    };
-    let Some(relative_path) = repo_relative_existing_path(root, &path) else {
-        return Vec::new();
-    };
-    if !visited.insert(relative_path.clone()) {
-        return Vec::new();
-    }
-    let Some(config) = read_tsconfig_alias_wire(root, &relative_path) else {
-        return Vec::new();
-    };
-
-    if let Some(paths) = config
-        .compiler_options
-        .as_ref()
-        .and_then(|options| options.paths.as_ref())
-    {
-        return sorted_ts_path_aliases(paths.keys().cloned());
-    }
-
-    let config_dir = Path::new(&relative_path).parent().unwrap_or(Path::new(""));
-    let mut aliases = config
-        .extends
-        .into_iter()
-        .flat_map(TsconfigExtendsWire::into_specifiers)
-        .filter_map(|specifier| resolve_tsconfig_extends_path(root, config_dir, &specifier))
-        .flat_map(|extended_path| read_tsconfig_path_aliases_inner(root, &extended_path, visited))
-        .collect::<Vec<_>>();
-    aliases.sort();
-    aliases.dedup();
-    aliases
-}
-
-fn read_tsconfig_alias_wire(root: &Path, relative_path: &str) -> Option<TsconfigAliasWire> {
-    let Ok(mut source) =
-        read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
-    else {
-        return None;
-    };
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return None;
-    }
-    serde_json::from_str::<TsconfigAliasWire>(&source).ok()
+    let mut aliases = Vec::new();
+    walk_tsconfig_chain(start, |relative_path| {
+        let Some(config) = read_tsconfig_json::<TsconfigAliasWire>(root, relative_path) else {
+            return Vec::new();
+        };
+        if let Some(paths) = config
+            .compiler_options
+            .as_ref()
+            .and_then(|options| options.paths.as_ref())
+        {
+            aliases.extend(paths.keys().cloned());
+            return Vec::new();
+        }
+        extended_configs(root, relative_path, config.extends)
+            .into_iter()
+            .filter_map(|extended| {
+                let path = repo_file_path(root, &extended).ok()?;
+                repo_relative_existing_path(root, &path)
+            })
+            .collect()
+    });
+    sorted_ts_path_aliases(aliases.into_iter())
 }
 
 fn sorted_ts_path_aliases(paths: impl Iterator<Item = String>) -> Vec<String> {
@@ -1777,85 +1739,6 @@ fn sorted_ts_path_aliases(paths: impl Iterator<Item = String>) -> Vec<String> {
     aliases.sort();
     aliases.dedup();
     aliases
-}
-
-fn resolve_tsconfig_extends_path(
-    root: &Path,
-    config_dir: &Path,
-    specifier: &str,
-) -> Option<String> {
-    let specifier_path = Path::new(specifier);
-    if specifier_path.is_absolute() {
-        return None;
-    }
-    if specifier.starts_with('.') {
-        return resolve_tsconfig_file_candidate(root, &config_dir.join(specifier_path));
-    }
-    resolve_package_tsconfig_extends_path(root, config_dir, specifier)
-}
-
-fn resolve_package_tsconfig_extends_path(
-    root: &Path,
-    config_dir: &Path,
-    specifier: &str,
-) -> Option<String> {
-    let mut current = normalize_repo_relative_input(config_dir)?;
-    loop {
-        let candidate = if current.as_os_str().is_empty() {
-            PathBuf::from("node_modules").join(specifier)
-        } else {
-            current.join("node_modules").join(specifier)
-        };
-        if let Some(resolved) = resolve_tsconfig_file_candidate(root, &candidate) {
-            return Some(resolved);
-        }
-        if current.as_os_str().is_empty() {
-            return None;
-        }
-        current.pop();
-    }
-}
-
-fn resolve_tsconfig_file_candidate(root: &Path, base: &Path) -> Option<String> {
-    let mut candidates = vec![base.to_path_buf()];
-    if base.extension().and_then(|extension| extension.to_str()) != Some("json") {
-        let mut with_json = base.as_os_str().to_owned();
-        with_json.push(".json");
-        candidates.push(PathBuf::from(with_json));
-    }
-    candidates.push(base.join("tsconfig.json"));
-
-    candidates
-        .into_iter()
-        .filter_map(|candidate| normalized_existing_repo_file(root, &candidate))
-        .next()
-}
-
-fn normalized_existing_repo_file(root: &Path, candidate: &Path) -> Option<String> {
-    repo_file_path(root, candidate).ok()?;
-    let normalized = normalize_repo_relative_input(candidate)?;
-    let relative = normalized.to_string_lossy();
-    if relative.is_empty() {
-        None
-    } else {
-        normalize_repo_relative(relative)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum TsconfigExtendsWire {
-    Single(String),
-    Multiple(Vec<String>),
-}
-
-impl TsconfigExtendsWire {
-    fn into_specifiers(self) -> Vec<String> {
-        match self {
-            Self::Single(specifier) => vec![specifier],
-            Self::Multiple(specifiers) => specifiers,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -2024,7 +1907,10 @@ fn package_and_subpath(specifier: &str) -> Option<(&str, String)> {
 #[cfg(feature = "lang-typescript")]
 impl ModeResolvers {
     pub(crate) fn new() -> Self {
-        let node = Resolver::new(resolve_options(mode_conditions("import")));
+        let node = Resolver::new_with_file_system(
+            BoundedFs::new(),
+            resolve_options(mode_conditions("import")),
+        );
         let loaders = |mode: LoadMode| {
             let conditions = || mode_conditions(mode.condition());
             let fields =

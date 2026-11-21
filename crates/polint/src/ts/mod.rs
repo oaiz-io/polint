@@ -40,6 +40,7 @@ pub mod spans;
 #[cfg(feature = "lang-typescript")]
 pub mod symbol_graph;
 pub mod syntax_store;
+pub(crate) mod tsconfig_chain;
 pub(crate) mod types;
 
 use std::cell::RefCell;

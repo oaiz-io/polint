@@ -1,17 +1,14 @@
-use serde::Deserialize;
-
 use super::{Digest, DigestKind};
 use crate::analysis::extensions::discovery::{DiscoveredExtension, discover_local_extensions};
 use crate::analysis_kernel::ProviderManifest;
 use crate::config::LoadedConfig;
 use crate::core::AnalysisDb;
 use crate::repo_fs::{
-    TOPOLOGY_LOCKFILE_MAX_BYTES, TOPOLOGY_MANIFEST_MAX_BYTES, normalize_repo_relative,
-    normalize_repo_relative_input, read_repo_file_to_string_with_limit, read_repo_file_with_limit,
-    repo_file_exists, repo_file_path, repo_relative_existing_path,
+    TOPOLOGY_LOCKFILE_MAX_BYTES, TOPOLOGY_MANIFEST_MAX_BYTES, read_repo_file_with_limit,
+    repo_file_exists,
 };
 use std::collections::BTreeSet;
-use std::path::{Path as FsPath, PathBuf};
+use std::path::Path as FsPath;
 
 pub(crate) use crate::analysis_api::{
     FileSnapshot, GoLifecycleSnapshot, INPUT_SNAPSHOT_SCHEMA_VERSION, InputComponent,
@@ -626,165 +623,11 @@ fn ts_config_name() -> String {
 
 fn ts_js_config_candidates(root: &FsPath, lifecycle_dirs: &BTreeSet<String>) -> Vec<String> {
     let mut candidates = lifecycle_candidates(lifecycle_dirs, config_file_names());
-    candidates.extend(extended_ts_config_candidates(
+    candidates.extend(crate::ts::tsconfig_chain::extended_ts_config_candidates(
         root,
         candidates.iter().map(String::as_str),
     ));
     candidates
-}
-
-fn extended_ts_config_candidates<'a>(
-    root: &FsPath,
-    initial_candidates: impl IntoIterator<Item = &'a str>,
-) -> Vec<String> {
-    let mut visited = BTreeSet::new();
-    let mut discovered = BTreeSet::new();
-    for candidate in initial_candidates {
-        let file_name = FsPath::new(candidate)
-            .file_name()
-            .and_then(|name| name.to_str());
-        if !matches!(file_name, Some("tsconfig.json" | "jsconfig.json")) {
-            continue;
-        }
-        collect_extended_ts_configs(root, &root.join(candidate), &mut visited, &mut discovered);
-    }
-    discovered.into_iter().collect()
-}
-
-fn collect_extended_ts_configs(
-    root: &FsPath,
-    config_path: &FsPath,
-    visited: &mut BTreeSet<String>,
-    discovered: &mut BTreeSet<String>,
-) {
-    let Some(config_path) = repo_relative_existing_path(root, config_path) else {
-        return;
-    };
-    if !visited.insert(config_path.clone()) {
-        return;
-    }
-    let Some(config) = read_tsconfig_extends_wire(root, &config_path) else {
-        return;
-    };
-    let config_dir = FsPath::new(&config_path)
-        .parent()
-        .unwrap_or(FsPath::new(""));
-    for specifier in config
-        .extends
-        .into_iter()
-        .flat_map(TsconfigExtendsWire::into_specifiers)
-    {
-        let Some(extended_path) = resolve_tsconfig_extends_path(root, config_dir, &specifier)
-        else {
-            continue;
-        };
-        discovered.insert(extended_path.clone());
-        collect_extended_ts_configs(root, &root.join(&extended_path), visited, discovered);
-    }
-}
-
-fn read_tsconfig_extends_wire(
-    root: &FsPath,
-    relative_path: &str,
-) -> Option<TsconfigExtendsOnlyWire> {
-    let Ok(mut source) =
-        read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
-    else {
-        return None;
-    };
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return None;
-    }
-    serde_json::from_str::<TsconfigExtendsOnlyWire>(&source).ok()
-}
-
-fn resolve_tsconfig_extends_path(
-    root: &FsPath,
-    config_dir: &FsPath,
-    specifier: &str,
-) -> Option<String> {
-    let specifier_path = FsPath::new(specifier);
-    if specifier_path.is_absolute() {
-        return None;
-    }
-    if specifier.starts_with('.') {
-        return resolve_tsconfig_file_candidate(root, &config_dir.join(specifier_path));
-    }
-    resolve_package_tsconfig_extends_path(root, config_dir, specifier)
-}
-
-fn resolve_package_tsconfig_extends_path(
-    root: &FsPath,
-    config_dir: &FsPath,
-    specifier: &str,
-) -> Option<String> {
-    let mut current = normalize_repo_relative_input(config_dir)?;
-    loop {
-        let candidate = if current.as_os_str().is_empty() {
-            PathBuf::from("node_modules").join(specifier)
-        } else {
-            current.join("node_modules").join(specifier)
-        };
-        if let Some(resolved) = resolve_tsconfig_file_candidate(root, &candidate) {
-            return Some(resolved);
-        }
-        if current.as_os_str().is_empty() {
-            return None;
-        }
-        current.pop();
-    }
-}
-
-fn resolve_tsconfig_file_candidate(root: &FsPath, base: &FsPath) -> Option<String> {
-    let mut candidates = vec![base.to_path_buf()];
-    if base.extension().and_then(|extension| extension.to_str()) != Some("json") {
-        let mut with_json = base.as_os_str().to_owned();
-        with_json.push(".json");
-        candidates.push(PathBuf::from(with_json));
-    }
-    candidates.push(base.join("tsconfig.json"));
-
-    candidates
-        .into_iter()
-        .filter_map(|candidate| normalized_existing_repo_file(root, &candidate))
-        .next()
-}
-
-fn normalized_existing_repo_file(root: &FsPath, candidate: &FsPath) -> Option<String> {
-    repo_file_path(root, candidate).ok()?;
-    let normalized = normalize_repo_relative_input(candidate)?;
-    let relative = normalized.to_string_lossy();
-    if relative.is_empty() {
-        None
-    } else {
-        normalize_repo_relative(relative)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TsconfigExtendsOnlyWire {
-    #[serde(default)]
-    extends: Option<TsconfigExtendsWire>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum TsconfigExtendsWire {
-    Single(String),
-    Multiple(Vec<String>),
-}
-
-impl TsconfigExtendsWire {
-    fn into_specifiers(self) -> Vec<String> {
-        match self {
-            Self::Single(specifier) => vec![specifier],
-            Self::Multiple(specifiers) => specifiers,
-        }
-    }
 }
 
 fn string_or_array_snapshot_setting(

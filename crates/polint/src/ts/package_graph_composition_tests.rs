@@ -1011,6 +1011,57 @@ fn a_cycle_of_tsconfig_extends_finishes() {
     );
 }
 
+/// A `tsconfig.json` whose `extends` run through `links` configs.
+fn tsconfig_chain_answer(links: usize) -> PortableAnswer {
+    let main = "import { f } from \"./f\";\nf();\n";
+    let mut files = vec![
+        (
+            "package.json".to_string(),
+            r#"{"name":"app","version":"1.0.0"}"#.to_string(),
+        ),
+        (
+            "tsconfig.json".to_string(),
+            r#"{"extends":"./configs/c0.json"}"#.to_string(),
+        ),
+        ("main.ts".to_string(), main.to_string()),
+        ("f.ts".to_string(), "export function f() {}\n".to_string()),
+        (format!("configs/c{links}.json"), "{}".to_string()),
+    ];
+    files.extend((0..links).map(|index| {
+        (
+            format!("configs/c{index}.json"),
+            format!("{{\"extends\":\"./c{}.json\"}}", index + 1),
+        )
+    }));
+    let files = files
+        .iter()
+        .map(|(path, text)| (path.as_str(), text.as_str()))
+        .collect::<Vec<_>>();
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(temp.path(), &files);
+    let whole = whole_program_answers(temp.path());
+    answer_in(&whole, ".:main.ts", main.find("f()").expect("a call")).clone()
+}
+
+/// A chain of `extends` as long as a project writes links the import; one
+/// longer than the configuration walk follows is reported unknown, and the
+/// analysis finishes rather than exhausting its stack.
+#[test]
+fn a_ten_thousand_link_tsconfig_extends_chain_finishes_with_an_unknown() {
+    let short = tsconfig_chain_answer(64);
+    assert_eq!(short.targets.len(), 1, "{short:?}");
+    assert!(short.targets[0].starts_with(".:f.ts@"), "{short:?}");
+    let long = tsconfig_chain_answer(10_000);
+    assert!(
+        long.targets.iter().all(|name| name.starts_with(".:f.ts@")),
+        "{long:?}"
+    );
+    assert!(
+        !long.claim.contains("Exact") && !long.claim.contains("Complete"),
+        "{long:?}"
+    );
+}
+
 #[test]
 fn the_stitch_refuses_a_graph_its_budget_cut_short() {
     let temp = tempfile::tempdir().expect("tempdir");
