@@ -14,7 +14,7 @@ use crate::analysis_api::ImportSyntax;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const CORPUS: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -101,12 +101,7 @@ fn every_file_node_loads_through_a_condition_map_is_named_and_one_file_only_wher
     let root = dir.path();
     materialise(root, &corpus);
     let resolver = DiskResolver::new();
-    let relative = |path: &Path| {
-        path.strip_prefix(root).map_or_else(
-            |_| path.display().to_string(),
-            |path| path.display().to_string(),
-        )
-    };
+    let relative = |path: &Path| path.strip_prefix(root).unwrap_or(path).to_path_buf();
 
     let mut failures = Vec::new();
     let mut requests = 0;
@@ -119,21 +114,23 @@ fn every_file_node_loads_through_a_condition_map_is_named_and_one_file_only_wher
             };
             let answer =
                 resolver.resolve(&root.join(&request.importer), &request.specifier, syntax);
-            let (named, exact): (BTreeSet<String>, bool) = match &answer {
+            let (named, exact): (BTreeSet<PathBuf>, bool) = match &answer {
                 Some(DiskTarget::File(path)) => ([relative(path)].into(), true),
                 Some(DiskTarget::Alternatives(paths)) => {
                     (paths.iter().map(|path| relative(path)).collect(), false)
                 }
                 None => (BTreeSet::new(), false),
             };
-            let loaded: BTreeSet<&String> = request
+            let loaded: BTreeSet<&Path> = request
                 .loads
                 .keys()
                 .filter(|path| !is_declaration(path))
+                .map(Path::new)
                 .collect();
-            let missed: Vec<&&String> = loaded
+            let missed: Vec<_> = loaded
                 .iter()
-                .filter(|path| !named.contains(**path))
+                .copied()
+                .filter(|path| !named.contains(*path))
                 .collect();
             let wrong_exact = exact && loaded.len() > 1;
             if missed.is_empty() && !wrong_exact {
