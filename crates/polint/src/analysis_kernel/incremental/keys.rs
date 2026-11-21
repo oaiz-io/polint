@@ -967,7 +967,8 @@ fn package_path_for_manifest_path(relative_path: &str) -> Option<String> {
 }
 
 fn package_json_workspace_patterns(contents: &str) -> Vec<String> {
-    let Ok(value) = serde_json::from_str::<Value>(contents) else {
+    let Ok(value) = crate::bounded_json::from_str::<Value>(contents, TOPOLOGY_MANIFEST_MAX_BYTES)
+    else {
         return Vec::new();
     };
     let Some(object) = value.as_object() else {
