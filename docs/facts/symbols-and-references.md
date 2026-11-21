@@ -294,6 +294,10 @@ Current limits:
 - no cross-file member or property resolution beyond module-linked import/export
   aliases
 - no declaration-file or project-reference precision claims
+- a `qualified_name` names at most the 64 innermost scopes that enclose the
+  symbol; for a symbol nested deeper, `...` stands for the outer ones. Every
+  scope it names carries its source span, so the name still identifies one
+  symbol
 - no call graph, CFG, coverage, or dataflow facts
 - no public exposure of Oxc IDs, raw Oxc semantic records, AST nodes, or resolver
   internals

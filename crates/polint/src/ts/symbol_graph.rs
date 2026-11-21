@@ -443,9 +443,10 @@ fn derive_ts_semantic_index(
         })
         .collect::<Vec<_>>();
     semantic_nodes.sort_by_key(|(start, end, _, kind)| (*start, *end, *kind));
+    let semantic_parents = semantic_scope_parents(nodes);
 
     for (_, _, node_id, kind) in semantic_nodes {
-        let scope_path = scope_path_for_node(file, nodes, node_id);
+        let scope_path = scope_path_for_node(file, nodes, &semantic_parents, node_id);
         let stable_key = ScopeFact::stable_key_for(
             interner,
             file.language,
@@ -458,9 +459,15 @@ fn derive_ts_semantic_index(
         if ids_by_stable_key.contains_key(&stable_key) {
             continue;
         }
-        let parent =
-            nearest_semantic_scope_parent(interner, file, nodes, node_id, &ids_by_stable_key)
-                .or(module_scope_id);
+        let parent = nearest_semantic_scope_parent(
+            interner,
+            file,
+            nodes,
+            &semantic_parents,
+            node_id,
+            &ids_by_stable_key,
+        )
+        .or(module_scope_id);
         let id = builder.add_scope(
             interner,
             ScopeFact {
@@ -1658,35 +1665,88 @@ fn semantic_unresolved_reference_key(
     .stable_key()
 }
 
+/// Enclosing scopes a scope path or an owner chain names. A path names the
+/// innermost of them and stands one segment for the rest, so the identities
+/// of a file grow linearly with its nesting depth. Each segment carries its
+/// scope's span, so a shortened path still names one scope.
+const MAX_NAMED_ENCLOSING_SCOPES: usize = 64;
+
+/// The segment that stands for the enclosing scopes a path does not name.
+const OMITTED_ENCLOSING_SCOPES: &str = "...";
+
+/// Orders scope segments given innermost first from the outermost one named,
+/// naming at most [`MAX_NAMED_ENCLOSING_SCOPES`] of them.
+fn bounded_outermost_first(innermost_first: impl Iterator<Item = String>) -> Vec<String> {
+    let mut segments = innermost_first
+        .take(MAX_NAMED_ENCLOSING_SCOPES + 1)
+        .collect::<Vec<_>>();
+    if segments.len() > MAX_NAMED_ENCLOSING_SCOPES {
+        segments.truncate(MAX_NAMED_ENCLOSING_SCOPES);
+        segments.push(OMITTED_ENCLOSING_SCOPES.to_string());
+    }
+    segments.reverse();
+    segments
+}
+
 fn scope_path_for_scope(
     file: &SourceFile,
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     scope_id: oxc_semantic::ScopeId,
 ) -> Vec<String> {
-    let mut ancestors = scoping.scope_ancestors(scope_id).collect::<Vec<_>>();
-    ancestors.reverse();
     let mut path = vec![file.relative_path.clone()];
-    path.extend(ancestors.into_iter().map(|scope| {
-        let kind = nodes.kind(scoping.get_node_id(scope));
-        scope_path_segment(kind)
-    }));
+    path.extend(bounded_outermost_first(
+        scoping
+            .scope_ancestors(scope_id)
+            .map(|scope| scope_path_segment(nodes.kind(scoping.get_node_id(scope)))),
+    ));
     path
+}
+
+/// The nearest enclosing node that opens a semantic scope, for every node,
+/// indexed by node id. A node is created after its parent, so one pass in id
+/// order finds each from its parent's.
+fn semantic_scope_parents(nodes: &AstNodes<'_>) -> Vec<Option<oxc_semantic::NodeId>> {
+    let mut parents: Vec<Option<oxc_semantic::NodeId>> = Vec::with_capacity(nodes.len());
+    for (node_id, _) in nodes.iter_enumerated() {
+        let parent = nodes.parent_id(node_id);
+        let nearest = (parent.index() < node_id.index())
+            .then(|| {
+                if semantic_scope_kind_for_ast(nodes.kind(parent)).is_some() {
+                    Some(parent)
+                } else {
+                    parents.get(parent.index()).copied().flatten()
+                }
+            })
+            .flatten();
+        parents.push(nearest);
+    }
+    parents
+}
+
+/// The enclosing semantic scope nodes of `node_id`, innermost first.
+fn semantic_scope_ancestors<'n>(
+    semantic_parents: &'n [Option<oxc_semantic::NodeId>],
+    node_id: oxc_semantic::NodeId,
+) -> impl Iterator<Item = oxc_semantic::NodeId> + 'n {
+    std::iter::successors(
+        semantic_parents.get(node_id.index()).copied().flatten(),
+        |ancestor| semantic_parents.get(ancestor.index()).copied().flatten(),
+    )
 }
 
 fn scope_path_for_node(
     file: &SourceFile,
     nodes: &AstNodes<'_>,
+    semantic_parents: &[Option<oxc_semantic::NodeId>],
     node_id: oxc_semantic::NodeId,
 ) -> Vec<String> {
-    let mut ancestors = nodes
-        .ancestors_enumerated(node_id)
-        .filter_map(|(_, node)| semantic_scope_kind_for_ast(node.kind()).map(|_| node.kind()))
-        .collect::<Vec<_>>();
-    ancestors.reverse();
     let mut path = vec![file.relative_path.clone()];
-    path.extend(ancestors.into_iter().map(scope_path_segment));
-    path.push(scope_path_segment(nodes.kind(node_id)));
+    path.extend(bounded_outermost_first(
+        std::iter::once(node_id)
+            .chain(semantic_scope_ancestors(semantic_parents, node_id))
+            .map(|scope| scope_path_segment(nodes.kind(scope))),
+    ));
     path
 }
 
@@ -1694,12 +1754,13 @@ fn nearest_semantic_scope_parent(
     interner: &crate::internal_core::StableKeyInterner,
     file: &SourceFile,
     nodes: &AstNodes<'_>,
+    semantic_parents: &[Option<oxc_semantic::NodeId>],
     node_id: oxc_semantic::NodeId,
     ids_by_stable_key: &BTreeMap<StableKeyId, ScopeId>,
 ) -> Option<ScopeId> {
-    nodes.ancestors_enumerated(node_id).find_map(|(_, node)| {
-        let kind = semantic_scope_kind_for_ast(node.kind())?;
-        let scope_path = scope_path_for_node(file, nodes, node.id());
+    semantic_scope_ancestors(semantic_parents, node_id).find_map(|ancestor| {
+        let kind = semantic_scope_kind_for_ast(nodes.kind(ancestor))?;
+        let scope_path = scope_path_for_node(file, nodes, semantic_parents, ancestor);
         let stable_key = ScopeFact::stable_key_for(
             interner,
             file.language,
@@ -2376,25 +2437,20 @@ fn owner_chain(
     nodes: &AstNodes<'_>,
     scope_id: oxc_semantic::ScopeId,
 ) -> Vec<String> {
-    let mut scopes = scoping.scope_ancestors(scope_id).collect::<Vec<_>>();
-    scopes.reverse();
-    scopes
-        .into_iter()
-        .filter_map(|scope| {
-            let node_id = scoping.get_node_id(scope);
-            let kind = nodes.kind(node_id);
-            if matches!(kind, AstKind::Program(_)) {
-                return None;
-            }
-            let span = kind.span();
-            Some(format!(
-                "{}@{}-{}",
-                ast_kind_label(kind),
-                span.start,
-                span.end
-            ))
-        })
-        .collect()
+    bounded_outermost_first(scoping.scope_ancestors(scope_id).filter_map(|scope| {
+        let node_id = scoping.get_node_id(scope);
+        let kind = nodes.kind(node_id);
+        if matches!(kind, AstKind::Program(_)) {
+            return None;
+        }
+        let span = kind.span();
+        Some(format!(
+            "{}@{}-{}",
+            ast_kind_label(kind),
+            span.start,
+            span.end
+        ))
+    }))
 }
 
 fn ast_kind_label(kind: AstKind<'_>) -> &'static str {

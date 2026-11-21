@@ -1483,8 +1483,8 @@ const MODULE_GRAPH_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
 }];
 
 const SYMBOL_GRAPH_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
-    name: "symbol-graph-facts-3",
-    version: 3,
+    name: "symbol-graph-facts-4",
+    version: 4,
 }];
 
 const MODULE_TOPOLOGY_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
@@ -2465,8 +2465,8 @@ mod tests {
         assert_eq!(
             manifest.schema_versions,
             &[SchemaVersion {
-                name: "symbol-graph-facts-3",
-                version: 3,
+                name: "symbol-graph-facts-4",
+                version: 4,
             }]
         );
     }
