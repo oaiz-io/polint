@@ -876,7 +876,7 @@ fn a_browser_field_that_replaces_the_main_file_claims_neither_file_exactly() {
 #[test]
 fn an_exports_map_whose_conditions_name_one_file_links_the_import() {
     let (answers, open) = dual_answers(
-        r#"{"name":"dual","version":"1.0.0","exports":{"types":"./index.d.ts","browser":"./node.cjs","default":"./node.cjs"}}"#,
+        r#"{"name":"dual","version":"1.0.0","exports":{"browser":"./node.cjs","default":"./node.cjs"}}"#,
         "dual",
         &[],
     );
@@ -887,6 +887,20 @@ fn an_exports_map_whose_conditions_name_one_file_links_the_import() {
             ["node_modules/dual:node.cjs@0..21#nodeRun"],
             "{answer:?}"
         );
+    }
+}
+
+#[test]
+fn a_declaration_only_condition_leaves_the_runtime_import_open() {
+    let (answers, open) = dual_answers(
+        r#"{"name":"dual","version":"1.0.0","exports":{"types":"./index.d.ts","default":"./node.cjs"}}"#,
+        "dual",
+        &[],
+    );
+    assert_eq!(open.len(), 2, "{open:?}");
+    for answer in answers {
+        assert!(answer.claim.contains("Open"), "{answer:?}");
+        assert_eq!(answer.targets, ["node_modules/dual:node.cjs@0..21#nodeRun"]);
     }
 }
 
