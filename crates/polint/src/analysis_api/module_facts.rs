@@ -50,6 +50,9 @@ pub struct ResolvedImportFact {
     /// be incomplete; it is empty where `target_node` names the one target.
     #[serde(default)]
     pub alternatives: Vec<ModuleNodeId>,
+    /// When an input could not be checked, its path and why it was refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_issue: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,6 +171,7 @@ impl ResolvedImportFact {
             precision,
             reason,
             alternatives: Vec::new(),
+            resolution_issue: None,
         }
     }
 

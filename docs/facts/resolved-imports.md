@@ -50,6 +50,7 @@ Query methods:
 | `status` | `ResolutionStatus` for the import. |
 | `precision` | `ResolutionPrecision` for the result. |
 | `reason` | Optional `UnresolvedReason` for uncertain results. |
+| `resolution_issue` | The path and reason when a resolver input could not be checked. |
 | `alternatives` | For an import with no single target (`ModeDependent`), the module graph nodes of the analysed files that one way of loading it may name: its mode, its conditions, Node or a bundler. Each is a conservative candidate, and the list may be incomplete. Empty when `target_node` names the one target. |
 
 ## Example: Report Unresolved Imports

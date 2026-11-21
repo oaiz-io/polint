@@ -18,13 +18,14 @@
 //! cannot parse, so every import through that package is reported unknown
 //! rather than resolved as if the package had no manifest.
 
-use crate::bounded_json::{MAX_JSON_DEPTH, check_bounds};
+use crate::bounded_json::{BoundedJsonError, MAX_JSON_DEPTH, check_bounds};
 use crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES;
 use crate::ts::tsconfig_chain::{MAX_TSCONFIG_CHAIN_CONFIGS, walk_tsconfig_chain};
 use oxc_resolver::{
     ExtendsField, FileMetadata, FileSystem, FileSystemOs, PathUtil, ResolveError, ResolveOptions,
     ResolverGeneric, TsConfig,
 };
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -33,6 +34,41 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 /// What a read gives in place of a config or a manifest the resolver must not
 /// load: not JSON, so loading it fails.
 const UNLOADABLE: &str = "{";
+
+#[derive(Clone)]
+pub(super) struct RefusedInput {
+    pub(super) path: PathBuf,
+    pub(super) reason: String,
+    pub(super) malformed_config: bool,
+}
+
+thread_local! {
+    static REFUSAL: RefCell<Option<RefusedInput>> = const { RefCell::new(None) };
+}
+
+impl RefusedInput {
+    pub(super) fn new(path: &Path, reason: impl ToString) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            reason: reason.to_string(),
+            malformed_config: false,
+        }
+    }
+
+    pub(super) fn record(self) {
+        REFUSAL.with(|slot| {
+            slot.borrow_mut().get_or_insert(self);
+        });
+    }
+
+    pub(super) fn capture<T>(resolve: impl FnOnce() -> T) -> (T, Option<Self>) {
+        let previous = REFUSAL.take();
+        let result = resolve();
+        (result, REFUSAL.replace(previous))
+    }
+}
+
+type ConfigChildren = Result<Vec<PathBuf>, RefusedInput>;
 
 pub(crate) struct BoundedFs {
     os: FileSystemOs,
@@ -43,9 +79,9 @@ pub(crate) struct BoundedFs {
     /// Finds the config a package `extends` names, as the resolver does.
     extends_resolver: OnceLock<Box<ResolverGeneric<BoundedFs>>>,
     /// The config files each config extends, by the config's path.
-    extended: Mutex<HashMap<PathBuf, Vec<PathBuf>>>,
+    extended: Mutex<HashMap<PathBuf, ConfigChildren>>,
     /// Whether the configs each config reaches are within the bound.
-    within_bound: Mutex<HashMap<PathBuf, bool>>,
+    within_bound: Mutex<HashMap<PathBuf, Result<(), RefusedInput>>>,
 }
 
 impl BoundedFs {
@@ -61,31 +97,61 @@ impl BoundedFs {
 
     /// The bytes of `path`, or `None` where the file is larger than `max` or
     /// nests deeper than [`MAX_JSON_DEPTH`].
-    fn read_limited(path: &Path, max: u64) -> io::Result<Option<Vec<u8>>> {
-        if std::fs::metadata(path)?.len() > max {
-            return Ok(None);
+    pub(super) fn read_limited(path: &Path, max: u64) -> Result<Option<Vec<u8>>, RefusedInput> {
+        let io_error = |error| RefusedInput::new(path, error);
+        let metadata = match std::fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(io_error(error)),
+        };
+        if metadata.len() > max {
+            return Err(RefusedInput::new(path, BoundedJsonError::TooLarge { max }));
         }
         let mut bytes = Vec::new();
-        std::fs::File::open(path)?
+        std::fs::File::open(path)
+            .map_err(io_error)?
             .take(max.saturating_add(1))
-            .read_to_end(&mut bytes)?;
-        Ok(check_bounds(&bytes, max).is_ok().then_some(bytes))
+            .read_to_end(&mut bytes)
+            .map_err(io_error)?;
+        check_bounds(&bytes, max).map_err(|error| RefusedInput::new(path, error))?;
+        Ok(Some(bytes))
     }
 
     /// Whether the configs `config` reaches through `extends` are within the
     /// bound.
-    fn chain_within_bound(&self, config: &Path) -> bool {
-        if let Some(&known) = lock(&self.within_bound).get(config) {
-            return known;
+    pub(super) fn check_config(&self, config: &Path) -> Result<(), RefusedInput> {
+        if let Some(known) = lock(&self.within_bound).get(config) {
+            return known.clone();
         }
-        let chain = walk_tsconfig_chain(config.to_path_buf(), |config| self.extended_files(config));
-        let within = !chain.exceeded;
-        lock(&self.within_bound).insert(config.to_path_buf(), within);
+        let mut refusal = None;
+        let chain = walk_tsconfig_chain(config.to_path_buf(), |config| {
+            if refusal.is_some() {
+                return Vec::new();
+            }
+            match self.extended_files(config) {
+                Ok(files) => files,
+                Err(error) => {
+                    refusal = Some(error);
+                    Vec::new()
+                }
+            }
+        });
+        let within = if let Some(refusal) = refusal {
+            Err(refusal)
+        } else if chain.exceeded {
+            Err(RefusedInput::new(
+                config,
+                format!("extends more than {MAX_TSCONFIG_CHAIN_CONFIGS} configs"),
+            ))
+        } else {
+            Ok(())
+        };
+        lock(&self.within_bound).insert(config.to_path_buf(), within.clone());
         within
     }
 
     /// The config files `config` extends, found as the resolver finds them.
-    fn extended_files(&self, config: &Path) -> Vec<PathBuf> {
+    fn extended_files(&self, config: &Path) -> ConfigChildren {
         if let Some(known) = lock(&self.extended).get(config) {
             return known.clone();
         }
@@ -94,16 +160,16 @@ impl BoundedFs {
         files
     }
 
-    fn read_extended_files(&self, config: &Path) -> Vec<PathBuf> {
-        let Ok(Some(bytes)) = Self::read_limited(config, TOPOLOGY_MANIFEST_MAX_BYTES) else {
-            return Vec::new();
+    fn read_extended_files(&self, config: &Path) -> ConfigChildren {
+        let Some(bytes) = Self::read_limited(config, TOPOLOGY_MANIFEST_MAX_BYTES)? else {
+            return Err(RefusedInput::new(config, "config not found"));
         };
-        let Ok(source) = FileSystemOs::validate_string(bytes) else {
-            return Vec::new();
-        };
-        let Ok(tsconfig) = TsConfig::parse(false, config, source) else {
-            return Vec::new();
-        };
+        let source = FileSystemOs::validate_string(bytes)
+            .map_err(|error| RefusedInput::new(config, error))?;
+        let tsconfig = TsConfig::parse(false, config, source).map_err(|error| RefusedInput {
+            malformed_config: true,
+            ..RefusedInput::new(config, error)
+        })?;
         let specifiers = match &tsconfig.extends {
             Some(ExtendsField::Single(specifier)) => vec![specifier.as_str()],
             Some(ExtendsField::Multiple(specifiers)) => {
@@ -114,16 +180,24 @@ impl BoundedFs {
         let directory = tsconfig.directory();
         specifiers
             .into_iter()
-            .filter_map(|specifier| match specifier.as_bytes().first()? {
-                b'/' => Some(PathBuf::from(specifier)),
-                b'.' => Some(directory.normalize_with(specifier)),
-                _ => self
-                    .extends_resolver()
-                    .resolve(directory, specifier)
-                    .ok()
-                    .map(oxc_resolver::Resolution::into_path_buf),
+            .map(|specifier| {
+                let path = match specifier.as_bytes().first() {
+                    Some(b'/') => PathBuf::from(specifier),
+                    Some(b'.') => directory.normalize_with(specifier),
+                    _ => {
+                        let (resolution, refusal) = RefusedInput::capture(|| {
+                            self.extends_resolver().resolve(directory, specifier)
+                        });
+                        if let Some(refusal) = refusal {
+                            return Err(refusal);
+                        }
+                        resolution
+                            .map_err(|error| RefusedInput::new(config, error))?
+                            .into_path_buf()
+                    }
+                };
+                Ok(self.config_file(path))
             })
-            .map(|path| self.config_file(path))
             .collect()
     }
 
@@ -168,19 +242,32 @@ impl FileSystem for BoundedFs {
 
     /// The resolver reads only manifests as bytes.
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
-        Ok(Self::read_limited(path, TOPOLOGY_MANIFEST_MAX_BYTES)?
-            .unwrap_or_else(|| UNLOADABLE.as_bytes().to_vec()))
+        match Self::read_limited(path, TOPOLOGY_MANIFEST_MAX_BYTES) {
+            Ok(Some(bytes)) => Ok(bytes),
+            Ok(None) => Err(io::ErrorKind::NotFound.into()),
+            Err(refusal) => {
+                refusal.record();
+                Ok(UNLOADABLE.as_bytes().to_vec())
+            }
+        }
     }
 
     /// The resolver reads only configs as text.
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
-        let Some(bytes) = Self::read_limited(path, TOPOLOGY_MANIFEST_MAX_BYTES)? else {
-            return Ok(UNLOADABLE.to_string());
-        };
-        if self.checks_configs && !self.chain_within_bound(path) {
-            return Ok(UNLOADABLE.to_string());
+        if self.checks_configs
+            && let Err(refusal) = self.check_config(path)
+        {
+            refusal.record();
+            return Ok(UNLOADABLE.into());
         }
-        FileSystemOs::validate_string(bytes)
+        match Self::read_limited(path, TOPOLOGY_MANIFEST_MAX_BYTES) {
+            Ok(Some(bytes)) => FileSystemOs::validate_string(bytes),
+            Ok(None) => Err(io::ErrorKind::NotFound.into()),
+            Err(refusal) => {
+                refusal.record();
+                Ok(UNLOADABLE.into())
+            }
+        }
     }
 
     fn metadata(&self, path: &Path) -> io::Result<FileMetadata> {

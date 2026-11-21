@@ -48,6 +48,7 @@ pub struct ResolvedImportDraft {
     pub edge_kind: Option<ModuleEdgeKind>,
     /// The files an import with no single target may load.
     pub alternatives: Vec<ModuleNodeDraft>,
+    pub resolution_issue: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -299,7 +300,7 @@ impl ModuleGraphBuilder {
             );
         }
 
-        ResolvedImportFact::new(
+        let mut fact = ResolvedImportFact::new(
             resolved_import,
             import.id,
             import.file,
@@ -308,7 +309,9 @@ impl ModuleGraphBuilder {
             draft.precision,
             draft.reason,
         )
-        .with_alternatives(alternatives)
+        .with_alternatives(alternatives);
+        fact.resolution_issue = draft.resolution_issue;
+        fact
     }
 
     pub fn finish(mut self) -> ModuleGraphOutput {
@@ -422,6 +425,7 @@ impl ResolvedImportDraft {
             reason: Some(reason),
             edge_kind: None,
             alternatives: Vec::new(),
+            resolution_issue: None,
         }
     }
 
@@ -433,6 +437,7 @@ impl ResolvedImportDraft {
             reason: Some(UnresolvedReason::SetupMissing),
             edge_kind: None,
             alternatives: Vec::new(),
+            resolution_issue: None,
         }
     }
 
@@ -444,6 +449,7 @@ impl ResolvedImportDraft {
             reason: Some(UnresolvedReason::UnsupportedLanguage),
             edge_kind: None,
             alternatives: Vec::new(),
+            resolution_issue: None,
         }
     }
 }
@@ -617,6 +623,7 @@ mod tests {
             reason: None,
             edge_kind: Some(ModuleEdgeKind::DependsOn),
             alternatives: Vec::new(),
+            resolution_issue: None,
         };
 
         let fact = builder.apply_resolved_import_draft(import, owner, draft);

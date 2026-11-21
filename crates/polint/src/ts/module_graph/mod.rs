@@ -19,6 +19,8 @@ use crate::analysis_neutral::module_graph::topology::{
     TopologyOutput, TopologyPackageFact, TopologyPackageId, TopologyPackageKind, TopologyPrecision,
     TopologyStatus, WorkspaceRootFact, WorkspaceRootId, WorkspaceRootKind,
 };
+#[cfg(feature = "lang-typescript")]
+use crate::bounded_json;
 use crate::internal_core::{FileId, Language, ModuleNodeId, StableKeyInterner};
 #[cfg(feature = "lang-typescript")]
 use crate::ts::DYNAMIC_IMPORT_SPECIFIER;
@@ -33,9 +35,7 @@ use crate::ts::tsconfig_chain::{
     resolve_tsconfig_file_candidate, walk_tsconfig_chain,
 };
 #[cfg(feature = "lang-typescript")]
-use crate::{bounded_json, repo_fs::read_file_with_limit};
-#[cfg(feature = "lang-typescript")]
-use bounded_fs::BoundedFs;
+use bounded_fs::{BoundedFs, RefusedInput};
 use formats::js_lockfile::{
     JsLockfileKind, JsLockfileManifest, JsLockfilePackage, JsPackageManager, parse_js_lockfile,
     unsupported_js_lockfile,
@@ -166,6 +166,7 @@ pub fn resolve_ts_import(
             reason: Some(UnresolvedReason::DynamicExpression),
             edge_kind: None,
             alternatives: Vec::new(),
+            resolution_issue: None,
         };
     }
 
@@ -185,47 +186,52 @@ pub fn resolve_ts_import(
         return ResolvedImportDraft::unresolved(UnresolvedReason::NotFound);
     };
 
-    let resolution = match context.resolver.resolve(
+    let (resolution, refusal) = context.resolver.resolve(
         &importer_path,
         input.import.path.as_str(),
         input.import.syntax,
-    ) {
-        ModeResolution::One(resolution) => resolution,
-        // A package outside the analysed files is named by its specifier,
-        // which every mode shares.
-        ModeResolution::Split(paths)
-            if is_external_package_specifier(&input.import.path)
-                && !tsconfig_path_alias_matches(context, &importer_path, &input.import.path)
-                && paths.iter().all(|path| {
-                    normalize_path(path).is_some_and(|path| {
-                        !context.file_by_absolute_normalized_path.contains_key(&path)
-                    })
-                }) =>
-        {
-            return external_draft(input.import.path.clone(), input.import.language);
-        }
-        // No one file is the target; each analysed file a way of loading
-        // the import names is a candidate.
-        ModeResolution::Split(paths) => {
-            let alternatives = paths
-                .iter()
-                .filter_map(|path| {
-                    let file = context
-                        .file_by_absolute_normalized_path
-                        .get(&normalize_path(path)?)
-                        .copied()?;
-                    Some(ModuleNodeDraft::file(
-                        file,
-                        input.db.path_for(file),
-                        input.import.language,
-                    ))
-                })
-                .collect();
+    );
+    let open = |paths: Vec<PathBuf>, reason, resolution_issue| ResolvedImportDraft {
+        alternatives: paths
+            .iter()
+            .filter_map(|path| {
+                let file = context
+                    .file_by_absolute_normalized_path
+                    .get(&normalize_path(path)?)
+                    .copied()?;
+                Some(ModuleNodeDraft::file(
+                    file,
+                    input.db.path_for(file),
+                    input.import.language,
+                ))
+            })
+            .collect(),
+        resolution_issue,
+        ..ResolvedImportDraft::unresolved(reason)
+    };
+    if let Some(refusal) = refusal {
+        let file = refusal
+            .path
+            .strip_prefix(&context.root)
+            .unwrap_or(&refusal.path);
+        let details = Some(format!("{}: {}", file.display(), refusal.reason));
+        if refusal.malformed_config {
             return ResolvedImportDraft {
-                alternatives,
-                ..ResolvedImportDraft::unresolved(UnresolvedReason::ModeDependent)
+                resolution_issue: details,
+                ..ResolvedImportDraft::setup_missing()
             };
         }
+        return open(
+            resolution.into_paths(),
+            UnresolvedReason::ResolverError,
+            details,
+        );
+    }
+    let resolution = match resolution {
+        ModeResolution::One(resolution) => resolution,
+        // No one file is the target; each analysed file a way of loading
+        // the import names is a candidate.
+        ModeResolution::Split(paths) => return open(paths, UnresolvedReason::ModeDependent, None),
     };
     match resolution {
         Ok(resolution) => resolved_path_draft(context, input, resolution.path()),
@@ -251,13 +257,7 @@ pub fn resolve_ts_import(
             | ResolveError::Json(_)
             | ResolveError::IOError(_),
         ) => ResolvedImportDraft::setup_missing(),
-        Err(_) => {
-            if is_external_package_specifier(&input.import.path) {
-                external_draft(input.import.path.clone(), input.import.language)
-            } else {
-                ResolvedImportDraft::unresolved(UnresolvedReason::ResolverError)
-            }
-        }
+        Err(_) => ResolvedImportDraft::unresolved(UnresolvedReason::ResolverError),
     }
 }
 
@@ -286,6 +286,7 @@ fn resolved_path_draft(
             reason: None,
             edge_kind: Some(ModuleEdgeKind::Imports),
             alternatives: Vec::new(),
+            resolution_issue: None,
         };
     }
 
@@ -306,6 +307,7 @@ fn external_draft(label: String, language: Language) -> ResolvedImportDraft {
         reason: None,
         edge_kind: Some(ModuleEdgeKind::DependsOn),
         alternatives: Vec::new(),
+        resolution_issue: None,
     }
 }
 
@@ -1857,9 +1859,14 @@ pub(crate) struct ModeResolvers {
     /// Reads the module format of an importing file.
     format: Resolver,
     /// The `package.json` files read for their `exports` and `imports` maps,
-    /// by path, or `None` where one cannot be read.
-    manifests: Mutex<BTreeMap<PathBuf, Option<Arc<serde_json::Value>>>>,
+    /// by path. An absent manifest and a refused manifest are distinct.
+    manifests: Mutex<BTreeMap<PathBuf, ManifestRead>>,
+    configs: BoundedFs,
+    config_issues: Mutex<BTreeMap<PathBuf, Option<RefusedInput>>>,
 }
+
+#[cfg(feature = "lang-typescript")]
+type ManifestRead = Result<Option<Arc<serde_json::Value>>, RefusedInput>;
 
 /// What resolving an import gives: the answer of every mode the import may
 /// load in, or `Split`, with the files any of them names, where those modes
@@ -1868,6 +1875,17 @@ pub(crate) struct ModeResolvers {
 pub(crate) enum ModeResolution {
     One(Result<oxc_resolver::Resolution, ResolveError>),
     Split(Vec<PathBuf>),
+}
+
+#[cfg(feature = "lang-typescript")]
+impl ModeResolution {
+    fn into_paths(self) -> Vec<PathBuf> {
+        match self {
+            Self::One(Ok(resolution)) => vec![resolution.into_path_buf()],
+            Self::Split(paths) => paths,
+            Self::One(Err(_)) => Vec::new(),
+        }
+    }
 }
 
 /// The answer two ways of loading an import agree on, or `Split`.
@@ -1987,6 +2005,8 @@ impl ModeResolvers {
             require: loaders(LoadMode::Require),
             format,
             manifests: Mutex::new(BTreeMap::new()),
+            configs: BoundedFs::new(),
+            config_issues: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -1999,7 +2019,21 @@ impl ModeResolvers {
     /// `main` where it has no `exports`, a bundler its `module` or `browser`,
     /// and every condition of an `exports` or `imports` map a loader may
     /// select must name one file.
-    pub(crate) fn resolve(
+    fn resolve(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        syntax: ImportSyntax,
+    ) -> (ModeResolution, Option<RefusedInput>) {
+        RefusedInput::capture(|| {
+            if let Some(refusal) = self.config_issue(importer) {
+                refusal.record();
+            }
+            self.resolve_modes(importer, specifier, syntax)
+        })
+    }
+
+    fn resolve_modes(
         &self,
         importer: &Path,
         specifier: &str,
@@ -2016,6 +2050,30 @@ impl ModeResolvers {
             import,
             self.resolve_in(importer, specifier, LoadMode::Require),
         )
+    }
+
+    fn config_issue(&self, importer: &Path) -> Option<RefusedInput> {
+        let directory = importer.parent()?;
+        let mut issues = self
+            .config_issues
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        issues
+            .entry(directory.to_path_buf())
+            .or_insert_with(|| {
+                for directory in directory.ancestors() {
+                    for name in ["tsconfig.json", "jsconfig.json"] {
+                        let config = directory.join(name);
+                        match fs::symlink_metadata(&config) {
+                            Ok(_) => return self.configs.check_config(&config).err(),
+                            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                            Err(error) => return Some(RefusedInput::new(&config, error)),
+                        }
+                    }
+                }
+                None
+            })
+            .clone()
     }
 
     /// The answer every loader gives `specifier` in `mode`, or `Split`.
@@ -2045,12 +2103,28 @@ impl ModeResolvers {
             LoadMode::Import => &self.import,
             LoadMode::Require => &self.require,
         };
+        let resolve = |resolver: &Resolver| {
+            let outcome = resolver.resolve_file(importer, specifier);
+            if let Err(error) = &outcome {
+                match error {
+                    ResolveError::Json(error) => {
+                        RefusedInput::new(&error.path, &error.message).record()
+                    }
+                    ResolveError::TsconfigNotFound(path)
+                    | ResolveError::TsconfigSelfReference(path) => {
+                        RefusedInput::new(path, error).record()
+                    }
+                    ResolveError::TsconfigCircularExtend(_) | ResolveError::Recursion => {
+                        RefusedInput::new(importer, error).record()
+                    }
+                    _ => {}
+                }
+            }
+            outcome
+        };
         let answer = join(
-            agree(
-                loaders.node.resolve_file(importer, specifier),
-                loaders.bundled.resolve_file(importer, specifier),
-            ),
-            ModeResolution::One(loaders.browser.resolve_file(importer, specifier)),
+            agree(resolve(&loaders.node), resolve(&loaders.bundled)),
+            ModeResolution::One(resolve(&loaders.browser)),
         );
         let resolved = match &answer {
             ModeResolution::One(Ok(resolution)) => Some(resolution.path().to_path_buf()),
@@ -2073,6 +2147,7 @@ impl ModeResolvers {
                 continue;
             }
             if seen.len() >= MAX_FOLLOWED_ALTERNATIVES {
+                RefusedInput::new(&importer, "condition target limit exceeded").record();
                 found.open = true;
                 break;
             }
@@ -2182,15 +2257,25 @@ impl ModeResolvers {
             .manifests
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        manifests
+        match manifests
             .entry(path)
             .or_insert_with_key(|path| {
-                let bytes = read_file_with_limit(path, TOPOLOGY_MANIFEST_MAX_BYTES).ok()?;
+                let Some(bytes) = BoundedFs::read_limited(path, TOPOLOGY_MANIFEST_MAX_BYTES)?
+                else {
+                    return Ok(None);
+                };
                 bounded_json::from_slice(&bytes, TOPOLOGY_MANIFEST_MAX_BYTES)
-                    .ok()
-                    .map(Arc::new)
+                    .map(|manifest| Some(Arc::new(manifest)))
+                    .map_err(|error| RefusedInput::new(path, error.reason()))
             })
             .clone()
+        {
+            Ok(manifest) => manifest,
+            Err(refusal) => {
+                refusal.record();
+                None
+            }
+        }
     }
 
     fn runs_as_module(&self, importer: &Path) -> bool {
@@ -2225,7 +2310,13 @@ impl DiskResolver {
         specifier: &str,
         syntax: ImportSyntax,
     ) -> Option<DiskTarget> {
-        match self.0.resolve(importer, specifier, syntax) {
+        let (resolution, refusal) = self.0.resolve(importer, specifier, syntax);
+        let resolution = if refusal.is_some() {
+            ModeResolution::Split(resolution.into_paths())
+        } else {
+            resolution
+        };
+        match resolution {
             ModeResolution::One(Ok(resolution)) => {
                 normalize_path(resolution.path()).map(DiskTarget::File)
             }

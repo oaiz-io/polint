@@ -1031,6 +1031,7 @@ pub fn resolve_go_import(
                 reason: None,
                 edge_kind: Some(ModuleEdgeKind::DependsOn),
                 alternatives: Vec::new(),
+                resolution_issue: None,
             };
         }
         return external_draft(input.import.path.clone());
@@ -1051,6 +1052,7 @@ fn external_draft(label: String) -> ResolvedImportDraft {
         reason: None,
         edge_kind: Some(ModuleEdgeKind::DependsOn),
         alternatives: Vec::new(),
+        resolution_issue: None,
     }
 }
 

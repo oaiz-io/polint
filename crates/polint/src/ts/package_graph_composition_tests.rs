@@ -425,7 +425,9 @@ fn the_stitch_keeps_every_edge_a_graph_found_alone() {
     .collect::<Vec<_>>();
     let graphs = named(&packages);
     let stitched = stitch(&graphs, &tree_of(&packages)).expect("stitch");
-    assert_eq!(stitched.open_imports, []);
+    assert!(stitched.open_imports.iter().any(|open| {
+        open.file == "main.js" && open.specifier == "libx" && open.reason == "no_single_target"
+    }));
     assert_eq!(
         stitched_portable(&stitched, &graphs),
         whole_program_answers(temp.path())
@@ -486,9 +488,9 @@ fn answer_in<'a>(
 }
 
 /// Node loads an import in import mode from an ES module and a `require` in
-/// require mode, and an `exports` map gives each mode its own file whatever
-/// the order of its keys: `main.mjs` runs `import.cjs` and `main.cjs` runs
-/// `require.cjs`. A `.js` file of a package without a module type may load
+/// require mode. By default `main.mjs` runs `import.cjs` and `main.cjs` runs
+/// `require.cjs`. In `main.mjs`, enabling `require` selects the earlier
+/// `require.cjs` instead. A `.js` file without a module type may load
 /// either way (Node runs it as an ES module, a compiler may turn its import
 /// into a `require`), so its call has no exact target.
 #[test]
@@ -541,7 +543,18 @@ fn an_import_and_a_require_of_one_package_reach_the_files_of_their_modes() {
                 .all(|target| target.ends_with(&format!("#{name}")))
     };
     let esm = answer_in(&whole, ".:main.mjs", run(import));
-    assert!(ends_with(esm, "importRun"), "main.mjs: {esm:?}");
+    assert_eq!(esm.targets.len(), 2, "main.mjs: {esm:?}");
+    assert!(
+        esm.targets
+            .iter()
+            .any(|target| target.ends_with("#importRun"))
+    );
+    assert!(
+        esm.targets
+            .iter()
+            .any(|target| target.ends_with("#requireRun"))
+    );
+    assert!(esm.claim.contains("Open"), "main.mjs: {esm:?}");
     let cjs = answer_in(&whole, ".:main.cjs", run(require));
     assert!(ends_with(cjs, "requireRun"), "main.cjs: {cjs:?}");
     let either = answer_in(&whole, ".:main.js", run(import));

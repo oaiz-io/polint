@@ -854,6 +854,74 @@ fn explicitly_enabled_opposite_mode_conditions_leave_calls_open() {
     }
 }
 
+#[test]
+fn a_refused_resolution_config_names_the_input_and_leaves_the_call_open() {
+    use crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES;
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    let write = |name: &str, source: &str| {
+        std::fs::write(root.join(name), source).expect("write fixture");
+    };
+    let alias = r#"{"compilerOptions":{"baseUrl":".","paths":{"alias-f":["./local.mts"]}}}"#;
+    write("main.mts", "import {f} from 'alias-f'; f();");
+    write("local.mts", "export function f() {}");
+    let limit = usize::try_from(TOPOLOGY_MANIFEST_MAX_BYTES).expect("size fits");
+    let at_limit = format!("{alias}{}", " ".repeat(limit - alias.len()));
+    write("tsconfig.json", &at_limit);
+    let control = run(root);
+    assert!(control.db.call_targets().iter().any(|target| {
+        target.target_function.is_some() && target.precision.tier() == ClaimTier::Exact
+    }));
+
+    let assert_open = |input: &str, reason: &str| {
+        let output = run(root);
+        let db = &output.db;
+        assert!(!db.unresolved_calls().is_empty(), "{input}: {reason}");
+        assert!(
+            db.call_targets()
+                .iter()
+                .all(|target| { target.precision.tier() != ClaimTier::Exact }),
+            "{input}: {reason}"
+        );
+        let details = serde_json::to_string(db.resolved_imports()).expect("serialize resolutions");
+        assert!(
+            details.contains(input) && details.contains(reason),
+            "{details}"
+        );
+    };
+
+    write("tsconfig.json", &(at_limit.clone() + " "));
+    assert_open("tsconfig.json", "bytes");
+
+    let nested = format!(r#"{{"extra":{}0{}}}"#, "[".repeat(127), "]".repeat(127));
+    write("tsconfig.json", &nested);
+    assert_open("tsconfig.json", "levels");
+
+    write("tsconfig.json", r#"{"extends":"./config-0.json"}"#);
+    for index in 0..crate::ts::tsconfig_chain::MAX_TSCONFIG_CHAIN_CONFIGS - 1 {
+        write(
+            &format!("config-{index}.json"),
+            &format!(r#"{{"extends":"./config-{}.json"}}"#, index + 1),
+        );
+    }
+    write("config-255.json", alias);
+    assert_open("tsconfig.json", "extends");
+
+    std::fs::remove_file(root.join("tsconfig.json")).expect("remove fixture");
+    write("jsconfig.json", &(at_limit + " "));
+    assert_open("jsconfig.json", "bytes");
+    std::fs::remove_file(root.join("jsconfig.json")).expect("remove fixture");
+
+    let manifest = r##"{"imports":{"#entry":"./local.mts"}}"##;
+    write("main.mts", "import {f} from '#entry'; f();");
+    write(
+        "package.json",
+        &format!("{manifest}{}", " ".repeat(limit + 1 - manifest.len())),
+    );
+    assert_open("package.json", "bytes");
+}
+
 /// The functions, as `file#name`, the call graph serves for the last call
 /// site whose text is `site` in the first of `files` as conservative targets.
 fn conservative_targets_in(files: &[(&str, &str)], site: &str) -> BTreeSet<String> {

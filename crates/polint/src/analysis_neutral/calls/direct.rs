@@ -5,7 +5,7 @@ use crate::analysis_api::{
     FunctionFact, ReferenceFact, ReferenceKind, SymbolFact, SymbolKind, SymbolPrecision,
     SymbolResolutionStatus,
 };
-use crate::analysis_api::{SemanticImportFact, SemanticImportKind, SemanticStatus};
+use crate::analysis_api::{ResolutionStatus, SemanticImportKind, SemanticStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallCallee, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact,
@@ -204,7 +204,7 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             })
             .filter_map(|import| Some((import.file?, import.local_name.clone()?)))
             .collect::<BTreeSet<_>>();
-        let external_imports = external_imports(db.semantic_imports());
+        let external_imports = external_imports(db);
         let namespace_member_call_properties = db
             .namespace_member_calls()
             .iter()
@@ -642,13 +642,37 @@ enum ImportChainEnd<'db> {
 
 /// `(file, local name)` of the import bindings every import of which loads a
 /// package outside the analysed files.
-fn external_imports(imports: &[SemanticImportFact]) -> BTreeSet<(FileId, String)> {
+fn external_imports(db: &(impl AnalysisHost + ?Sized)) -> BTreeSet<(FileId, String)> {
+    let resolutions = db
+        .resolved_imports()
+        .iter()
+        .map(|row| (row.import, row.status))
+        .collect::<BTreeMap<_, _>>();
+    let mut ts_external = BTreeMap::new();
+    for import in db
+        .imports()
+        .iter()
+        .filter(|import| import.language.is_ts_family())
+    {
+        let confirmed = resolutions.get(&import.id) == Some(&ResolutionStatus::External);
+        *ts_external
+            .entry((import.file, import.path.as_str()))
+            .or_insert(true) &= confirmed;
+    }
     let mut external = BTreeMap::<(FileId, String), bool>::new();
-    for import in imports {
+    for import in db.semantic_imports() {
         let (Some(file), Some(name)) = (import.file, import.local_name.clone()) else {
             continue;
         };
-        *external.entry((file, name)).or_insert(true) &= import.status == SemanticStatus::External;
+        let confirmed = if import.language.is_ts_family() {
+            ts_external
+                .get(&(file, import.import_path.as_str()))
+                .copied()
+                .unwrap_or(false)
+        } else {
+            import.status == SemanticStatus::External
+        };
+        *external.entry((file, name)).or_insert(true) &= confirmed;
     }
     external
         .into_iter()
