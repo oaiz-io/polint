@@ -5,7 +5,7 @@ use crate::analysis_api::{
     FunctionFact, ReferenceFact, ReferenceKind, SymbolFact, SymbolKind, SymbolPrecision,
     SymbolResolutionStatus,
 };
-use crate::analysis_api::{SemanticImportKind, SemanticStatus};
+use crate::analysis_api::{SemanticImportFact, SemanticImportKind, SemanticStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallCallee, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact,
@@ -83,14 +83,26 @@ pub fn resolve_direct_call_targets(
         // its declaration, or in a file whose bindings `with` or `eval` can
         // reach) still names the call's callee, but not which value it holds
         // when the call runs: the edge to the binding may be taken, never
-        // exactly, and the site stays open.
-        let (target_function, held) = match index.function_for_symbol(symbol) {
-            Some(function) => (Some(function), false),
+        // exactly, and the site stays open. So may the edge of an import
+        // that is not followed to a declaration, unless the import loads a
+        // package outside the analysed files: one the resolver could not
+        // follow, or that names a different file for each way of loading
+        // it, may reach any of those files' functions.
+        let (target_function, open) = match index.function_for_symbol(symbol) {
+            Some(function) => (Some(function), None),
             None if index.calls_bind_without_a_function(symbol) => {
-                (None, index.binds_a_declared_value(symbol))
+                let open = if index.binds_a_declared_value(symbol) {
+                    Some(UnresolvedCallReason::FunctionValue)
+                } else if index.import_is_unfollowed(symbol) {
+                    Some(UnresolvedCallReason::MissingImportResolution)
+                } else {
+                    None
+                };
+                (None, open)
             }
             None => continue,
         };
+        let held = open.is_some();
         if symbol.kind == SymbolKind::Class
             && !matches!(site.kind, CallSyntaxKind::Constructor | CallSyntaxKind::New)
         {
@@ -122,7 +134,7 @@ pub fn resolve_direct_call_targets(
             } else {
                 CallTargetStatus::Resolved
             },
-            reason: held.then_some(UnresolvedCallReason::FunctionValue),
+            reason: open,
             provenance: CallProvenance::NativeDirect,
             precision: if held {
                 CallPrecision::Conservative
@@ -159,6 +171,9 @@ struct DirectIndex<'db, H: AnalysisHost + ?Sized> {
     /// `(file, local name)` of namespace imports, whose binding is the module
     /// object rather than any one export.
     namespace_imports: BTreeSet<(FileId, String)>,
+    /// `(file, local name)` of import bindings each import of which loads a
+    /// package outside the analysed files.
+    external_imports: BTreeSet<(FileId, String)>,
     /// Call span -> property span of an `ns.name(...)` callee, `ns` being a
     /// namespace import, as the frontend recorded it from the AST.
     namespace_member_call_properties: BTreeMap<SpanKey, SpanKey>,
@@ -189,6 +204,7 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             })
             .filter_map(|import| Some((import.file?, import.local_name.clone()?)))
             .collect::<BTreeSet<_>>();
+        let external_imports = external_imports(db.semantic_imports());
         let namespace_member_call_properties = db
             .namespace_member_calls()
             .iter()
@@ -225,6 +241,7 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             callees_by_binding: callees_by_binding(db.value_functions(), &functions_by_span),
             import_links: import_links(db.references()),
             namespace_imports,
+            external_imports,
             namespace_member_references: namespace_member_references(
                 db.references(),
                 &namespace_properties,
@@ -327,24 +344,57 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
     /// `None` when the chain passes a namespace import, leaves the linked
     /// files, cycles or runs past the hop limit.
     fn declared_symbol_for(&self, symbol: &'db SymbolFact) -> Option<&'db SymbolFact> {
+        match self.import_chain_end(symbol) {
+            ImportChainEnd::Declared(declared) => Some(declared),
+            ImportChainEnd::Import(_) | ImportChainEnd::Lost => None,
+        }
+    }
+
+    /// Where the module links from `symbol` end: at a declaration, at an
+    /// import binding with no link to follow, or nowhere, where a link
+    /// leaves the symbol facts, the chain cycles or it runs past the hop
+    /// limit.
+    fn import_chain_end(&self, symbol: &'db SymbolFact) -> ImportChainEnd<'db> {
         let mut current = symbol;
         for _ in 0..MAX_IMPORT_HOPS {
             if current.kind != SymbolKind::Import {
-                return Some(current);
+                return ImportChainEnd::Declared(current);
             }
-            let file = current.file?;
+            let Some(file) = current.file else {
+                return ImportChainEnd::Lost;
+            };
             if self
                 .namespace_imports
                 .contains(&(file, current.name.clone()))
             {
-                return None;
+                return ImportChainEnd::Import(current);
             }
-            let target = self
-                .import_links
-                .get(&span_key(current.primary_span.as_ref()?))?;
-            current = self.symbols_by_id.get(target).copied()?;
+            let Some(span) = current.primary_span.as_ref() else {
+                return ImportChainEnd::Lost;
+            };
+            let Some(target) = self.import_links.get(&span_key(span)) else {
+                return ImportChainEnd::Import(current);
+            };
+            let Some(next) = self.symbols_by_id.get(target).copied() else {
+                return ImportChainEnd::Lost;
+            };
+            current = next;
         }
-        None
+        ImportChainEnd::Lost
+    }
+
+    /// Whether a call through `symbol` passes an import binding the module
+    /// links do not follow to a declaration, where the import does not load
+    /// a package outside the analysed files. Such an import may load files
+    /// of the analysed program, so the binding does not answer for the call.
+    fn import_is_unfollowed(&self, symbol: &'db SymbolFact) -> bool {
+        match self.import_chain_end(symbol) {
+            ImportChainEnd::Declared(_) => false,
+            ImportChainEnd::Import(import) => !import
+                .file
+                .is_some_and(|file| self.external_imports.contains(&(file, import.name.clone()))),
+            ImportChainEnd::Lost => true,
+        }
     }
 
     /// Whether a call through `symbol` that reaches no one function still
@@ -580,6 +630,29 @@ fn namespace_member_references<'db>(
                 .contains(&span)
                 .then_some((span, reference))
         })
+        .collect()
+}
+
+/// Where a chain of module links from a symbol ends.
+enum ImportChainEnd<'db> {
+    Declared(&'db SymbolFact),
+    Import(&'db SymbolFact),
+    Lost,
+}
+
+/// `(file, local name)` of the import bindings every import of which loads a
+/// package outside the analysed files.
+fn external_imports(imports: &[SemanticImportFact]) -> BTreeSet<(FileId, String)> {
+    let mut external = BTreeMap::<(FileId, String), bool>::new();
+    for import in imports {
+        let (Some(file), Some(name)) = (import.file, import.local_name.clone()) else {
+            continue;
+        };
+        *external.entry((file, name)).or_insert(true) &= import.status == SemanticStatus::External;
+    }
+    external
+        .into_iter()
+        .filter_map(|(binding, external)| external.then_some(binding))
         .collect()
 }
 

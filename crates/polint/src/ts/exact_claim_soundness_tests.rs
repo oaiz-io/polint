@@ -178,10 +178,16 @@ fn exact_targets_in(files: &[(&str, &str)], site: &str) -> ExactTargets {
             targets.served.insert(function_name[&function].clone());
         } else if let Some(symbol) = edge.symbol {
             targets.served.insert(symbol_name[&symbol].clone());
+        } else {
+            targets.served.insert(UNNAMED.to_string());
         }
     }
     targets
 }
+
+/// What `served` holds for an exact edge that names neither a function nor a
+/// symbol: a complete answer with no target.
+const UNNAMED: &str = "<no target>";
 
 fn none() -> ExactTargets {
     ExactTargets::default()
@@ -795,4 +801,75 @@ fn a_super_method_call_of_an_object_method_after_set_prototype_of_claims_no_wron
                   Object.setPrototypeOf(o, {n: function q(){console.log('q')}}); o.n();\n";
     let targets = exact_targets("super-object.mjs", source, "super.n()");
     assert!(targets == none() || targets == only("q"), "{targets:?}");
+}
+
+/// Node prints `target`, and `worker` under `--conditions=worker`: the
+/// condition map of `#dual` names a file for each, so the call has two
+/// possible targets and no complete answer.
+#[test]
+fn a_call_through_an_imports_map_with_two_files_claims_no_complete_target() {
+    let files = [
+        ("main.mjs", "import {run} from '#dual';\nrun();\n"),
+        (
+            "package.json",
+            r##"{"name":"app","version":"1.0.0","imports":{"#dual":{"worker":"./worker.mjs","default":"./target.mjs"}}}"##,
+        ),
+        (
+            "worker.mjs",
+            "export function run(){console.log('worker')}\n",
+        ),
+        (
+            "target.mjs",
+            "export function run(){console.log('target')}\n",
+        ),
+    ];
+    assert_eq!(exact_targets_in(&files, "run()"), none());
+    assert_eq!(
+        conservative_targets_in(&files, "run()"),
+        BTreeSet::from(["target.mjs#run".to_string(), "worker.mjs#run".to_string()])
+    );
+}
+
+/// The functions, as `file#name`, the call graph serves for the last call
+/// site whose text is `site` in the first of `files` as conservative targets.
+fn conservative_targets_in(files: &[(&str, &str)], site: &str) -> BTreeSet<String> {
+    let temp = tempfile::tempdir().expect("temp dir");
+    for (path, source) in files {
+        std::fs::write(temp.path().join(path), source).expect("write source");
+    }
+    let (path, source) = files[0];
+    let start = u32::try_from(source.rfind(site).expect("the site is in the source"))
+        .expect("small source");
+    let end = start + u32::try_from(site.len()).expect("small site");
+    let output = run(temp.path());
+    let db = &output.db;
+    let file_path = db
+        .files()
+        .iter()
+        .map(|file| (file.id, file.relative_path.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let file = file_path
+        .iter()
+        .find(|(_, relative)| relative.as_str() == path)
+        .map(|(id, _)| *id)
+        .expect("the site's file is analysed");
+    let function = db
+        .functions()
+        .iter()
+        .map(|function| {
+            let label = format!("{}#{}", file_path[&function.file], function.name);
+            (function.id, label)
+        })
+        .collect::<BTreeMap<_, _>>();
+    let index = db.call_graph_index();
+    (0..u32::try_from(index.edges.len()).expect("few edges"))
+        .map(|id| index.edge(db, id))
+        .filter(|edge| {
+            edge.span.file == file
+                && edge.span.start_byte == start
+                && edge.span.end_byte == end
+                && edge.precision.tier() == ClaimTier::Conservative
+        })
+        .filter_map(|edge| edge.function.map(|id| function[&id].clone()))
+        .collect()
 }
