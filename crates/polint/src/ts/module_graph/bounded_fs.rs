@@ -95,22 +95,30 @@ impl BoundedFs {
         }
     }
 
-    /// The bytes of `path`, or `None` where the file is larger than `max` or
-    /// nests deeper than [`MAX_JSON_DEPTH`].
+    /// The bytes of `path`, `None` if it is missing, or the reason it was refused.
     pub(super) fn read_limited(path: &Path, max: u64) -> Result<Option<Vec<u8>>, RefusedInput> {
         let io_error = |error| RefusedInput::new(path, error);
-        let metadata = match std::fs::metadata(path) {
-            Ok(metadata) => metadata,
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NONBLOCK);
+        }
+        let file = match options.open(path) {
+            Ok(file) => file,
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(io_error(error)),
         };
+        let metadata = file.metadata().map_err(io_error)?;
+        if !metadata.is_file() {
+            return Err(RefusedInput::new(path, "not a regular file"));
+        }
         if metadata.len() > max {
             return Err(RefusedInput::new(path, BoundedJsonError::TooLarge { max }));
         }
         let mut bytes = Vec::new();
-        std::fs::File::open(path)
-            .map_err(io_error)?
-            .take(max.saturating_add(1))
+        file.take(max.saturating_add(1))
             .read_to_end(&mut bytes)
             .map_err(io_error)?;
         check_bounds(&bytes, max).map_err(|error| RefusedInput::new(path, error))?;
@@ -294,6 +302,29 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_is_refused_without_waiting_for_a_writer() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fifo = dir.path().join("package.json");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .expect("mkfifo")
+                .success()
+        );
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = BoundedFs::read_limited(&fifo, TOPOLOGY_MANIFEST_MAX_BYTES);
+            let _ = send.send(result);
+        });
+        let result = receive
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .expect("reading a resolver input must not wait for a FIFO writer");
+        assert!(matches!(result, Err(refusal) if refusal.reason.contains("not a regular file")));
+    }
 
     #[test]
     fn a_config_past_the_chain_bound_reads_as_unloadable() {
