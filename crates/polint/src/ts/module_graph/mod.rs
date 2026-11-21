@@ -1836,13 +1836,6 @@ impl LoadMode {
             Self::Require => "require",
         }
     }
-
-    fn other(self) -> Self {
-        match self {
-            Self::Import => Self::Require,
-            Self::Require => Self::Import,
-        }
-    }
 }
 
 /// The resolvers of one mode: Node's, and those of a bundler for Node and
@@ -2126,20 +2119,14 @@ impl ModeResolvers {
             .get(if exports { "exports" } else { "imports" })
             .filter(|map| !map.is_null())?;
         Some(
-            conditions::reachable_targets(
-                map,
-                &key,
-                exports,
-                mode.condition(),
-                mode.other().condition(),
-            )
-            .into_iter()
-            .map(|target| match target {
-                conditions::Reach::File(target) | conditions::Reach::Package(target) => {
-                    (root.clone(), target)
-                }
-            })
-            .collect(),
+            conditions::reachable_targets(map, &key, exports, mode.condition())
+                .into_iter()
+                .map(|target| match target {
+                    conditions::Reach::File(target) | conditions::Reach::Package(target) => {
+                        (root.clone(), target)
+                    }
+                })
+                .collect(),
         )
     }
 

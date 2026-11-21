@@ -830,6 +830,30 @@ fn a_call_through_an_imports_map_with_two_files_claims_no_complete_target() {
     );
 }
 
+#[test]
+fn explicitly_enabled_opposite_mode_conditions_leave_calls_open() {
+    for (main, source, condition) in [
+        ("main.mjs", "import {f} from '#entry'; f();", "require"),
+        ("main.cjs", "const {f} = require('#entry'); f();", "import"),
+    ] {
+        let manifest = format!(
+            r##"{{"imports":{{"#entry":{{"{condition}":"./alternate.mjs","default":"./target.mjs"}}}}}}"##
+        );
+        let files = [
+            (main, source),
+            ("package.json", &manifest),
+            ("alternate.mjs", "export function f() {}"),
+            ("target.mjs", "export function f() {}"),
+        ];
+        assert_eq!(exact_targets_in(&files, "f()"), none(), "{condition}");
+        assert_eq!(
+            conservative_targets_in(&files, "f()"),
+            BTreeSet::from(["alternate.mjs#f".to_string(), "target.mjs#f".to_string()]),
+            "{condition}"
+        );
+    }
+}
+
 /// The functions, as `file#name`, the call graph serves for the last call
 /// site whose text is `site` in the first of `files` as conservative targets.
 fn conservative_targets_in(files: &[(&str, &str)], site: &str) -> BTreeSet<String> {

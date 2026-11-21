@@ -5,8 +5,8 @@
 //! `browser`, `module` or `worker`, and either may be given further
 //! conditions such as `development`. The walk follows Node's resolution of a
 //! map value under every such set at once: every condition but the mode's own
-//! and `default` may or may not be selected, and the other mode's condition
-//! never is. A condition map picks its first selected key whose value is not
+//! and `default` may or may not be selected, including the other mode's
+//! condition if the user explicitly enables it. A map picks its first selected key whose value is not
 //! `undefined`: a nested map that selects nothing lets the loader go on to
 //! the next key. A list gives its first entry that neither selects nothing,
 //! is `null` nor is an invalid target; any other error ends it. A map with a
@@ -61,19 +61,13 @@ impl Ends {
     }
 }
 
-/// The targets `map` may give `key` in the mode whose condition is `own`,
-/// where `other` is the condition of the other mode. `map` is the `exports`
+/// The targets `map` may give `key` in the mode whose condition is `own`.
+/// `map` is the `exports`
 /// value of a package when `exports` is set, with `key` `.` or a `./`
 /// subpath, and its `imports` value otherwise, with `key` a `#` specifier.
 /// Empty where `map` gives `key` nothing. Object order decides which key a
 /// loader picks, which the resolver's JSON maps keep.
-pub(super) fn reachable_targets(
-    map: &Value,
-    key: &str,
-    exports: bool,
-    own: &str,
-    other: &str,
-) -> Vec<Reach> {
+pub(super) fn reachable_targets(map: &Value, key: &str, exports: bool, own: &str) -> Vec<Reach> {
     let found = match map {
         Value::Object(entries) if exports => match subpath_keys(entries) {
             Some(true) => entry(entries, key),
@@ -90,7 +84,6 @@ pub(super) fn reachable_targets(
         matched: None,
         internal: !exports,
         own,
-        other,
         targets: Vec::new(),
     };
     if let Some((value, matched)) = found {
@@ -144,7 +137,6 @@ struct Walk<'a> {
     matched: Option<String>,
     internal: bool,
     own: &'a str,
-    other: &'a str,
     targets: Vec<Reach>,
 }
 
@@ -227,9 +219,6 @@ impl Walk<'_> {
         }
         let mut ends = Ends::default();
         for (condition, value) in conditions {
-            if condition == self.other {
-                continue;
-            }
             let end = self.value(value);
             ends = ends.with(end.without(Ends::UNDEFINED));
             let always = condition == self.own || condition == "default";
@@ -305,7 +294,7 @@ mod tests {
     use serde_json::json;
 
     fn targets(map: serde_json::Value, key: &str, exports: bool) -> Vec<Reach> {
-        reachable_targets(&map, key, exports, "import", "require")
+        reachable_targets(&map, key, exports, "import")
     }
 
     fn files(names: &[&str]) -> Vec<Reach> {
@@ -326,7 +315,7 @@ mod tests {
         });
         assert_eq!(
             targets(map, ".", true),
-            files(&["./browser.js", "./import.js"])
+            files(&["./browser.js", "./require.js", "./import.js"])
         );
     }
 

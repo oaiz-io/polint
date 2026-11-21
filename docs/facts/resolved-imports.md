@@ -6,6 +6,12 @@ these views as typed parameters in a `#[polint::rule]` function, and polint
 derives the `resolved_imports` and `module_graph` capabilities from those
 parameters.
 
+A site is exact or complete only when polint has checked every applicable way
+the specifier can resolve. A limit, a refused input, or a selectable condition
+whose outcome is not shared by all profiles leaves the site open, with an
+unknown marker explaining why. A known candidate does not close the site, and
+an unchecked input is not evidence that there is no target.
+
 Start rules with:
 
 ```rust
