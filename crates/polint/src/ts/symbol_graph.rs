@@ -33,6 +33,7 @@ use oxc_semantic::{
     SymbolFlags, SymbolId as OxcSymbolId,
 };
 use oxc_span::GetSpan;
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Request passed by the composition root to the TypeScript/JavaScript symbol adapter.
@@ -152,13 +153,21 @@ pub fn derive_ts_symbols(
         return output;
     }
 
+    // Each file's semantic index depends only on that file, so the indexes are
+    // built on worker threads; the symbols and references go through the one
+    // builder in path order. An Oxc tree cannot cross threads, so the loop
+    // parses each file again.
+    let indexes = files
+        .par_iter()
+        .map(|file| derive_ts_file_semantic_index(interner, file, requests_references))
+        .collect::<Vec<_>>();
     let mut summaries = Vec::new();
-    for file in files {
+    for (file, index) in files.into_iter().zip(indexes) {
         summaries.push(derive_ts_file_symbols(
-            interner,
             builder,
             &mut output,
             file,
+            index,
             requests_references,
         ));
     }
@@ -205,11 +214,37 @@ fn supported_language_support(
         .collect()
 }
 
-fn derive_ts_file_symbols(
+/// The semantic index of one file, or `None` when the file does not parse.
+fn derive_ts_file_semantic_index(
     interner: &crate::internal_core::StableKeyInterner,
+    file: &SourceFile,
+    requests_references: bool,
+) -> Option<SemanticIndexOutput> {
+    let allocator = Allocator::default();
+    let parsed = parse_ts_file(&allocator, file);
+    if parsed.is_catastrophic() {
+        return None;
+    }
+    let semantic = SemanticBuilder::new()
+        .with_check_syntax_error(true)
+        .build(parsed.program())
+        .semantic;
+    Some(derive_ts_semantic_index(
+        interner,
+        file,
+        file.source.as_ref(),
+        parsed.program(),
+        semantic.scoping(),
+        semantic.nodes(),
+        requests_references,
+    ))
+}
+
+fn derive_ts_file_symbols(
     builder: &mut SymbolGraphBuilder,
     output: &mut LanguageSymbolOutput,
     file: &SourceFile,
+    index: Option<SemanticIndexOutput>,
     requests_references: bool,
 ) -> TsFileSymbolSummary {
     let source = file.source.as_ref();
@@ -240,15 +275,9 @@ fn derive_ts_file_symbols(
     let semantic = semantic_return.semantic;
     let scoping = semantic.scoping();
     let nodes = semantic.nodes();
-    output.semantic.extend(derive_ts_semantic_index(
-        interner,
-        file,
-        source,
-        parsed.program(),
-        scoping,
-        nodes,
-        requests_references,
-    ));
+    if let Some(index) = index {
+        output.semantic.extend(index);
+    }
     let export_names = collect_export_names(parsed.program(), scoping);
     let parameter_symbols = collect_parameter_symbols(nodes);
     let namespace_member_calls = if requests_references {

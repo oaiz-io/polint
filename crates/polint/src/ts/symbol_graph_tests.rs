@@ -286,7 +286,7 @@ const lazy = import(moduleName);
 
 #[cfg(test)]
 mod semantic_resolution {
-    use super::{derive_ts_file_symbols, derive_ts_semantic_index};
+    use super::{derive_ts_file_semantic_index, derive_ts_file_symbols, derive_ts_semantic_index};
     use crate::ts::parse::parse_ts_file;
     use oxc_allocator::Allocator;
     use oxc_semantic::SemanticBuilder;
@@ -327,7 +327,8 @@ mod semantic_resolution {
         let mut builder = SymbolGraphBuilder::new(interner.clone());
         let mut output = LanguageSymbolOutput::default();
 
-        derive_ts_file_symbols(&interner, &mut builder, &mut output, &file, false);
+        let index = derive_ts_file_semantic_index(&interner, &file, false);
+        derive_ts_file_symbols(&mut builder, &mut output, &file, index, false);
         let symbol_output = builder.finish();
 
         (interner, symbol_output.symbols, output.semantic)
