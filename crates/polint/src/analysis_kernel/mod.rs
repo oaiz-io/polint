@@ -3231,6 +3231,53 @@ function cleanup(value: string) {{ return value.trim(); }}
         );
     }
 
+    /// A value that flows down a chain of copies is solved once per node. The
+    /// solver stores the calls it resolves, not every pair of nodes the chain
+    /// connects, so a deep chain of conditionals costs its length and not its
+    /// square.
+    #[cfg(feature = "lang-typescript")]
+    #[test]
+    fn a_two_hundred_deep_conditional_chain_stores_solver_edges_linear_in_its_depth() {
+        let depth = 200;
+        let mut chain = String::from("f()");
+        for level in 0..depth {
+            chain = format!("v === {level} ? f() : {chain}");
+        }
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("main.mjs"),
+            format!("function f() {{}}\nexport function g(v) {{ const t = {chain}; return t; }}\n"),
+        )
+        .expect("write source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let output = AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel should run");
+
+        let calls = output.db.call_sites().len();
+        assert!(calls > depth, "every call in the chain is a call site");
+        let stored = output.db.solver_derived_edges().len();
+        assert!(
+            stored <= 2 * calls,
+            "{stored} solver edges for {calls} call sites"
+        );
+        let resolved_to_f = output
+            .db
+            .refined_call_edges()
+            .iter()
+            .filter(|edge| edge.target_function.is_some())
+            .count();
+        assert!(resolved_to_f > depth, "every call to f keeps its target");
+    }
+
     #[cfg(feature = "lang-typescript")]
     #[test]
     fn ts_function_returns_flow_through_their_return_place_to_the_consuming_call() {

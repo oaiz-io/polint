@@ -63,9 +63,9 @@ pub trait SolverPolicy {
 
 /// The language-neutral points-to policy.
 ///
-/// It composes the existing Andersen fixpoint without rewriting it. Its derived
-/// edges continue through the unified engine's CopyEdge closure; the folded
-/// points-to result is retained only for budget/status accounting.
+/// It composes the existing Andersen fixpoint without rewriting it. It derives no
+/// edges of its own; the folded points-to result is retained only for
+/// budget/status accounting.
 pub struct PointsToPolicy {
     constraints: Vec<PointsToConstraintFact>,
 }

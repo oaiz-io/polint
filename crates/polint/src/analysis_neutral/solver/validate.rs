@@ -19,9 +19,9 @@
 //! value-flow (`CopyEdge`) graph that passes through a `CallConstraint` (summary)
 //! node — is DETECTED and reported as a bounded diagnostic rather than allowed to
 //! diverge. This is the concrete mechanism behind D-11's "closed input set / single
-//! fixpoint per run / bounded outer iterations": the solver's transitive closure is
+//! fixpoint per run / bounded outer iterations": the solver's value flow is
 //! deterministic and terminating because the cycle is detected and the back-edge is
-//! not re-expanded (the engine's self-loop guard + this check together bound it).
+//! not re-expanded.
 
 use std::collections::{BTreeMap, BTreeSet};
 

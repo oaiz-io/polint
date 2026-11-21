@@ -45,9 +45,10 @@ pub(crate) struct SolverProviderRunOutput {
 ///
 /// Pipeline mirroring `polint.semantic_graph`:
 /// 1. read the closed input snapshot — the stored semantic-graph constraints — and
-///    drive [`derive_edges`] over the unified `CopyEdge` vocabulary, bounded by the
-///    [`SolverBudget`] (D-11),
-/// 2. `normalized()` is applied inside `derive_edges` (stable-key sort),
+///    drive the solver engine over it: the model edges plus the call edges the
+///    Go RTA and TS points-to policies resolve, bounded by the [`SolverBudget`]
+///    (D-11),
+/// 2. the engine normalizes the merged output (stable-key sort),
 /// 3. compute the output digest over the stored stable KEYS + upstream digests +
 ///    the budget (D-15), never run-local dense IDs,
 /// 4. validate the derived edges (precision ceiling, dup keys, dangling endpoints)
@@ -100,9 +101,8 @@ pub(crate) fn derive_solver_with_go_points_to(
     debug_assert_eq!(manifest.id, SOLVER_PROVIDER_ID);
 
     // Step: drive the unified solver ENGINE over the closed input snapshot (D-02,
-    // the reserved seam). The points-to CopyEdge closure (`derive_edges`, byte-
-    // identical) AND the Go RTA policy's resolved call edges converge into one
-    // SolverOutput under one SolverBudget. The build is read-only; the engine
+    // the reserved seam). The model edges AND the Go RTA policy's resolved call
+    // edges converge into one SolverOutput under one SolverBudget. The build is read-only; the engine
     // normalizes the merged output.
     //
     // The TS policy projects the semantic graph into the shared Andersen domain and
@@ -229,8 +229,8 @@ fn solver_output_digest(
     )
 }
 
-/// Honest budget-exhaustion signal (D-06): emitted when the solver truncated a
-/// source's transitive closure under the per-source step budget. The downstream
+/// Honest budget-exhaustion signal (D-06): emitted when a solver policy or the
+/// adaptation caps stopped short of a complete answer under the budget. The downstream
 /// unknown taxonomy categorizes it; surviving derived edges keep their own honest
 /// status and precision.
 fn budget_exceeded_diagnostic(budget_reasons: &BTreeSet<String>) -> Diagnostic {
@@ -389,8 +389,7 @@ mod tests {
         }
     }
 
-    /// Builds a db with a small semantic graph: a chain a -> b -> c so the solver
-    /// derives the transitive edge a -> c.
+    /// Builds a db with a small semantic graph: a chain of copies a -> b -> c.
     fn db_with_copy_chain() -> AnalysisDb {
         let mut db = AnalysisDb::new();
         let interner = db.stable_key_interner();
@@ -434,15 +433,15 @@ mod tests {
     }
 
     #[test]
-    fn populated_db_derives_transitive_edge_and_stores() {
+    fn a_copy_chain_stores_no_derived_edge_of_its_own() {
+        // Copies are solved by the points-to policy, which stores the calls it
+        // resolves. A chain of copies with no call stores nothing.
         let mut db = db_with_copy_chain();
         let output = run(&mut db);
         assert!(output.output_digest.is_some());
         assert!(
-            db.solver_derived_edges()
-                .iter()
-                .any(|e| e.source == SemanticNodeId(0) && e.target == SemanticNodeId(2)),
-            "expected the transitive a -> c edge stored"
+            db.solver_derived_edges().is_empty(),
+            "a copy chain must not store a closure edge"
         );
     }
 
@@ -594,7 +593,7 @@ mod tests {
         .output_digest;
 
         let mut bumped = SolverBudget::default();
-        bumped.max_steps += 1;
+        bumped.max_outer_iterations += 1;
         let mut db_b = db_with_copy_chain();
         let changed = derive_solver_with_cache_stats(
             &mut db_b,

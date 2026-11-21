@@ -36,7 +36,7 @@ pub fn solver_provider_parameter_digest(budget: &SolverBudget) -> Digest {
         SOLVER_SCHEMA_LABEL,
         "derived_edges",
         "derived_edge_provenance",
-        "transitive_copy_closure_v1",
+        "no_copy_closure_v1",
         "provenance_projection_v1",
         "precision_ceiling_v1",
         // Go RTA fixpoint algorithm version (D-12): a change to the RTA
@@ -61,7 +61,6 @@ pub fn solver_provider_parameter_digest(budget: &SolverBudget) -> Digest {
 /// Only knobs observable by the production solver participate.
 pub fn solver_budget_digest_parts(budget: &SolverBudget) -> Vec<String> {
     vec![
-        format!("budget.max_steps={}", budget.max_steps),
         format!(
             "budget.max_outer_iterations={}",
             budget.max_outer_iterations
@@ -130,13 +129,12 @@ mod tests {
                     "solver-run-output-2",
                     "derived_edges",
                     "derived_edge_provenance",
-                    "transitive_copy_closure_v1",
+                    "no_copy_closure_v1",
                     "provenance_projection_v1",
                     "precision_ceiling_v1",
                     "go_rta_fixpoint_v1",
                     "ts_points_to_projection_v3",
                     "adaptation_model_v1",
-                    "budget.max_steps=10000",
                     "budget.max_outer_iterations=64",
                     "budget.points_to.max_steps=50000000",
                     "budget.points_to.max_objects_per_var=4096",
@@ -168,13 +166,12 @@ mod tests {
                 "solver-run-output-2",
                 "derived_edges",
                 "derived_edge_provenance",
-                "transitive_copy_closure_v0",
+                "transitive_copy_closure_v1",
                 "provenance_projection_v1",
                 "precision_ceiling_v1",
                 "go_rta_fixpoint_v1",
                 "ts_points_to_projection_v3",
                 "adaptation_model_v1",
-                "budget.max_steps=10000",
                 "budget.max_outer_iterations=64",
                 "budget.points_to.max_steps=50000000",
                 "budget.points_to.max_objects_per_var=4096",
@@ -197,14 +194,6 @@ mod tests {
         // budget-default (or override) change invalidates downstream.
         let default_budget = SolverBudget::default();
         let base = solver_provider_parameter_digest(&default_budget);
-
-        let mut bumped_steps = SolverBudget::default();
-        bumped_steps.max_steps += 1;
-        assert_ne!(
-            solver_provider_parameter_digest(&bumped_steps),
-            base,
-            "changing max_steps must change the parameter digest"
-        );
 
         let mut bumped_outer = SolverBudget::default();
         bumped_outer.max_outer_iterations += 1;

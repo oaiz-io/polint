@@ -5342,44 +5342,42 @@ mod tests {
         use crate::analysis::ids::SemanticConstraintId;
         use crate::analysis::points_to::facts::{PointsToPrecision, PointsToStatus};
         use crate::analysis::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
-        use crate::analysis::solver::engine::derive_edges;
+        use crate::analysis::solver::engine::derive_model_edges;
         use crate::analysis::solver::store::SolverStore;
 
-        fn copy(stable_key: &str, src: u64, dst: u64) -> ConstraintFact {
-            ConstraintFact {
-                id: SemanticConstraintId(0),
-                kind: ConstraintKind::CopyEdge {
-                    dst: crate::analysis::ids::SemanticNodeId(dst),
-                    src: crate::analysis::ids::SemanticNodeId(src),
-                },
-                status: PointsToStatus::Present,
-                precision: PointsToPrecision::FlowInsensitive,
-                stable_key: crate::core::stable_key_for_test(stable_key),
-            }
-        }
-
-        let constraints = vec![copy("copy|a-b", 1, 2), copy("copy|b-c", 2, 3)];
+        let constraints = vec![ConstraintFact {
+            id: SemanticConstraintId(0),
+            kind: ConstraintKind::ModelEdge {
+                source: crate::analysis::ids::SemanticNodeId(1),
+                target: crate::analysis::ids::SemanticNodeId(3),
+                language: "typescript".to_string(),
+                scope: "src/app.ts".to_string(),
+                confidence: "heuristic".to_string(),
+                evidence: vec!["src/app.ts:10".to_string()],
+            },
+            status: PointsToStatus::Present,
+            precision: PointsToPrecision::Heuristic,
+            stable_key: crate::core::stable_key_for_test("model|a-c"),
+        }];
         let budget = crate::analysis::solver::budget::SolverBudget::default();
         let interner = crate::core::test_stable_key_interner();
-        let output = derive_edges(&interner, &constraints, &budget);
+        let output = derive_model_edges(&interner, &constraints, &budget);
         let store = SolverStore::from_output(output, &interner).expect("store");
 
-        // Pick the transitive edge (the one with 2 contributing facts).
-        let transitive = store
+        let modelled = store
             .derived_edges()
-            .iter()
-            .find(|e| e.provenance.contributing_facts.len() == 2)
-            .expect("transitive derived edge");
+            .first()
+            .expect("modelled derived edge");
 
         let view = explain_derived_edge_provenance(
             &store,
             &interner,
-            interner.resolve(transitive.stable_key).as_ref(),
+            interner.resolve(modelled.stable_key).as_ref(),
         )
         .expect("provenance surfaced via private plumbing");
-        assert_eq!(view.constraint_kind, "copy_edge");
-        assert_eq!(view.contributing_fact_keys.len(), 2);
-        assert!(view.solver_step > 0);
+        assert_eq!(view.constraint_kind, "model_edge");
+        assert_eq!(view.contributing_fact_keys, vec!["model|a-c".to_string()]);
+        assert_eq!(view.solver_step, 0);
         // A missing edge key yields None (no panic, no public surface).
         assert!(
             explain_derived_edge_provenance(&store, &interner, "edge|does|not|exist").is_none()

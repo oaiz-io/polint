@@ -22,13 +22,13 @@ use crate::internal_core::{StableKeyId, StableKeyInterner};
 use super::budget::{BudgetReason, BudgetStatus};
 use super::facts::DerivedEdgeFact;
 
-/// The provider id for the unified solver (registered in the kernel manifest in
-/// Plan 03), mirroring `SEMANTIC_GRAPH_PROVIDER_ID`.
+/// The provider id for the unified solver (registered in the kernel manifest),
+/// mirroring `SEMANTIC_GRAPH_PROVIDER_ID`.
 pub const SOLVER_PROVIDER_ID: &str = "polint.solver";
 
 /// Provider output for `polint.solver` — the normalized derived-edge rows plus the
-/// run-level [`BudgetStatus`]. `budget_status` is `BudgetExceeded` when the solver
-/// truncated any source's closure under the per-source step budget, so an exhausted
+/// run-level [`BudgetStatus`]. `budget_status` is `BudgetExceeded` when a solver
+/// policy or the adaptation caps stopped short under the budget, so an exhausted
 /// run is never indistinguishable from a complete one (review finding #3 / D-06).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SolverOutput {

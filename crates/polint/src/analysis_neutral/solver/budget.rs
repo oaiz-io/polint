@@ -1,8 +1,8 @@
 //! Unified solver budget model (D-05, D-06).
 //!
 //! [`SolverBudget`] generalizes the points-to sub-domain's `PointsToBudget`: it
-//! carries the cross-domain knobs (`max_steps` and an explicit bounded
-//! outer-iteration cap per D-11) plus a per-sub-domain channel for the
+//! carries the cross-domain knob (an explicit bounded outer-iteration cap per
+//! D-11) plus a per-sub-domain channel for the
 //! points-to-specific knobs. [`BudgetStatus`] generalizes `PointsToBudgetStatus`
 //! and models budget exhaustion as an explicit, honest signal (D-06) — never a
 //! silent drop.
@@ -11,9 +11,7 @@
 //! `PointsToBudgetStatus` are treated as a **sub-domain projection** of the
 //! unified types via explicit mapping functions
 //! ([`SolverBudget::points_to_budget`] / [`BudgetStatus::from_points_to`]) rather
-//! than editing `PointsToBudget`. The two defaults are equal, and the
-//! points-to step ceiling is its own knob because `max_steps` also bounds the
-//! engine's edge closure.
+//! than editing `PointsToBudget`. The two defaults are equal.
 
 use serde::{Deserialize, Serialize};
 
@@ -94,13 +92,11 @@ impl Default for GoRtaSubBudget {
 
 /// Unified solver budget generalizing `PointsToBudget` (D-05).
 ///
-/// Cross-domain knobs: `max_steps` (per-step worklist cap, mirrors the points-to
-/// default 10_000) and `max_outer_iterations` (the explicit bounded outer-iteration
+/// Cross-domain knob: `max_outer_iterations` (the explicit bounded outer-iteration
 /// cap mandated by D-11 — the unified core never loops unbounded). Per-sub-domain
 /// knobs hang off [`PointsToSubBudget`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SolverBudget {
-    pub max_steps: usize,
     pub max_outer_iterations: usize,
     pub points_to: PointsToSubBudget,
     pub go: GoRtaSubBudget,
@@ -110,9 +106,6 @@ pub struct SolverBudget {
 impl Default for SolverBudget {
     fn default() -> Self {
         Self {
-            // Matches the points-to default 10_000 so the folded sub-domain runs
-            // identically when driven through the unified budget.
-            max_steps: 10_000,
             // Bounded outer-iteration cap (D-11). A single fixpoint drain is one
             // outer iteration today; the cap keeps future multi-policy rounds
             // bounded rather than unbounded.
@@ -120,7 +113,7 @@ impl Default for SolverBudget {
             points_to: PointsToSubBudget::default(),
             // Go RTA sub-budget (D-10/D-11). Adding this field MUST NOT perturb the
             // existing fields' values — `solver_budget_default_matches_points_to_defaults`
-            // pins 10_000 / 64 / points-to defaults byte-identically.
+            // pins 64 / points-to defaults byte-identically.
             go: GoRtaSubBudget::default(),
             // Repo-local adaptation model caps (ADAPT-01). Appending this field keeps
             // existing solver defaults byte-identical while making model expansion
@@ -249,12 +242,9 @@ mod tests {
     #[test]
     fn solver_budget_default_matches_points_to_defaults() {
         let budget = SolverBudget::default();
-        assert_eq!(budget.max_steps, 10_000);
         assert!(budget.max_outer_iterations > 0);
 
         // The projection reproduces the standalone points-to defaults exactly.
-        // The points-to step ceiling is its own knob: the cross-domain
-        // `max_steps` also bounds the engine's edge closure.
         let projected = budget.points_to_budget();
         assert_eq!(projected, PointsToBudget::default());
         assert_eq!(projected.max_steps, 50_000_000);
@@ -275,7 +265,6 @@ mod tests {
         // (10_000), never the policy-count 64 (CR-01).
         assert_eq!(budget.go.max_worklist_steps, 10_000);
         // The existing cross-domain/points-to defaults are still byte-identical.
-        assert_eq!(budget.max_steps, 10_000);
         assert_eq!(budget.max_outer_iterations, 64);
         assert_eq!(budget.points_to, PointsToSubBudget::default());
     }
