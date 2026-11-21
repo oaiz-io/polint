@@ -44,6 +44,7 @@ Query methods:
 | `status` | `ResolutionStatus` for the import. |
 | `precision` | `ResolutionPrecision` for the result. |
 | `reason` | Optional `UnresolvedReason` for uncertain results. |
+| `alternatives` | For an import with no single target (`ModeDependent`), the module graph nodes of the analysed files that one way of loading it may name: its mode, its conditions, Node or a bundler. Each is a conservative candidate, and the list may be incomplete. Empty when `target_node` names the one target. |
 
 ## Example: Report Unresolved Imports
 
@@ -209,6 +210,11 @@ A package without `exports` loads its `main` under Node, but its `module` or
 `browser` field first under a bundler, so an import resolves only when Node
 and a bundler name the same file as well. A package specifier whose files are
 not analysed stays `External` either way, since its label is the specifier.
+
+A `ModeDependent` import lists in `alternatives` each analysed file one way of
+loading it names. The call graph follows each of them as a conservative
+target, so a call through the import may reach every candidate and none of
+its answers is exact or complete.
 
 ## Setup-Sensitive Behavior
 

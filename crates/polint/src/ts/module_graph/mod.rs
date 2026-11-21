@@ -163,6 +163,7 @@ pub fn resolve_ts_import(
             precision: ResolutionPrecision::None,
             reason: Some(UnresolvedReason::DynamicExpression),
             edge_kind: None,
+            alternatives: Vec::new(),
         };
     }
 
@@ -201,8 +202,27 @@ pub fn resolve_ts_import(
         {
             return external_draft(input.import.path.clone(), input.import.language);
         }
-        ModeResolution::Split(_) => {
-            return ResolvedImportDraft::unresolved(UnresolvedReason::ModeDependent);
+        // No one file is the target; each analysed file a way of loading
+        // the import names is a candidate.
+        ModeResolution::Split(paths) => {
+            let alternatives = paths
+                .iter()
+                .filter_map(|path| {
+                    let file = context
+                        .file_by_absolute_normalized_path
+                        .get(&normalize_path(path)?)
+                        .copied()?;
+                    Some(ModuleNodeDraft::file(
+                        file,
+                        input.db.path_for(file),
+                        input.import.language,
+                    ))
+                })
+                .collect();
+            return ResolvedImportDraft {
+                alternatives,
+                ..ResolvedImportDraft::unresolved(UnresolvedReason::ModeDependent)
+            };
         }
     };
     match resolution {
@@ -263,6 +283,7 @@ fn resolved_path_draft(
             precision: ResolutionPrecision::ExactFile,
             reason: None,
             edge_kind: Some(ModuleEdgeKind::Imports),
+            alternatives: Vec::new(),
         };
     }
 
@@ -282,6 +303,7 @@ fn external_draft(label: String, language: Language) -> ResolvedImportDraft {
         precision: ResolutionPrecision::ExternalPackage,
         reason: None,
         edge_kind: Some(ModuleEdgeKind::DependsOn),
+        alternatives: Vec::new(),
     }
 }
 
@@ -2118,19 +2140,41 @@ impl DiskResolver {
         Self(ModeResolvers::new())
     }
 
-    /// The file `specifier` names when the file `importer` imports it with
-    /// `syntax`; `None` where the modes it may load in name different files.
+    /// The files `specifier` may name when the file `importer` imports it
+    /// with `syntax`: the one file every way of loading it names, or each
+    /// file one of them names. `None` where it names no file.
     pub(crate) fn resolve(
         &self,
         importer: &Path,
         specifier: &str,
         syntax: ImportSyntax,
-    ) -> Option<PathBuf> {
+    ) -> Option<DiskTarget> {
         match self.0.resolve(importer, specifier, syntax) {
-            ModeResolution::One(Ok(resolution)) => normalize_path(resolution.path()),
-            ModeResolution::One(Err(_)) | ModeResolution::Split(_) => None,
+            ModeResolution::One(Ok(resolution)) => {
+                normalize_path(resolution.path()).map(DiskTarget::File)
+            }
+            ModeResolution::One(Err(_)) => None,
+            ModeResolution::Split(paths) => Some(DiskTarget::Alternatives(
+                paths
+                    .iter()
+                    .filter_map(|path| normalize_path(path))
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+            )),
         }
     }
+}
+
+/// Where an import resolved on disk leads.
+#[cfg(feature = "lang-typescript")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DiskTarget {
+    /// The one file every way of loading the import names.
+    File(PathBuf),
+    /// The files the ways of loading the import name, where they differ.
+    /// The list may be incomplete.
+    Alternatives(Vec<PathBuf>),
 }
 
 #[cfg(feature = "lang-typescript")]

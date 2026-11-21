@@ -35,49 +35,67 @@ use crate::internal_core::StableKeyInterner;
 const GUARD_KEY: &str = "value_flow_guard:";
 
 /// Where the imports of a program lead: for each package, importing file,
-/// specifier and syntax, the package and the file inside it that the import
-/// names.
+/// specifier and syntax, the files of other packages the import may name.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Tree {
-    pub(crate) links: BTreeMap<(String, String, String, ImportSyntax), (String, String)>,
+    pub(crate) links: BTreeMap<(String, String, String, ImportSyntax), Link>,
+}
+
+/// The files of other packages one import may name, each as its package and
+/// the path inside it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Link {
+    pub(crate) files: BTreeSet<(String, String)>,
+    /// Whether the ways of loading the import name different files, so no
+    /// one file is its target.
+    pub(crate) alternatives: bool,
 }
 
 #[cfg(feature = "lang-typescript")]
 impl Tree {
     /// The tree of packages laid out on disk, each named and rooted at its
     /// install directory: every import of every graph resolved from its file
-    /// the way the module graph resolves it, and named by the package whose
-    /// root holds the resolved file most closely. An import resolving into no
-    /// package, or into its own, is left out.
+    /// the way the module graph resolves it, and each file it may name
+    /// named by the package whose root holds the file most closely. A file
+    /// in no package, or in the importing one, is left out, and so is an
+    /// import that names one file and has none left.
     pub(crate) fn on_disk(packages: &[(&str, &std::path::Path, &PackageGraph)]) -> Self {
+        use crate::ts::module_graph::DiskTarget;
         let resolver = crate::ts::module_graph::DiskResolver::new();
         let mut tree = Self::default();
         for (name, root, graph) in packages {
             for import in &graph.boundary.imports {
-                let Some(resolved) =
-                    resolver.resolve(&root.join(&import.file), &import.specifier, import.syntax)
-                else {
-                    continue;
+                let (files, alternatives) = match resolver.resolve(
+                    &root.join(&import.file),
+                    &import.specifier,
+                    import.syntax,
+                ) {
+                    Some(DiskTarget::File(file)) => (vec![file], false),
+                    Some(DiskTarget::Alternatives(files)) => (files, true),
+                    None => continue,
                 };
-                let Some((target, root)) = packages
+                let files = files
                     .iter()
-                    .filter(|(_, root, _)| resolved.starts_with(root))
-                    .max_by_key(|(_, root, _)| root.components().count())
-                    .map(|(target, root, _)| (*target, *root))
-                else {
-                    continue;
-                };
-                let Ok(inner) = resolved.strip_prefix(root) else {
-                    continue;
-                };
-                if target == *name {
+                    .filter_map(|resolved| {
+                        let (target, root) = packages
+                            .iter()
+                            .filter(|(_, root, _)| resolved.starts_with(root))
+                            .max_by_key(|(_, root, _)| root.components().count())
+                            .map(|(target, root, _)| (*target, *root))?;
+                        let inner = resolved.strip_prefix(root).ok()?;
+                        (target != *name).then(|| {
+                            let inner = inner
+                                .components()
+                                .map(|part| part.as_os_str().to_string_lossy())
+                                .collect::<Vec<_>>()
+                                .join("/");
+                            (target.to_string(), inner)
+                        })
+                    })
+                    .collect::<BTreeSet<_>>();
+                if files.is_empty() && !alternatives {
                     continue;
                 }
-                let inner = inner
-                    .components()
-                    .map(|part| part.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
                 tree.links.insert(
                     (
                         (*name).to_string(),
@@ -85,7 +103,10 @@ impl Tree {
                         import.specifier.clone(),
                         import.syntax,
                     ),
-                    (target.to_string(), inner),
+                    Link {
+                        files,
+                        alternatives,
+                    },
                 );
             }
         }
@@ -171,23 +192,39 @@ pub(crate) fn stitch(
         .map(|(at, (name, _))| (*name, at))
         .collect::<BTreeMap<_, _>>();
 
-    // The open copy of each linked import, and the place it is linked to;
-    // `None` when the file it names holds no place for the value.
-    let mut links = BTreeMap::new();
+    // The open copy of each linked import, and the places it is linked to.
+    let mut links = BTreeMap::<_, Vec<SemanticNodeId>>::new();
     let mut open_imports = Vec::new();
     for (at, (name, graph)) in graphs.iter().enumerate() {
         for import in &graph.boundary.imports {
             let node = |number: u32| global[at][number as usize];
-            match link_source(&graphs, &by_name, &global, tree, name, import) {
-                Ok(source) => {
-                    links.insert((node(import.place), node(import.open)), source);
+            let open = |reason| OpenImport {
+                package: (*name).to_string(),
+                file: import.file.clone(),
+                specifier: import.specifier.clone(),
+                reason,
+            };
+            let key = (
+                (*name).to_string(),
+                import.file.clone(),
+                import.specifier.clone(),
+                import.syntax,
+            );
+            let Some(link) = tree.links.get(&key) else {
+                open_imports.push(open("unlinked_import"));
+                continue;
+            };
+            if link.alternatives {
+                open_imports.push(open("no_single_target"));
+            }
+            let sources = links
+                .entry((node(import.place), node(import.open)))
+                .or_default();
+            for (target, file) in &link.files {
+                match link_source(&graphs, &by_name, &global, target, file, import.value) {
+                    Ok(source) => sources.extend(source),
+                    Err(reason) => open_imports.push(open(reason)),
                 }
-                Err(reason) => open_imports.push(OpenImport {
-                    package: (*name).to_string(),
-                    file: import.file.clone(),
-                    specifier: import.specifier.clone(),
-                    reason,
-                }),
             }
         }
     }
@@ -202,15 +239,15 @@ pub(crate) fn stitch(
         for constraint in &graph.constraints {
             let mut kind = constraint.kind.clone();
             kind.remap_nodes(|node| global[at][ConstraintEntry::node(node) as usize]);
-            if let ConstraintKind::CopyEdge { dst, src } = kind
-                && let Some(Some(source)) = links.get(&(dst, src))
-            {
-                entries.push(ConstraintEntry {
-                    kind: ConstraintKind::CopyEdge { dst, src: *source },
-                    status: constraint.status,
-                    precision: constraint.precision,
-                    key: node_text(name, &format!("{}#link", constraint.key)),
-                });
+            if let ConstraintKind::CopyEdge { dst, src } = kind {
+                for (link, &source) in links.get(&(dst, src)).into_iter().flatten().enumerate() {
+                    entries.push(ConstraintEntry {
+                        kind: ConstraintKind::CopyEdge { dst, src: source },
+                        status: constraint.status,
+                        precision: constraint.precision,
+                        key: node_text(name, &format!("{}#link#{link}", constraint.key)),
+                    });
+                }
             }
             if constraint.key.starts_with(GUARD_KEY)
                 && let ConstraintKind::CallConstraint {
@@ -306,6 +343,7 @@ pub(crate) fn stitch(
         })
         .collect();
     open_imports.sort();
+    open_imports.dedup();
     Ok(Stitched {
         nodes: texts,
         sites,
@@ -317,34 +355,26 @@ fn node_text(package: &str, text: &str) -> String {
     format!("{package}\0{text}")
 }
 
-/// The global place an import is linked to: `Ok(None)` when the file it
-/// names holds no place for the value, so the import receives nothing, and
-/// the reason when it cannot be linked.
+/// The global place an import of `value` is linked to in `file` of the
+/// package `target`: `Ok(None)` when the file holds no place for the value,
+/// so the import receives nothing from it, and the reason when it cannot be
+/// linked.
 fn link_source(
     graphs: &[(&str, &PackageGraph)],
     by_name: &BTreeMap<&str, usize>,
     global: &[Vec<SemanticNodeId>],
-    tree: &Tree,
-    package: &str,
-    import: &ImportEntry,
+    target: &str,
+    file: &str,
+    value: ModuleValue,
 ) -> Result<Option<SemanticNodeId>, &'static str> {
-    let key = (
-        package.to_string(),
-        import.file.clone(),
-        import.specifier.clone(),
-        import.syntax,
-    );
-    let Some((target, file)) = tree.links.get(&key) else {
-        return Err("unlinked_import");
-    };
-    let Some(&at) = by_name.get(target.as_str()) else {
+    let Some(&at) = by_name.get(target) else {
         return Err("missing_package_graph");
     };
     let modules = &graphs[at].1.boundary.modules;
     let Ok(found) = modules.binary_search_by(|entry| entry.file.as_str().cmp(file)) else {
         return Ok(None);
     };
-    let place = match import.value {
+    let place = match value {
         ModuleValue::Module => modules[found].module,
         ModuleValue::Namespace => modules[found].namespace,
     };

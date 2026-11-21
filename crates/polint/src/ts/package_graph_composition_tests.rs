@@ -8,7 +8,7 @@
 //! compared by a portable key, the install and the path inside it, so the two
 //! sides agree on names without sharing run-local ids.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::analysis_kernel::{AnalysisKernel, KernelInput, KernelOutput};
@@ -609,19 +609,27 @@ fn a_package_whose_main_and_module_fields_differ_claims_neither_file_exactly() {
     let stitched = stitch(&graphs, &tree_of(&packages)).expect("stitch");
     assert_eq!(stitched_portable(&stitched, &graphs), whole);
 
-    for (file, text) in [("main.mjs", import), ("main.cjs", require)] {
+    // Each file a loader may run is a conservative target. A `require` of
+    // `module.mjs` returns its namespace, whose `run` is undefined.
+    for (file, text, runs) in [
+        (
+            "main.mjs",
+            import,
+            &["#mainRun", "#moduleRun", "#browserRun"][..],
+        ),
+        ("main.cjs", require, &["#mainRun", "#browserRun"][..]),
+    ] {
         let answer = answer_in(&whole, &format!(".:{file}"), run(text));
         assert!(
             !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
             "{file}: {answer:?}"
         );
-        assert!(
-            answer
-                .targets
-                .iter()
-                .all(|target| !target.ends_with("#moduleRun") && !target.ends_with("#browserRun")),
-            "{file}: {answer:?}"
-        );
+        for run in runs {
+            assert!(
+                answer.targets.iter().any(|target| target.ends_with(run)),
+                "{file} may reach {run}: {answer:?}"
+            );
+        }
         assert!(
             stitched
                 .open_imports
@@ -687,9 +695,9 @@ fn dual_answers(
     (answers, open)
 }
 
-/// Asserts that neither file of the app claims one target for `run()` and
-/// that the stitch leaves both imports open: Node and a bundler load
-/// different files of `dual`.
+/// Asserts that neither file of the app claims one target for `run()`, that
+/// `run()` may reach the `run` of both files, and that the stitch leaves both
+/// imports open: Node and a bundler load different files of `dual`.
 fn assert_split(manifest: &str, specifier: &str, nested: &[(&str, &str)]) {
     let (answers, open) = dual_answers(manifest, specifier, nested);
     for (file, answer) in ["main.mjs", "main.cjs"].into_iter().zip(&answers) {
@@ -697,6 +705,12 @@ fn assert_split(manifest: &str, specifier: &str, nested: &[(&str, &str)]) {
             !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
             "{file}: {answer:?}"
         );
+        for run in ["#nodeRun", "#browserRun"] {
+            assert!(
+                answer.targets.iter().any(|target| target.ends_with(run)),
+                "{file} may reach {run}: {answer:?}"
+            );
+        }
         assert!(
             open.contains(&(file.to_string(), specifier.to_string())),
             "the import of {file} is left open: {open:?}"
@@ -746,6 +760,67 @@ fn an_exports_map_with_a_custom_condition_claims_neither_file_exactly() {
         r#"{"name":"dual","version":"1.0.0","exports":{"development":"./browser.cjs","default":"./node.cjs"}}"#,
         "dual",
         &[],
+    );
+}
+
+/// Node runs `node.cjs` and `node --conditions=worker` runs `worker.cjs`:
+/// `run()` may reach either `run`, conservatively, and the stitch of the two
+/// packages answers as the whole program.
+#[test]
+fn a_condition_map_that_names_two_files_reaches_both_conservatively() {
+    let import = "import dual from 'dual';\ndual.run();\n";
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(
+        temp.path(),
+        &[
+            ("package.json", r#"{"name":"app","version":"1.0.0"}"#),
+            ("main.mjs", import),
+            (
+                "node_modules/dual/package.json",
+                r#"{"name":"dual","version":"1.0.0","exports":{"import":{"feature":"./node.cjs"},"worker":"./worker.cjs","default":"./node.cjs"}}"#,
+            ),
+            (
+                "node_modules/dual/node.cjs",
+                "exports.run = function run() {};\n",
+            ),
+            (
+                "node_modules/dual/worker.cjs",
+                "exports.run = function run() {};\n",
+            ),
+        ],
+    );
+    let whole = whole_program_answers(temp.path());
+    let packages = [
+        (".", temp.path().to_path_buf()),
+        ("node_modules/dual", temp.path().join("node_modules/dual")),
+    ]
+    .into_iter()
+    .map(|(name, root)| {
+        let graph = package_graph_of(&root).expect("package graph");
+        (name.to_string(), root, graph)
+    })
+    .collect::<Vec<_>>();
+    let graphs = named(&packages);
+    let stitched = stitch(&graphs, &tree_of(&packages)).expect("stitch");
+    assert_eq!(stitched_portable(&stitched, &graphs), whole);
+    let answer = answer_in(
+        &whole,
+        ".:main.mjs",
+        import.find("dual.run").expect("a call"),
+    );
+    assert!(
+        !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
+        "{answer:?}"
+    );
+    let files = answer
+        .targets
+        .iter()
+        .map(|target| target.split('@').next().unwrap_or_default())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        files,
+        BTreeSet::from(["node_modules/dual:node.cjs", "node_modules/dual:worker.cjs"]),
+        "{answer:?}"
     );
 }
 

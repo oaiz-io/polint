@@ -46,6 +46,8 @@ pub struct ResolvedImportDraft {
     pub precision: ResolutionPrecision,
     pub reason: Option<UnresolvedReason>,
     pub edge_kind: Option<ModuleEdgeKind>,
+    /// The files an import with no single target may load.
+    pub alternatives: Vec<ModuleNodeDraft>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -279,6 +281,13 @@ impl ModuleGraphBuilder {
             .target
             .as_ref()
             .map(|target| self.ensure_draft_node(target));
+        let alternatives = draft
+            .alternatives
+            .iter()
+            .map(|alternative| self.ensure_draft_node(alternative))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
         if let (Some(target_node), Some(edge_kind)) = (target_node, draft.edge_kind) {
             self.link_resolved_import(
                 owner,
@@ -299,6 +308,7 @@ impl ModuleGraphBuilder {
             draft.precision,
             draft.reason,
         )
+        .with_alternatives(alternatives)
     }
 
     pub fn finish(mut self) -> ModuleGraphOutput {
@@ -411,6 +421,7 @@ impl ResolvedImportDraft {
             precision: ResolutionPrecision::None,
             reason: Some(reason),
             edge_kind: None,
+            alternatives: Vec::new(),
         }
     }
 
@@ -421,6 +432,7 @@ impl ResolvedImportDraft {
             precision: ResolutionPrecision::None,
             reason: Some(UnresolvedReason::SetupMissing),
             edge_kind: None,
+            alternatives: Vec::new(),
         }
     }
 
@@ -431,6 +443,7 @@ impl ResolvedImportDraft {
             precision: ResolutionPrecision::None,
             reason: Some(UnresolvedReason::UnsupportedLanguage),
             edge_kind: None,
+            alternatives: Vec::new(),
         }
     }
 }
@@ -603,6 +616,7 @@ mod tests {
             precision: ResolutionPrecision::ExternalPackage,
             reason: None,
             edge_kind: Some(ModuleEdgeKind::DependsOn),
+            alternatives: Vec::new(),
         };
 
         let fact = builder.apply_resolved_import_draft(import, owner, draft);

@@ -6989,7 +6989,11 @@ use polint::sdk::prelude::*;
     description = "Report imports that did not resolve.",
     severity = "warn"
 )]
-fn unresolved_import(ctx: &mut RuleCtx<'_>, resolved: ResolvedImports<'_>) -> RuleResult {
+fn unresolved_import(
+    ctx: &mut RuleCtx<'_>,
+    resolved: ResolvedImports<'_>,
+    graph: ModuleGraphFacts<'_>,
+) -> RuleResult {
     let rule_id = ctx.rule_id().to_string();
     for import in resolved.iter() {
         if matches!(
@@ -7003,6 +7007,14 @@ fn unresolved_import(ctx: &mut RuleCtx<'_>, resolved: ResolvedImports<'_>) -> Ru
             .reason
             .map(|reason| format!("{reason:?}"))
             .unwrap_or_else(|| "None".to_string());
+        let mut alternatives = graph
+            .nodes()
+            .iter()
+            .filter(|node| import.alternatives.contains(&node.id))
+            .map(|node| node.label.clone())
+            .collect::<Vec<_>>();
+        alternatives.sort();
+        let alternatives = alternatives.join(",");
         ctx.report(
             Diagnostic::warning(
                 rule_id.clone(),
@@ -7011,7 +7023,8 @@ fn unresolved_import(ctx: &mut RuleCtx<'_>, resolved: ResolvedImports<'_>) -> Ru
                 "Import did not resolve.",
             )
             .with_evidence("status", format!("{:?}", import.status))
-            .with_evidence("reason", reason),
+            .with_evidence("reason", reason)
+            .with_evidence("alternatives", alternatives),
         );
     }
     Ok(())
@@ -12099,6 +12112,14 @@ go 1.24
         assert!(
             vendored.len() == 1 && diagnostic_has_evidence(vendored[0], "reason", "ModeDependent"),
             "an analysed package whose fields name two files resolves to neither: {json:#?}"
+        );
+        assert!(
+            diagnostic_has_evidence(
+                vendored[0],
+                "alternatives",
+                "src/vendored/main.js,src/vendored/module.js"
+            ),
+            "the import lists both files a loader may run: {json:#?}"
         );
     }
 

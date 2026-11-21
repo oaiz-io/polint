@@ -23,7 +23,7 @@ use crate::analysis_neutral::points_to::facts::PointsToPrecision;
 use crate::analysis_neutral::semantic_graph::build::{function_node_key, node_key_from_identity};
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
-use crate::internal_core::{FileId, StableKeyInterner};
+use crate::internal_core::{FileId, ModuleNodeId, StableKeyInterner};
 use crate::ts::constraints::described::{Described, Obj, Token, describe_program};
 use crate::ts::constraints::{
     FlowCall, FlowRow, FlowSpan, FlowVar, TsValueFlows, lower_ts_source_value_flows,
@@ -167,35 +167,48 @@ impl GraphBuilder {
             .iter()
             .filter_map(|node| Some((node.id, node.file?)))
             .collect::<BTreeMap<_, _>>();
+        // The file each import names, or the files it may load where no one
+        // file is its target.
         let resolved = db
             .resolved_imports()
             .iter()
             .map(|import| {
-                (
-                    import.import,
-                    import
-                        .target_node
-                        .filter(|_| import.status == ResolutionStatus::Resolved),
-                )
+                let target = import
+                    .target_node
+                    .filter(|_| import.status == ResolutionStatus::Resolved);
+                (import.import, (target, &import.alternatives))
             })
             .collect::<BTreeMap<_, _>>();
-        let mut targets = BTreeMap::<(FileId, &str, ImportSyntax), BTreeSet<Option<usize>>>::new();
-        for import in db.imports() {
-            let target = resolved
-                .get(&import.id)
-                .copied()
-                .flatten()
-                .and_then(|node| module_files.get(&node))
+        let node_file = |node: &ModuleNodeId| {
+            module_files
+                .get(node)
                 .and_then(|file| indices.get(file))
-                .copied();
+                .copied()
+        };
+        let mut targets = BTreeMap::<
+            (FileId, &str, ImportSyntax),
+            BTreeSet<(Option<usize>, BTreeSet<usize>)>,
+        >::new();
+        for import in db.imports() {
+            let (target, alternatives) = resolved
+                .get(&import.id)
+                .map(|(target, alternatives)| {
+                    (
+                        target.as_ref().and_then(node_file),
+                        alternatives.iter().filter_map(node_file).collect(),
+                    )
+                })
+                .unwrap_or_default();
             targets
                 .entry((import.file, &import.path, import.syntax))
                 .or_default()
-                .insert(target);
+                .insert((target, alternatives));
         }
         // A request into another package is described as outside code, as
         // the package's own graph describes it, and linked beside its open
-        // value: the program then answers as the stitch of its packages.
+        // value: the program then answers as the stitch of its packages. A
+        // request with no one target is open, and linked beside its open
+        // value to every file it may load.
         let packages = file_paths
             .iter()
             .map(|path| install_of(path).0)
@@ -208,20 +221,23 @@ impl GraphBuilder {
                     .requests
                     .iter()
                     .map(|request| {
-                        let candidates =
-                            targets.get(&(*file, request.specifier.as_ref(), request.syntax))?;
-                        if candidates.len() != 1 {
-                            return None;
+                        let lowered = |target: &usize| flows[*target].1.lowered;
+                        let mut candidates = targets
+                            .get(&(*file, request.specifier.as_ref(), request.syntax))
+                            .into_iter()
+                            .flatten();
+                        let (Some((target, alternatives)), None) =
+                            (candidates.next(), candidates.next())
+                        else {
+                            return (None, Vec::new());
+                        };
+                        match target.filter(lowered) {
+                            Some(target) if packages[target] != packages[index] => {
+                                (None, vec![target])
+                            }
+                            Some(target) => (Some(target), Vec::new()),
+                            None => (None, alternatives.iter().copied().filter(lowered).collect()),
                         }
-                        candidates
-                            .first()
-                            .copied()
-                            .flatten()
-                            .filter(|&target| flows[target].1.lowered)
-                    })
-                    .map(|target| match target {
-                        Some(target) if packages[target] != packages[index] => (None, Some(target)),
-                        target => (target, None),
                     })
                     .unzip::<_, _, Vec<_>, Vec<_>>()
             })
@@ -369,9 +385,10 @@ struct FileProjection<'b, 'n> {
     file_paths: &'n [String],
     file_index: usize,
     requests: &'n [Option<usize>],
-    /// The file of another package each request names, linked beside the
-    /// request's open value.
-    links: &'n [Option<usize>],
+    /// The files each request is linked to beside its open value: the file
+    /// of another package it names, or every file it may load where no one
+    /// file is its target.
+    links: &'n [Vec<usize>],
     earlier_callees: &'n BTreeSet<SemanticNodeId>,
     places: BTreeMap<(FlowVar, bool), SemanticNodeId>,
     next_place: &'b mut u64,
@@ -663,7 +680,7 @@ impl FileProjection<'_, '_> {
                     None => self.var(FlowVar::Open, false),
                 };
                 self.push(ConstraintKind::CopyEdge { dst, src });
-                if let Some(target) = self.links.get(request as usize).copied().flatten() {
+                for &target in self.links.get(request as usize).into_iter().flatten() {
                     let src = module_place(self, target);
                     self.push(ConstraintKind::CopyEdge { dst, src });
                 }
