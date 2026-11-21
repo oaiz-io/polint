@@ -245,7 +245,7 @@ impl Cache {
                 };
             }
         };
-        match serde_json::from_str(&raw) {
+        match crate::bounded_json::from_str(&raw, ANALYSIS_CACHE_MAX_BYTES) {
             Ok(value) => CacheReadOutcome {
                 value: Some(value),
                 status: CacheReadStatus::Hit,
@@ -275,7 +275,8 @@ impl Cache {
                 };
             }
         };
-        match serde_json::from_str::<serde::de::IgnoredAny>(&raw) {
+        match crate::bounded_json::from_str::<serde::de::IgnoredAny>(&raw, ANALYSIS_CACHE_MAX_BYTES)
+        {
             Ok(_) => CacheReadOutcome {
                 value: Some(raw.into_bytes()),
                 status: CacheReadStatus::Hit,
@@ -1339,6 +1340,22 @@ mod tests {
 
             assert_eq!(outcome.status, CacheReadStatus::InvalidEvicted);
             assert!(outcome.value.is_none());
+            assert!(!cache.path_for(&key).exists());
+        }
+
+        #[test]
+        fn read_json_bytes_rejects_nesting_that_ignored_any_accepts() {
+            let temp = tempfile::tempdir().unwrap();
+            let cache = Cache::default_for_repo(temp.path(), true);
+            let key = key();
+            let depth = crate::bounded_json::MAX_JSON_DEPTH + 1;
+            let contents = format!("{}null{}", "[".repeat(depth), "]".repeat(depth));
+            assert!(serde_json::from_str::<serde::de::IgnoredAny>(&contents).is_ok());
+            fs::create_dir_all(cache.root()).unwrap();
+            fs::write(cache.path_for(&key), contents).unwrap();
+
+            let outcome = cache.read_json_bytes_with_status(&key);
+            assert_eq!(outcome.status, CacheReadStatus::InvalidEvicted);
             assert!(!cache.path_for(&key).exists());
         }
 

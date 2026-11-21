@@ -16,9 +16,9 @@ use crate::analysis_kernel::ProviderManifest;
 use crate::cache::{CACHE_VERSION, CacheKey};
 use crate::core::AnalysisDb;
 use crate::repo_fs::{
-    TOPOLOGY_LOCKFILE_MAX_BYTES, TOPOLOGY_MANIFEST_MAX_BYTES, normalize_repo_relative,
-    normalize_repo_relative_input, read_repo_file_to_string_with_limit, read_repo_file_with_limit,
-    repo_dir_path, repo_file_exists, repo_file_path, repo_relative_existing_path,
+    TOPOLOGY_LOCKFILE_MAX_BYTES, TOPOLOGY_MANIFEST_MAX_BYTES, normalize_repo_relative_input,
+    read_repo_file_to_string_with_limit, read_repo_file_with_limit, repo_dir_path,
+    repo_file_exists, repo_relative_existing_path,
 };
 use crate::ts::module_graph::parse_pnpm_workspace_packages;
 
@@ -850,7 +850,7 @@ pub(crate) fn module_graph_topology_input_digest_rows(
         root,
         candidate_paths.iter().map(String::as_str),
     ));
-    candidate_paths.extend(extended_ts_config_candidates(
+    candidate_paths.extend(crate::ts::tsconfig_chain::extended_ts_config_candidates(
         root,
         candidate_paths.iter().map(String::as_str),
     ));
@@ -967,7 +967,8 @@ fn package_path_for_manifest_path(relative_path: &str) -> Option<String> {
 }
 
 fn package_json_workspace_patterns(contents: &str) -> Vec<String> {
-    let Ok(value) = serde_json::from_str::<Value>(contents) else {
+    let Ok(value) = crate::bounded_json::from_str::<Value>(contents, TOPOLOGY_MANIFEST_MAX_BYTES)
+    else {
         return Vec::new();
     };
     let Some(object) = value.as_object() else {
@@ -1030,155 +1031,6 @@ fn topology_relevant_dirs(db: &AnalysisDb) -> BTreeSet<String> {
         }
     }
     dirs
-}
-
-fn extended_ts_config_candidates<'a>(
-    root: &Path,
-    initial_candidates: impl IntoIterator<Item = &'a str>,
-) -> Vec<String> {
-    let mut visited = BTreeSet::new();
-    let mut discovered = BTreeSet::new();
-    for candidate in initial_candidates {
-        let file_name = Path::new(candidate)
-            .file_name()
-            .and_then(|name| name.to_str());
-        if !matches!(file_name, Some("tsconfig.json" | "jsconfig.json")) {
-            continue;
-        }
-        collect_extended_ts_configs(root, &root.join(candidate), &mut visited, &mut discovered);
-    }
-    discovered.into_iter().collect()
-}
-
-fn collect_extended_ts_configs(
-    root: &Path,
-    config_path: &Path,
-    visited: &mut BTreeSet<String>,
-    discovered: &mut BTreeSet<String>,
-) {
-    let Some(config_path) = repo_relative_existing_path(root, config_path) else {
-        return;
-    };
-    if !visited.insert(config_path.clone()) {
-        return;
-    }
-    let Some(config) = read_tsconfig_extends_wire(root, &config_path) else {
-        return;
-    };
-    let config_dir = Path::new(&config_path).parent().unwrap_or(Path::new(""));
-    for specifier in config
-        .extends
-        .into_iter()
-        .flat_map(TsconfigExtendsWire::into_specifiers)
-    {
-        let Some(extended_path) = resolve_tsconfig_extends_path(root, config_dir, &specifier)
-        else {
-            continue;
-        };
-        discovered.insert(extended_path.clone());
-        collect_extended_ts_configs(root, &root.join(&extended_path), visited, discovered);
-    }
-}
-
-fn read_tsconfig_extends_wire(root: &Path, relative_path: &str) -> Option<TsconfigExtendsOnlyWire> {
-    let Ok(mut source) =
-        read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
-    else {
-        return None;
-    };
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return None;
-    }
-    serde_json::from_str::<TsconfigExtendsOnlyWire>(&source).ok()
-}
-
-fn resolve_tsconfig_extends_path(
-    root: &Path,
-    config_dir: &Path,
-    specifier: &str,
-) -> Option<String> {
-    let specifier_path = Path::new(specifier);
-    if specifier_path.is_absolute() {
-        return None;
-    }
-    if specifier.starts_with('.') {
-        return resolve_tsconfig_file_candidate(root, &config_dir.join(specifier_path));
-    }
-    resolve_package_tsconfig_extends_path(root, config_dir, specifier)
-}
-
-fn resolve_package_tsconfig_extends_path(
-    root: &Path,
-    config_dir: &Path,
-    specifier: &str,
-) -> Option<String> {
-    let mut current = normalize_repo_relative_input(config_dir)?;
-    loop {
-        let candidate = if current.as_os_str().is_empty() {
-            PathBuf::from("node_modules").join(specifier)
-        } else {
-            current.join("node_modules").join(specifier)
-        };
-        if let Some(resolved) = resolve_tsconfig_file_candidate(root, &candidate) {
-            return Some(resolved);
-        }
-        if current.as_os_str().is_empty() {
-            return None;
-        }
-        current.pop();
-    }
-}
-
-fn resolve_tsconfig_file_candidate(root: &Path, base: &Path) -> Option<String> {
-    let mut candidates = vec![base.to_path_buf()];
-    if base.extension().and_then(|extension| extension.to_str()) != Some("json") {
-        let mut with_json = base.as_os_str().to_owned();
-        with_json.push(".json");
-        candidates.push(PathBuf::from(with_json));
-    }
-    candidates.push(base.join("tsconfig.json"));
-
-    candidates
-        .into_iter()
-        .filter_map(|candidate| normalized_existing_repo_file(root, &candidate))
-        .next()
-}
-
-fn normalized_existing_repo_file(root: &Path, candidate: &Path) -> Option<String> {
-    repo_file_path(root, candidate).ok()?;
-    let normalized = normalize_repo_relative_input(candidate)?;
-    let relative = normalized.to_string_lossy();
-    if relative.is_empty() {
-        None
-    } else {
-        normalize_repo_relative(relative)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TsconfigExtendsOnlyWire {
-    #[serde(default)]
-    extends: Option<TsconfigExtendsWire>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum TsconfigExtendsWire {
-    Single(String),
-    Multiple(Vec<String>),
-}
-
-impl TsconfigExtendsWire {
-    fn into_specifiers(self) -> Vec<String> {
-        match self {
-            Self::Single(specifier) => vec![specifier],
-            Self::Multiple(specifiers) => specifiers,
-        }
-    }
 }
 
 fn topology_input_relative_path(dir: &str, file_name: &str) -> String {
@@ -2062,7 +1914,7 @@ mod tests {
                 Digest::from_parts(DigestKind::ProviderOutput, "ts_syntax", &["base"]),
             );
             let mut changed_schema = base.clone();
-            changed_schema.schema_version = "symbol-graph-facts-4:4".to_string();
+            changed_schema.schema_version = "symbol-graph-facts-4:changed".to_string();
 
             assert_ne!(base, changed_schema);
             assert!(base.extension_digests.contains(&Digest::absent(
@@ -2753,7 +2605,7 @@ mod symbol_graph_semantic_layer_key {
     fn tracks_schema_upstream_outputs_and_absent_extension_digest() {
         let base = key(semantic_provider_parameter_digest());
         let mut changed_schema = base.clone();
-        changed_schema.schema_version = "symbol-graph-facts-4:4".to_string();
+        changed_schema.schema_version = "symbol-graph-facts-4:changed".to_string();
 
         assert_ne!(base, changed_schema);
         assert!(base.extension_digests.contains(&Digest::absent(

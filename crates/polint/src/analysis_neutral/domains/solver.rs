@@ -33,6 +33,12 @@ impl<H: AnalysisHost> Copy for SolverInput<'_, H> {}
 pub struct SolverBudget {
     pub max_iterations: u32,
     pub widening_fuel: u32,
+    /// Place facts the solver may carry through its steps, summed over every
+    /// state it steps from. A step copies its state, so this bounds the time
+    /// and the memory of a solve where the iteration limit alone does not: a
+    /// long function that defines a new place at every step holds a state
+    /// that grows with each one.
+    pub max_carried_facts: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +89,7 @@ impl SolverPolicy {
             budget: SolverBudget {
                 max_iterations: 10_000,
                 widening_fuel: 8,
+                max_carried_facts: 4_000_000,
             },
             reduction_rounds: 4,
         }
@@ -144,8 +151,13 @@ impl IdeDomainSolver {
         }
 
         let mut iterations = 0_u32;
+        let mut carried_facts = 0_u64;
         while let Some(point) = queue.pop_front() {
-            if iterations >= self.policy.budget.max_iterations {
+            carried_facts = carried_facts
+                .saturating_add(states.get(&point).map_or(0, ProductState::fact_count) as u64);
+            if iterations >= self.policy.budget.max_iterations
+                || carried_facts > self.policy.budget.max_carried_facts
+            {
                 mark_ide_budget_exceeded(
                     &facts,
                     &mut states,
@@ -305,6 +317,12 @@ impl IdeDomainSolver {
             }
         }
 
+        tracing::debug!(
+            target: "polint::kernel::stage",
+            iterations,
+            carried_facts,
+            "abstract domain solve"
+        );
         materialize_results(
             &facts,
             &states,
@@ -808,6 +826,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 16,
             widening_fuel: 2,
+            max_carried_facts: u64::MAX,
         }));
 
         let first_digest = solver.solve(first).stable_digest_parts();
@@ -822,6 +841,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 16,
             widening_fuel: 0,
+            max_carried_facts: u64::MAX,
         }));
 
         let result = solver.solve(input);
@@ -835,6 +855,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 1,
             widening_fuel: 4,
+            max_carried_facts: u64::MAX,
         }));
 
         let result = solver.solve(input);
@@ -849,6 +870,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 16,
             widening_fuel: 2,
+            max_carried_facts: u64::MAX,
         }));
 
         let result = solver.solve(input);
@@ -874,6 +896,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 16,
             widening_fuel: 2,
+            max_carried_facts: u64::MAX,
         }));
 
         let result = solver.solve(input);
@@ -895,6 +918,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 16,
             widening_fuel: 2,
+            max_carried_facts: u64::MAX,
         }));
 
         let first = solver.solve(input).stable_digest_parts();
@@ -909,6 +933,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 16,
             widening_fuel: 2,
+            max_carried_facts: u64::MAX,
         }));
 
         let full = solver.solve(input);
@@ -936,6 +961,7 @@ mod tests {
         let solver = IdeDomainSolver::new(SolverPolicy::for_test(SolverBudget {
             max_iterations: 64,
             widening_fuel: 2,
+            max_carried_facts: u64::MAX,
         }));
 
         let result = solver.solve(input);
@@ -963,8 +989,164 @@ mod tests {
         );
     }
 
+    /// Facts held by the stored states before and after `operations`.
+    fn stored_operation_facts(result: &SolverResult, operations: usize) -> usize {
+        (0..operations as u64)
+            .map(MirOpId)
+            .map(|operation| {
+                let results = result.results();
+                results
+                    .before_operation(operation)
+                    .map_or(0, ProductState::fact_count)
+                    + results
+                        .after_operation(operation)
+                        .map_or(0, ProductState::fact_count)
+            })
+            .sum()
+    }
+
+    #[test]
+    fn a_long_straight_line_function_carries_facts_within_the_budget_or_says_it_did_not() {
+        // Each assignment defines one more place, so the state after the last
+        // one holds a fact per assignment. A solver that keeps a whole state at
+        // every step stores facts quadratic in the function's length.
+        let operations = 1_000;
+        let budget = 50_000;
+        let input = test_fixture::straight_line_solver_input(operations);
+        let policy = SolverPolicy::for_test(SolverBudget {
+            max_carried_facts: budget,
+            ..SolverPolicy::deterministic().budget
+        });
+        let result = IdeDomainSolver::new(policy).solve(input);
+
+        let stored = stored_operation_facts(&result, operations);
+        assert!(
+            stored as u64 <= budget.saturating_mul(2),
+            "stored {stored} facts for {operations} operations"
+        );
+        assert_eq!(result.statuses().next(), Some(SolverStatus::BudgetExceeded));
+        assert!(result.has_top_reason(TopReason::BudgetExceeded));
+    }
+
+    #[test]
+    fn a_short_straight_line_function_is_solved_within_the_budget() {
+        let operations = 100;
+        let input = test_fixture::straight_line_solver_input(operations);
+        let result = IdeDomainSolver::new(SolverPolicy::deterministic()).solve(input);
+
+        assert_eq!(result.statuses().next(), Some(SolverStatus::Solved));
+        let last = MirOpId(operations as u64 - 1);
+        let after = result
+            .results()
+            .after_operation(last)
+            .expect("after the last operation");
+        assert_eq!(
+            after.core.constants[&PlaceId(operations as u64 - 1)],
+            ConstantDomain::from_literal(ConstantLiteral::Number((operations - 1).to_string()))
+        );
+    }
+
     mod test_fixture {
         use super::*;
+
+        /// One function whose body assigns a number to `operations` new places in
+        /// sequence, one operation per block.
+        pub(super) fn straight_line_solver_input(
+            operations: usize,
+        ) -> SolverInput<'static, LocalAnalysisDb> {
+            let function = FunctionId::from_raw(1);
+            let mut db = LocalAnalysisDb::new();
+            let interner = db.stable_key_interner();
+            let places = (0..operations)
+                .map(|index| {
+                    local_place(
+                        &interner,
+                        PlaceId(index as u64),
+                        function,
+                        &format!("v{index}"),
+                        &format!("place:{index}"),
+                    )
+                })
+                .collect();
+            let mir_operations = (0..operations)
+                .map(|index| {
+                    mir_operation(
+                        &interner,
+                        MirOpId(index as u64),
+                        MirBodyId(0),
+                        MirOperationKind::Assign {
+                            place: PlaceId(index as u64),
+                            value: MirValue::Literal {
+                                value: index.to_string(),
+                            },
+                            mode: AssignMode::Overwrite,
+                        },
+                        &format!("op:{index}"),
+                    )
+                })
+                .collect();
+            db.replace_semantic_mir(MirOutput {
+                bodies: vec![mir_body(&interner, MirBodyId(0), function, "body:0")],
+                places,
+                operations: mir_operations,
+                unsupported: Vec::new(),
+                ..MirOutput::default()
+            })
+            .expect("semantic MIR should store");
+            // Node and block 1 is the entry, 2..=operations+1 hold the
+            // operations in order, and the one after them is the exit.
+            let exit = operations as u64 + 2;
+            let mut blocks = vec![cfg_block(&interner, 1, 1, BasicBlockKind::Entry, 0)];
+            let mut nodes = vec![cfg_node_for(&interner, 1, 1, 1, 0, None)];
+            for index in 0..operations as u64 {
+                let id = index + 2;
+                blocks.push(cfg_block(
+                    &interner,
+                    id,
+                    1,
+                    BasicBlockKind::StraightLine,
+                    id as u32 - 1,
+                ));
+                nodes.push(cfg_node_for(
+                    &interner,
+                    id,
+                    1,
+                    id,
+                    id as u32 - 1,
+                    Some(MirOpId(index)),
+                ));
+            }
+            blocks.push(cfg_block(
+                &interner,
+                exit,
+                1,
+                BasicBlockKind::ExitNormal,
+                exit as u32 - 1,
+            ));
+            nodes.push(cfg_node_for(
+                &interner,
+                exit,
+                1,
+                exit,
+                exit as u32 - 1,
+                None,
+            ));
+            let edges = (1..exit)
+                .map(|from| cfg_edge_for(&interner, from, 1, from, from + 1))
+                .collect();
+            db.replace_cfg_facts(CfgOutput {
+                functions: vec![cfg_function_for(
+                    &interner, 1, 0, function, 1, exit, "cfg:0",
+                )],
+                blocks,
+                nodes,
+                edges,
+                ..CfgOutput::empty()
+            })
+            .expect("CFG should store");
+            let db = Box::leak(Box::new(db));
+            (&*db).into()
+        }
 
         pub(super) fn solver_input(shuffled: bool) -> SolverInput<'static, LocalAnalysisDb> {
             let mut db = LocalAnalysisDb::new();
@@ -1369,6 +1551,7 @@ mod tests {
                 evidence: Vec::new(),
                 input_stable_keys: Vec::new(),
                 stable_key: crate::internal_core::stable_key_for_test("refined:caller:callee"),
+                assumptions: Vec::new(),
             }
         }
 

@@ -1,0 +1,3 @@
+construct = "this-forms"
+held_out = true
+description = "A method stores an arrow into `this`; a parameter that may hold either of two instances calls the stored function."

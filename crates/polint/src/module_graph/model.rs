@@ -6,7 +6,7 @@ use crate::module_graph::topology::{
 };
 use serde::{Deserialize, Serialize};
 
-pub(crate) const MODULE_GRAPH_LAYER_SCHEMA: &str = "module-graph-facts-v3";
+pub(crate) const MODULE_GRAPH_LAYER_SCHEMA: &str = "module-graph-facts-v4";
 pub(crate) const MODULE_TOPOLOGY_LAYER_SCHEMA: &str = "module-topology-facts-v2";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

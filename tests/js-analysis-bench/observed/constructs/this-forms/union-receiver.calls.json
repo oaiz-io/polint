@@ -1,0 +1,76 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 5,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@170..294",
+      "name": "choices"
+    },
+    {
+      "function": "main.js@225..251",
+      "name": "parseArg"
+    },
+    {
+      "function": "main.js@29..147",
+      "name": "choices"
+    },
+    {
+      "function": "main.js@298..413",
+      "name": "parse"
+    },
+    {
+      "function": "main.js@82..106",
+      "name": "parseArg"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@352..374",
+      "syntax": "member",
+      "callee": "main.js@225..251",
+      "callee_name": "parseArg"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@352..374",
+      "syntax": "member",
+      "callee": "main.js@82..106",
+      "callee_name": "parseArg"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@430..452",
+      "syntax": "member",
+      "callee": "main.js@29..147",
+      "callee_name": "choices"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@495..519",
+      "syntax": "member",
+      "callee": "main.js@170..294",
+      "callee_name": "choices"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@547..565",
+      "syntax": "identifier",
+      "callee": "main.js@298..413",
+      "callee_name": "parse"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@583..603",
+      "syntax": "identifier",
+      "callee": "main.js@298..413",
+      "callee_name": "parse"
+    }
+  ]
+}

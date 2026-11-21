@@ -102,6 +102,7 @@ fn edge_from_dispatch(
                 ),
             ],
         ),
+        assumptions: Vec::new(),
     }
 }
 
@@ -151,6 +152,7 @@ fn edge_from_unresolved(
                 ("framework", unresolved.framework_id.clone()),
             ],
         ),
+        assumptions: Vec::new(),
     }
 }
 

@@ -15,7 +15,7 @@ impl RefinedCallsProviderParameters {
         Self {
             precision_tier: "setup-aware",
             direct_mirror: true,
-            solver_projection: "solver_derived_edges",
+            solver_projection: "solver_derived_edges_at_derived_site",
             retired_heuristic_producers: true,
         }
     }

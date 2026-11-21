@@ -41,6 +41,21 @@ root, the inputs mounted read-only and every capability dropped. It is never
 part of `cargo test`; its output under `observed/` is committed so the report
 never needs to run it.
 
+Each package is recorded twice, and nothing is written unless the two
+recordings are byte-identical. The recorder lists as failures a driver that
+threw and a selected file it could not instrument; a recording with any
+failure is refused, not written, so a partial run cannot pass for a complete
+one. Drivers seed every source of randomness they use for the same reason.
+
+A package recorded through its own test suite (`tests_from`) needs the
+suite's archive and its modules. `bench.py fetch` downloads the archive, checks
+its `sha256`, unpacks the listed paths, and installs the modules with `npm ci
+--ignore-scripts` from the committed manifest and lockfile, in the pinned image
+with network: npm only downloads and unpacks there, and no package code runs
+until the recorder runs it without network. The lockfile is written with
+`python3 tests/js-analysis-bench/bench.py lock-test-modules --only <package>`
+when the manifest changes.
+
 ## Inputs
 
 - `constructs/<construct>/<case>/`: small hand-labelled programs, two per
@@ -53,13 +68,41 @@ never needs to run it.
 - `inputs.toml`: the real packages, each pinned by exact tarball URL, the
   tarball's `sha512` integrity and `sha256`, with format, licence and origin.
   `analysed` selects the files polint analyses and the recorder instruments.
+  **The analysed set of a package is its shipped source, not its test files**:
+  one rule for every package, tune set and held-out set alike. Paths under a
+  `test`, `tests`, `__tests__`, `benchmark` or `benchmarks` folder and files
+  named `*.test.*` or `*.spec.*` are left out even when the tarball carries
+  them (zod's does). The library never imports them and no driver runs them,
+  so the rule changes what analysis costs, not what the run observed: zod's
+  recording has no edge in those paths. One report, the first written with the
+  rule, also scores zod on its globs alone (`compare_previous_set`), apart from
+  every other table, so it reads against earlier reports.
   The set covers ESM source (axios, chalk), TypeScript source (zod), CommonJS
   only (commander), CommonJS transpiled from ESM (async), minified UMD (dayjs)
   and a bundled UMD (underscore).
+- The held-out packages (`held_out = true` in `inputs.toml`,
+  `research/package-graphs/HELD-OUT.md`): acorn, co, express, immer, js-yaml,
+  nanostores, node-forge and pako. No analysis change is tuned on them. Their
+  drivers under `observed/drivers/heldout/` are written from each package's
+  documentation, or run the package's own test suite (`tests_from`: express,
+  js-yaml, node-forge), and are committed apart from analysis code; the
+  `held-out authorship` CI job runs `held_out_guard.py` on a pull request's
+  changed paths and refuses one that changes both
+  `crates/polint/src/{ts,analysis*,graph}` and a held-out file (anything under
+  `observed/drivers/heldout/`, or an `observed/` file named after a held-out
+  package). `corpus` gives a parser's driver its input: the shipped JavaScript
+  of the named packages, copied into the tree in sorted order.
 - `observed/`: the recorder (`recorder.mjs`), one driver per package that
-  exercises its public API, placeholder modules for axios's Node-adapter
-  dependencies (the driver never sends a request), and the recorded
-  `*.calls.json` and `*.exports.json`.
+  exercises its public API, and the recorded `*.calls.json` (schema
+  `polint-js-bench-observed-calls-2`, with the functions the run entered) and
+  `*.exports.json`. `observed/stubs/node_modules/` holds placeholder modules
+  for axios's Node-adapter dependencies (the driver never sends a request):
+  `form-data` is Node's own `FormData` and `follow-redirects` Node's `http` and
+  `https`. They are committed through an exception to the root ignore of
+  `node_modules/`. The recorder strips TypeScript types in place; it blanks
+  value-import names that only a type declares, and a file that needs code
+  generation (enums, namespaces, parameter properties) runs uninstrumented
+  and is listed under `transformed_not_instrumented`.
 
 ### Label grammar
 
@@ -99,6 +142,9 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   out. Every single-target case is listed in `report.md`.
 - **Export-set accuracy**: per file, exported names from `Symbols` and from
   the module export facts against the keys of the module as Node loads it.
+  A file that fails to load on its own (node-forge's jQuery form helper and
+  its web-worker script, for example) has no keys to compare; it is left out
+  and counted under `load errors`.
 - **Unresolved share**: share of call sites with an unresolved marker, and of
   references with no resolved target.
 - **Why missed** (packages): each observed edge polint does not find is put in
@@ -115,6 +161,77 @@ Several directives may share a line (`@callback isEven arrow @fn arrow @calls is
   upper bound on the recall it could add. Gap conditions are read from syntax
   alone, so the attribution says where a miss sits, not that fixing that gap
   alone would find it.
+- **Tiers**: what each edge claims, from its precision
+  (`research/package-graphs/TIERS.md`). `Exact` and `SetupAware` are
+  **exact**; `Conservative` and `Ambiguous` are **conservative**; `Heuristic`
+  is **apart**; `Unknown` and `Unsupported` claim nothing. A typed-hierarchy
+  edge whose evidence says it dispatches to an `implementation`, a
+  `union_member` or an `inferred` target names a candidate, not the target;
+  the engine tiers it conservative, and the report stops on one that claims
+  exact. A refined row
+  claims only when its status is `Resolved` or `Ambiguous`, and an `Ambiguous`
+  row is never exact. The dump carries the engine's tier for every edge
+  (`claim_tier`) and the report stops when its own list disagrees, so a new
+  precision cannot be scored without a decision on both sides.
+  Recall per tier is over the same observed edges as recall: **exact-complete**
+  (an exact edge found the callee and the site is complete: at least one exact
+  or conservative target and no unresolved row), **exact**, **exact plus
+  conservative**, and **apart only** (found by a heuristic edge alone, which
+  no other view credits). The older recall column counts every edge with a
+  target, heuristic ones included, and is kept for comparison with earlier
+  reports.
+- **Precision by tier**: at executed sites, as for wrong targets, the share of
+  each tier's claimed targets the run called there. It is a lower bound: a run
+  takes some paths only. A single exact target the run never called there is
+  a **wrong exact target**; the target is 0 on every plan, and every case is
+  listed.
+- **Targets per site**: mean, nearest-rank p95 and maximum over the sites that
+  claim any target in the tier; how wide a tier's answers are.
+- **Open sites by reason**: every site that is not complete, counted under each
+  reason its answer gives (the refined row's reason or status, else the
+  unresolved row's). `none recorded` is an open site whose answer gives no
+  reason.
+- **Budget events**: the solver's budget status per dump and every budget it
+  reported as reached, such as `points_to.max_dynamic_vars`.
+- **Refined edges**: refined rows counted by bench tier, algorithm, status,
+  precision and whether they name a function.
+- **Sites gained by the refined plan**: sites where a refined plan claims an
+  exact or conservative target and the base plan claims none, by file, with
+  whether the file is a test or benchmark path and how many of the gained sites
+  the run executed.
+- `bench.py selftest` checks these measures on a synthetic package without
+  fetching, building or sandboxing anything: a site only a heuristic edge
+  answers counts as apart only, a typed candidate counts as conservative, a
+  single exact target the run did not call is a wrong exact target, a budget
+  reason is reported, and every tier section is rendered. It also checks the
+  outside-tool scorer: position conversion on a line with non-ASCII and astral
+  characters before a call, and that it matches an observed edge to the same
+  site and callee as polint's scorer. It checks driver coverage, that a
+  held-out package's misses lose their causes and examples, that the gate
+  leaves a flagged package out of recall but counts its wrong exact targets,
+  that recall under a recall target is reported as not met, and the
+  authorship guard's classification of changed paths.
+- **Driver coverage** (packages): the functions the recording entered, over
+  the census's functions in the analysed files (classes and static blocks
+  left out, since no call enters them). An entered function counts once, as
+  the innermost census function ending at the same byte. It says how much of
+  a package the recall speaks for.
+- **Held-out packages**: `## Held-out packages` scores the held-out set with
+  the tune set's measures, apart from it, and with no gap ranking, no cause
+  and no example of a missed edge, so nothing in the report invites tuning on
+  them. Wrong exact targets and answers with other targets and no unresolved
+  marker keep their examples: either is a defect to fix. A package whose
+  recording entered under 40% of its functions is flagged and left out of
+  held-out recall. The **held-out gate** pools recall per tier over the tune
+  set and over the unflagged held-out packages; it passes on a plan when
+  every held-out tier is within 5 points of the tune set and no held-out
+  package, flagged or not, has a wrong exact target or a false-complete
+  answer. The tune-set tables, cost and outside tools cover the tune set only.
+- **Recall targets**: `## Recall targets` compares the pooled tune-set recall of
+  each plan and tier against the targets of
+  `research/package-graphs/ITERATION-1-CLASSICAL.md`, and each tune package's
+  no-types recall against the per-package target. It is a report: a target
+  not met is a row marked `no` and does not fail the run.
 - **Cost**: `polint check` with the census rule pack in `rule-pack/` (asks for
   `Functions`, `CallGraph`, `Symbols`, `References`), cold and warm, wall time
   and peak RSS from the in-process cost record (`POLINT_GOLDEN_COST_PATH`) and
@@ -133,13 +250,43 @@ Two columns are reported throughout:
   produces. Rules have no public view of these facts. The benchmark reads them
   through an internal hook and adds no public view.
 
+## Outside tools
+
+`## Outside tools` puts [Jelly](https://github.com/cs-au-dk/jelly) beside
+polint, scored on the same observed calls with the same site and callee
+matching (`report.Spans`, `report.unobserved_targets`; the scorer imports them
+rather than copying them). Jelly runs twice per tune-set package, static and
+with `--approx`, on the same shipped source files polint analyses. Held-out
+packages are not run.
+
+```sh
+python3 tests/js-analysis-bench/bench.py outside [--only <package>]  # needs docker and network for the build
+```
+
+`bench.py outside` builds Jelly at a pinned commit from a hash-checked archive
+into an image on the pinned `node` base (`outside/Dockerfile.jelly`; the network
+is used only while building the image), then runs it in the same sandbox as the
+recorder, with `--network none`. Its raw call graphs are committed gzip-compressed
+under `baseline/outside/<run>/<package>.json.gz`, with a `<package>.meta.json`
+recording the image, arguments, exit code and wall time, so `bench.py report`
+scores them without docker. `outside/score_outside.py` converts Jelly's
+positions (1-based lines, 1-based end-exclusive UTF-16 columns) to the byte
+offsets every bench key uses.
+
+Jelly has no tiers, so every Jelly edge counts as claimed and its wrong-target
+counts are an upper bound; the report lists this and the other deviations from
+polint's scoring under the table. ACG (js-callgraph) is not run: its parser
+rejects ES2020 and drops such files silently.
+
 ## The internal hook
 
 `crates/polint-eval/src/harness/js_bench.rs` (compiled into the `polint`
 library as `crate::eval::js_bench`, test-only) holds one ignored test,
 `dump_js_bench_facts`. It analyses each tree listed in
 `POLINT_JS_BENCH_MANIFEST` with the capabilities in `POLINT_JS_BENCH_CAPS` and
-writes the facts as JSON (`polint-js-bench-facts-2`). It only reads facts and is
+writes the facts as JSON (`polint-js-bench-facts-3`: every edge row carries
+its `claim_tier`, refined rows their `reason` and `dispatch` evidence, and the
+document the solver's `solver_budget`). It only reads facts and is
 not part of any public surface. `report.py` runs it through the test binary.
 
 With `POLINT_JS_BENCH_CENSUS=1` the dump also carries a syntax census: every
@@ -150,6 +297,45 @@ census parses each file again on its own, reads no analysis store and feeds
 nothing back. The report runs it as a separate dump so the timed dumps are
 unchanged.
 
+With `POLINT_JS_BENCH_PACKAGE_GRAPH=1` the refined dump of each tune-set
+package also writes its package graph; the report stores it compressed and
+states its size, and stitches the trees in `inputs.toml`.
+
+With `POLINT_JS_BENCH_CORRECTIONS=1` the refined dump of each tune-set package
+loads the package's own recorded calls as corrections to its package graph,
+applies them after the export and writes what became of each. The report's
+`## Corrections` section counts them: applied, derived, stale and unanchored.
+Its recall with corrections is 100% by construction, because the corrections
+come from the recording it is checked against; it proves the correction layer
+and is not an accuracy number. Neither flag changes any other section.
+
+## Condition maps
+
+`conditions/` checks polint's resolution of `exports` and `imports` maps
+against Node itself. `conditions.py` generates, from a fixed seed, 2,400
+packages (1,400 `exports` maps, 1,000 `imports` maps) that mix nested condition
+maps, arrays, `*` patterns, `null` and invalid targets, numeric keys, the
+`import`, `require`, `node`, `default`, `browser`, `worker`, `module-sync` and
+custom conditions, maps that select nothing, declaration files, bare and self
+references, and targets that name other specifiers, including cycles. Node
+(the pinned image) resolves every request once per condition set and in both
+modes, and `corpus.json` records each file it loaded and under which sets.
+
+```sh
+python3 tests/js-analysis-bench/conditions/conditions.py record   # needs docker
+python3 tests/js-analysis-bench/conditions/conditions.py check    # no docker
+```
+
+`record` runs `resolve.mjs` in the sandbox with `--network none` and the
+package tree mounted read-only. `check` regenerates the maps and fails unless
+they are the committed ones. The Rust test
+`every_file_node_loads_through_a_condition_map_is_named_and_one_file_only_where_node_agrees`
+reads the corpus with no Node and fails a request when polint does not name a
+file Node loads, or names one file as the exact answer where Node loads
+different files under different sets. A set under which Node loads nothing
+runs no call, so it does not bear on the exact answer, and a declaration file
+holds no function a call can reach.
+
 ## Limits
 
 - Labels are per line, so two sites on one line calling the same callee count
@@ -159,32 +345,36 @@ unchanged.
   denominator.
 - Implicit observed edges (accessors, coercion, iterator protocol) have no
   call expression. They are listed by kind but left out of headline recall.
-- Four zod files need TypeScript transforms (not just type stripping) and run
-  without instrumentation, so calls into them are not observed.
+- Four zod files and one immer file need TypeScript transforms (not just type
+  stripping) and run without instrumentation, so calls into them are not
+  observed.
 - Wall times come from whatever machine runs the report, and on a shared
   machine they move with its load: the committed baseline ran beside other
   jobs, and the small trees' cold times about doubled from one full run to
   the next. Compare times only between runs on the same quiet machine; peak
   RSS, stored bytes and every score are stable.
-- Packages use polint's default discovery, so default excludes apply (chalk's
-  `source/vendor/` is not analysed).
+- A package is analysed as the package it is: the report writes a
+  `.polint.toml` into each staged tree whose `[workspace] include` is the
+  package's `analysed` globs and whose `exclude` keeps only
+  `**/node_modules/**` and `**/.git/**`, so a package's own `vendor/` (chalk's
+  `source/vendor/`) is analysed. A repository keeps polint's default excludes.
 
 ## Findings in the baseline
 
 These are found by the benchmark and are not changed by it:
 
-- Functions under a unary operator (`!function(){}()`, `void function(){}()`)
-  are not extracted, so minified UMD bundles such as dayjs yield almost no
-  facts.
-- Functions declared inside `try`, `catch` or `if` blocks are not
-  extracted, nor are the calls in their bodies. Calls written directly in try,
-  finally and if blocks, and functions in bare blocks and loop bodies, are.
+- Every function and call site Oxc parses in the tune set is extracted:
+  the report's extraction gaps (unary IIFEs, functions in try / catch / if
+  blocks, calls in exported initialisers, files not analysed, other
+  extraction) are 0 on every tune package.
 - Member calls on object-literal functions and namespace imports are not
-  resolved. This is the largest single gap on the real packages: 1053 of 2582
-  missed base edges, 724 of them on zod.
-- Of the base misses that are not extraction or named resolution gaps, most
-  are identifier calls to an arrow function (435) and `(0, f)(x)` calls to
-  a declaration (134, async's compiled CommonJS interop).
+  resolved. This is the largest single gap on the real packages: 730 of 1814
+  missed base edges, 306 of them on zod.
+- Of the base misses that are not named resolution gaps, most are identifier
+  calls to an arrow function (247) and `(0, f)(x)` calls to a declaration
+  (134). All but at most one of the latter are async's compiled CommonJS
+  interop: the sites are extracted with the last operand as callee and miss
+  for the reason the operand's own call would.
 - A class is one function spanning the class; there is no constructor function.
 - On underscore both plans mark `iteratee(...)` inside `map` unresolved:
   `iteratee = cb(iteratee, context)` can return closures the refined walk does
@@ -194,9 +384,9 @@ These are found by the benchmark and are not changed by it:
   equals base recall there.
 - `.polint/cache` holds tens to hundreds of MB per MB of source after a
   cold run, mostly layer blobs.
-- The refined plan's dump on zod takes about 80 s and 3.6 GB, against 11 s
-  and 1.3 GB for the base plan, within its 180 s budget. Most of it is the
-  refined-call solver, not the callable-flow walk. Refined recall on zod
-  equals base recall (217 of 1308 observed edges).
-- Sites the base plan stops at an import binding (57 on axios, 25 on zod)
+- On the shipped set the refined plan's dump on zod takes about 11 s and
+  1.0 GB, against about 4 s and 0.5 GB for the base plan, within its 180 s
+  budget; `semantic_graph` is about 30% of its summed stage time. Refined
+  recall on zod equals base recall (721 of 1308 observed edges).
+- Sites the base plan stops at an import binding (1 on axios, 1 on zod)
   have no target and no unresolved marker on the refined plan.

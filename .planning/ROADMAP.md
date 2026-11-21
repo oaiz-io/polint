@@ -8,6 +8,7 @@
 - [x] **v1.3 Graph Engine Precision** - shared semantic graph, reachability/root semantics, Go RTA, JS/TS token/object models, adaptation, unknown taxonomy, budgets, and benchmark promotion gates. Archive: [v1.3 roadmap](milestones/v1.3-ROADMAP.md).
 - [x] **v1.4 Policy Query Surface** - preview SDK views and typed query objects for realistic repo-local policies over calls, control flow, and data flow. Completed 2026-06-20. Archive: [v1.4 roadmap](milestones/v1.4-ROADMAP.md).
 - [ ] **v2.0 Static Analysis 2.0 Implementation** - durable, queryable local semantic layer: private SQLite/rusqlite store, summary persistence and invalidation frontier, warm `polint review` payoff, internal query engine, exploratory `polint graph` CLI, lexical-search boundary, and scale/recovery gates. 9 phases (63-71).
+- [ ] **v2.1 Package Graphs, Iteration 1 (classical)** - the engine direction of `AGENTS.md`: stages 0 and 1 of the accuracy ladder made as accurate as classical analysis allows on JS/TS, the first package graph and stitch, and the smallest proof of the correction layer. A parallel track to v2.0; every result reaches rules through the SDK view that serves it (`AGENTS.md`, No Side Engines). 8 phases (72-79), one pull request each, stacked on `research/package-graph-pipeline` (#141). Plan: `research/package-graphs/implementation/README.md`.
 
 ## Current Status
 
@@ -231,6 +232,101 @@ Plans:
 
 ---
 
+## Phases (v2.1 Package Graphs, Iteration 1)
+
+Planned 2026-11-17 from `research/package-graphs/`. Numbering continues from v2.0's last phase 71. Each phase is one pull request; 73 and 74 run in parallel after 72, 77 and 78 in parallel after 76. Every phase keeps the SDK's shape unbroken and serves its results through the existing views (PG-11), and keeps the held-out rule (PG-12).
+
+- [ ] **Phase 72: Package-Graph Measurement Baseline** - tiers, executed-site precision, targets per site, open sites, budget events, refined-edge census, outside-tool columns from a tracked scorer, the held-out set recorded, cost re-measured on a quiet machine. *(PG-01, PG-02, PG-03)*
+- [ ] **Phase 73: Read All the Code** - unary IIFEs, block-level functions, exported initialisers, sequence callees, a package's own `vendor/`. *(PG-04)*
+- [ ] **Phase 74: Solver Call Rule and Budget Semantics** - no global latch, derived edges survive a budget event, the call rule over per-function places, stable slot identities, order-independent solve. *(PG-05)*
+- [ ] **Phase 75: Lower JS/TS Value Flow** - the closed construct list lowered from MIR in order of edges won; platform as a package model; the walker retired. *(PG-06)*
+- [ ] **Phase 76: Solver Scale and Tiers** - fixed point with no budget event on the tune set, shared sets, cycle collapse, difference propagation, indirection bound, tier assignment with assumption ids, the held-out gate. *(PG-07)*
+- [ ] **Phase 77: Types in the Solver** - checker facts as filters and seeds; the join rule; zero wrong exact targets. *(PG-08)*
+- [ ] **Phase 78: Package Graph v0 and Stitch** - crate-private export through the bench dump, stitch against a resolved tree, the composition test on the fixture and three real trees, identity stability, size and stitch time. *(PG-09)*
+- [ ] **Phase 79: Correction Layer Proof** - the bench's recorded edges as `observed` corrections, applied after the engine output; stale detection. *(PG-10)*
+
+### Phase 72: Package-Graph Measurement Baseline
+
+**Goal:** Every number the iteration is judged by exists in the committed bench report before any engine change: per-tier recall, precision per tier, open sites by reason, budget events, the outside-tool columns, and the held-out set; and the axios cost regression observed in `research/package-graphs/DIAGNOSIS.md` §5 is confirmed or refuted.
+
+**Depends on:** #141 (the direction documents).
+
+**Requirements:** PG-01, PG-02, PG-03
+
+**Plans:** 1 plan — `.planning/phases/72-package-graph-measurement-baseline/72-01-PLAN.md`
+
+### Phase 73: Read All the Code
+
+**Goal:** Stage 0 is complete on the tune set: no observed edge is lost because its site or callee is not extracted.
+
+**Depends on:** Phase 72.
+
+**Requirements:** PG-04
+
+**Plans:** 1 plan — `.planning/phases/73-read-all-the-code/73-01-PLAN.md`
+
+### Phase 74: Solver Call Rule and Budget Semantics
+
+**Goal:** The TS/JS points-to solver can carry what lowering will give it: no result is ever blanked by a budget, calls connect arguments, returns and receivers to callees, and the solve is a fixed point independent of constraint order.
+
+**Depends on:** Phase 72 (parallel with 73).
+
+**Requirements:** PG-05
+
+**Plans:** 1 plan — `.planning/phases/74-solver-call-rule-and-budget-semantics/74-01-PLAN.md`
+
+### Phase 75: Lower JS/TS Value Flow
+
+**Goal:** Every construct in the closed list is a constraint from MIR, and the walker is gone or measured negligible.
+
+**Depends on:** Phases 73 and 74.
+
+**Requirements:** PG-06
+
+**Plans:** 1 plan — `.planning/phases/75-lower-js-ts-value-flow/75-01-PLAN.md`
+
+### Phase 76: Solver Scale and Tiers
+
+**Goal:** The solve fits the cost targets with no budget event on the tune set, and every site has a tier with recorded assumptions.
+
+**Depends on:** Phase 75.
+
+**Requirements:** PG-07
+
+**Plans:** 1 plan — `.planning/phases/76-solver-scale-and-tiers/76-01-PLAN.md`
+
+### Phase 77: Types in the Solver
+
+**Goal:** Types raise recall without a single wrong exact claim.
+
+**Depends on:** Phase 76.
+
+**Requirements:** PG-08
+
+**Plans:** 1 plan — `.planning/phases/77-types-in-the-solver/77-01-PLAN.md`
+
+### Phase 78: Package Graph v0 and Stitch
+
+**Goal:** One package graph is exported, two are stitched, and stitched equals whole.
+
+**Depends on:** Phase 76 (Phase 77 optional).
+
+**Requirements:** PG-09
+
+**Plans:** 1 plan — `.planning/phases/78-package-graph-v0-and-stitch/78-01-PLAN.md`
+
+### Phase 79: Correction Layer Proof
+
+**Goal:** Recorded edges enter as corrections beside the engine output, and nothing in the engine reads them.
+
+**Depends on:** Phase 78.
+
+**Requirements:** PG-10
+
+**Plans:** 1 plan — `.planning/phases/79-correction-layer-proof/79-01-PLAN.md`
+
+---
+
 ## Requirement Coverage
 
 | Phase | Requirements |
@@ -246,6 +342,19 @@ Plans:
 | 71 | VAL-01, VAL-03, VAL-07, VAL-08, VAL-09 |
 
 67/67 v2.0 requirements mapped; no orphans, no double-mapping. BENCH-03 is owned by Phase 63 (gate wiring) and enforced as a phase-boundary gate from Phase 64 onward.
+
+| Phase | Requirements (v2.1) |
+|-------|--------------|
+| 72 | PG-01, PG-02, PG-03 |
+| 73 | PG-04 |
+| 74 | PG-05 |
+| 75 | PG-06 |
+| 76 | PG-07 |
+| 77 | PG-08 |
+| 78 | PG-09 |
+| 79 | PG-10 |
+
+PG-11 and PG-12 are boundaries every v2.1 phase enforces; they are not owned by one phase.
 
 ---
 *Roadmap generated: 2026-07-09 after v2.0 requirements approval*

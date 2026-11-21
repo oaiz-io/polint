@@ -11,10 +11,7 @@ pub struct AliasOutput {
 
 impl AliasOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.answers.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.answers, |row| row.stable_key, |row| row.id);
         for (index, row) in self.answers.iter_mut().enumerate() {
             row.id = AliasAnswerId(index as u64);
         }

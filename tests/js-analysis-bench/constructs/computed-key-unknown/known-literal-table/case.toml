@@ -1,0 +1,3 @@
+construct = "computed-key-unknown"
+held_out = false
+description = "A key computed at run time selects from a literal whose fields are all known; the answer is every field, left open."

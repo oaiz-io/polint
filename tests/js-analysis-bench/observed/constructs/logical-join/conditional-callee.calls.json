@@ -1,0 +1,108 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 6,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..70",
+      "name": "onDone"
+    },
+    {
+      "function": "main.js@130..184",
+      "name": "log"
+    },
+    {
+      "function": "main.js@186..292",
+      "name": "settle"
+    },
+    {
+      "function": "main.js@294..397",
+      "name": "notify"
+    },
+    {
+      "function": "main.js@399..506",
+      "name": "traced"
+    },
+    {
+      "function": "main.js@72..128",
+      "name": "onFail"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@243..265",
+      "syntax": "expression",
+      "callee": "main.js@12..70",
+      "callee_name": "onDone"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@243..265",
+      "syntax": "expression",
+      "callee": "main.js@72..128",
+      "callee_name": "onFail"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@357..377",
+      "syntax": "identifier",
+      "callee": "main.js@12..70",
+      "callee_name": "onDone"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@449..482",
+      "syntax": "expression",
+      "callee": "main.js@72..128",
+      "callee_name": "onFail"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@450..462",
+      "syntax": "identifier",
+      "callee": "main.js@130..184",
+      "callee_name": "log"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@508..536",
+      "syntax": "identifier",
+      "callee": "main.js@186..292",
+      "callee_name": "settle"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@555..584",
+      "syntax": "identifier",
+      "callee": "main.js@186..292",
+      "callee_name": "settle"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@603..617",
+      "syntax": "identifier",
+      "callee": "main.js@294..397",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@636..648",
+      "syntax": "identifier",
+      "callee": "main.js@294..397",
+      "callee_name": "notify"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@667..681",
+      "syntax": "identifier",
+      "callee": "main.js@399..506",
+      "callee_name": "traced"
+    }
+  ]
+}

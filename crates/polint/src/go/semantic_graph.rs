@@ -47,9 +47,7 @@ pub fn project_go_semantic(
         };
         builder.push_constraint(
             interner,
-            ConstraintKind::CallConstraint {
-                callsite: callsite_node,
-            },
+            ConstraintKind::call_at(callsite_node),
             &interner.resolve(callsite.stable_key),
         );
         if callsite.status != GoSemanticCallStatus::ResolvedStatic {

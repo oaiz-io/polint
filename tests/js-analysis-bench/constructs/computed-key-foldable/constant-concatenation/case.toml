@@ -1,0 +1,3 @@
+construct = "computed-key-foldable"
+held_out = false
+description = "A computed key folds to a constant: string concatenation and a `const` string."

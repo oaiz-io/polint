@@ -254,6 +254,7 @@ fn finish(
         derived_edges: edges_by_key.into_values().collect(),
         budget_status,
         budget_reasons,
+        incomplete_sites: 0,
     }
     .normalized(interner)
 }

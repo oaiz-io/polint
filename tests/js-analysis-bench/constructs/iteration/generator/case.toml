@@ -1,0 +1,3 @@
+construct = "iteration"
+held_out = true
+description = "A generator yields function values that a `for…of` loop and spread consume."

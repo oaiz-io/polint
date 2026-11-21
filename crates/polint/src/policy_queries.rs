@@ -325,52 +325,25 @@ fn matching_call_events(
     query_digest: &str,
 ) -> Vec<PolicyViolation> {
     let site_by_id = call_sites_by_id(db);
-    if !db.refined_call_edges().is_empty() {
-        return db
-            .refined_call_edges()
-            .iter()
-            .filter_map(|edge| {
-                if call_pattern_matches_edge(db, pattern, edge, &site_by_id) {
-                    Some(violation_for_edge(
-                        db,
-                        edge,
-                        &site_by_id,
-                        PolicyOperation::EventsMatching,
-                        query_digest,
-                        vec![
-                            ("event", "call".to_string()),
-                            ("target", best_call_target_label(db, edge, &site_by_id)),
-                        ],
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
-    }
-
-    db.call_sites()
+    db.refined_call_edges()
         .iter()
-        .filter_map(|site| {
-            if call_pattern_matches_site(pattern, site) {
-                Some(PolicyViolation::new(
+        .filter_map(|edge| {
+            if call_pattern_matches_edge(db, pattern, edge, &site_by_id) {
+                Some(violation_for_edge(
+                    db,
+                    edge,
+                    &site_by_id,
                     PolicyOperation::EventsMatching,
                     query_digest,
-                    db.path_for(site.file),
-                    site.span.diagnostic_range(),
-                    policy_status_from_call_status_and_precision(site.status, site.precision),
-                    policy_precision_from_call_precision(site.precision),
                     vec![
-                        ("event".to_string(), "call".to_string()),
-                        ("target".to_string(), call_site_label(site)),
+                        ("event", "call".to_string()),
+                        ("target", best_call_target_label(db, edge, &site_by_id)),
                     ],
                 ))
             } else {
                 None
             }
         })
-        .collect::<Vec<_>>()
-        .into_iter()
         .chain(matching_function_call_events(db, pattern, query_digest))
         .collect()
 }
@@ -1675,39 +1648,22 @@ fn matching_flow_sinks(
 ) -> Vec<FlowSink> {
     let mut sinks = BTreeMap::<(CallSiteId, DataFlowNodeId), FlowSink>::new();
 
-    if !db.refined_call_edges().is_empty() {
-        for edge in db.refined_call_edges() {
-            let Some(site) = site_by_id.get(&edge.site).copied() else {
-                continue;
-            };
-            if !sink_matches_edge(db, pattern, edge, site_by_id) {
-                continue;
-            }
-            push_flow_sinks_for_site(
-                db,
-                store,
-                pattern,
-                site,
-                best_call_target_label(db, edge, site_by_id),
-                policy_precision_from_call_precision(edge.precision),
-                &mut sinks,
-            );
+    for edge in db.refined_call_edges() {
+        let Some(site) = site_by_id.get(&edge.site).copied() else {
+            continue;
+        };
+        if !sink_matches_edge(db, pattern, edge, site_by_id) {
+            continue;
         }
-    } else {
-        for site in db.call_sites() {
-            if !sink_matches_site(pattern, site) {
-                continue;
-            }
-            push_flow_sinks_for_site(
-                db,
-                store,
-                pattern,
-                site,
-                call_site_label(site),
-                policy_precision_from_call_precision(site.precision),
-                &mut sinks,
-            );
-        }
+        push_flow_sinks_for_site(
+            db,
+            store,
+            pattern,
+            site,
+            best_call_target_label(db, edge, site_by_id),
+            policy_precision_from_call_precision(edge.precision),
+            &mut sinks,
+        );
     }
 
     sinks.into_values().collect()
@@ -1770,18 +1726,6 @@ fn nodes_for_place(store: &DataFlowStore, place: PlaceId) -> Vec<&DataFlowNodeFa
         .collect()
 }
 
-fn sink_matches_candidates(pattern: &SinkPattern, candidates: &[String]) -> bool {
-    match pattern.kind() {
-        SinkPatternKind::Call => pattern
-            .values()
-            .iter()
-            .any(|value| candidates.iter().any(|candidate| candidate == value)),
-        SinkPatternKind::Logger => candidates
-            .iter()
-            .any(|candidate| logger_candidate(candidate)),
-    }
-}
-
 fn sink_matches_edge(
     db: &AnalysisDb,
     pattern: &SinkPattern,
@@ -1799,11 +1743,6 @@ fn sink_matches_edge(
             .all()
             .any(|candidate| logger_candidate(candidate)),
     }
-}
-
-fn sink_matches_site(pattern: &SinkPattern, site: &CallSiteFact) -> bool {
-    let candidates = vec![call_site_label(site)];
-    sink_matches_candidates(pattern, &candidates)
 }
 
 fn function_call_match<'a>(function: &'a FunctionFact, pattern: &EventPattern) -> Option<&'a str> {
@@ -2328,25 +2267,14 @@ fn ordered_control_call_events(
     let blocks = cfg_blocks_by_operation(db);
     let mut events = Vec::new();
 
-    if !db.refined_call_edges().is_empty() {
-        for edge in db.refined_call_edges() {
-            if !precision_meets(edge.precision, minimum_precision) {
-                continue;
-            }
-            if let Some(event) =
-                control_event_for_edge(db, edge, &site_by_id, &operation_orders, &blocks)
-            {
-                events.push(event);
-            }
+    for edge in db.refined_call_edges() {
+        if !precision_meets(edge.precision, minimum_precision) {
+            continue;
         }
-    } else {
-        for site in db.call_sites() {
-            if precision_rank(policy_precision_from_call_precision(site.precision))
-                < precision_rank(minimum_precision)
-            {
-                continue;
-            }
-            events.push(control_event_for_site(db, site, &operation_orders, &blocks));
+        if let Some(event) =
+            control_event_for_edge(db, edge, &site_by_id, &operation_orders, &blocks)
+        {
+            events.push(event);
         }
     }
 
@@ -2447,33 +2375,6 @@ fn control_event_for_edge(
         precision: edge.precision,
         confidence: Some(edge.confidence),
     })
-}
-
-fn control_event_for_site(
-    db: &AnalysisDb,
-    site: &CallSiteFact,
-    operation_orders: &BTreeMap<(MirBodyId, MirOpId), OperationOrder>,
-    blocks: &BTreeMap<(MirBodyId, MirOpId), BasicBlockId>,
-) -> ControlCallEvent {
-    let label = call_site_label(site);
-    ControlCallEvent {
-        function: site.caller,
-        block: blocks.get(&(site.body, site.operation)).copied(),
-        body: site.body,
-        operation: site.operation,
-        site: site.id,
-        result: site.result,
-        arguments: site.arguments.clone(),
-        file: db.path_for(site.file),
-        range: site.span.diagnostic_range(),
-        target_label: label.clone(),
-        candidates: vec![label],
-        order: control_order(db, site, operation_orders),
-        order_source: control_order_source(site, operation_orders),
-        status: site.status,
-        precision: site.precision,
-        confidence: None,
-    }
 }
 
 /// Block of every CFG-placed MIR operation, built once per control-event pass.
@@ -2704,14 +2605,6 @@ fn call_pattern_matches_edge(
     }
     let candidates = call_edge_match_candidates(db, edge, site_by_id);
     explicit_values_match_preferred(pattern.values(), &candidates.semantic, &candidates.syntax)
-}
-
-fn call_pattern_matches_site(pattern: &EventPattern, site: &CallSiteFact) -> bool {
-    if pattern.kind() != EventPatternKind::Call {
-        return false;
-    }
-    let label = call_site_label(site);
-    pattern.values().iter().any(|value| value == &label)
 }
 
 fn call_pattern_matches_root(
@@ -3126,17 +3019,6 @@ mod tests {
     }
 
     #[test]
-    fn events_matching_fallback_uses_call_site_precision_for_status() {
-        let db = policy_query_db_with_conservative_fallback_call_site();
-
-        let violations = matching_events(&db, EventPattern::call("dangerous"));
-
-        assert_eq!(violations.len(), 1);
-        assert_eq!(violations[0].status(), PolicyStatus::Heuristic);
-        assert_eq!(violations[0].precision(), PolicyPrecision::Conservative);
-    }
-
-    #[test]
     fn events_matching_uses_syntax_function_calls_without_call_site_facts() {
         let db = policy_query_db_with_syntax_function_call("client.dangerous");
 
@@ -3307,21 +3189,6 @@ mod tests {
         assert!(diagnostic.evidence.iter().any(|evidence| {
             evidence.label == "required_guard" && evidence.value == "authorize"
         }));
-    }
-
-    #[test]
-    fn control_flow_missing_guard_treats_local_callsite_match_as_heuristic() {
-        let db = policy_query_db_with_unresolved_conservative_call_site();
-        let query = GuardQuery::new(
-            EventPattern::call("dangerous"),
-            GuardPattern::call_any(["authorize"]),
-        );
-
-        let violations = missing_guards(&db, query);
-
-        assert_eq!(violations.len(), 1);
-        assert_eq!(violations[0].status(), PolicyStatus::Heuristic);
-        assert_eq!(violations[0].precision(), PolicyPrecision::Conservative);
     }
 
     #[test]
@@ -5193,49 +5060,6 @@ mod tests {
         db
     }
 
-    fn policy_query_db_with_conservative_fallback_call_site() -> AnalysisDb {
-        let mut db = AnalysisDb::new();
-        let file = db.add_file(
-            PathBuf::from("src/main.go"),
-            "src/main.go".to_string(),
-            "package main\nfunc main() { dangerous() }\n".to_string(),
-        );
-        let main = push_test_function(&mut db, file, "main", 1, false);
-        let mut site = call_site(0, file, main, "dangerous");
-        site.precision = CallPrecision::Conservative;
-
-        db.replace_call_facts(CallOutput {
-            sites: vec![site],
-            targets: Vec::new(),
-            unresolved: Vec::new(),
-        })
-        .expect("valid call facts");
-        db.replace_refined_call_facts(RefinedCallOutput { edges: Vec::new() })
-            .expect("valid refined call facts");
-        db
-    }
-
-    fn policy_query_db_with_unresolved_conservative_call_site() -> AnalysisDb {
-        let mut db = AnalysisDb::new();
-        let file = db.add_file(
-            PathBuf::from("src/main.go"),
-            "src/main.go".to_string(),
-            "package main\nfunc main() { dangerous() }\n".to_string(),
-        );
-        let main = push_test_function(&mut db, file, "main", 1, false);
-        let mut site = call_site(0, file, main, "dangerous");
-        site.status = CallTargetStatus::Unresolved;
-        site.precision = CallPrecision::Conservative;
-
-        db.replace_call_facts(CallOutput {
-            sites: vec![site],
-            targets: Vec::new(),
-            unresolved: Vec::new(),
-        })
-        .expect("valid call facts");
-        db
-    }
-
     fn policy_query_db_with_syntax_function_call(call: &str) -> AnalysisDb {
         let mut db = AnalysisDb::new();
         let file = db.add_file(
@@ -5305,6 +5129,41 @@ mod tests {
         db.replace_refined_call_facts(RefinedCallOutput { edges: vec![edge] })
             .expect("valid refined call facts");
         db
+    }
+
+    #[test]
+    fn call_graph_serves_an_ambiguous_exact_answer_as_conservative() {
+        let mut db = AnalysisDb::new();
+        let file = db.add_file(
+            PathBuf::from("src/main.go"),
+            "src/main.go".to_string(),
+            "package main\nfunc main() { run() }\nfunc run() {}\n".to_string(),
+        );
+        let main = push_test_function(&mut db, file, "main", 1, false);
+        let run = push_test_function(&mut db, file, "run", 2, false);
+        let site = call_site(0, file, main, "run");
+        db.replace_call_facts(CallOutput {
+            sites: vec![site.clone()],
+            targets: Vec::new(),
+            unresolved: Vec::new(),
+        })
+        .expect("valid call facts");
+        let mut edge = refined_edge(0, site.id, main, run, "run");
+        edge.base_target = None;
+        edge.status = CallTargetStatus::Ambiguous;
+        edge.precision = CallPrecision::Exact;
+        db.replace_refined_call_facts(RefinedCallOutput { edges: vec![edge] })
+            .expect("valid refined call facts");
+
+        let index = db.call_graph_index();
+        let served = index.by_caller[&main]
+            .iter()
+            .map(|&edge| {
+                let edge = index.edge(&db, edge);
+                (edge.function, edge.precision)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(served, [(Some(run), CallPrecision::Conservative)]);
     }
 
     fn policy_query_db_with_unresolved_target() -> AnalysisDb {
@@ -6200,6 +6059,7 @@ mod tests {
             evidence: Vec::new(),
             input_stable_keys: Vec::new(),
             stable_key: crate::core::stable_key_for_test(&format!("refined:{id}:{label}")),
+            assumptions: Vec::new(),
         }
     }
 
@@ -6232,6 +6092,7 @@ mod tests {
             stable_key: crate::core::stable_key_for_test(&format!(
                 "refined:{id}:{label}:unresolved"
             )),
+            assumptions: Vec::new(),
         }
     }
 }

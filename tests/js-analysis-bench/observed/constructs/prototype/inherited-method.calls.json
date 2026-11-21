@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js"
@@ -7,6 +7,24 @@
   "instrumented_functions": 4,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@101..202",
+      "name": "describe"
+    },
+    {
+      "function": "main.js@12..71",
+      "name": "Animal"
+    },
+    {
+      "function": "main.js@205..282",
+      "name": "Dog"
+    },
+    {
+      "function": "main.js@368..418",
+      "name": "sound"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

@@ -12,9 +12,6 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// The directory, under the repository root, that holds model files.
-const MODELS_DIRECTORY: &str = ".polint/models";
-
 const ROLES: &[&str] = &[
     "router",
     "route",
@@ -127,25 +124,10 @@ pub(crate) struct RepositoryRouteModels {
 
 /// Reads every `[[go_route]]` table under `.polint/models`.
 pub(crate) fn load_repository_route_models(root: &Path) -> RepositoryRouteModels {
-    let directory = root.join(MODELS_DIRECTORY);
-    let mut paths = std::fs::read_dir(&directory)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "toml"))
-        .collect::<Vec<_>>();
-    paths.sort();
     let mut models = Vec::new();
     let mut problems = Vec::new();
-    for path in paths {
-        let name = format!(
-            "{MODELS_DIRECTORY}/{}",
-            path.file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default()
-        );
-        let text = match std::fs::read_to_string(&path) {
+    for super::model_files::ModelFile { name, text } in super::model_files::model_files(root) {
+        let text = match text {
             Ok(text) => text,
             Err(error) => {
                 problems.push(format!("{name}: could not be read: {error}"));
@@ -280,6 +262,23 @@ middleware_from = 0
         assert_eq!(
             load_repository_route_models(root.path()),
             super::RepositoryRouteModels::default()
+        );
+    }
+
+    #[test]
+    fn a_model_file_over_one_mebibyte_is_reported_and_not_read() {
+        let root = tempfile::tempdir().unwrap();
+        write(
+            root.path(),
+            "big.toml",
+            &format!("# {}\n", "x".repeat(1_048_576)),
+        );
+        let problems = load_repository_route_models(root.path()).problems;
+        assert_eq!(
+            problems,
+            vec![
+                ".polint/models/big.toml: could not be read: larger than 1048576 bytes".to_string()
+            ]
         );
     }
 }

@@ -259,52 +259,58 @@ impl DomainOutput {
     }
 
     pub fn normalized(mut self, interner: &crate::internal_core::StableKeyInterner) -> Self {
-        self.observations.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.body,
-                left.block,
-                left.operation,
-                left.place,
-                left.slot,
-                left.location,
-                left.status,
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.body,
-                    right.block,
-                    right.operation,
-                    right.place,
-                    right.slot,
-                    right.location,
-                    right.status,
-                    right.id,
-                ))
-        });
-        self.events.sort_by(|left, right| {
-            (
-                interner.resolve(left.stable_key),
-                left.body,
-                left.block,
-                left.operation,
-                left.slot,
-                left.status,
-                left.reason.as_str(),
-                left.id,
-            )
-                .cmp(&(
-                    interner.resolve(right.stable_key),
-                    right.body,
-                    right.block,
-                    right.operation,
-                    right.slot,
-                    right.status,
-                    right.reason.as_str(),
-                    right.id,
-                ))
-        });
+        {
+            let keys = interner.read_view();
+            self.observations.sort_by(|left, right| {
+                (
+                    keys.text(left.stable_key),
+                    left.body,
+                    left.block,
+                    left.operation,
+                    left.place,
+                    left.slot,
+                    left.location,
+                    left.status,
+                    left.id,
+                )
+                    .cmp(&(
+                        keys.text(right.stable_key),
+                        right.body,
+                        right.block,
+                        right.operation,
+                        right.place,
+                        right.slot,
+                        right.location,
+                        right.status,
+                        right.id,
+                    ))
+            });
+        }
+        {
+            let keys = interner.read_view();
+            self.events.sort_by(|left, right| {
+                (
+                    keys.text(left.stable_key),
+                    left.body,
+                    left.block,
+                    left.operation,
+                    left.slot,
+                    left.status,
+                    left.reason.as_str(),
+                    left.id,
+                )
+                    .cmp(&(
+                        keys.text(right.stable_key),
+                        right.body,
+                        right.block,
+                        right.operation,
+                        right.slot,
+                        right.status,
+                        right.reason.as_str(),
+                        right.id,
+                    ))
+            });
+        }
         for (index, fact) in self.observations.iter_mut().enumerate() {
             fact.id = DomainObservationId(index as u64);
         }

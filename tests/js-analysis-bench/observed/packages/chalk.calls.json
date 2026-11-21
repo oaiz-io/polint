@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "source/index.js",
@@ -10,6 +10,184 @@
   "instrumented_functions": 51,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "source/index.js@1377..1486",
+      "name": "constructor"
+    },
+    {
+      "function": "source/index.js@1511..1677",
+      "name": "chalkFactory"
+    },
+    {
+      "function": "source/index.js@1680..1744",
+      "name": "createChalk"
+    },
+    {
+      "function": "source/index.js@2017..2217",
+      "name": "get"
+    },
+    {
+      "function": "source/index.js@2246..2393",
+      "name": "get"
+    },
+    {
+      "function": "source/index.js@2610..3373",
+      "name": "createModelConverters"
+    },
+    {
+      "function": "source/index.js@2702..2774",
+      "name": "ansi"
+    },
+    {
+      "function": "source/index.js@2794..2872",
+      "name": "ansi256"
+    },
+    {
+      "function": "source/index.js@2964..3008",
+      "name": "ansi"
+    },
+    {
+      "function": "source/index.js@3028..3078",
+      "name": "ansi256"
+    },
+    {
+      "function": "source/index.js@3111..3160",
+      "name": ""
+    },
+    {
+      "function": "source/index.js@3268..3318",
+      "name": "ansi"
+    },
+    {
+      "function": "source/index.js@3801..4375",
+      "name": "get"
+    },
+    {
+      "function": "source/index.js@4081..4274",
+      "name": "styleFunction"
+    },
+    {
+      "function": "source/index.js@441..586",
+      "name": "assertValidLevel"
+    },
+    {
+      "function": "source/index.js@4489..4535",
+      "name": "get"
+    },
+    {
+      "function": "source/index.js@4628..4903",
+      "name": "createStyler"
+    },
+    {
+      "function": "source/index.js@4928..6011",
+      "name": "createBuilder"
+    },
+    {
+      "function": "source/index.js@5051..5524",
+      "name": "builder"
+    },
+    {
+      "function": "source/index.js@6033..7314",
+      "name": "applyStyle"
+    },
+    {
+      "function": "source/index.js@817..849",
+      "name": "get"
+    },
+    {
+      "function": "source/index.js@852..917",
+      "name": "set"
+    },
+    {
+      "function": "source/index.js@944..1352",
+      "name": "applyOptions"
+    },
+    {
+      "function": "source/utilities.js@264..736",
+      "name": "stringReplaceAll"
+    },
+    {
+      "function": "source/utilities.js@745..1186",
+      "name": "stringEncaseCRLFWithFirstIndex"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@105..139",
+      "name": ""
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@162..220",
+      "name": "wrapAnsi256"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@178..220",
+      "name": ""
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@243..331",
+      "name": "wrapAnsi16m"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@259..331",
+      "name": ""
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@3194..6929",
+      "name": "assembleStyles"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@4625..5123",
+      "name": "value"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@5169..5715",
+      "name": "value"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@5411..5445",
+      "name": ""
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@5772..5823",
+      "name": "value"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@5874..6635",
+      "name": "value"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@6689..6770",
+      "name": "value"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@6824..6877",
+      "name": "value"
+    },
+    {
+      "function": "source/vendor/ansi-styles/index.js@89..139",
+      "name": "wrapAnsi16"
+    },
+    {
+      "function": "source/vendor/supports-color/index.js@1110..1424",
+      "name": "envForceColor"
+    },
+    {
+      "function": "source/vendor/supports-color/index.js@1426..1585",
+      "name": "translateLevel"
+    },
+    {
+      "function": "source/vendor/supports-color/index.js@1587..4104",
+      "name": "_supportsColor"
+    },
+    {
+      "function": "source/vendor/supports-color/index.js@235..585",
+      "name": "hasFlag"
+    },
+    {
+      "function": "source/vendor/supports-color/index.js@4113..4297",
+      "name": "createSupportsColor"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

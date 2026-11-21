@@ -29,6 +29,14 @@ the lower-level syntax fact.
 - Complexity is syntax-level and intentionally conservative.
 - Invalid parse trees may reduce or omit facts for a file.
 - TS/JS facts do not use TypeScript type checking.
+- A TS/JS function with no static name (an arrow passed as an argument, an
+  anonymous `export default` function or class, a method whose key is computed
+  at run time such as `[Symbol.iterator]()`) is named by its span,
+  `<polint:anonymous:START:END>`.
+- TS/JS functions are read from every statement and expression that can hold
+  one: blocks, `try`/`catch`/`finally`, labelled and `with` statements,
+  parameter and destructuring defaults, and the operands of unary, binary,
+  template and type-assertion expressions.
 
 ## Small Rule Shape
 

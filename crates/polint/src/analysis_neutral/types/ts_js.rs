@@ -15,6 +15,7 @@ use crate::analysis_neutral::ids::{
 use crate::analysis_neutral::mir_body::MirBody;
 use crate::analysis_neutral::mir_op::{
     MirAggregateKind, MirOperation, MirOperationKind, MirValue, UnsupportedPrecision,
+    source_evidence_excerpt,
 };
 use crate::analysis_neutral::places::{PlaceFact, PlaceProjection, PlaceRoot, PlaceStatus};
 use crate::analysis_neutral::types::facts::{
@@ -878,6 +879,7 @@ fn collect_narrowing_for_operation(
         .filter(|place| evidence_mentions_place(evidence, place))
         .copied()
         .collect::<Vec<_>>();
+    let excerpt = source_evidence_excerpt(evidence);
     for place_fact in candidate_places {
         let place = place_fact.id;
         let place_stable_key = interner.resolve(place_fact.stable_key).to_string();
@@ -921,7 +923,7 @@ fn collect_narrowing_for_operation(
             cfg_block: None,
             operation: Some(operation.id),
             predicate: None,
-            evidence: evidence.trim().to_string(),
+            evidence: excerpt.clone(),
             language: body.language,
             file: Some(body.file),
             function: Some(body.function),
@@ -938,7 +940,7 @@ fn collect_narrowing_for_operation(
                         interner.resolve(operation.stable_key).to_string(),
                     ),
                     ("place", place_stable_key.clone()),
-                    ("evidence", evidence.trim().to_string()),
+                    ("evidence", excerpt.clone()),
                 ],
             ),
         });

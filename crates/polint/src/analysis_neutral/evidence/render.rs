@@ -51,10 +51,12 @@ pub fn render_bundle_json_v1(
         .iter()
         .filter_map(|path_id| store.paths().iter().find(|path| path.id == *path_id))
         .collect::<Vec<_>>();
-    paths.sort_by(|left, right| {
-        (left.rank, interner.resolve(left.stable_key))
-            .cmp(&(right.rank, interner.resolve(right.stable_key)))
-    });
+    {
+        let keys = interner.read_view();
+        paths.sort_by(|left, right| {
+            (left.rank, keys.text(left.stable_key)).cmp(&(right.rank, keys.text(right.stable_key)))
+        });
+    }
 
     let mut unknowns = store
         .unknowns()

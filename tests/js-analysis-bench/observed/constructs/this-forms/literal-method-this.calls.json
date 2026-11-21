@@ -1,0 +1,65 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@153..271",
+      "name": "later"
+    },
+    {
+      "function": "main.js@192..210",
+      "name": "run"
+    },
+    {
+      "function": "main.js@30..80",
+      "name": "clone"
+    },
+    {
+      "function": "main.js@84..149",
+      "name": "copy"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@116..128",
+      "syntax": "member",
+      "callee": "main.js@30..80",
+      "callee_name": "clone"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@198..210",
+      "syntax": "member",
+      "callee": "main.js@30..80",
+      "callee_name": "clone"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@247..252",
+      "syntax": "identifier",
+      "callee": "main.js@192..210",
+      "callee_name": "run"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@277..289",
+      "syntax": "member",
+      "callee": "main.js@84..149",
+      "callee_name": "copy"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@306..319",
+      "syntax": "member",
+      "callee": "main.js@153..271",
+      "callee_name": "later"
+    }
+  ]
+}

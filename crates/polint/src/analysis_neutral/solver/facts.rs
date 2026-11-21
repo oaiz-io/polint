@@ -15,7 +15,9 @@
 //! the exact precision tier. [`derived_edge_precision_ceiling`] maps the points-to
 //! precision onto the kernel [`FactPrecision`] vocabulary and is asserted to NEVER
 //! return [`FactPrecision::Exact`] — budget exhaustion and conservative derivation
-//! surface honestly, never as a falsely-exact edge.
+//! surface honestly, never as a falsely-exact edge. Whether the site the edge was
+//! derived at reaches this target and no other is a separate claim, the edge's
+//! [`EdgeClaim`], which states the assumptions it rests on.
 //!
 //! Identity fields are interned [`StableKeyId`]s. Wire/cache/test byte stability must
 //! go through [`DerivedEdgeFact::stable_payload`] (resolved text), never raw numeric
@@ -26,6 +28,7 @@ use serde::Serialize;
 use crate::analysis_api::FactPrecision;
 use crate::analysis_neutral::ids::{DerivedEdgeId, SemanticNodeId};
 use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
+use crate::analysis_neutral::points_to::tiers::EdgeClaim;
 use crate::internal_core::{StableKeyId, StableKeyInterner};
 
 use super::provenance::{DerivedEdgeProvenance, DerivedEdgeProvenanceStablePayload};
@@ -57,6 +60,10 @@ pub struct DerivedEdgeFact {
     /// The edge's provenance (D-08): contributing facts (total-ordered by resolved
     /// stable text), producing constraint kind, and solver step.
     pub provenance: DerivedEdgeProvenance,
+    /// What the edge claims about its site: exact under named assumptions,
+    /// one of a closed set of targets, open to values from outside, or
+    /// nothing beyond its precision.
+    pub claim: EdgeClaim,
 }
 
 /// Resolved-text wire/cache payload for one derived edge. Never carries numeric
@@ -70,6 +77,7 @@ pub struct DerivedEdgeStablePayload {
     #[serde(rename = "stable_key")]
     pub stable_key_text: String,
     pub provenance: DerivedEdgeProvenanceStablePayload,
+    pub claim: EdgeClaim,
 }
 
 impl DerivedEdgeFact {
@@ -88,6 +96,7 @@ impl DerivedEdgeFact {
             precision: self.precision,
             stable_key_text: interner.resolve(self.stable_key).to_string(),
             provenance: self.provenance.stable_payload(interner),
+            claim: self.claim.clone(),
         }
     }
 }
@@ -177,6 +186,7 @@ mod tests {
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: crate::internal_core::stable_key_for_test("edge|copy_edge|a"),
             provenance: provenance(),
+            claim: EdgeClaim::Unassigned,
         };
         assert!(edge.honors_precision_ceiling());
     }
@@ -202,6 +212,7 @@ mod tests {
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: crate::internal_core::stable_key_for_test("edge|copy_edge|a"),
             provenance: provenance(),
+            claim: EdgeClaim::Unassigned,
         };
         let payload = edge.stable_payload(&interner);
         let json = serde_json::to_string(&payload).expect("serialize");

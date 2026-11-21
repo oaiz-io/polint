@@ -126,11 +126,7 @@ impl DerivedEdgeProvenance {
             contributing_facts.into_iter().collect();
         // Total order by resolved stable text (never StableKeyId allocation order),
         // then de-duplicate so a fact referenced twice does not perturb the byte layout.
-        contributing_facts.sort_by(|left, right| {
-            interner
-                .resolve(left.stable_key)
-                .cmp(&interner.resolve(right.stable_key))
-        });
+        interner.sort_by_key_text(&mut contributing_facts, |row| row.stable_key, |_| ());
         contributing_facts.dedup_by(|left, right| left.stable_key == right.stable_key);
         Self {
             contributing_facts,

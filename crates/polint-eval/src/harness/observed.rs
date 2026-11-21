@@ -1178,7 +1178,8 @@ fn points_to_status(status: crate::analysis::points_to::facts::PointsToStatus) -
         crate::analysis::points_to::facts::PointsToStatus::SetupMissing => {
             ObservedStatus::SetupMissing
         }
-        crate::analysis::points_to::facts::PointsToStatus::BudgetExceeded => {
+        crate::analysis::points_to::facts::PointsToStatus::BudgetExceeded
+        | crate::analysis::points_to::facts::PointsToStatus::IndirectionBound => {
             ObservedStatus::BudgetExceeded
         }
     }

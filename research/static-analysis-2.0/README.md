@@ -129,6 +129,11 @@ Ordered workstreams; each compounds the next. No time estimates by design.
 | — | Competitive landscape (standing reference) | [09-competitive-landscape.md](09-competitive-landscape.md) | Positioning + what to steal |
 | — | Open questions to resolve before/while building | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) | Decision log seed |
 
+[`../package-graphs/README.md`](../package-graphs/README.md) (2026-11-17) extends
+this track: package graphs per (package, version) become a primary output,
+and graph construction gains stages after classical analysis. It lists which
+of the decisions below it moves.
+
 Standing decisions already taken (see 00-critical-review.md for rationale):
 
 - Stop iterating recognizers against the Jelly micro suite (~89% F1 is the

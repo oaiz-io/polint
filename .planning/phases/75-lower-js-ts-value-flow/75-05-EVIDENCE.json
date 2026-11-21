@@ -1,0 +1,2745 @@
+{
+  "ablation_source_head": "167b1c52",
+  "bench_commands": [
+    {
+      "command": "python3 tests/js-analysis-bench/bench.py report --no-cost --no-types --out /tmp/js-bench-75e-resume-off",
+      "log": "/tmp/pr75-resume-off.log",
+      "rc": 0
+    },
+    {
+      "command": "python3 tests/js-analysis-bench/bench.py report --no-cost --no-types --out /tmp/js-bench-75e-resume-on",
+      "log": "/tmp/pr75-resume-on.log",
+      "rc": 0
+    },
+    {
+      "command": "make js-bench JS_BENCH_ARGS=--no-types",
+      "log": "/tmp/pr75-baseline.log",
+      "rc": 0
+    },
+    {
+      "command": "python3 tests/js-analysis-bench/bench.py report --no-cost --no-types --out /tmp/js-bench-75e-determinism-a",
+      "log": "/tmp/pr75-determinism-a.log",
+      "rc": 0
+    },
+    {
+      "command": "python3 tests/js-analysis-bench/bench.py report --no-cost --no-types --out /tmp/js-bench-75e-determinism-b",
+      "log": "/tmp/pr75-determinism-b.log",
+      "rc": 0
+    }
+  ],
+  "determinism": {
+    "normalization": "Remove only the top-level dump_cost key, then serialize with indent=2 and sort_keys=True.",
+    "raw_cmp": 1,
+    "raw_command": "cmp /tmp/js-bench-75e-determinism-a/report.json /tmp/js-bench-75e-determinism-b/report.json",
+    "without_dump_cost_cmp": 0,
+    "without_dump_cost_command": "cmp /tmp/pr75-determinism-a.json /tmp/pr75-determinism-b.json"
+  },
+  "gate": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-0.log",
+      "rc": 0,
+      "summaries": []
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-1.log",
+      "rc": 0,
+      "summaries": []
+    },
+    {
+      "command": "cargo test --workspace --locked --no-fail-fast",
+      "failed_tests": [
+        "internal_dependency_directions_are_acyclic",
+        "dense_id_sweep_matches_baseline",
+        "module_layering_has_no_wrong_direction_edges"
+      ],
+      "log": "/tmp/pr75-gate-2.log",
+      "rc": 101,
+      "summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3034 filtered out; finished in 0.22s",
+        "test result: ok. 3014 passed; 0 failed; 21 ignored; 0 measured; 0 filtered out; finished in 96.78s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 198.67s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 194 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 211.15s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.10s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: FAILED. 8 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.47s",
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 35.33s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s",
+        "test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    {
+      "command": "cargo test -p polint --test public_surface_leak --locked",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-3.log",
+      "rc": 0,
+      "summaries": [
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s"
+      ]
+    },
+    {
+      "command": "cargo test -p polint --lib solver_composition --locked",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-4.log",
+      "rc": 0,
+      "summaries": [
+        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 3018 filtered out; finished in 10.64s"
+      ]
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-rerun-0.log",
+      "rc": 0,
+      "summaries": []
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-rerun-1.log",
+      "rc": 0,
+      "summaries": []
+    },
+    {
+      "command": "cargo test --workspace --locked --no-fail-fast",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-rerun-2.log",
+      "rc": 0,
+      "summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3034 filtered out; finished in 0.05s",
+        "test result: ok. 3014 passed; 0 failed; 21 ignored; 0 measured; 0 filtered out; finished in 37.21s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.07s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 194 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 150.37s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s",
+        "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.45s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+        "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.17s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s",
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.61s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.95s",
+        "test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    {
+      "command": "cargo test -p polint --test public_surface_leak --locked",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-rerun-3.log",
+      "rc": 0,
+      "summaries": [
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s"
+      ]
+    },
+    {
+      "command": "cargo test -p polint --lib solver_composition --locked",
+      "failed_tests": [],
+      "log": "/tmp/pr75-gate-rerun-4.log",
+      "rc": 0,
+      "summaries": [
+        "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 3018 filtered out; finished in 6.62s"
+      ]
+    }
+  ],
+  "initial_surviving_mutation": {
+    "command": "cargo test -p polint --lib ts::constraints:: --locked",
+    "mutation": 4,
+    "note": "Survived before the direct-row test; kernel fallback masked the missing guard.",
+    "passed": 62,
+    "rc": 0
+  },
+  "mutations": [
+    {
+      "command": "cargo test -p polint --lib ts::constraints:: --locked",
+      "failed_tests": [
+        "ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype",
+        "ts::constraints::lower::tests::constant_string_keys_are_folded",
+        "ts::constraints::lower::tests::an_exported_object_keeps_its_fields_but_an_escaped_object_opens_them",
+        "ts::constraints::lower::tests::namespace_reexports_and_commonjs_requests_link_across_files",
+        "ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described",
+        "ts::constraints::lower::tests::a_method_called_on_its_literal_reads_this",
+        "ts::constraints::lower::tests::object_fields_flow_through_parameters",
+        "ts::constraints::lower::tests::prototype_chains_and_own_shadowing_are_described",
+        "ts::constraints::lower::tests::functions_hold_assigned_and_defined_properties",
+        "ts::constraints::lower::tests::prototype_lookup_respects_shadowing_and_opens_unknown_chains_and_cycles",
+        "ts::constraints::callable_values::repeated_calls_and_heap_updates_keep_their_callable_targets"
+      ],
+      "failure_details": [
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype' (1768475) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\ninst.check(): Described { named: {(57, 72): 2, (116, 138): 2, (289, 319): 2, (334, 343): 1}, open: {Local(4), Local(6), Local(7), Local(9), Local(10), Local(12), Temp(3), Temp(10), Temp(12), Temp(13), Temp(14), Temp(16), Param((36, 88), 0), Param((89, 141), 0), Param((89, 141), 1), Param((245, 278), 0), Param((245, 278), 1), This((0, 244)), This((36, 88)), This((89, 141)), This((245, 278)), This((307, 317)), Return((36, 88))}, escaped_functions: {(36, 88), (89, 141), (307, 317)}, escaped_objects: {Site((334, 343)), Site((37",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::constant_string_keys_are_folded' (1768588) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\no.onOpen(): Described { named: {}, open: {Temp(1), This((0, 15))}, escaped_functions: {(0, 15)}, escaped_objects: {Site((47, 49))}, lookups: {}, model_targets: {}, prototypes: {} }",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::constant_string_keys_are_folded"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::an_exported_object_keeps_its_fields_but_an_escaped_object_opens_them' (1768586) panicked at crates/polint/src/ts/constraints/lower.rs:2032:9:\nassertion failed: described.escaped_objects.is_empty()",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:2032:9:",
+          "test": "ts::constraints::lower::tests::an_exported_object_keeps_its_fields_but_an_escaped_object_opens_them"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::namespace_reexports_and_commonjs_requests_link_across_files' (1768591) panicked at crates/polint/src/ts/constraints/lower.rs:2017:17:\n[Described { named: {}, open: {This((7, 24))}, escaped_functions: {(7, 24)}, escaped_objects: {Namespace}, lookups: {}, model_targets: {}, prototypes: {} }, Described { named: {}, open: {}, escaped_functions: {}, escaped_objects: {Namespace}, lookups: {}, model_targets: {}, prototypes: {} }, Described { named: {}, open: {Temp(0)}, escaped_functions: {}, escaped_objects: {}, lookups: {}, model_targets: {}, prototypes: {} }]",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:2017:17:",
+          "test": "ts::constraints::lower::tests::namespace_reexports_and_commonjs_requests_link_across_files"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described' (1768587) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\nsuper.run(): Described { named: {(103, 110): 0, (165, 172): 0}, open: {Temp(4), Temp(5), Temp(10), This((0, 15)), This((43, 51)), This((114, 152))}, escaped_functions: {(0, 15), (43, 51), (114, 152)}, escaped_objects: {Site((165, 172)), Prototype((16, 53)), Prototype((54, 154))}, lookups: {}, model_targets: {}, prototypes: {(16, 53), (54, 154)} }",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::a_method_called_on_its_literal_reads_this' (1768479) panicked at crates/polint/src/ts/constraints/lower.rs:2167:9:\nassertion failed: described.named.contains_key(&site_of(&flows, source, \"this.clone()\"))",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:2167:9:",
+          "test": "ts::constraints::lower::tests::a_method_called_on_its_literal_reads_this"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::object_fields_flow_through_parameters' (1768709) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\no.run(): Described { named: {(70, 76): 1}, open: {Temp(0), This((0, 15)), This((16, 44))}, escaped_functions: {(0, 15)}, escaped_objects: {Site((55, 57))}, lookups: {}, model_targets: {}, prototypes: {} }",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::object_fields_flow_through_parameters"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::prototype_chains_and_own_shadowing_are_described' (1768710) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\no.run(): Described { named: {(63, 70): 0}, open: {Temp(5), Temp(8), This((34, 51))}, escaped_functions: {(34, 51)}, escaped_objects: {Site((63, 70)), Site((91, 107)), Prototype((0, 15))}, lookups: {}, model_targets: {}, prototypes: {(0, 15)} }",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::prototype_chains_and_own_shadowing_are_described"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::functions_hold_assigned_and_defined_properties' (1768589) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\nF.run(): Described { named: {}, open: {Temp(3), Temp(4), This((0, 15)), This((16, 31))}, escaped_functions: {(0, 15), (16, 31)}, escaped_objects: {}, lookups: {}, model_targets: {}, prototypes: {} }",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::functions_hold_assigned_and_defined_properties"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::prototype_lookup_respects_shadowing_and_opens_unknown_chains_and_cycles' (1768719) panicked at crates/polint/src/ts/constraints/lower.rs:2054:9:\nassertion failed: described.named.contains_key(&site_of(&flows, source, \"o.run()\"))",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:2054:9:",
+          "test": "ts::constraints::lower::tests::prototype_lookup_respects_shadowing_and_opens_unknown_chains_and_cycles"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::callable_values::repeated_calls_and_heap_updates_keep_their_callable_targets' (1768408) panicked at crates/polint/src/ts/constraints/callable_values.rs:1462:9:\nassertion `left == right` failed: a callee that spends the walk budget, then a walk that needs it\n  left: {}\n right: {\"function a() {}\"}\n\n\nfailures:\n    ts::constraints::callable_values::repeated_calls_and_heap_updates_keep_their_callable_targets\n    ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype\n    ts::constraints::lower::tests::a_method_called_on_its_literal_reads_this\n    ts::constraints::lower::tests::an_exported_object_keeps_its_fields_but_an_escaped_object_opens",
+          "failure_line": "crates/polint/src/ts/constraints/callable_values.rs:1462:9:",
+          "test": "ts::constraints::callable_values::repeated_calls_and_heap_updates_keep_their_callable_targets"
+        }
+      ],
+      "failure_lines": [
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:2032:9:",
+        "crates/polint/src/ts/constraints/lower.rs:2017:17:",
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:2167:9:",
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:2054:9:",
+        "crates/polint/src/ts/constraints/callable_values.rs:1462:9:"
+      ],
+      "file": "crates/polint/src/ts/constraints/lower.rs",
+      "line": 1560,
+      "log": "/tmp/pr75-mutation-1.log",
+      "mutation": 1,
+      "rc": 101
+    },
+    {
+      "command": "cargo test -p polint --lib ts::constraints:: --locked",
+      "failed_tests": [
+        "ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype",
+        "ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described",
+        "ts::constraints::platform::tests::destructuring_a_spread_generator_keeps_element_flow",
+        "ts::constraints::callable_values::returned_callables_are_complete_or_left_unresolved"
+      ],
+      "failure_details": [
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype' (1905531) panicked at crates/polint/src/ts/constraints/lower.rs:1908:13:\ninitializer(inst, def): Described { named: {(289, 319): 2, (334, 343): 1, (359, 375): 2}, open: {Temp(1), Temp(2), Temp(4), Temp(5), Temp(18), Temp(19), This((0, 244)), This((307, 317))}, escaped_functions: {(307, 317)}, escaped_objects: {Site((334, 343)), Site((340, 342)), Site((372, 374)), Prototype((36, 88))}, lookups: {}, model_targets: {}, prototypes: {(36, 88)} }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1908:13:",
+          "test": "ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described' (1905540) panicked at crates/polint/src/ts/constraints/lower.rs:1908:13:\nsuper.run(): Described { named: {(103, 110): 0, (165, 172): 0}, open: {Temp(3), Temp(5), Temp(6), Temp(7), Temp(8), Temp(13), Temp(14), This((43, 51)), This((114, 152))}, escaped_functions: {(43, 51), (114, 152)}, escaped_objects: {Site((165, 172)), Prototype((16, 53)), Prototype((54, 154))}, lookups: {(24, Object(0, Prototype((54, 154))))}, model_targets: {}, prototypes: {(16, 53), (54, 154)} }",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1908:13:",
+          "test": "ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::platform::tests::destructuring_a_spread_generator_keeps_element_flow' (1905558) panicked at crates/polint/src/ts/constraints/platform.rs:346:9:\n[]",
+          "failure_line": "crates/polint/src/ts/constraints/platform.rs:346:9:",
+          "test": "ts::constraints::platform::tests::destructuring_a_spread_generator_keeps_element_flow"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::callable_values::returned_callables_are_complete_or_left_unresolved' (1905518) panicked at crates/polint/src/ts/constraints/callable_values.rs:1268:9:\nassertion `left == right` failed: \"fn();\": an `||` joins both operands: the value flow does not follow truthiness, so the default joins the bound function\n  left: {\"function a() {}\"}\n right: {\"function a() {}\", \"function b() {}\"}\n\n\nfailures:\n    ts::constraints::callable_values::returned_callables_are_complete_or_left_unresolved\n    ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype\n    ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described\n    ts::constrai",
+          "failure_line": "crates/polint/src/ts/constraints/callable_values.rs:1268:9:",
+          "test": "ts::constraints::callable_values::returned_callables_are_complete_or_left_unresolved"
+        }
+      ],
+      "failure_lines": [
+        "crates/polint/src/ts/constraints/lower.rs:1908:13:",
+        "crates/polint/src/ts/constraints/lower.rs:1908:13:",
+        "crates/polint/src/ts/constraints/platform.rs:346:9:",
+        "crates/polint/src/ts/constraints/callable_values.rs:1268:9:"
+      ],
+      "file": "crates/polint/src/ts/constraints/lower.rs",
+      "line": 284,
+      "log": "/tmp/pr75-mutation-2.log",
+      "mutation": 2,
+      "rc": 101
+    },
+    {
+      "command": "cargo test -p polint --lib ts::constraints:: --locked",
+      "failed_tests": [
+        "ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype",
+        "ts::constraints::lower::tests::prototype_chains_and_own_shadowing_are_described",
+        "ts::constraints::lower::tests::namespace_reexports_and_commonjs_requests_link_across_files",
+        "ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described"
+      ],
+      "failure_details": [
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype' (1983269) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\ninst.check(): Described { named: {(57, 72): 2, (116, 138): 2, (289, 319): 2, (334, 343): 1, (359, 375): 2}, open: {Temp(14), Temp(15), This((0, 244)), This((89, 141)), This((245, 278)), This((307, 317))}, escaped_functions: {(307, 317)}, escaped_objects: {Site((334, 343)), Prototype((36, 88))}, lookups: {}, model_targets: {}, prototypes: {(36, 88)} }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::prototype_chains_and_own_shadowing_are_described' (1983309) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\no.run(): Described { named: {(63, 70): 0}, open: {Temp(5), Temp(6), Temp(9), Temp(10), This((34, 51))}, escaped_functions: {(34, 51)}, escaped_objects: {Site((63, 70)), Site((91, 107)), Prototype((0, 15))}, lookups: {}, model_targets: {}, prototypes: {(0, 15)} }",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::prototype_chains_and_own_shadowing_are_described"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::namespace_reexports_and_commonjs_requests_link_across_files' (1983307) panicked at crates/polint/src/ts/constraints/lower.rs:2017:17:\n[Described { named: {}, open: {This((7, 24))}, escaped_functions: {}, escaped_objects: {}, lookups: {}, model_targets: {}, prototypes: {} }, Described { named: {}, open: {}, escaped_functions: {}, escaped_objects: {}, lookups: {}, model_targets: {}, prototypes: {} }, Described { named: {}, open: {}, escaped_functions: {}, escaped_objects: {}, lookups: {}, model_targets: {}, prototypes: {} }]",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:2017:17:",
+          "test": "ts::constraints::lower::tests::namespace_reexports_and_commonjs_requests_link_across_files"
+        },
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described' (1983303) panicked at crates/polint/src/ts/constraints/lower.rs:1902:13:\nsuper.run(): Described { named: {(103, 110): 0, (165, 172): 0}, open: {Temp(4), Temp(5), Temp(6), Temp(7), Temp(12), Temp(13), This((0, 15)), This((43, 51)), This((114, 152))}, escaped_functions: {(0, 15), (43, 51), (114, 152)}, escaped_objects: {Site((165, 172)), Prototype((16, 53)), Prototype((54, 154))}, lookups: {}, model_targets: {}, prototypes: {(16, 53), (54, 154)} }\n\n\nfailures:\n    ts::constraints::lower::tests::a_factory_constructor_keeps_its_initializer_and_prototype\n    ts::constraints::lower::tests::class_fields_inherita",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+          "test": "ts::constraints::lower::tests::class_fields_inheritance_and_super_are_described"
+        }
+      ],
+      "failure_lines": [
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:",
+        "crates/polint/src/ts/constraints/lower.rs:2017:17:",
+        "crates/polint/src/ts/constraints/lower.rs:1902:13:"
+      ],
+      "file": "crates/polint/src/ts/constraints/described.rs",
+      "line": 533,
+      "log": "/tmp/pr75-mutation-3.log",
+      "mutation": 3,
+      "rc": 101
+    },
+    {
+      "command": "cargo test -p polint --lib ts::constraints:: --locked",
+      "failed_tests": [
+        "ts::constraints::lower::tests::unknown_computed_reads_open_callbacks_reachable_from_the_base"
+      ],
+      "failure_details": [
+        {
+          "assertion_excerpt": "thread 'ts::constraints::lower::tests::unknown_computed_reads_open_callbacks_reachable_from_the_base' (2231296) panicked at crates/polint/src/ts/constraints/lower.rs:2150:9:\nassertion failed: described.open.contains(&FlowVar::Param(invoke, 0))\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    ts::constraints::lower::tests::unknown_computed_reads_open_callbacks_reachable_from_the_base\n\ntest result: FAILED. 62 passed; 1 failed; 0 ignored; 0 measured; 2972 filtered out; finished in 2.94s\n\nerror: test failed, to rerun pass `-p polint --lib`",
+          "failure_line": "crates/polint/src/ts/constraints/lower.rs:2150:9:",
+          "test": "ts::constraints::lower::tests::unknown_computed_reads_open_callbacks_reachable_from_the_base"
+        }
+      ],
+      "failure_lines": [
+        "crates/polint/src/ts/constraints/lower.rs:2150:9:"
+      ],
+      "file": "crates/polint/src/ts/constraints/lower.rs",
+      "line": 1461,
+      "log": "/tmp/pr75-mutation-4.log",
+      "mutation": 4,
+      "rc": 101
+    },
+    {
+      "command": "cargo test -p polint --lib reduce_results_follow_array_cardinality --locked",
+      "failed_tests": [
+        "ts::constraints::callable_values::reduce_results_follow_array_cardinality"
+      ],
+      "failure_details": [
+        {
+          "assertion_excerpt": "thread 'ts::constraints::callable_values::reduce_results_follow_array_cardinality' (2330699) panicked at crates/polint/src/ts/constraints/callable_values.rs:1100:9:\nassertion `left == right` failed: \"[].reduce(() => () => 2)()\": an empty reduce throws; nothing is produced\n  left: {\"() => 2\"}\n right: {}\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    ts::constraints::callable_values::reduce_results_follow_array_cardinality\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3034 filtered out; finished in 0.05s\n\nerror: test failed, to rerun pass `-p polint --lib`",
+          "failure_line": "crates/polint/src/ts/constraints/callable_values.rs:1100:9:",
+          "test": "ts::constraints::callable_values::reduce_results_follow_array_cardinality"
+        }
+      ],
+      "failure_lines": [
+        "crates/polint/src/ts/constraints/callable_values.rs:1100:9:"
+      ],
+      "file": "crates/polint/models/platform/javascript.toml",
+      "line": 29,
+      "log": "/tmp/pr75-mutation-5.log",
+      "mutation": 5,
+      "rc": 101
+    },
+    {
+      "command": "cargo test -p polint --lib platform_behavior_changes_the_semantic_graph_cache_key --locked",
+      "failed_tests": [
+        "analysis_neutral::semantic_graph::cache_key::tests::platform_behavior_changes_the_semantic_graph_cache_key"
+      ],
+      "failure_details": [
+        {
+          "assertion_excerpt": "thread 'analysis_neutral::semantic_graph::cache_key::tests::platform_behavior_changes_the_semantic_graph_cache_key' (2427899) panicked at crates/polint/src/analysis_neutral/semantic_graph/cache_key.rs:95:9:\nassertion `left != right` failed\n  left: Digest { kind: ProviderParameters, value: \"e0fbfaa5ad7f6757\" }\n right: Digest { kind: ProviderParameters, value: \"e0fbfaa5ad7f6757\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    analysis_neutral::semantic_graph::cache_key::tests::platform_behavior_changes_the_semantic_graph_cache_key\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3034 filtered out; finished in 0.00s\n\nerror: test fa",
+          "failure_line": "crates/polint/src/analysis_neutral/semantic_graph/cache_key.rs:95:9:",
+          "test": "analysis_neutral::semantic_graph::cache_key::tests::platform_behavior_changes_the_semantic_graph_cache_key"
+        }
+      ],
+      "failure_lines": [
+        "crates/polint/src/analysis_neutral/semantic_graph/cache_key.rs:95:9:"
+      ],
+      "file": "crates/polint/src/analysis_neutral/semantic_graph/cache_key.rs",
+      "line": 79,
+      "log": "/tmp/pr75-mutation-6.log",
+      "mutation": 6,
+      "rc": 101
+    }
+  ],
+  "platform_identity_move": {
+    "digest_function_body_unchanged": true,
+    "model_source_declaration_unchanged": true,
+    "neutral_module": "crates/polint/src/analysis_neutral/adaptation/platform.rs",
+    "original_commit": "0b8e2851"
+  },
+  "safety": [
+    {
+      "analysed_set_comparisons": [
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        }
+      ],
+      "comparison_completeness_note": "The condensed analysed-set comparison omits false-complete counters; the full package/held-out/construct scores are checked separately.",
+      "false_complete_full_scores": 0,
+      "report": "/tmp/js-bench-75e-resume-off/report.json",
+      "sha256": "af319db8063a1f0a4c9c125dd089dec616f79fcb554cf1e0a15378b23c045ee8",
+      "wrong_exact_targets": 0
+    },
+    {
+      "analysed_set_comparisons": [
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        }
+      ],
+      "comparison_completeness_note": "The condensed analysed-set comparison omits false-complete counters; the full package/held-out/construct scores are checked separately.",
+      "false_complete_full_scores": 0,
+      "report": "/tmp/js-bench-75e-resume-on/report.json",
+      "sha256": "88ecd06c8b9dc7ec058eb2b929a1a11152acc8c789640b8de479d8f2c12d0d5a",
+      "wrong_exact_targets": 0
+    },
+    {
+      "analysed_set_comparisons": [
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        }
+      ],
+      "comparison_completeness_note": "The condensed analysed-set comparison omits false-complete counters; the full package/held-out/construct scores are checked separately.",
+      "false_complete_full_scores": 0,
+      "report": "tests/js-analysis-bench/baseline/report.json",
+      "sha256": "7b99502db6ca4524b4ed9f8ba6741a5544a3ad3c86d9f967fef2742b807dced9",
+      "wrong_exact_targets": 0
+    },
+    {
+      "analysed_set_comparisons": [
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        }
+      ],
+      "comparison_completeness_note": "The condensed analysed-set comparison omits false-complete counters; the full package/held-out/construct scores are checked separately.",
+      "false_complete_full_scores": 0,
+      "report": "/tmp/js-bench-75e-determinism-a/report.json",
+      "sha256": "2d539c7b48d464711c377a57886d623e14221312022a89926990d074de9428fe",
+      "wrong_exact_targets": 0
+    },
+    {
+      "analysed_set_comparisons": [
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "previous_set",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "base",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        },
+        {
+          "package": "zod",
+          "plan": "refined",
+          "set": "shipped",
+          "wrong_exact_targets": 0
+        }
+      ],
+      "comparison_completeness_note": "The condensed analysed-set comparison omits false-complete counters; the full package/held-out/construct scores are checked separately.",
+      "false_complete_full_scores": 0,
+      "report": "/tmp/js-bench-75e-determinism-b/report.json",
+      "sha256": "b4168143eab08c042a3090ff72dbd17a7fcca1c7ca4bc645c6961800254a99eb",
+      "wrong_exact_targets": 0
+    }
+  ],
+  "source_head": "07be066b542defc4bc248680e4ef1469dda60e57",
+  "uptime": [
+    "12:23:27 up 13 days,  4:00,  0 user,  load average: 88.45, 108.98, 100.36",
+    "12:35:43 up 13 days,  4:12,  0 user,  load average: 17.35, 60.56, 82.62"
+  ],
+  "walker_comparison": {
+    "lowering_only": [],
+    "observed_edges_compared": 3382,
+    "off": "/tmp/js-bench-75e-resume-off/report.json",
+    "on": "/tmp/js-bench-75e-resume-on/report.json",
+    "walker_only": [
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "internal/DoublyLinkedList.js:30 insertAfter",
+        "outcome": "no target, marked unresolved",
+        "package": "async",
+        "polint_callee": "internal/DoublyLinkedList.js@845..1071#DLL.insertAfter",
+        "polint_site": {
+          "key": "internal/DoublyLinkedList.js@1460..1493",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.insertAfter(this.tail, node)"
+        },
+        "site": "internal/DoublyLinkedList.js:51",
+        "site_key": "internal/DoublyLinkedList.js@1460..1493",
+        "site_text": "this.insertAfter(this.tail, node)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "internal/DoublyLinkedList.js:16 removeLink",
+        "outcome": "no target, marked unresolved",
+        "package": "async",
+        "polint_callee": "internal/DoublyLinkedList.js@491..757#DLL.removeLink",
+        "polint_site": {
+          "key": "internal/DoublyLinkedList.js@1572..1598",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.removeLink(this.head)"
+        },
+        "site": "internal/DoublyLinkedList.js:55",
+        "site_key": "internal/DoublyLinkedList.js@1572..1598",
+        "site_text": "this.removeLink(this.head)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "internal/Heap.js:23 percUp",
+        "outcome": "no target, marked unresolved",
+        "package": "async",
+        "polint_callee": "internal/Heap.js@463..734#Heap.percUp",
+        "polint_site": {
+          "key": "internal/Heap.js@1310..1343",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.percUp(this.heap.length - 1)"
+        },
+        "site": "internal/Heap.js:58",
+        "site_key": "internal/Heap.js@1310..1343",
+        "site_text": "this.percUp(this.heap.length - 1)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "internal/Heap.js:35 percDown",
+        "outcome": "no target, marked unresolved",
+        "package": "async",
+        "polint_callee": "internal/Heap.js@740..1210#Heap.percDown",
+        "polint_site": {
+          "key": "internal/Heap.js@1551..1567",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.percDown(0)"
+        },
+        "site": "internal/Heap.js:70",
+        "site_key": "internal/Heap.js@1551..1567",
+        "site_text": "this.percDown(0)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/core/AxiosHeaders.js:216 set",
+        "outcome": "no target, marked unresolved",
+        "package": "axios",
+        "polint_callee": "lib/core/AxiosHeaders.js@5105..6705#AxiosHeaders.set",
+        "polint_site": {
+          "key": "lib/core/AxiosHeaders.js@5079..5096",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.set(headers)"
+        },
+        "site": "lib/core/AxiosHeaders.js:213",
+        "site_key": "lib/core/AxiosHeaders.js@5079..5096",
+        "site_text": "this.set(headers)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/core/AxiosHeaders.js:392 toJSON",
+        "outcome": "no target, marked unresolved",
+        "package": "axios",
+        "polint_callee": "lib/core/AxiosHeaders.js@9121..9388#AxiosHeaders.toJSON",
+        "polint_site": {
+          "key": "lib/core/AxiosHeaders.js@9440..9453",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.toJSON()"
+        },
+        "site": "lib/core/AxiosHeaders.js:405",
+        "site_key": "lib/core/AxiosHeaders.js@9440..9453",
+        "site_text": "this.toJSON()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/core/AxiosHeaders.js:392 toJSON",
+        "outcome": "no target, marked unresolved",
+        "package": "axios",
+        "polint_callee": "lib/core/AxiosHeaders.js@9121..9388#AxiosHeaders.toJSON",
+        "polint_site": {
+          "key": "lib/core/AxiosHeaders.js@9521..9534",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.toJSON()"
+        },
+        "site": "lib/core/AxiosHeaders.js:409",
+        "site_key": "lib/core/AxiosHeaders.js@9521..9534",
+        "site_text": "this.toJSON()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:644 _registerCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@20934..21488#Command._registerCommand",
+        "polint_site": {
+          "key": "lib/command.js@10731..10757",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._registerCommand(cmd)"
+        },
+        "site": "lib/command.js:298",
+        "site_key": "lib/command.js@10731..10757",
+        "site_text": "this._registerCommand(cmd)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:316 createArgument",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@11194..11277#Command.createArgument",
+        "polint_site": {
+          "key": "lib/command.js@11920..11958",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createArgument(name, description)"
+        },
+        "site": "lib/command.js:337",
+        "site_key": "lib/command.js@11920..11958",
+        "site_text": "this.createArgument(name, description)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:375 addArgument",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@12769..13333#Command.addArgument",
+        "polint_site": {
+          "key": "lib/command.js@12117..12143",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.addArgument(argument)"
+        },
+        "site": "lib/command.js:343",
+        "site_key": "lib/command.js@12117..12143",
+        "site_text": "this.addArgument(argument)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:192 createCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@7310..7365#Command.createCommand",
+        "polint_site": {
+          "key": "lib/command.js@14577..14605",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createCommand(helpName)"
+        },
+        "site": "lib/command.js:423",
+        "site_key": "lib/command.js@14577..14605",
+        "site_text": "this.createCommand(helpName)",
+        "syntax": "member"
+      },
+      {
+        "cause": "local_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2559 helpOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@80570..81340#Command.helpOption",
+        "polint_site": {
+          "key": "lib/command.js@14611..14640",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "helpCommand.helpOption(false)"
+        },
+        "site": "lib/command.js:424",
+        "site_key": "lib/command.js@14611..14640",
+        "site_text": "helpCommand.helpOption(false)",
+        "syntax": "member"
+      },
+      {
+        "cause": "local_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:359 arguments",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@12444..12596#Command.arguments",
+        "polint_site": {
+          "key": "lib/command.js@14660..14691",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "helpCommand.arguments(helpArgs)"
+        },
+        "site": "lib/command.js:425",
+        "site_key": "lib/command.js@14660..14691",
+        "site_text": "helpCommand.arguments(helpArgs)",
+        "syntax": "member"
+      },
+      {
+        "cause": "local_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2218 description",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@71136..71393#Command.description",
+        "polint_site": {
+          "key": "lib/command.js@14718..14758",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "helpCommand.description(helpDescription)"
+        },
+        "site": "lib/command.js:426",
+        "site_key": "lib/command.js@14718..14758",
+        "site_text": "helpCommand.description(helpDescription)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1649 _findCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@53633..53794#Command._findCommand",
+        "polint_site": {
+          "key": "lib/command.js@16066..16091",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._findCommand('help')"
+        },
+        "site": "lib/command.js:468",
+        "site_key": "lib/command.js@16066..16091",
+        "site_text": "this._findCommand('help')",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:409 helpCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@13988..14978#Command.helpCommand",
+        "polint_site": {
+          "key": "lib/command.js@16182..16220",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.helpCommand(undefined, undefined)"
+        },
+        "site": "lib/command.js:472",
+        "site_key": "lib/command.js@16182..16220",
+        "site_text": "this.helpCommand(undefined, undefined)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:512 _exitCallback",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@17297..17494#<polint:anonymous:17297:17494>",
+        "polint_site": {
+          "key": "lib/command.js@17899..17962",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._exitCallback(new CommanderError(exitCode, code, message))"
+        },
+        "site": "lib/command.js:535",
+        "site_key": "lib/command.js@17899..17962",
+        "site_text": "this._exitCallback(new CommanderError(exitCode, code, message))",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1664 _findOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@53922..54002#Command._findOption",
+        "polint_site": {
+          "key": "lib/command.js@20206..20236",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._findOption(option.short)"
+        },
+        "site": "lib/command.js:621",
+        "site_key": "lib/command.js@20206..20236",
+        "site_text": "this._findOption(option.short)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1664 _findOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@53922..54002#Command._findOption",
+        "polint_site": {
+          "key": "lib/command.js@20263..20292",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._findOption(option.long)"
+        },
+        "site": "lib/command.js:622",
+        "site_key": "lib/command.js@20263..20292",
+        "site_text": "this._findOption(option.long)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2392 _initOptionGroup",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@75732..75874#Command._initOptionGroup",
+        "polint_site": {
+          "key": "lib/command.js@20664..20693",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._initOptionGroup(option)"
+        },
+        "site": "lib/command.js:632",
+        "site_key": "lib/command.js@20664..20693",
+        "site_text": "this._initOptionGroup(option)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2401 _initCommandGroup",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@75930..76061#Command._initCommandGroup",
+        "polint_site": {
+          "key": "lib/command.js@21419..21450",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._initCommandGroup(command)"
+        },
+        "site": "lib/command.js:660",
+        "site_key": "lib/command.js@21419..21450",
+        "site_text": "this._initCommandGroup(command)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:619 _registerOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@20130..20729#Command._registerOption",
+        "polint_site": {
+          "key": "lib/command.js@21632..21660",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._registerOption(option)"
+        },
+        "site": "lib/command.js:671",
+        "site_key": "lib/command.js@21632..21660",
+        "site_text": "this._registerOption(option)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1664 _findOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@53922..54002#Command._findOption",
+        "polint_site": {
+          "key": "lib/command.js@21965..21999",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._findOption(positiveLongFlag)"
+        },
+        "site": "lib/command.js:680",
+        "site_key": "lib/command.js@21965..21999",
+        "site_text": "this._findOption(positiveLongFlag)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:953 setOptionValueWithSource",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@31096..31332#Command.setOptionValueWithSource",
+        "polint_site": {
+          "key": "lib/command.js@22011..22162",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.setOptionValueWithSource( name, option.defaultValue === undefined ? true : option.de\u2026"
+        },
+        "site": "lib/command.js:681",
+        "site_key": "lib/command.js@22011..22162",
+        "site_text": "this.setOptionValueWithSource( name, option.defaultValue === undefined ? true : option.de\u2026",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:953 setOptionValueWithSource",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@31096..31332#Command.setOptionValueWithSource",
+        "polint_site": {
+          "key": "lib/command.js@22230..22297",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.setOptionValueWithSource(name, option.defaultValue, 'default')"
+        },
+        "site": "lib/command.js:688",
+        "site_key": "lib/command.js@22230..22297",
+        "site_text": "this.setOptionValueWithSource(name, option.defaultValue, 'default')",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:585 createOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@19279..19360#Command.createOption",
+        "polint_site": {
+          "key": "lib/command.js@24340..24377",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createOption(flags, description)"
+        },
+        "site": "lib/command.js:747",
+        "site_key": "lib/command.js@24340..24377",
+        "site_text": "this.createOption(flags, description)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:670 addOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@21608..23913#Command.addOption",
+        "polint_site": {
+          "key": "lib/command.js@24809..24831",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.addOption(option)"
+        },
+        "site": "lib/command.js:763",
+        "site_key": "lib/command.js@24809..24831",
+        "site_text": "this.addOption(option)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:741 _optionEx",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@24070..24836#Command._optionEx",
+        "polint_site": {
+          "key": "lib/command.js@25949..26011",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._optionEx({}, flags, description, parseArg, defaultValue)"
+        },
+        "site": "lib/command.js:789",
+        "site_key": "lib/command.js@25949..26011",
+        "site_text": "this._optionEx({}, flags, description, parseArg, defaultValue)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1127 _prepareForParse",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@37144..37297#Command._prepareForParse",
+        "polint_site": {
+          "key": "lib/command.js@35617..35640",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._prepareForParse()"
+        },
+        "site": "lib/command.js:1091",
+        "site_key": "lib/command.js@35617..35640",
+        "site_text": "this._prepareForParse()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1001 _prepareUserArgs",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@32283..34221#Command._prepareUserArgs",
+        "polint_site": {
+          "key": "lib/command.js@35663..35704",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._prepareUserArgs(argv, parseOptions)"
+        },
+        "site": "lib/command.js:1092",
+        "site_key": "lib/command.js@35663..35704",
+        "site_text": "this._prepareUserArgs(argv, parseOptions)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1550 _parseCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@50282..53535#Command._parseCommand",
+        "polint_site": {
+          "key": "lib/command.js@35710..35742",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._parseCommand([], userArgs)"
+        },
+        "site": "lib/command.js:1093",
+        "site_key": "lib/command.js@35710..35742",
+        "site_text": "this._parseCommand([], userArgs)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1141 saveStateBeforeParse",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@37614..38039#Command.saveStateBeforeParse",
+        "polint_site": {
+          "key": "lib/command.js@37208..37235",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.saveStateBeforeParse()"
+        },
+        "site": "lib/command.js:1129",
+        "site_key": "lib/command.js@37208..37235",
+        "site_text": "this.saveStateBeforeParse()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1158 restoreStateBeforeParse",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@38307..39011#Command.restoreStateBeforeParse",
+        "polint_site": {
+          "key": "lib/command.js@37256..37286",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.restoreStateBeforeParse()"
+        },
+        "site": "lib/command.js:1131",
+        "site_key": "lib/command.js@37256..37286",
+        "site_text": "this.restoreStateBeforeParse()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1649 _findCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@53633..53794#Command._findCommand",
+        "polint_site": {
+          "key": "lib/command.js@45068..45098",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._findCommand(commandName)"
+        },
+        "site": "lib/command.js:1353",
+        "site_key": "lib/command.js@45068..45098",
+        "site_text": "this._findCommand(commandName)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1531 _chainOrCallSubCommandHook",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@49810..50142#Command._chainOrCallSubCommandHook",
+        "polint_site": {
+          "key": "lib/command.js@45226..45325",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._chainOrCallSubCommandHook( promiseChain, subCommand, 'preSubcommand', )"
+        },
+        "site": "lib/command.js:1358",
+        "site_key": "lib/command.js@45226..45325",
+        "site_text": "this._chainOrCallSubCommandHook( promiseChain, subCommand, 'preSubcommand', )",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1481 _chainOrCall",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@48602..48861#Command._chainOrCall",
+        "polint_site": {
+          "key": "lib/command.js@45346..45589",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._chainOrCall(promiseChain, () => { if (subCommand._executableHandler) { this._execut\u2026"
+        },
+        "site": "lib/command.js:1363",
+        "site_key": "lib/command.js@45346..45589",
+        "site_text": "this._chainOrCall(promiseChain, () => { if (subCommand._executableHandler) { this._execut\u2026",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1403 _checkNumberOfArguments",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@46297..46785#Command._checkNumberOfArguments",
+        "polint_site": {
+          "key": "lib/command.js@47447..47477",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._checkNumberOfArguments()"
+        },
+        "site": "lib/command.js:1444",
+        "site_key": "lib/command.js@47447..47477",
+        "site_text": "this._checkNumberOfArguments()",
+        "syntax": "member"
+      },
+      {
+        "cause": "parameter_call",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1363 <anonymous>",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@45378..45588#<polint:anonymous:45378:45588>",
+        "polint_site": {
+          "key": "lib/command.js@48852..48856",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "fn()"
+        },
+        "site": "lib/command.js:1488",
+        "site_key": "lib/command.js@48852..48856",
+        "site_text": "fn()",
+        "syntax": "identifier"
+      },
+      {
+        "cause": "parameter_call",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1603 <anonymous>",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@52130..52183#<polint:anonymous:52130:52183>",
+        "polint_site": {
+          "key": "lib/command.js@48852..48856",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "fn()"
+        },
+        "site": "lib/command.js:1488",
+        "site_key": "lib/command.js@48852..48856",
+        "site_text": "fn()",
+        "syntax": "identifier"
+      },
+      {
+        "cause": "parameter_call",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1607 <anonymous>",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@52274..52362#<polint:anonymous:52274:52362>",
+        "polint_site": {
+          "key": "lib/command.js@48852..48856",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "fn()"
+        },
+        "site": "lib/command.js:1488",
+        "site_key": "lib/command.js@48852..48856",
+        "site_text": "fn()",
+        "syntax": "identifier"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:121 _getCommandAndAncestors",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@4681..4919#Command._getCommandAndAncestors",
+        "polint_site": {
+          "key": "lib/command.js@49089..49119",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getCommandAndAncestors()"
+        },
+        "site": "lib/command.js:1502",
+        "site_key": "lib/command.js@49089..49119",
+        "site_text": "this._getCommandAndAncestors()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1748 parseOptions",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@56460..61373#Command.parseOptions",
+        "polint_site": {
+          "key": "lib/command.js@50336..50362",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.parseOptions(unknown)"
+        },
+        "site": "lib/command.js:1551",
+        "site_key": "lib/command.js@50336..50362",
+        "site_text": "this.parseOptions(unknown)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1966 _parseOptionsEnv",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@63360..64267#Command._parseOptionsEnv",
+        "polint_site": {
+          "key": "lib/command.js@50368..50391",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._parseOptionsEnv()"
+        },
+        "site": "lib/command.js:1552",
+        "site_key": "lib/command.js@50368..50391",
+        "site_text": "this._parseOptionsEnv()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1996 _parseOptionsImplied",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@64381..65313#Command._parseOptionsImplied",
+        "polint_site": {
+          "key": "lib/command.js@50454..50481",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._parseOptionsImplied()"
+        },
+        "site": "lib/command.js:1553",
+        "site_key": "lib/command.js@50454..50481",
+        "site_text": "this._parseOptionsImplied()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1649 _findCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@53633..53794#Command._findCommand",
+        "polint_site": {
+          "key": "lib/command.js@50625..50655",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._findCommand(operands[0])"
+        },
+        "site": "lib/command.js:1558",
+        "site_key": "lib/command.js@50625..50655",
+        "site_text": "this._findCommand(operands[0])",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1352 _dispatchSubcommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@44991..45619#Command._dispatchSubcommand",
+        "polint_site": {
+          "key": "lib/command.js@50672..50737",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._dispatchSubcommand(operands[0], operands.slice(1), unknown)"
+        },
+        "site": "lib/command.js:1559",
+        "site_key": "lib/command.js@50672..50737",
+        "site_text": "this._dispatchSubcommand(operands[0], operands.slice(1), unknown)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:463 _getHelpCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@15901..16324#Command._getHelpCommand",
+        "polint_site": {
+          "key": "lib/command.js@50760..50782",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getHelpCommand()"
+        },
+        "site": "lib/command.js:1562",
+        "site_key": "lib/command.js@50760..50782",
+        "site_text": "this._getHelpCommand()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:463 _getHelpCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@15901..16324#Command._getHelpCommand",
+        "polint_site": {
+          "key": "lib/command.js@50808..50830",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getHelpCommand()"
+        },
+        "site": "lib/command.js:1563",
+        "site_key": "lib/command.js@50808..50830",
+        "site_text": "this._getHelpCommand()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2621 help",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@82319..82825#Command.help",
+        "polint_site": {
+          "key": "lib/command.js@51422..51448",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.help({ error: true })"
+        },
+        "site": "lib/command.js:1582",
+        "site_key": "lib/command.js@51422..51448",
+        "site_text": "this.help({ error: true })",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2686 _outputHelpIfRequested",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@84395..84756#Command._outputHelpIfRequested",
+        "polint_site": {
+          "key": "lib/command.js@51461..51504",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._outputHelpIfRequested(parsed.unknown)"
+        },
+        "site": "lib/command.js:1585",
+        "site_key": "lib/command.js@51461..51504",
+        "site_text": "this._outputHelpIfRequested(parsed.unknown)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1675 _checkForMissingMandatoryOptions",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@54175..54605#Command._checkForMissingMandatoryOptions",
+        "polint_site": {
+          "key": "lib/command.js@51510..51549",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._checkForMissingMandatoryOptions()"
+        },
+        "site": "lib/command.js:1586",
+        "site_key": "lib/command.js@51510..51549",
+        "site_text": "this._checkForMissingMandatoryOptions()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1723 _checkForConflictingOptions",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@55653..55883#Command._checkForConflictingOptions",
+        "polint_site": {
+          "key": "lib/command.js@51555..51589",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._checkForConflictingOptions()"
+        },
+        "site": "lib/command.js:1587",
+        "site_key": "lib/command.js@51555..51589",
+        "site_text": "this._checkForConflictingOptions()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2331 name",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@74101..74201#Command.name",
+        "polint_site": {
+          "key": "lib/command.js@51870..51881",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.name()"
+        },
+        "site": "lib/command.js:1596",
+        "site_key": "lib/command.js@51870..51881",
+        "site_text": "this.name()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1428 _processArguments",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@46907..48390#Command._processArguments",
+        "polint_site": {
+          "key": "lib/command.js@51954..51978",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._processArguments()"
+        },
+        "site": "lib/command.js:1599",
+        "site_key": "lib/command.js@51954..51978",
+        "site_text": "this._processArguments()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1499 _chainOrCallHooks",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@49001..49637#Command._chainOrCallHooks",
+        "polint_site": {
+          "key": "lib/command.js@52026..52075",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._chainOrCallHooks(promiseChain, 'preAction')"
+        },
+        "site": "lib/command.js:1602",
+        "site_key": "lib/command.js@52026..52075",
+        "site_text": "this._chainOrCallHooks(promiseChain, 'preAction')",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1481 _chainOrCall",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@48602..48861#Command._chainOrCall",
+        "polint_site": {
+          "key": "lib/command.js@52098..52192",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._chainOrCall(promiseChain, () => this._actionHandler(this.processedArgs), )"
+        },
+        "site": "lib/command.js:1603",
+        "site_key": "lib/command.js@52098..52192",
+        "site_text": "this._chainOrCall(promiseChain, () => this._actionHandler(this.processedArgs), )",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1481 _chainOrCall",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@48602..48861#Command._chainOrCall",
+        "polint_site": {
+          "key": "lib/command.js@52242..52363",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._chainOrCall(promiseChain, () => { this.parent.emit(commandEvent, operands, unknown)\u2026"
+        },
+        "site": "lib/command.js:1607",
+        "site_key": "lib/command.js@52242..52363",
+        "site_text": "this._chainOrCall(promiseChain, () => { this.parent.emit(commandEvent, operands, unknown)\u2026",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1499 _chainOrCallHooks",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@49001..49637#Command._chainOrCallHooks",
+        "polint_site": {
+          "key": "lib/command.js@52394..52444",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._chainOrCallHooks(promiseChain, 'postAction')"
+        },
+        "site": "lib/command.js:1611",
+        "site_key": "lib/command.js@52394..52444",
+        "site_text": "this._chainOrCallHooks(promiseChain, 'postAction')",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1649 _findCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@53633..53794#Command._findCommand",
+        "polint_site": {
+          "key": "lib/command.js@52706..52728",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._findCommand('*')"
+        },
+        "site": "lib/command.js:1619",
+        "site_key": "lib/command.js@52706..52728",
+        "site_text": "this._findCommand('*')",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2162 unknownCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@69368..69986#Command.unknownCommand",
+        "polint_site": {
+          "key": "lib/command.js@53061..53082",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.unknownCommand()"
+        },
+        "site": "lib/command.js:1627",
+        "site_key": "lib/command.js@53061..53082",
+        "site_text": "this.unknownCommand()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:121 _getCommandAndAncestors",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@4681..4919#Command._getCommandAndAncestors",
+        "polint_site": {
+          "key": "lib/command.js@54303..54333",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getCommandAndAncestors()"
+        },
+        "site": "lib/command.js:1677",
+        "site_key": "lib/command.js@54303..54333",
+        "site_text": "this._getCommandAndAncestors()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:121 _getCommandAndAncestors",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@4681..4919#Command._getCommandAndAncestors",
+        "polint_site": {
+          "key": "lib/command.js@55776..55806",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getCommandAndAncestors()"
+        },
+        "site": "lib/command.js:1725",
+        "site_key": "lib/command.js@55776..55806",
+        "site_text": "this._getCommandAndAncestors()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:121 _getCommandAndAncestors",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@4681..4919#Command._getCommandAndAncestors",
+        "polint_site": {
+          "key": "lib/command.js@62145..62175",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getCommandAndAncestors()"
+        },
+        "site": "lib/command.js:1926",
+        "site_key": "lib/command.js@62145..62175",
+        "site_text": "this._getCommandAndAncestors()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:533 _exit",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@17830..18046#Command._exit",
+        "polint_site": {
+          "key": "lib/command.js@63170..63205",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._exit(exitCode, code, message)"
+        },
+        "site": "lib/command.js:1957",
+        "site_key": "lib/command.js@63170..63205",
+        "site_text": "this._exit(exitCode, code, message)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:192 createCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@7310..7365#Command.createCommand",
+        "polint_site": {
+          "key": "lib/command.js@6421..6445",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createCommand(name)"
+        },
+        "site": "lib/command.js:165",
+        "site_key": "lib/command.js@6421..6445",
+        "site_text": "this.createCommand(name)",
+        "syntax": "member"
+      },
+      {
+        "cause": "local_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:359 arguments",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@12444..12596#Command.arguments",
+        "polint_site": {
+          "key": "lib/command.js@6837..6856",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "cmd.arguments(args)"
+        },
+        "site": "lib/command.js:173",
+        "site_key": "lib/command.js@6837..6856",
+        "site_text": "cmd.arguments(args)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:644 _registerCommand",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@20934..21488#Command._registerCommand",
+        "polint_site": {
+          "key": "lib/command.js@6862..6888",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._registerCommand(cmd)"
+        },
+        "site": "lib/command.js:174",
+        "site_key": "lib/command.js@6862..6888",
+        "site_text": "this._registerCommand(cmd)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1940 error",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@62575..63210#Command.error",
+        "polint_site": {
+          "key": "lib/command.js@68692..68748",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.error(message, { code: 'commander.unknownOption' })"
+        },
+        "site": "lib/command.js:2136",
+        "site_key": "lib/command.js@68692..68748",
+        "site_text": "this.error(message, { code: 'commander.unknownOption' })",
+        "syntax": "member"
+      },
+      {
+        "cause": "local_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:99 copyInheritedSettings",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@3818..4624#Command.copyInheritedSettings",
+        "polint_site": {
+          "key": "lib/command.js@6917..6948",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "cmd.copyInheritedSettings(this)"
+        },
+        "site": "lib/command.js:176",
+        "site_key": "lib/command.js@6917..6948",
+        "site_text": "cmd.copyInheritedSettings(this)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:203 createHelp",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@7550..7628#Command.createHelp",
+        "polint_site": {
+          "key": "lib/command.js@69532..69549",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createHelp()"
+        },
+        "site": "lib/command.js:2168",
+        "site_key": "lib/command.js@69532..69549",
+        "site_text": "this.createHelp()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:1940 error",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@62575..63210#Command.error",
+        "polint_site": {
+          "key": "lib/command.js@69924..69981",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.error(message, { code: 'commander.unknownCommand' })"
+        },
+        "site": "lib/command.js:2179",
+        "site_key": "lib/command.js@69924..69981",
+        "site_text": "this.error(message, { code: 'commander.unknownCommand' })",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:585 createOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@19279..19360#Command.createOption",
+        "polint_site": {
+          "key": "lib/command.js@70666..70703",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createOption(flags, description)"
+        },
+        "site": "lib/command.js:2200",
+        "site_key": "lib/command.js@70666..70703",
+        "site_text": "this.createOption(flags, description)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:619 _registerOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@20130..20729#Command._registerOption",
+        "polint_site": {
+          "key": "lib/command.js@70770..70805",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._registerOption(versionOption)"
+        },
+        "site": "lib/command.js:2202",
+        "site_key": "lib/command.js@70770..70805",
+        "site_text": "this._registerOption(versionOption)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:215 configureHelp",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@7943..8109#Command.configureHelp",
+        "polint_site": {
+          "key": "lib/command.js@7602..7622",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.configureHelp()"
+        },
+        "site": "lib/command.js:204",
+        "site_key": "lib/command.js@7602..7622",
+        "site_text": "this.configureHelp()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:203 createHelp",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@7550..7628#Command.createHelp",
+        "polint_site": {
+          "key": "lib/command.js@77186..77203",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createHelp()"
+        },
+        "site": "lib/command.js:2451",
+        "site_key": "lib/command.js@77186..77203",
+        "site_text": "this.createHelp()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2475 _getOutputContext",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@77829..78621#Command._getOutputContext",
+        "polint_site": {
+          "key": "lib/command.js@77225..77263",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getOutputContext(contextOptions)"
+        },
+        "site": "lib/command.js:2452",
+        "site_key": "lib/command.js@77225..77263",
+        "site_text": "this._getOutputContext(contextOptions)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2475 _getOutputContext",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@77829..78621#Command._getOutputContext",
+        "polint_site": {
+          "key": "lib/command.js@79102..79140",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getOutputContext(contextOptions)"
+        },
+        "site": "lib/command.js:2512",
+        "site_key": "lib/command.js@79102..79140",
+        "site_text": "this._getOutputContext(contextOptions)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:121 _getCommandAndAncestors",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@4681..4919#Command._getCommandAndAncestors",
+        "polint_site": {
+          "key": "lib/command.js@79310..79340",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getCommandAndAncestors()"
+        },
+        "site": "lib/command.js:2520",
+        "site_key": "lib/command.js@79310..79340",
+        "site_text": "this._getCommandAndAncestors()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2450 helpInformation",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@77133..77555#Command.helpInformation",
+        "polint_site": {
+          "key": "lib/command.js@79502..79554",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.helpInformation({ error: outputContext.error })"
+        },
+        "site": "lib/command.js:2525",
+        "site_key": "lib/command.js@79502..79554",
+        "site_text": "this.helpInformation({ error: outputContext.error })",
+        "syntax": "member"
+      },
+      {
+        "cause": "local_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2490 write",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@78449..78565#<polint:anonymous:78449:78565>",
+        "polint_site": {
+          "key": "lib/command.js@79856..79892",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "outputContext.write(helpInformation)"
+        },
+        "site": "lib/command.js:2535",
+        "site_key": "lib/command.js@79856..79892",
+        "site_text": "outputContext.write(helpInformation)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2592 _getHelpOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@81517..81703#Command._getHelpOption",
+        "polint_site": {
+          "key": "lib/command.js@79950..79971",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getHelpOption()"
+        },
+        "site": "lib/command.js:2538",
+        "site_key": "lib/command.js@79950..79971",
+        "site_text": "this._getHelpOption()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:121 _getCommandAndAncestors",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@4681..4919#Command._getCommandAndAncestors",
+        "polint_site": {
+          "key": "lib/command.js@80045..80075",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getCommandAndAncestors()"
+        },
+        "site": "lib/command.js:2541",
+        "site_key": "lib/command.js@80045..80075",
+        "site_text": "this._getCommandAndAncestors()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:585 createOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@19279..19360#Command.createOption",
+        "polint_site": {
+          "key": "lib/command.js@81107..81209",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.createOption( flags ?? '-h, --help', description ?? 'display help for command', )"
+        },
+        "site": "lib/command.js:2575",
+        "site_key": "lib/command.js@81107..81209",
+        "site_text": "this.createOption( flags ?? '-h, --help', description ?? 'display help for command', )",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2559 helpOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@80570..81340#Command.helpOption",
+        "polint_site": {
+          "key": "lib/command.js@81626..81663",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.helpOption(undefined, undefined)"
+        },
+        "site": "lib/command.js:2595",
+        "site_key": "lib/command.js@81626..81663",
+        "site_text": "this.helpOption(undefined, undefined)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2505 outputHelp",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@78887..80157#Command.outputHelp",
+        "polint_site": {
+          "key": "lib/command.js@82346..82377",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.outputHelp(contextOptions)"
+        },
+        "site": "lib/command.js:2622",
+        "site_key": "lib/command.js@82346..82377",
+        "site_text": "this.outputHelp(contextOptions)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:533 _exit",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@17830..18046#Command._exit",
+        "polint_site": {
+          "key": "lib/command.js@82766..82820",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._exit(exitCode, 'commander.help', '(outputHelp)')"
+        },
+        "site": "lib/command.js:2633",
+        "site_key": "lib/command.js@82766..82820",
+        "site_text": "this._exit(exitCode, 'commander.help', '(outputHelp)')",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2592 _getHelpOption",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@81517..81703#Command._getHelpOption",
+        "polint_site": {
+          "key": "lib/command.js@84449..84470",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._getHelpOption()"
+        },
+        "site": "lib/command.js:2687",
+        "site_key": "lib/command.js@84449..84470",
+        "site_text": "this._getHelpOption()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:2505 outputHelp",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@78887..80157#Command.outputHelp",
+        "polint_site": {
+          "key": "lib/command.js@84583..84600",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.outputHelp()"
+        },
+        "site": "lib/command.js:2690",
+        "site_key": "lib/command.js@84583..84600",
+        "site_text": "this.outputHelp()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/command.js:533 _exit",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/command.js@17830..18046#Command._exit",
+        "polint_site": {
+          "key": "lib/command.js@84689..84745",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this._exit(0, 'commander.helpDisplayed', '(outputHelp)')"
+        },
+        "site": "lib/command.js:2692",
+        "site_key": "lib/command.js@84689..84745",
+        "site_text": "this._exit(0, 'commander.helpDisplayed', '(outputHelp)')",
+        "syntax": "member"
+      },
+      {
+        "cause": "parameter_call",
+        "kind": "call",
+        "observed_callee": "lib/help.js:484 <anonymous>",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@13435..13484#<polint:anonymous:13435:13484>",
+        "polint_site": {
+          "key": "lib/help.js@11728..11742",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "getGroup(item)"
+        },
+        "site": "lib/help.js:421",
+        "site_key": "lib/help.js@11728..11742",
+        "site_text": "getGroup(item)",
+        "syntax": "identifier"
+      },
+      {
+        "cause": "parameter_call",
+        "kind": "call",
+        "observed_callee": "lib/help.js:514 <anonymous>",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@14440..14479#<polint:anonymous:14440:14479>",
+        "polint_site": {
+          "key": "lib/help.js@11728..11742",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "getGroup(item)"
+        },
+        "site": "lib/help.js:421",
+        "site_key": "lib/help.js@11728..11742",
+        "site_text": "getGroup(item)",
+        "syntax": "identifier"
+      },
+      {
+        "cause": "parameter_call",
+        "kind": "call",
+        "observed_callee": "lib/help.js:484 <anonymous>",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@13435..13484#<polint:anonymous:13435:13484>",
+        "polint_site": {
+          "key": "lib/help.js@11919..11933",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "getGroup(item)"
+        },
+        "site": "lib/help.js:426",
+        "site_key": "lib/help.js@11919..11933",
+        "site_text": "getGroup(item)",
+        "syntax": "identifier"
+      },
+      {
+        "cause": "parameter_call",
+        "kind": "call",
+        "observed_callee": "lib/help.js:514 <anonymous>",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@14440..14479#<polint:anonymous:14440:14479>",
+        "polint_site": {
+          "key": "lib/help.js@11919..11933",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "getGroup(item)"
+        },
+        "site": "lib/help.js:426",
+        "site_key": "lib/help.js@11919..11933",
+        "site_text": "getGroup(item)",
+        "syntax": "identifier"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:403 formatItemList",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@11144..11283#Help.formatItemList",
+        "polint_site": {
+          "key": "lib/help.js@13254..13309",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.formatItemList('Arguments:', argumentList, helper)"
+        },
+        "site": "lib/help.js:477",
+        "site_key": "lib/help.js@13254..13309",
+        "site_text": "this.formatItemList('Arguments:', argumentList, helper)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:417 groupItems",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@11529..12072#Help.groupItems",
+        "polint_site": {
+          "key": "lib/help.js@13359..13491",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.groupItems( cmd.options, helper.visibleOptions(cmd), (option) => option.helpGroupHea\u2026"
+        },
+        "site": "lib/help.js:481",
+        "site_key": "lib/help.js@13359..13491",
+        "site_text": "this.groupItems( cmd.options, helper.visibleOptions(cmd), (option) => option.helpGroupHea\u2026",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:403 formatItemList",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@11144..11283#Help.formatItemList",
+        "polint_site": {
+          "key": "lib/help.js@14238..14302",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.formatItemList('Global Options:', globalOptionList, helper)"
+        },
+        "site": "lib/help.js:506",
+        "site_key": "lib/help.js@14238..14302",
+        "site_text": "this.formatItemList('Global Options:', globalOptionList, helper)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:417 groupItems",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@11529..12072#Help.groupItems",
+        "polint_site": {
+          "key": "lib/help.js@14362..14486",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.groupItems( cmd.commands, helper.visibleCommands(cmd), (sub) => sub.helpGroup() || '\u2026"
+        },
+        "site": "lib/help.js:511",
+        "site_key": "lib/help.js@14362..14486",
+        "site_text": "this.groupItems( cmd.commands, helper.visibleCommands(cmd), (sub) => sub.helpGroup() || '\u2026",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:575 styleDescriptionText",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@16267..16314#Help.styleDescriptionText",
+        "polint_site": {
+          "key": "lib/help.js@15986..16016",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.styleDescriptionText(str)"
+        },
+        "site": "lib/help.js:564",
+        "site_key": "lib/help.js@15986..16016",
+        "site_text": "this.styleDescriptionText(str)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:575 styleDescriptionText",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@16267..16314#Help.styleDescriptionText",
+        "polint_site": {
+          "key": "lib/help.js@16065..16095",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.styleDescriptionText(str)"
+        },
+        "site": "lib/help.js:567",
+        "site_key": "lib/help.js@16065..16095",
+        "site_text": "this.styleDescriptionText(str)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:575 styleDescriptionText",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@16267..16314#Help.styleDescriptionText",
+        "polint_site": {
+          "key": "lib/help.js@16148..16178",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.styleDescriptionText(str)"
+        },
+        "site": "lib/help.js:570",
+        "site_key": "lib/help.js@16148..16178",
+        "site_text": "this.styleDescriptionText(str)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:575 styleDescriptionText",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@16267..16314#Help.styleDescriptionText",
+        "polint_site": {
+          "key": "lib/help.js@16229..16259",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.styleDescriptionText(str)"
+        },
+        "site": "lib/help.js:573",
+        "site_key": "lib/help.js@16229..16259",
+        "site_text": "this.styleDescriptionText(str)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:597 styleOptionText",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@16950..16992#Help.styleOptionText",
+        "polint_site": {
+          "key": "lib/help.js@16351..16376",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.styleOptionText(str)"
+        },
+        "site": "lib/help.js:579",
+        "site_key": "lib/help.js@16351..16376",
+        "site_text": "this.styleOptionText(str)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/help.js:600 styleArgumentText",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/help.js@16995..17039#Help.styleArgumentText",
+        "polint_site": {
+          "key": "lib/help.js@16915..16942",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.styleArgumentText(str)"
+        },
+        "site": "lib/help.js:595",
+        "site_key": "lib/help.js@16915..16942",
+        "site_text": "this.styleArgumentText(str)",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/option.js:203 name",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/option.js@5381..5504#Option.name",
+        "polint_site": {
+          "key": "lib/option.js@5709..5720",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.name()"
+        },
+        "site": "lib/option.js:219",
+        "site_key": "lib/option.js@5709..5720",
+        "site_text": "this.name()",
+        "syntax": "member"
+      },
+      {
+        "cause": "this_member",
+        "kind": "call",
+        "observed_callee": "lib/option.js:203 name",
+        "outcome": "no target, marked unresolved",
+        "package": "commander",
+        "polint_callee": "lib/option.js@5381..5504#Option.name",
+        "polint_site": {
+          "key": "lib/option.js@5770..5781",
+          "marked_unresolved": true,
+          "match": "exact span",
+          "stops_at_import_binding": false,
+          "targets": [],
+          "text": "this.name()"
+        },
+        "site": "lib/option.js:221",
+        "site_key": "lib/option.js@5770..5781",
+        "site_text": "this.name()",
+        "syntax": "member"
+      }
+    ],
+    "walker_only_counts": {
+      "async/this_member": 4,
+      "axios/this_member": 3,
+      "commander/local_member": 6,
+      "commander/parameter_call": 7,
+      "commander/this_member": 85
+    }
+  }
+}

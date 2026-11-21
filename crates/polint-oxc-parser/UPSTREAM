@@ -1,0 +1,3 @@
+oxc_parser 0.129.0
+crates.io checksum 2fcb901b425989d315e1c536f561d6f92260731a1e1c1418c1ba4cc203167124
+git https://github.com/oxc-project/oxc ec00055e64692a7eb81bc3b77a7e7480ed084931 crates/oxc_parser

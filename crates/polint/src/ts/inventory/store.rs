@@ -313,6 +313,7 @@ mod tests {
             lexical_parent_key: Some(interner.intern("module")),
             display_name: Some(stable_key.to_string()),
             kind: TsFunctionInventoryKind::Arrow,
+            has_body: true,
             status: TsInventoryStatus::Resolved,
         }
     }

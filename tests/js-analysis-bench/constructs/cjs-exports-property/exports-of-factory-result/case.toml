@@ -1,0 +1,3 @@
+construct = "cjs-exports-property"
+held_out = true
+description = "`exports.x` holds a function returned by a factory call; another module requires and calls it."

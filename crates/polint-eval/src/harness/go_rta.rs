@@ -87,11 +87,11 @@ fn solver_budget_for_fixture(fixture_dir: &Path) -> SolverBudget {
 }
 
 /// Drives the unified solver engine over the fixture-built db exactly as
-/// `derive_solver_with_cache_stats` does (the points-to CopyEdge closure via step-1
-/// `derive_edges` + the Go RTA policy + the TS points-to policy), returning the merged,
+/// `derive_solver_with_cache_stats` does (the model edges + the Go RTA policy + the
+/// TS points-to policy), returning the merged,
 /// normalized [`SolverOutput`] so the gate can read the run-level `budget_status` and
 /// the derived edges. Like production, it does NOT register `PointsToPolicy` (FINDING 3): the
-/// points-to edges come from the step-1 CopyEdge closure, and registering the Andersen
+/// TS call edges come from the TS points-to policy, and registering the Andersen
 /// fold here would re-run a discarded solve whose budget status would pollute the run.
 fn solver_output_for_db(db: &AnalysisDb, budget: SolverBudget) -> SolverOutput {
     let constraints = db.semantic_constraints().to_vec();

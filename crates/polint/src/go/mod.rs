@@ -16,6 +16,7 @@ pub mod lifecycle;
 mod local_db;
 #[cfg(feature = "lang-go")]
 mod mir;
+mod model_files;
 pub mod module_graph;
 mod process_runner;
 pub(crate) mod route_models;

@@ -34,6 +34,14 @@ pub enum NodeKind {
     AbstractObject(ObjectTokenId),
     Module(ModuleNodeId),
     Package(PackageId),
+    /// The parameter at a position of a function, as the call rule binds it.
+    FunctionParam(FunctionId, u8),
+    /// The rest parameter of a function.
+    FunctionRest(FunctionId),
+    /// The value a function's `this` holds.
+    FunctionThis(FunctionId),
+    /// The values a function returns.
+    FunctionReturn(FunctionId),
 }
 
 impl NodeKind {
@@ -47,6 +55,10 @@ impl NodeKind {
             Self::AbstractObject(_) => "abstract_object",
             Self::Module(_) => "module",
             Self::Package(_) => "package",
+            Self::FunctionParam(..) => "function_param",
+            Self::FunctionRest(_) => "function_rest",
+            Self::FunctionThis(_) => "function_this",
+            Self::FunctionReturn(_) => "function_return",
         }
     }
 }
@@ -164,8 +176,12 @@ mod tests {
             NodeKind::AbstractObject(ObjectTokenId(5)),
             NodeKind::Module(ModuleNodeId::from_raw(6)),
             NodeKind::Package(PackageId::from_raw(7)),
+            NodeKind::FunctionParam(FunctionId::from_raw(1), 0),
+            NodeKind::FunctionRest(FunctionId::from_raw(1)),
+            NodeKind::FunctionThis(FunctionId::from_raw(1)),
+            NodeKind::FunctionReturn(FunctionId::from_raw(1)),
         ];
-        assert_eq!(nodes.len(), 7);
+        assert_eq!(nodes.len(), 11);
     }
 
     #[test]
@@ -189,10 +205,21 @@ mod tests {
             NodeKind::Package(PackageId::from_raw(0)).as_str(),
             "package"
         );
+        let function = FunctionId::from_raw(0);
+        assert_eq!(
+            NodeKind::FunctionParam(function, 0).as_str(),
+            "function_param"
+        );
+        assert_eq!(NodeKind::FunctionRest(function).as_str(), "function_rest");
+        assert_eq!(NodeKind::FunctionThis(function).as_str(), "function_this");
+        assert_eq!(
+            NodeKind::FunctionReturn(function).as_str(),
+            "function_return"
+        );
     }
 
     #[test]
-    fn node_kind_has_exactly_7_variants() {
+    fn node_kind_has_exactly_11_variants() {
         // Compile-time exhaustive match over every arm; the array length lock fails
         // to compile if a variant is added without updating this test.
         fn assert_all(kind: &NodeKind) -> &'static str {
@@ -204,6 +231,10 @@ mod tests {
                 NodeKind::AbstractObject(_) => "abstract_object",
                 NodeKind::Module(_) => "module",
                 NodeKind::Package(_) => "package",
+                NodeKind::FunctionParam(..) => "function_param",
+                NodeKind::FunctionRest(_) => "function_rest",
+                NodeKind::FunctionThis(_) => "function_this",
+                NodeKind::FunctionReturn(_) => "function_return",
             }
         }
         let variants = [
@@ -214,8 +245,12 @@ mod tests {
             assert_all(&NodeKind::AbstractObject(ObjectTokenId(0))),
             assert_all(&NodeKind::Module(ModuleNodeId::from_raw(0))),
             assert_all(&NodeKind::Package(PackageId::from_raw(0))),
+            assert_all(&NodeKind::FunctionParam(FunctionId::from_raw(0), 0)),
+            assert_all(&NodeKind::FunctionRest(FunctionId::from_raw(0))),
+            assert_all(&NodeKind::FunctionThis(FunctionId::from_raw(0))),
+            assert_all(&NodeKind::FunctionReturn(FunctionId::from_raw(0))),
         ];
-        assert_eq!(variants.len(), 7);
+        assert_eq!(variants.len(), 11);
     }
 
     #[test]

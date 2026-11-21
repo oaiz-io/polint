@@ -190,6 +190,12 @@ Every fix has a unit test that failed before the fix.
 
 ## Walker Plan (After the Performance Branch Merges)
 
+> Superseded on 2026-11-17 by
+> [`../package-graphs/ITERATION-1-CLASSICAL.md`](../package-graphs/ITERATION-1-CLASSICAL.md).
+> The constructs and fixtures listed here are still the list of what to cover.
+> They are now covered by lowering value flow into constraints (WP1 and WP2
+> there), not by extending the walker.
+
 Line numbers are for `crates/polint/src/ts/callable_flow/extract.rs` at
 `2f433fea`. They will move once the performance branch lands. Each item names a
 construct fixture to add under `tests/js-analysis-bench/constructs/` first, so

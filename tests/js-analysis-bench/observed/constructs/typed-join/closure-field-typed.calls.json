@@ -1,0 +1,47 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.ts"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.ts@170..289",
+      "name": "exitOverride"
+    },
+    {
+      "function": "main.ts@293..390",
+      "name": "exit"
+    },
+    {
+      "function": "main.ts@394..478",
+      "name": "onExit"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.ts@345..368",
+      "syntax": "member",
+      "callee": "main.ts@394..478",
+      "callee_name": "onExit"
+    },
+    {
+      "kind": "call",
+      "site": "main.ts@480..514",
+      "syntax": "member",
+      "callee": "main.ts@170..289",
+      "callee_name": "exitOverride"
+    },
+    {
+      "kind": "call",
+      "site": "main.ts@480..522",
+      "syntax": "member",
+      "callee": "main.ts@293..390",
+      "callee_name": "exit"
+    }
+  ]
+}

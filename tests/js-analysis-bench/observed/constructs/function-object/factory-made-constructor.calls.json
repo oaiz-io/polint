@@ -1,0 +1,48 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js",
+    "make.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@63..123",
+      "name": "initError"
+    },
+    {
+      "function": "make.js@18..173",
+      "name": "$make"
+    },
+    {
+      "function": "make.js@63..81",
+      "name": "made"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@143..159",
+      "syntax": "identifier",
+      "callee": "make.js@18..173",
+      "callee_name": "$make"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@177..195",
+      "syntax": "member",
+      "callee": "main.js@63..123",
+      "callee_name": "initError"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@217..232",
+      "syntax": "new",
+      "callee": "make.js@63..81",
+      "callee_name": "made"
+    }
+  ]
+}

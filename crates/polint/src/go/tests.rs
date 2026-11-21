@@ -1675,3 +1675,89 @@ func Ones() *int {
             .any(|literal| literal.value == "budget exceeded")
     );
 }
+
+/// One Go file per construct that nests, `levels` deep. Operator, selector,
+/// call and index chains build a syntax tree as deep as the chain is long.
+fn nested_go_sources(levels: usize) -> Vec<(&'static str, String)> {
+    let n = levels;
+    let body = |statement: String| format!("package p\n\nfunc F() {{\n\t{statement}\n}}\n");
+    vec![
+        (
+            "paren",
+            body(format!("_ = {}a{}", "(".repeat(n), ")".repeat(n))),
+        ),
+        ("unary", body(format!("_ = {}a", "-".repeat(n)))),
+        ("binary chain", body(format!("_ = {}a", "a + ".repeat(n)))),
+        ("selector chain", body(format!("_ = a{}", ".b".repeat(n)))),
+        ("call chain", body(format!("_ = a{}", "()".repeat(n)))),
+        ("index chain", body(format!("_ = a{}", "[0]".repeat(n)))),
+        ("block", body(format!("{}{}", "{".repeat(n), "}".repeat(n)))),
+        (
+            "else if",
+            body(format!("if a {{}}{}", " else if a {}".repeat(n))),
+        ),
+        (
+            "closure",
+            body(format!(
+                "_ = {}a{}",
+                "func() int { return ".repeat(n),
+                " }()".repeat(n)
+            )),
+        ),
+        (
+            "composite literal",
+            body(format!("_ = {}a{}", "[]any{".repeat(n), "}".repeat(n))),
+        ),
+        (
+            "slice type",
+            body(format!("var x {}int; _ = x", "[]".repeat(n))),
+        ),
+    ]
+}
+
+/// Extract and lower one Go file on a thread with the stack every analysis
+/// worker gets, so a walk that would overflow a worker overflows here too.
+fn analyze_and_lower_on_a_worker_stack(source: String) -> Vec<String> {
+    std::thread::Builder::new()
+        .stack_size(crate::jobs::WORKER_STACK_BYTES)
+        .spawn(move || {
+            let mut db = crate::analysis_neutral::LocalAnalysisDb::new();
+            db.add_file(PathBuf::from("p.go"), "p.go".to_string(), source);
+            let cache = crate::analysis_api::DisabledAnalysisCache;
+            let diagnostics = crate::go::analyze_with_options(&mut db, &cache, "", "", false);
+            let _ = crate::go::lower_go_mir(&db);
+            diagnostics
+                .iter()
+                .map(|diagnostic| format!("{}: {}", diagnostic.rule_id, diagnostic.message))
+                .collect()
+        })
+        .expect("spawn analysis thread")
+        .join()
+        .expect("analysis thread finished")
+}
+
+#[test]
+fn a_go_file_nested_past_the_limit_is_reported_and_not_analysed() {
+    for (construct, source) in nested_go_sources(100_000) {
+        let diagnostics = analyze_and_lower_on_a_worker_stack(source);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|message| message.starts_with("parser/go:") && message.contains("deeper than")),
+            "{construct}: the file is reported as nested past the limit: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn a_go_file_nested_well_within_the_limit_is_analysed() {
+    for (construct, source) in nested_go_sources(500) {
+        let diagnostics = analyze_and_lower_on_a_worker_stack(source);
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|message| message.contains("deeper than")),
+            "{construct}: {diagnostics:?}"
+        );
+    }
+}

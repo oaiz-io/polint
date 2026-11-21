@@ -1,0 +1,3 @@
+construct = "typed-join"
+held_out = true
+description = "A subclass of an emitter declared only in a type declaration forwards through super.emit to the platform emitter; an object with its own emit method is never the target."

@@ -7,9 +7,10 @@ mod adapter;
 #[cfg(not(feature = "lang-typescript"))]
 mod unavailable;
 #[cfg(not(feature = "lang-typescript"))]
-pub use unavailable::{semantic_graph, token_flow};
+pub use unavailable::semantic_graph;
 pub mod binding;
 mod callable_flow;
+pub(crate) mod constraints;
 pub mod error;
 mod frontend;
 mod hash;
@@ -30,6 +31,8 @@ pub mod points_to;
 mod repo_fs;
 pub mod scope;
 #[cfg(feature = "lang-typescript")]
+mod sealed_bindings;
+#[cfg(feature = "lang-typescript")]
 pub mod semantic_graph;
 pub(crate) mod semantic_graph_build;
 #[cfg(feature = "lang-typescript")]
@@ -37,8 +40,7 @@ pub mod spans;
 #[cfg(feature = "lang-typescript")]
 pub mod symbol_graph;
 pub mod syntax_store;
-#[cfg(feature = "lang-typescript")]
-pub mod token_flow;
+pub(crate) mod tsconfig_chain;
 pub(crate) mod types;
 
 use std::cell::RefCell;
@@ -53,6 +55,12 @@ mod tests;
 // The kernel harness lives under `crate::eval`, which needs both languages.
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 mod direct_call_tests;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod exact_claim_soundness_tests;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod package_graph_composition_tests;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod package_graph_corrections_tests;
 
 thread_local! {
     static FRONTEND_STABLE_KEYS: RefCell<Option<StableKeyInterner>> = const { RefCell::new(None) };
@@ -106,8 +114,6 @@ pub use crate::analysis_api::{anonymous_callable_name, is_anonymous_callable_nam
 #[allow(unreachable_pub, unused_imports)]
 pub use adapter::analyze_with_options;
 #[cfg(feature = "lang-typescript")]
-pub(crate) use adapter::object_method_function_span;
-#[cfg(feature = "lang-typescript")]
 #[allow(unused_imports)]
 pub use adapter::{
     DYNAMIC_IMPORT_SPECIFIER, analyze_files_with_plan_options_and_cache_stats,
@@ -115,6 +121,8 @@ pub use adapter::{
 };
 #[cfg(all(test, feature = "lang-typescript"))]
 pub(crate) use adapter::{analyze, analyze_with_cache};
+#[cfg(feature = "lang-typescript")]
+pub(crate) use adapter::{class_method_function_span, object_method_function_span};
 
 pub use frontend::{FAMILY_TYPESCRIPT_JAVASCRIPT, TS_FRONTEND_PROFILE, TsJsFrontend};
 pub use syntax_store::{TS_SYNTAX_STORE_FAMILY, TsSyntaxStore};

@@ -1,6 +1,6 @@
 #![allow(dead_code, reason = "kept for private internal consumers")]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis_api::{
     ImportFact, ModuleNode, ModuleNodeKind, ResolutionStatus, ResolvedImportFact,
@@ -309,25 +309,10 @@ impl<'a> DirectBindingIndex<'a> {
         binding: Option<&TsBindingFact>,
     ) -> Option<&'a TsInventoryFunctionFact> {
         let functions = self.function_by_name.get(name)?;
-        if let Some(binding) = binding
-            && let Some(function) = functions.iter().copied().find(|function| {
-                function.file == binding.file && spans_overlap(&function.span, &binding.span)
-            })
-        {
-            return Some(function);
+        match binding {
+            Some(binding) => callable_for_binding(functions, binding),
+            None => functions.iter().copied().find(|function| function.has_body),
         }
-        if let Some(binding) = binding {
-            let mut same_file = functions
-                .iter()
-                .copied()
-                .filter(|function| function.file == binding.file);
-            let first = same_file.next()?;
-            if same_file.next().is_none() {
-                return Some(first);
-            }
-            return None;
-        }
-        functions.first().copied()
     }
 
     fn visible_any_binding(
@@ -558,28 +543,50 @@ impl<'a> ModuleBindingIndex<'a> {
         module_node: ModuleNodeId,
         export_name: &str,
     ) -> Option<ModuleFunctionTarget<'a>> {
-        self.exported_function_inner(module_node, export_name, 0)
+        let mut search = ExportSearch::default();
+        let found = self.exported_function_inner(module_node, export_name, 0, &mut search);
+        found.filter(|_| !search.exhausted)
     }
 
+    /// The function `module_node` exports as `export_name`, following its
+    /// re-exports. Each module and name is searched once: a second search
+    /// finds what the first did not. Past nine hops or [`MAX_EXPORT_LOOKUPS`]
+    /// lookups the search stops with no answer, as a later match would stand
+    /// in for one the cut branch might have found first.
     fn exported_function_inner(
         &self,
         module_node: ModuleNodeId,
         export_name: &str,
         depth: usize,
+        search: &mut ExportSearch,
     ) -> Option<ModuleFunctionTarget<'a>> {
-        if depth > 8 {
+        if search.exhausted {
+            return None;
+        }
+        if depth > 8 || search.seen.len() >= MAX_EXPORT_LOOKUPS {
+            search.exhausted = true;
+            return None;
+        }
+        if !search.seen.insert((module_node, export_name.to_string())) {
             return None;
         }
 
         let module = self.module_file_by_node.get(&module_node)?;
+        let mut explicit = false;
         for binding in &module.scope.bindings {
-            if binding.exported_name.as_deref() == Some(export_name)
-                && let Some(function_key) = binding.inventory_function_key
-                && let Some(function) = module
+            if binding.exported_name.as_deref() != Some(export_name) {
+                continue;
+            }
+            if let Some(function_key) = binding.inventory_function_key
+                && let Some(declaration) = module
                     .inventory
                     .functions
                     .iter()
                     .find(|function| function.stable_key == function_key)
+                && let Some(function) = implementation_of(
+                    &module.inventory.functions.iter().collect::<Vec<_>>(),
+                    declaration,
+                )
             {
                 return Some(ModuleFunctionTarget {
                     module_node,
@@ -587,8 +594,7 @@ impl<'a> ModuleBindingIndex<'a> {
                     via_reexport: false,
                 });
             }
-            if binding.exported_name.as_deref() == Some(export_name)
-                && binding.module_source.is_none()
+            if binding.module_source.is_none()
                 && let Some(imported_name) = binding.imported_name.as_deref()
                 && let Some(function) = function_for_local_export(
                     module.inventory,
@@ -603,32 +609,79 @@ impl<'a> ModuleBindingIndex<'a> {
                     via_reexport: false,
                 });
             }
-            if matches!(binding.binding_kind, TsBindingKind::ReExport)
-                && (binding.exported_name.as_deref() == Some(export_name)
-                    || binding.exported_name.as_deref() == Some("*"))
-                && let Some(source) = binding.module_source.as_ref()
-                && let Some(reexport) = self
-                    .resolved_by_file_source
-                    .get(&(binding.file, source.clone()))
-                && reexport.status == ResolutionStatus::Resolved
-                && let Some(target_node) = reexport.target_node
-            {
-                let target_name = binding
-                    .imported_name
-                    .as_deref()
-                    .filter(|name| *name != "*")
-                    .unwrap_or(export_name);
-                if let Some(mut function) =
-                    self.exported_function_inner(target_node, target_name, depth + 1)
+            if let Some(function) = self.reexported_function(binding, export_name, depth, search) {
+                return Some(function);
+            }
+            explicit = true;
+        }
+        // A name the module exports itself hides the `export *` ones, and two
+        // `export *` that give one name different bindings give it none.
+        if explicit {
+            return None;
+        }
+        let mut found: Option<ModuleFunctionTarget<'a>> = None;
+        for binding in &module.scope.bindings {
+            if binding.exported_name.as_deref() != Some("*") {
+                continue;
+            }
+            let Some(function) = self.reexported_function(binding, export_name, depth, search)
+            else {
+                continue;
+            };
+            match &found {
+                Some(first)
+                    if first.module_node != function.module_node
+                        || first.function.stable_key != function.function.stable_key =>
                 {
-                    function.via_reexport = true;
-                    return Some(function);
+                    search.exhausted = true;
+                    return None;
                 }
+                Some(_) => {}
+                None => found = Some(function),
             }
         }
-
-        None
+        found.filter(|_| !search.exhausted)
     }
+
+    /// The function the re-export `binding` gives `export_name`, where it is
+    /// a re-export of a resolved module.
+    fn reexported_function(
+        &self,
+        binding: &TsBindingFact,
+        export_name: &str,
+        depth: usize,
+        search: &mut ExportSearch,
+    ) -> Option<ModuleFunctionTarget<'a>> {
+        if !matches!(binding.binding_kind, TsBindingKind::ReExport) {
+            return None;
+        }
+        let source = binding.module_source.as_ref()?;
+        let reexport = self
+            .resolved_by_file_source
+            .get(&(binding.file, source.clone()))?;
+        if reexport.status != ResolutionStatus::Resolved {
+            return None;
+        }
+        let target_node = reexport.target_node?;
+        let target_name = binding
+            .imported_name
+            .as_deref()
+            .filter(|name| *name != "*")
+            .unwrap_or(export_name);
+        let mut function =
+            self.exported_function_inner(target_node, target_name, depth + 1, search)?;
+        function.via_reexport = true;
+        Some(function)
+    }
+}
+
+/// Bound on the module and name pairs one export search looks up.
+const MAX_EXPORT_LOOKUPS: usize = 512;
+
+#[derive(Default)]
+struct ExportSearch {
+    seen: BTreeSet<(ModuleNodeId, String)>,
+    exhausted: bool,
 }
 
 struct ModuleFunctionTarget<'a> {
@@ -786,14 +839,18 @@ fn function_for_local_export<'a>(
         return Some(function);
     }
 
-    let mut overlapping = inventory
+    let named = inventory
         .functions
         .iter()
         .filter(|function| function.display_name.as_deref() == Some(local_name))
+        .collect::<Vec<_>>();
+    let mut overlapping = named
+        .iter()
+        .copied()
         .filter(|function| spans_overlap(&function.span, &export.span));
     let first = overlapping.next()?;
     if overlapping.next().is_none() {
-        Some(first)
+        implementation_of(&named, first)
     } else {
         None
     }
@@ -836,22 +893,57 @@ fn function_by_binding<'a>(
         .iter()
         .filter(|function| function.display_name.as_deref() == Some(name))
         .collect::<Vec<_>>();
+    callable_for_binding(&functions, binding)
+}
+
+/// The function a call through `binding` runs, among the same-named
+/// `functions`: the one whose declaration the binding names, else the only
+/// callable one in the binding's file.
+fn callable_for_binding<'a>(
+    functions: &[&'a TsInventoryFunctionFact],
+    binding: &TsBindingFact,
+) -> Option<&'a TsInventoryFunctionFact> {
     if let Some(function) = functions.iter().copied().find(|function| {
         function.file == binding.file && spans_overlap(&function.span, &binding.span)
     }) {
-        return Some(function);
+        return implementation_of(functions, function);
     }
 
     let mut same_file = functions
         .iter()
         .copied()
-        .filter(|function| function.file == binding.file);
+        .filter(|function| function.file == binding.file && function.has_body);
     let first = same_file.next()?;
     if same_file.next().is_none() {
         Some(first)
     } else {
         None
     }
+}
+
+/// The function that runs when `declaration` is called. A declaration with a
+/// body runs itself. A body-less one is an overload signature, whose
+/// implementation is the next same-named declaration with a body in the same
+/// file and lexical parent, or an ambient declaration with no implementation in
+/// the analysed code, which no call is claimed to reach.
+fn implementation_of<'a>(
+    functions: &[&'a TsInventoryFunctionFact],
+    declaration: &'a TsInventoryFunctionFact,
+) -> Option<&'a TsInventoryFunctionFact> {
+    if declaration.has_body {
+        return Some(declaration);
+    }
+    functions
+        .iter()
+        .copied()
+        .filter(|function| {
+            function.has_body
+                && function.file == declaration.file
+                && function.lexical_parent_key == declaration.lexical_parent_key
+                && function.display_name == declaration.display_name
+                && function.span.start_byte >= declaration.span.end_byte
+        })
+        .min_by_key(|function| (function.span.start_byte, function.span.end_byte))
 }
 
 fn resolved_row(

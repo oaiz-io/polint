@@ -880,8 +880,9 @@ impl<'a> Events<'a> {
     /// Finds events matching `query`.
     ///
     /// Supports call-event matching over syntax-derived function calls, upgrading
-    /// to call/refined-call facts when another requested capability already
-    /// builds them. Other event kinds remain preview vocabulary until backed facts land.
+    /// to the resolved call edges the `CallGraph` view serves when another
+    /// requested capability already builds them. Other event kinds remain
+    /// preview vocabulary until backed facts land.
     pub fn matching(self, query: EventPattern) -> Vec<PolicyViolation> {
         crate::policy_queries::matching_events(self.db, query)
     }
@@ -897,8 +898,8 @@ pub struct Calls<'a> {
 impl<'a> Calls<'a> {
     /// Finds forbidden reachable calls described by `query`.
     ///
-    /// Answers bounded reachability over private refined-call and
-    /// reachability facts without exposing raw call-graph internals.
+    /// Answers bounded reachability over the call edges the `CallGraph` view
+    /// serves and the reachability roots, without exposing raw internals.
     pub fn forbidden_reachable(self, query: ReachQuery) -> Vec<PolicyViolation> {
         crate::policy_queries::forbidden_reachable(self.db, query)
     }
@@ -914,8 +915,8 @@ pub struct ControlFlow<'a> {
 impl<'a> ControlFlow<'a> {
     /// Finds events missing a required guard.
     ///
-    /// Supports same-function call-event guard checks over private
-    /// refined call facts and CFG-backed operation order, with MIR/source
+    /// Supports same-function call-event guard checks over the resolved call
+    /// edges and CFG-backed operation order, with MIR/source
     /// ordering as fallback when CFG facts are absent. Other event families
     /// remain preview vocabulary until backed facts land.
     pub fn missing_guard(self, query: GuardQuery) -> Vec<PolicyViolation> {
@@ -940,8 +941,8 @@ impl<'a> ControlFlow<'a> {
 
     /// Finds lifecycle starts missing required cleanup.
     ///
-    /// Supports same-function call-event lifecycle checks over private
-    /// refined call facts and CFG-backed operation order, with MIR/source
+    /// Supports same-function call-event lifecycle checks over the resolved
+    /// call edges and CFG-backed operation order, with MIR/source
     /// ordering as fallback when CFG facts are absent. Exact path, error-exit,
     /// and interprocedural resource proof remains deferred.
     pub fn missing_cleanup(self, query: LifecycleQuery) -> Vec<PolicyViolation> {

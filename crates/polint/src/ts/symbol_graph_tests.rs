@@ -286,7 +286,7 @@ const lazy = import(moduleName);
 
 #[cfg(test)]
 mod semantic_resolution {
-    use super::{derive_ts_file_symbols, derive_ts_semantic_index};
+    use super::{derive_ts_file_semantic_index, derive_ts_file_symbols, derive_ts_semantic_index};
     use crate::ts::parse::parse_ts_file;
     use oxc_allocator::Allocator;
     use oxc_semantic::SemanticBuilder;
@@ -327,7 +327,8 @@ mod semantic_resolution {
         let mut builder = SymbolGraphBuilder::new(interner.clone());
         let mut output = LanguageSymbolOutput::default();
 
-        derive_ts_file_symbols(&interner, &mut builder, &mut output, &file, false);
+        let index = derive_ts_file_semantic_index(&interner, &file, false);
+        derive_ts_file_symbols(&mut builder, &mut output, &file, index, false);
         let symbol_output = builder.finish();
 
         (interner, symbol_output.symbols, output.semantic)
@@ -423,6 +424,89 @@ export const used = localThing;
             derive_symbols_and_semantic("const value = 1;\nexport const doubled = value;\n");
 
         assert!(semantic.resolutions.is_empty());
+    }
+
+    /// Bytes of every scope path, scope key, qualified name, symbol key and
+    /// resolution key derived for `depth` nested functions, each of which
+    /// declares a local and reads the one of the function around it, and the
+    /// number of symbols.
+    fn identity_bytes_for_nested_functions(depth: usize) -> (usize, usize) {
+        let mut source = String::new();
+        for level in 0..depth {
+            let outer = level.saturating_sub(1);
+            source.push_str(&format!("function f{level}() {{ const v{level} = v{outer}; "));
+        }
+        source.push_str(&"}".repeat(depth));
+        // The parse and the walks recurse once per level; an unoptimised build
+        // needs more stack than a test thread has by default.
+        std::thread::Builder::new()
+            .stack_size(256 * 1024 * 1024)
+            .spawn(move || identity_bytes(source))
+            .expect("spawn derivation thread")
+            .join()
+            .expect("derivation finishes")
+    }
+
+    fn identity_bytes(source: String) -> (usize, usize) {
+        let file = SourceFile::new(
+            FileId::from_raw(0),
+            PathBuf::from("src/deep.ts"),
+            "src/deep.ts".to_string(),
+            Language::TypeScript,
+            source.into(),
+            "test-hash".to_string(),
+        );
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let mut builder = SymbolGraphBuilder::new(interner.clone());
+        let mut output = LanguageSymbolOutput::default();
+        let index = derive_ts_file_semantic_index(&interner, &file, true);
+        derive_ts_file_symbols(&mut builder, &mut output, &file, index, true);
+        let symbols = builder.finish().symbols;
+        let semantic = output.semantic;
+        let key = |id| interner.resolve(id).len();
+        let scopes = semantic
+            .scopes
+            .iter()
+            .map(|scope| {
+                scope.scope_path.iter().map(String::len).sum::<usize>() + key(scope.stable_key)
+            })
+            .sum::<usize>();
+        let symbol_bytes = symbols
+            .iter()
+            .map(|symbol| symbol.qualified_name.len() + key(symbol.stable_key))
+            .sum::<usize>();
+        let resolutions = semantic
+            .resolutions
+            .iter()
+            .map(|row| {
+                key(row.stable_key)
+                    + key(row.source_stable_key)
+                    + row.target_stable_keys.iter().map(|id| key(*id)).sum::<usize>()
+            })
+            .sum::<usize>();
+        let distinct_symbol_keys = symbols
+            .iter()
+            .map(|symbol| symbol.stable_key)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        assert_eq!(
+            distinct_symbol_keys,
+            symbols.len(),
+            "every symbol keeps its own identity"
+        );
+        (scopes + symbol_bytes + resolutions, symbols.len())
+    }
+
+    #[test]
+    fn identities_in_deeply_nested_functions_grow_linearly_with_their_depth() {
+        let (shallow, shallow_symbols) = identity_bytes_for_nested_functions(200);
+        let (deep, deep_symbols) = identity_bytes_for_nested_functions(400);
+
+        assert_eq!(deep_symbols, 2 * shallow_symbols);
+        assert!(
+            deep * 2 < shallow * 5,
+            "twice the depth derives {deep} identity bytes against {shallow}"
+        );
     }
 }
 
@@ -604,15 +688,23 @@ mod value_functions {
     }
 
     /// A parameter named `eval` does not make `eval(...)` an indirect call
-    /// the analysis can trust: the argument may still be the global `eval`.
+    /// the analysis can trust: the argument may still be the global `eval`,
+    /// so the binding its code writes has no row.
     #[test]
-    fn an_eval_parameter_drops_every_row() {
+    fn an_eval_parameter_drops_the_row_its_code_writes() {
         let found = rows(
             "src/value.cjs",
             "function run(eval) {\n  let f = () => 1;\n  eval(\"f = () => 2\");\n  return f();\n}\n",
         );
 
-        assert!(found.is_empty(), "{found:?}");
+        assert!(
+            found.iter().all(|(_, _, binding, _)| binding != "f"),
+            "{found:?}"
+        );
+        assert!(
+            found.iter().any(|(_, _, binding, _)| binding == "run"),
+            "{found:?}"
+        );
     }
 
     #[test]

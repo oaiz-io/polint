@@ -1,0 +1,15 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "main.js": {
+      "system": "cjs",
+      "names": [
+        "remove",
+        "save"
+      ],
+      "whole_value": "object"
+    }
+  }
+}

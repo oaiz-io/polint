@@ -130,8 +130,8 @@ impl Digest {
 /// Large outputs have millions of parts. Owning each as its own string costs an
 /// allocation per part and leaves the freed parts scattered over the heap; one
 /// buffer is a few large allocations that go back to the operating system when
-/// it is dropped. [`DigestParts::digest`] hashes exactly what
-/// [`Digest::from_parts`] hashes over the same parts sorted as strings.
+/// it is dropped. [`DigestParts::digest`] sorts the parts as strings and hashes
+/// them in fixed-size chunks of that order, in parallel.
 #[derive(Debug, Default)]
 pub(crate) struct DigestParts {
     text: String,
@@ -222,9 +222,34 @@ impl DigestParts {
     }
 
     /// Digest of the parts, sorted.
+    ///
+    /// The sorted parts are cut into chunks of a fixed size, each chunk is
+    /// hashed on its own and the chunk hashes are folded in order behind the
+    /// part count, so the value depends on the parts and not on how many
+    /// threads hashed them.
     pub(crate) fn digest(mut self, kind: DigestKind, label: &str) -> Digest {
+        use rayon::prelude::*;
+        const PARTS_PER_CHUNK: usize = 4096;
         self.sort();
-        Digest::from_part_iter(kind, label, self.iter())
+        let text = self.text.as_str();
+        let chunks = self
+            .spans
+            .par_chunks(PARTS_PER_CHUNK)
+            .map(|chunk| {
+                Digest::from_part_iter(
+                    kind,
+                    label,
+                    chunk.iter().map(|&(start, end)| &text[start..end]),
+                )
+                .value
+            })
+            .collect::<Vec<_>>();
+        let count = self.spans.len().to_string();
+        Digest::from_part_iter(
+            kind,
+            label,
+            std::iter::once(count.as_str()).chain(chunks.iter().map(String::as_str)),
+        )
     }
 }
 
@@ -380,25 +405,36 @@ mod tests {
     }
 
     #[test]
-    fn packed_parts_digest_matches_sorted_string_parts() {
+    fn packed_parts_digest_depends_on_the_parts_not_their_order_or_threads() {
         // Enough rows to span several parallel batches, with duplicates and
         // parts that are prefixes of each other.
         let rows = (0..20_000_u32).rev().collect::<Vec<_>>();
         let part = |row: &u32| format!("row={}{}", row % 997, "x".repeat((row % 3) as usize));
 
-        let mut expected = rows.iter().map(part).collect::<Vec<_>>();
-        expected.push("header".to_owned());
-        expected.sort();
-        let refs = expected.iter().map(String::as_str).collect::<Vec<_>>();
+        let digest = |rows: &[u32], threads: usize| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .expect("thread pool");
+            pool.install(|| {
+                let mut packed = DigestParts::default();
+                packed.push("header");
+                packed.extend_in_order(rows, |text, row| text.push_str(&part(row)));
+                packed.digest(DigestKind::ProviderOutput, "rows")
+            })
+        };
+        let mut sorted = rows.clone();
+        sorted.sort();
+        let expected = digest(&rows, 1);
+        assert_eq!(digest(&rows, 4), expected);
+        assert_eq!(digest(&sorted, 3), expected);
 
-        let mut packed = DigestParts::default();
-        packed.push("header");
-        packed.extend_in_order(&rows, |text, row| text.push_str(&part(row)));
-
-        assert_eq!(
-            packed.digest(DigestKind::ProviderOutput, "rows"),
-            Digest::from_parts(DigestKind::ProviderOutput, "rows", &refs)
-        );
+        let mut changed = rows.clone();
+        changed[17] = 20_001;
+        assert_ne!(digest(&changed, 4), expected);
+        let mut fewer = rows;
+        fewer.pop();
+        assert_ne!(digest(&fewer, 4), expected);
     }
 
     #[test]

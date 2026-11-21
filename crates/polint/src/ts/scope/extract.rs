@@ -1,6 +1,6 @@
 #![allow(dead_code, reason = "kept for private internal consumers")]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
@@ -23,6 +23,7 @@ use crate::ts::scope::facts::{
     TsScopeFact, TsScopeKind,
 };
 use crate::ts::scope::store::TsScopeOutput;
+use crate::ts::sealed_bindings::{bindings_written_by_block_functions, dynamic_scope};
 
 pub fn extract_ts_scope(interner: &StableKeyInterner, file: &SourceFile) -> TsScopeOutput {
     let source = file.source.as_ref();
@@ -52,11 +53,23 @@ pub fn extract_ts_scope(interner: &StableKeyInterner, file: &SourceFile) -> TsSc
 pub fn mark_scope_partial_ast(output: &mut TsScopeOutput) {
     for binding in &mut output.bindings {
         if matches!(binding.status, TsBindingStatus::Present) {
-            binding.status = TsBindingStatus::unsupported_dynamic(PARTIAL_AST_REASON);
-            binding.binding_kind = TsBindingKind::UnsupportedDynamic;
-            binding.declaration_kind = TsDeclarationKind::UnsupportedDynamic;
+            mark_binding_dynamic(binding, PARTIAL_AST_REASON);
         }
     }
+}
+
+/// The reason a binding carries when a `with` statement or a direct `eval`
+/// can reach it: what its name holds there is not decided by the binding.
+const DYNAMIC_SCOPE_REASON: &str = "dynamic-scope: with statement or eval";
+
+/// The reason a binding carries when a block-level function declaration of
+/// non-strict code also writes it.
+const BLOCK_FUNCTION_WRITE_REASON: &str = "dynamic-scope: written by a block function declaration";
+
+fn mark_binding_dynamic(binding: &mut TsBindingFact, reason: &str) {
+    binding.status = TsBindingStatus::unsupported_dynamic(reason);
+    binding.binding_kind = TsBindingKind::UnsupportedDynamic;
+    binding.declaration_kind = TsDeclarationKind::UnsupportedDynamic;
 }
 
 pub fn extract_ts_scope_from_program(
@@ -69,7 +82,9 @@ pub fn extract_ts_scope_from_program(
 ) -> TsScopeOutput {
     crate::ts::with_frontend_stable_keys(interner, || {
         let (scopes, scope_keys) = extract_scope_rows(file, source, scoping, nodes);
-        let mut bindings = extract_semantic_binding_rows(file, source, scoping, nodes, &scope_keys);
+        let written = bindings_written_by_block_functions(scoping, nodes);
+        let mut bindings =
+            extract_semantic_binding_rows(file, source, scoping, nodes, &scope_keys, &written);
         // Oxc semantic symbols record import bindings, but not each import/export
         // specifier's module/source alias shape as a standalone row.
         bindings.extend(extract_import_export_rows(
@@ -87,6 +102,7 @@ pub fn extract_ts_scope_from_program(
             nodes,
             &scope_keys,
             scoping,
+            &written,
         ));
         // Oxc semantic symbols point destructured names at the declaration owner in
         // some cases; this AST fallback preserves an explicit destructuring row.
@@ -96,6 +112,7 @@ pub fn extract_ts_scope_from_program(
             nodes,
             &scope_keys,
             scoping,
+            &written,
         ));
         bindings.extend(extract_boundary_rows(
             file,
@@ -105,6 +122,37 @@ pub fn extract_ts_scope_from_program(
             scoping,
             &bindings,
         ));
+
+        // A `with` body can make any name of the file read another value than
+        // its binding holds, and a direct `eval` any name its call can see.
+        let dynamic = dynamic_scope(program, scoping, nodes);
+        let reached = dynamic
+            .bindings()
+            .iter()
+            .map(|symbol| {
+                (
+                    crate::ts::intern_frontend_stable_key(scope_key_for_symbol(
+                        file,
+                        &scope_keys,
+                        scoping,
+                        *symbol,
+                    )),
+                    scoping.symbol_name(*symbol),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        // An eval that may name the module wrapper may also rewrite what the
+        // file exports and what its `require` calls load.
+        for binding in &mut bindings {
+            let through_wrapper = dynamic.opens_wrapper()
+                && (binding.module_source.is_some() || binding.exported_name.is_some());
+            if dynamic.whole_file()
+                || through_wrapper
+                || reached.contains(&(binding.scope_key, binding.name.as_str()))
+            {
+                mark_binding_dynamic(binding, DYNAMIC_SCOPE_REASON);
+            }
+        }
 
         TsScopeOutput { scopes, bindings }
     })
@@ -147,6 +195,7 @@ fn extract_semantic_binding_rows(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     scope_keys: &BTreeMap<OxcScopeId, String>,
+    written: &BTreeSet<OxcSymbolId>,
 ) -> Vec<TsBindingFact> {
     let mut symbols = scoping.symbol_ids().collect::<Vec<_>>();
     symbols.sort_by(|left, right| {
@@ -168,7 +217,13 @@ fn extract_semantic_binding_rows(
 
     symbols
         .into_iter()
-        .map(|symbol| semantic_binding_row(file, source, scoping, nodes, scope_keys, symbol))
+        .map(|symbol| {
+            let mut row = semantic_binding_row(file, source, scoping, nodes, scope_keys, symbol);
+            if written.contains(&symbol) {
+                mark_binding_dynamic(&mut row, BLOCK_FUNCTION_WRITE_REASON);
+            }
+            row
+        })
         .collect()
 }
 
@@ -543,6 +598,7 @@ fn extract_alias_rows(
     nodes: &AstNodes<'_>,
     scope_keys: &BTreeMap<OxcScopeId, String>,
     scoping: &Scoping,
+    written: &BTreeSet<OxcSymbolId>,
 ) -> Vec<TsBindingFact> {
     let module_scope = scope_keys
         .get(&scoping.root_scope_id())
@@ -560,35 +616,37 @@ fn extract_alias_rows(
         let Some(init) = &declarator.init else {
             continue;
         };
-        let scope_key = scope_key_for_binding(
-            file,
-            scope_keys,
-            scoping,
-            identifier.name.as_str(),
-            identifier.span,
-        )
-        .unwrap_or_else(|| module_scope.clone());
+        let symbol = symbol_for_binding(scoping, identifier.name.as_str(), identifier.span);
+        if !keeps_declared_value(scoping, written, symbol) {
+            continue;
+        }
+        let scope_key = symbol.map_or_else(
+            || module_scope.clone(),
+            |symbol| scope_key_for_symbol(file, scope_keys, scoping, symbol),
+        );
         match init {
-            Expression::Identifier(target) => rows.push(binding_row(BindingRowDraft {
-                file,
-                source,
-                span: span_from_oxc(file, declarator.span),
-                scope_key: scope_key.clone(),
-                name: identifier.name.clone(),
-                declaration_kind: TsDeclarationKind::Alias,
-                binding_kind: TsBindingKind::Alias,
-                import_export_kind: TsImportExportKind::Alias,
-                module_source: None,
-                imported_name: Some(target.name.to_string()),
-                exported_name: None,
-                status: TsBindingStatus::present(),
-            })),
+            Expression::Identifier(target) if reads_declared_value(scoping, written, init) => rows
+                .push(binding_row(BindingRowDraft {
+                    file,
+                    source,
+                    span: span_from_oxc(file, declarator.span),
+                    scope_key: scope_key.clone(),
+                    name: identifier.name.clone(),
+                    declaration_kind: TsDeclarationKind::Alias,
+                    binding_kind: TsBindingKind::Alias,
+                    import_export_kind: TsImportExportKind::Alias,
+                    module_source: None,
+                    imported_name: Some(target.name.to_string()),
+                    exported_name: None,
+                    status: TsBindingStatus::present(),
+                })),
             Expression::ObjectExpression(object) => {
                 rows.extend(object.properties.iter().filter_map(|property| {
                     let ObjectPropertyKind::ObjectProperty(property) = property else {
                         return None;
                     };
-                    if property.computed {
+                    if property.computed || !reads_declared_value(scoping, written, &property.value)
+                    {
                         return None;
                     }
                     let property_name = property_key_name(&property.key)?;
@@ -679,6 +737,7 @@ fn extract_destructuring_rows(
     nodes: &AstNodes<'_>,
     scope_keys: &BTreeMap<OxcScopeId, String>,
     scoping: &Scoping,
+    written: &BTreeSet<OxcSymbolId>,
 ) -> Vec<TsBindingFact> {
     let module_scope = scope_keys
         .get(&scoping.root_scope_id())
@@ -698,20 +757,20 @@ fn extract_destructuring_rows(
         let mut names = Vec::new();
         collect_pattern_bindings(&declarator.id, &mut names);
         for binding in names {
-            let imported_name = destructuring_aliases.get(&binding.name).cloned();
+            let symbol = symbol_for_binding(scoping, binding.name.as_str(), binding.span);
+            let imported_name = destructuring_aliases
+                .get(&binding.name)
+                .filter(|_| keeps_declared_value(scoping, written, symbol))
+                .cloned();
             let import_export_kind = if imported_name.is_some() {
                 TsImportExportKind::Alias
             } else {
                 TsImportExportKind::None
             };
-            let scope_key = scope_key_for_binding(
-                file,
-                scope_keys,
-                scoping,
-                binding.name.as_str(),
-                binding.span,
-            )
-            .unwrap_or_else(|| module_scope.clone());
+            let scope_key = symbol.map_or_else(
+                || module_scope.clone(),
+                |symbol| scope_key_for_symbol(file, scope_keys, scoping, symbol),
+            );
             rows.push(binding_row(BindingRowDraft {
                 file,
                 source,
@@ -1205,27 +1264,58 @@ fn binding_identifier(pattern: &BindingPattern<'_>) -> Option<PatternBinding> {
     }
 }
 
-fn scope_key_for_binding(
+fn scope_key_for_symbol(
     file: &SourceFile,
     scope_keys: &BTreeMap<OxcScopeId, String>,
     scoping: &Scoping,
-    name: &str,
-    span: oxc_span::Span,
-) -> Option<String> {
-    scoping.symbol_ids().find_map(|symbol| {
+    symbol: OxcSymbolId,
+) -> String {
+    scope_keys
+        .get(&scoping.symbol_scope_id(symbol))
+        .cloned()
+        .unwrap_or_else(|| module_scope_key(file))
+}
+
+fn symbol_for_binding(scoping: &Scoping, name: &str, span: oxc_span::Span) -> Option<OxcSymbolId> {
+    scoping.symbol_ids().find(|&symbol| {
         let symbol_span = scoping.symbol_span(symbol);
-        if scoping.symbol_name(symbol) != name
-            || symbol_span.start != span.start
-            || symbol_span.end != span.end
-        {
-            return None;
-        }
-        let scope_id = scoping.symbol_scope_id(symbol);
-        scope_keys
-            .get(&scope_id)
-            .cloned()
-            .or_else(|| Some(module_scope_key(file)))
+        scoping.symbol_name(symbol) == name
+            && symbol_span.start == span.start
+            && symbol_span.end == span.end
     })
+}
+
+/// Whether a declared name keeps the value it is declared with: no reference
+/// writes it, no second declaration redeclares it and no block function
+/// declaration writes it. A name that may hold another value is no alias of
+/// its initializer.
+fn keeps_declared_value(
+    scoping: &Scoping,
+    written: &BTreeSet<OxcSymbolId>,
+    symbol: Option<OxcSymbolId>,
+) -> bool {
+    symbol.is_some_and(|symbol| {
+        !scoping.symbol_is_mutated(symbol)
+            && scoping.symbol_redeclarations(symbol).is_empty()
+            && !written.contains(&symbol)
+    })
+}
+
+/// Whether the value an alias reads stays the declared one: the name it reads
+/// is not written anywhere. An unresolved name is left to the binding lookup.
+fn reads_declared_value(
+    scoping: &Scoping,
+    written: &BTreeSet<OxcSymbolId>,
+    expression: &Expression<'_>,
+) -> bool {
+    let Expression::Identifier(identifier) = expression else {
+        return true;
+    };
+    identifier
+        .reference_id
+        .get()
+        .and_then(|reference| scoping.get_reference(reference).symbol_id())
+        .is_none_or(|symbol| !scoping.symbol_is_mutated(symbol) && !written.contains(&symbol))
 }
 
 fn ts_scope_kind(kind: AstKind<'_>) -> TsScopeKind {

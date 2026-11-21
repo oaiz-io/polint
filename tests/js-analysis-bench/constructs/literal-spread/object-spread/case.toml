@@ -1,0 +1,3 @@
+construct = "literal-spread"
+held_out = false
+description = "Methods reach a call through object spread and array spread of a literal."

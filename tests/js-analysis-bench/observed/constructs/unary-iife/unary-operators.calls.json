@@ -1,0 +1,90 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 5,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@179..260",
+      "name": ""
+    },
+    {
+      "function": "main.js@266..343",
+      "name": ""
+    },
+    {
+      "function": "main.js@355..434",
+      "name": ""
+    },
+    {
+      "function": "main.js@41..89",
+      "name": "step"
+    },
+    {
+      "function": "main.js@92..169",
+      "name": ""
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@140..151",
+      "syntax": "identifier",
+      "callee": "main.js@41..89",
+      "callee_name": "step"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@231..242",
+      "syntax": "identifier",
+      "callee": "main.js@41..89",
+      "callee_name": "step"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@314..325",
+      "syntax": "identifier",
+      "callee": "main.js@41..89",
+      "callee_name": "step"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@405..416",
+      "syntax": "identifier",
+      "callee": "main.js@41..89",
+      "callee_name": "step"
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@169",
+      "syntax": "implicit",
+      "callee": "main.js@92..169",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@260",
+      "syntax": "implicit",
+      "callee": "main.js@179..260",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@343",
+      "syntax": "implicit",
+      "callee": "main.js@266..343",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@434",
+      "syntax": "implicit",
+      "callee": "main.js@355..434",
+      "callee_name": ""
+    }
+  ]
+}

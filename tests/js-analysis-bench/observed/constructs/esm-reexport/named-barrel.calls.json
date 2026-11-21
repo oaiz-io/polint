@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "index.js",
@@ -10,6 +10,16 @@
   "instrumented_functions": 2,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "parse.js@25..101",
+      "name": "parse"
+    },
+    {
+      "function": "render.js@26..105",
+      "name": "render"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

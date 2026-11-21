@@ -2586,7 +2586,7 @@ mod tests {
         let payload_text = fs::read_to_string(payload_path).expect("payload JSON readable");
         let payload: serde_json::Value =
             serde_json::from_str(&payload_text).expect("payload is JSON");
-        assert_eq!(payload["schema"], "module-graph-facts-v3");
+        assert_eq!(payload["schema"], "module-graph-facts-v4");
         for field in [
             "workspace_roots",
             "topology_packages",

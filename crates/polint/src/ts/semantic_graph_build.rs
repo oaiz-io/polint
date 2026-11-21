@@ -21,6 +21,8 @@ use std::sync::Arc;
 use oxc_allocator::Allocator;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 use oxc_semantic::SemanticBuilder;
+#[cfg(feature = "lang-typescript")]
+use rayon::prelude::*;
 
 use crate::analysis_api::FactFamily;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
@@ -28,6 +30,7 @@ use crate::analysis_api::SourceFile;
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::adaptation::store::AdaptationModelStore;
 use crate::analysis_neutral::ids::{ObjectTokenId, PlaceId, SemanticNodeId};
+use crate::analysis_neutral::package_graph::install_of;
 use crate::analysis_neutral::semantic_graph::build::TS_DIRECT_BINDING_ORIGIN;
 use crate::analysis_neutral::semantic_graph::build::{
     function_node_key, node_key_from_identity, place_node_key,
@@ -38,7 +41,7 @@ use crate::analysis_neutral::semantic_graph::facts::SemanticPrecision;
 use crate::analysis_neutral::semantic_graph::facts::{EdgeKind, NodeKind};
 use crate::analysis_neutral::semantic_graph::store::SemanticGraphOutput;
 use crate::analysis_neutral::stable_key::semantic_stable_key;
-use crate::internal_core::{FileId, StableKeyInterner};
+use crate::internal_core::{FileId, ResolvedImportId, StableKeyInterner};
 use crate::ts::binding::direct::{
     TsDirectBindingModuleFile, TsDirectBindingModuleInput, resolve_direct_bindings_with_modules,
 };
@@ -62,7 +65,8 @@ use crate::ts::parse::parse_ts_file;
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 use crate::ts::scope::extract::{extract_ts_scope_from_program, mark_scope_partial_ast};
 use crate::ts::scope::store::TsScopeOutput;
-pub(crate) use crate::ts::token_flow::{TsTokenSourceFlow, collect_ts_token_source_flows};
+
+mod value_flow;
 
 /// Projects a real-but-minimal semantic graph from already-stored v1.2 facts.
 ///
@@ -71,7 +75,7 @@ pub(crate) use crate::ts::token_flow::{TsTokenSourceFlow, collect_ts_token_sourc
 /// the default dense ID and a composed stable key. The caller runs `normalized()` and
 /// `SemanticGraphStore::from_output` to sort by stable key and assign dense IDs.
 #[cfg(all(test, feature = "lang-typescript"))]
-pub(crate) fn build_semantic_graph(db: &impl AnalysisHost) -> SemanticGraphOutput {
+pub(crate) fn build_semantic_graph(db: &(impl AnalysisHost + Sync)) -> SemanticGraphOutput {
     let ts_direct_bindings = collect_ts_direct_binding_collection(db);
     build_semantic_graph_with_ts_direct_binding_collection(
         db,
@@ -182,12 +186,13 @@ fn build_semantic_graph_with_inputs<H: AnalysisHost>(
     builder.project_call_edges_and_constraints(db);
     project_additional_facts(db, &mut builder.inner);
     builder.project_ts_direct_bindings(db, ts_direct_bindings);
-    builder.project_ts_token_source_flows(db, ts_analyses);
     builder.project_ts_callable_flows(db, callable_flows);
     builder.project_ts_object_model(db, object_model);
     builder.project_adaptation_models(interner, adaptation_models);
     builder.project_member_of_edges(db);
     builder.project_value_constraints(db);
+    builder.project_ts_function_places(db);
+    builder.project_ts_value_flows(db, ts_analyses);
     // TypeConstraint intentionally emits zero rows in this pass (see module docs).
     // The base places for access-path projections are already projected as nodes
     // above.
@@ -285,7 +290,7 @@ impl TsDirectBindingCollection {
 }
 
 pub(crate) fn collect_ts_direct_binding_collection(
-    db: &impl AnalysisHost,
+    db: &(impl AnalysisHost + Sync),
 ) -> TsDirectBindingCollection {
     let (analyses, callable_flows) = collect_ts_file_analyses(db);
     let output = collect_ts_direct_bindings_from_analyses(db, &analyses);
@@ -303,13 +308,25 @@ pub(crate) fn collect_ts_direct_bindings(db: &impl AnalysisHost) -> TsDirectBind
 }
 
 #[cfg(feature = "lang-typescript")]
-fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
+fn collect_ts_file_analyses(
+    db: &(impl AnalysisHost + Sync),
+) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
     let interner = db.stable_key_interner();
     let files = db
         .files()
         .iter()
         .filter(|file| file.language.is_ts_family())
         .collect::<Vec<_>>();
+    // An Oxc tree cannot cross threads, so each file is analyzed on the thread
+    // that parses it, and the trees the callable flows read are parsed again.
+    let analyses = files
+        .par_iter()
+        .map(|file| {
+            let arena = Allocator::default();
+            let parsed = parse_ts_file(&arena, file);
+            crate::ts::semantic_graph::analyze_parsed_ts_file(&interner, file, &parsed)
+        })
+        .collect();
     let arenas = files
         .iter()
         .map(|_| Allocator::default())
@@ -319,13 +336,6 @@ fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec
         .zip(&arenas)
         .map(|(file, arena)| parse_ts_file(arena, file))
         .collect::<Vec<_>>();
-    let analyses = files
-        .iter()
-        .zip(&parsed)
-        .map(|(file, parsed)| {
-            crate::ts::semantic_graph::analyze_parsed_ts_file(&interner, file, parsed)
-        })
-        .collect();
     let programs = files
         .iter()
         .zip(&parsed)
@@ -337,7 +347,9 @@ fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec
 }
 
 #[cfg(not(feature = "lang-typescript"))]
-fn collect_ts_file_analyses(db: &impl AnalysisHost) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
+fn collect_ts_file_analyses(
+    db: &(impl AnalysisHost + Sync),
+) -> (Vec<TsFileAnalysis>, Vec<TsCallableFlow>) {
     let interner = db.stable_key_interner();
     let analyses = db
         .files()
@@ -399,6 +411,30 @@ fn analyze_ts_binding_file(
         inventory,
         scope,
     }
+}
+
+/// The resolved imports whose target file belongs to another package than the
+/// importing file.
+fn imports_across_packages(db: &impl AnalysisHost) -> BTreeSet<ResolvedImportId> {
+    let package = |file: FileId| {
+        db.file(file)
+            .map(|file| install_of(&file.relative_path).0.to_string())
+    };
+    let module_files = db
+        .module_nodes()
+        .iter()
+        .filter_map(|node| Some((node.id, node.file?)))
+        .collect::<BTreeMap<_, _>>();
+    db.resolved_imports()
+        .iter()
+        .filter(|resolved| {
+            resolved
+                .target_node
+                .and_then(|node| module_files.get(&node))
+                .is_some_and(|&target| package(target) != package(resolved.from_file))
+        })
+        .map(|resolved| resolved.id)
+        .collect()
 }
 
 fn collect_ts_direct_bindings_from_analyses<A: TsDirectBindingAnalysis>(
@@ -522,8 +558,17 @@ impl GraphBuilder {
         // The calls/refined-calls contract remains owned by analysis::calls; direct TS
         // bindings are not part of that fact family.
         let context = TsDirectBindingNodeContext::new(interner, db, self);
+        let across_packages = imports_across_packages(db);
         for binding in bindings {
             if binding.status != TsDirectBindingStatus::Resolved {
+                continue;
+            }
+            // A binding into another package is left to that package's
+            // graph, as the package's own analysis leaves it.
+            if binding
+                .resolved_import
+                .is_some_and(|import| across_packages.contains(&import))
+            {
                 continue;
             }
             let Some(callsite_node) =
@@ -533,9 +578,7 @@ impl GraphBuilder {
             };
             self.inner.push_constraint_with_origin(
                 interner,
-                ConstraintKind::CallConstraint {
-                    callsite: callsite_node,
-                },
+                ConstraintKind::call_at(callsite_node),
                 &interner.resolve(binding.stable_key),
                 TS_DIRECT_BINDING_ORIGIN,
             );
@@ -561,59 +604,6 @@ impl GraphBuilder {
                 );
             }
         }
-    }
-
-    fn project_ts_token_source_flows(
-        &mut self,
-        db: &impl AnalysisHost,
-        ts_analyses: Option<&[TsFileAnalysis]>,
-    ) {
-        let interner_handle = db.stable_key_interner();
-        let interner = &interner_handle;
-        let context = TsDirectBindingNodeContext::new(interner, db, self);
-        if let Some(analyses) = ts_analyses {
-            for analysis in analyses {
-                for flow in &analysis.token_source_flows {
-                    self.project_ts_token_source_flow(interner, flow, &context);
-                }
-            }
-            return;
-        }
-
-        for file in db
-            .files()
-            .iter()
-            .filter(|file| file.language.is_ts_family())
-        {
-            for flow in collect_ts_token_source_flows(interner, file, None) {
-                self.project_ts_token_source_flow(interner, &flow, &context);
-            }
-        }
-    }
-
-    fn project_ts_token_source_flow(
-        &mut self,
-        interner: &StableKeyInterner,
-        flow: &TsTokenSourceFlow,
-        context: &TsDirectBindingNodeContext<'_>,
-    ) {
-        let Some(source_node) =
-            context.function_node_for_binding(&flow.source_function_stable_key_text)
-        else {
-            return;
-        };
-        let Some(callsite_node) = context.callsite_node_for_binding(&flow.callsite_stable_key_text)
-        else {
-            return;
-        };
-        self.push_constraint(
-            interner,
-            ConstraintKind::CopyEdge {
-                dst: callsite_node,
-                src: source_node,
-            },
-            &flow.stable_key_text,
-        );
     }
 
     fn project_ts_callable_flows(&mut self, db: &impl AnalysisHost, flows: &[TsCallableFlow]) {
@@ -664,7 +654,7 @@ impl GraphBuilder {
             );
             self.inner.push_constraint_with_precision(
                 &interner,
-                ConstraintKind::CallConstraint { callsite },
+                ConstraintKind::call_at(callsite),
                 &identity,
                 PointsToPrecision::Heuristic,
             );
@@ -759,7 +749,7 @@ impl GraphBuilder {
             ) {
                 self.push_constraint(
                     interner,
-                    ConstraintKind::CallConstraint { callsite },
+                    ConstraintKind::call_at(callsite),
                     &interner.resolve(read.stable_key),
                 );
                 // The loaded property value is the callee. Keep that flow in
@@ -799,7 +789,7 @@ impl GraphBuilder {
             ) {
                 self.push_constraint(
                     interner,
-                    ConstraintKind::CallConstraint { callsite },
+                    ConstraintKind::call_at(callsite),
                     &interner.resolve(binding.stable_key),
                 );
             }
@@ -841,6 +831,89 @@ impl GraphBuilder {
 
     fn project_value_constraints(&mut self, db: &impl AnalysisHost) {
         self.inner.project_value_constraints(db);
+    }
+
+    // -- per-function places ------------------------------------------------
+
+    /// Gives every TS function its `this` and return places, and copies what
+    /// each `return` hands back into the return place. The return copy is
+    /// `SummaryProjected`: it merges every path of the function and leaves out
+    /// returned values that lower to no place, so a call result read through
+    /// it is never an exact claim.
+    fn project_ts_function_places(&mut self, db: &impl AnalysisHost) {
+        use crate::analysis_neutral::mir_op::{MirOperationKind, MirValue};
+        use crate::analysis_neutral::points_to::facts::PointsToPrecision;
+        let interner_handle = db.stable_key_interner();
+        let interner = &interner_handle;
+        let mut returns = BTreeMap::new();
+        for function in db.functions() {
+            if !function.language.is_ts_family() {
+                continue;
+            }
+            let key = function_node_key(db, function);
+            if self.node_for_key(interner, &key).is_none() {
+                continue;
+            }
+            self.inner.intern_node(
+                interner,
+                NodeKind::FunctionThis(function.id),
+                node_key_from_identity("function_this", &key),
+            );
+            let ret = self.inner.intern_node(
+                interner,
+                NodeKind::FunctionReturn(function.id),
+                node_key_from_identity("function_return", &key),
+            );
+            returns.insert(function.id, ret);
+        }
+        if returns.is_empty() {
+            return;
+        }
+        let function_by_body = db
+            .mir_bodies()
+            .iter()
+            .map(|body| (body.id, body.function))
+            .collect::<BTreeMap<_, _>>();
+        let place_key_by_id = db
+            .mir_places()
+            .iter()
+            .map(|place| (place.id, interner.resolve(place.stable_key)))
+            .collect::<BTreeMap<_, _>>();
+        let result_by_site = db
+            .call_sites()
+            .iter()
+            .filter_map(|site| site.result.map(|result| (site.id, result)))
+            .collect::<BTreeMap<_, _>>();
+        for operation in db.mir_operations() {
+            let MirOperationKind::Return { value: Some(value) } = &operation.kind else {
+                continue;
+            };
+            let place = match value {
+                MirValue::Place(place) => *place,
+                MirValue::CallReturn(site) => match result_by_site.get(site) {
+                    Some(result) => *result,
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let (Some(&ret), Some(stable)) = (
+                function_by_body
+                    .get(&operation.body)
+                    .and_then(|function| returns.get(function)),
+                place_key_by_id.get(&place),
+            ) else {
+                continue;
+            };
+            let src =
+                self.inner
+                    .intern_node(interner, NodeKind::Place(place), place_node_key(stable));
+            self.inner.push_constraint_with_precision(
+                interner,
+                ConstraintKind::CopyEdge { dst: ret, src },
+                &interner.resolve(operation.stable_key),
+                PointsToPrecision::SummaryProjected,
+            );
+        }
     }
 
     fn into_output(self) -> SemanticGraphOutput {

@@ -308,6 +308,7 @@ fn edge_from_target(
         evidence: refinement.evidence,
         input_stable_keys: refinement.input_stable_keys,
         stable_key: refinement.stable_key,
+        assumptions: Vec::new(),
     }
 }
 
@@ -368,6 +369,7 @@ fn unresolved_go_edge(
                 ("status", format!("{status:?}")),
             ],
         ),
+        assumptions: Vec::new(),
     }
 }
 

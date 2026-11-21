@@ -22,19 +22,21 @@ use crate::internal_core::{StableKeyId, StableKeyInterner};
 use super::budget::{BudgetReason, BudgetStatus};
 use super::facts::DerivedEdgeFact;
 
-/// The provider id for the unified solver (registered in the kernel manifest in
-/// Plan 03), mirroring `SEMANTIC_GRAPH_PROVIDER_ID`.
+/// The provider id for the unified solver (registered in the kernel manifest),
+/// mirroring `SEMANTIC_GRAPH_PROVIDER_ID`.
 pub const SOLVER_PROVIDER_ID: &str = "polint.solver";
 
 /// Provider output for `polint.solver` — the normalized derived-edge rows plus the
-/// run-level [`BudgetStatus`]. `budget_status` is `BudgetExceeded` when the solver
-/// truncated any source's closure under the per-source step budget, so an exhausted
+/// run-level [`BudgetStatus`]. `budget_status` is `BudgetExceeded` when a solver
+/// policy or the adaptation caps stopped short under the budget, so an exhausted
 /// run is never indistinguishable from a complete one (review finding #3 / D-06).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SolverOutput {
     pub derived_edges: Vec<DerivedEdgeFact>,
     pub budget_status: BudgetStatus,
     pub budget_reasons: BTreeSet<String>,
+    /// Call sites the solve left incomplete because a budget ran out.
+    pub incomplete_sites: u64,
 }
 
 impl SolverOutput {
@@ -42,10 +44,7 @@ impl SolverOutput {
     /// [`DerivedEdgeId`]s sequentially by index (dense IDs only after the stable-key
     /// sort, D-08). Shuffling the input rows yields byte-identical normalized output.
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.derived_edges.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.derived_edges, |row| row.stable_key, |row| row.id);
         for (index, edge) in self.derived_edges.iter_mut().enumerate() {
             edge.id = DerivedEdgeId(index as u64);
         }
@@ -61,6 +60,7 @@ pub struct SolverStore {
     derived_edges: Vec<DerivedEdgeFact>,
     budget_status: BudgetStatus,
     budget_reasons: BTreeSet<String>,
+    incomplete_sites: u64,
     /// Derived edges indexed by their producing constraint-kind tag (the owned
     /// `provenance.constraint_kind` snake_case label).
     edges_by_constraint_kind: BTreeMap<String, Vec<usize>>,
@@ -72,6 +72,7 @@ impl Default for SolverStore {
             derived_edges: Vec::new(),
             budget_status: BudgetStatus::NotRun,
             budget_reasons: BTreeSet::new(),
+            incomplete_sites: 0,
             edges_by_constraint_kind: BTreeMap::new(),
         }
     }
@@ -119,6 +120,7 @@ impl SolverStore {
             derived_edges: output.derived_edges,
             budget_status: output.budget_status,
             budget_reasons: output.budget_reasons,
+            incomplete_sites: output.incomplete_sites,
             ..Self::default()
         };
 
@@ -145,6 +147,11 @@ impl SolverStore {
 
     pub fn budget_reasons(&self) -> &BTreeSet<String> {
         &self.budget_reasons
+    }
+
+    /// Call sites the solve left incomplete because a budget ran out.
+    pub fn incomplete_sites(&self) -> u64 {
+        self.incomplete_sites
     }
 
     /// Indices into [`Self::derived_edges`] for every edge produced by the given
@@ -241,6 +248,7 @@ mod tests {
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: crate::internal_core::stable_key_for_test(stable_key),
             provenance: prov,
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         }
     }
 

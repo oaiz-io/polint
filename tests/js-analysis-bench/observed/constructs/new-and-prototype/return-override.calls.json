@@ -1,0 +1,69 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 5,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..63",
+      "name": "speak"
+    },
+    {
+      "function": "main.js@124..295",
+      "name": "makeClass"
+    },
+    {
+      "function": "main.js@166..184",
+      "name": "Made"
+    },
+    {
+      "function": "main.js@222..277",
+      "name": "hello"
+    },
+    {
+      "function": "main.js@65..122",
+      "name": "Wrapper"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@313..326",
+      "syntax": "new",
+      "callee": "main.js@65..122",
+      "callee_name": "Wrapper"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@346..361",
+      "syntax": "member",
+      "callee": "main.js@12..63",
+      "callee_name": "speak"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@392..403",
+      "syntax": "identifier",
+      "callee": "main.js@124..295",
+      "callee_name": "makeClass"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@425..435",
+      "syntax": "new",
+      "callee": "main.js@166..184",
+      "callee_name": "Made"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@425..443",
+      "syntax": "member",
+      "callee": "main.js@222..277",
+      "callee_name": "hello"
+    }
+  ]
+}

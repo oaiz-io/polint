@@ -108,7 +108,9 @@ Each handler and middleware is a `RouteFunction`:
 
 A repository describes its own wrappers in `.polint/models/*.toml` with
 `[[go_route]]` tables. They are applied before the built-in models, so a
-repository model of the same call takes precedence.
+repository model of the same call takes precedence. A model file larger than
+1 MiB, or one that resolves outside the repository, is not read; it is
+reported and the other files still apply.
 
 ```toml
 # An in-house subscriber wrapper: Subscribe(topic, handler).

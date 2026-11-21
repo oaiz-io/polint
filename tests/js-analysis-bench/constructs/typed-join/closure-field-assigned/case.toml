@@ -1,0 +1,3 @@
+construct = "typed-join"
+held_out = true
+description = "A constructor stores a no-op closure in an instance field and a setter replaces it; the call through the field reaches the function the setter stored."

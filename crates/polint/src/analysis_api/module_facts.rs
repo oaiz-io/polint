@@ -44,6 +44,15 @@ pub struct ResolvedImportFact {
     pub status: ResolutionStatus,
     pub precision: ResolutionPrecision,
     pub reason: Option<UnresolvedReason>,
+    /// The files an import with no single target may load, where the ways a
+    /// loader may run it (its mode, its conditions, Node or a bundler) name
+    /// different files. Each is a conservative candidate, and the list may
+    /// be incomplete; it is empty where `target_node` names the one target.
+    #[serde(default)]
+    pub alternatives: Vec<ModuleNodeId>,
+    /// When an input could not be checked, its path and why it was refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_issue: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +103,9 @@ pub enum UnresolvedReason {
     UnsupportedImport,
     ResolverError,
     OutsideWorkspace,
+    /// The import may load in import mode or in require mode, and the two
+    /// modes resolve it to different files.
+    ModeDependent,
 }
 impl ModuleNode {
     /// Constructs a module-graph node from its complete fact fields.
@@ -158,6 +170,15 @@ impl ResolvedImportFact {
             status,
             precision,
             reason,
+            alternatives: Vec::new(),
+            resolution_issue: None,
         }
+    }
+
+    /// The fact with `alternatives` as the files the import may load.
+    #[must_use]
+    pub fn with_alternatives(mut self, alternatives: Vec<ModuleNodeId>) -> Self {
+        self.alternatives = alternatives;
+        self
     }
 }

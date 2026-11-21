@@ -1,0 +1,9 @@
+{
+  "name": "polint-js-bench-js-yaml-tests",
+  "private": true,
+  "description": "The modules js-yaml's own test suite needs at its release tag: runtime dependencies and the test tools the suite requires, at the tag's declared ranges.",
+  "dependencies": {
+    "fast-check": "^2.8.0",
+    "mocha": "^8.2.1"
+  }
+}

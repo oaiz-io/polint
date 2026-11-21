@@ -1,0 +1,58 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..72",
+      "name": "onChange"
+    },
+    {
+      "function": "main.js@160..226",
+      "name": "listener"
+    },
+    {
+      "function": "main.js@230..327",
+      "name": "update"
+    },
+    {
+      "function": "main.js@90..156",
+      "name": "listener"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@271..291",
+      "syntax": "member",
+      "callee": "main.js@12..72",
+      "callee_name": "onChange"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@271..291",
+      "syntax": "member",
+      "callee": "main.js@160..226",
+      "callee_name": "listener"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@407..422",
+      "syntax": "member",
+      "callee": "main.js@230..327",
+      "callee_name": "update"
+    },
+    {
+      "kind": "implicit",
+      "site": "main.js@373",
+      "syntax": "implicit",
+      "callee": "main.js@90..156",
+      "callee_name": "listener"
+    }
+  ]
+}

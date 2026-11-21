@@ -1,0 +1,19 @@
+{
+  "tool": "jelly",
+  "image": "polint-js-bench-jelly",
+  "arguments": [
+    "-j",
+    "/out/cg.json",
+    "-b",
+    "/bench/pkg",
+    "-i",
+    "840",
+    "--ignore-unresolved",
+    "--no-print-progress",
+    "--no-tty",
+    "--approx"
+  ],
+  "files": 5,
+  "exit_code": 0,
+  "wall_s": 1.3
+}

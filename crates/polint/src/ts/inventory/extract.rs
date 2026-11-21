@@ -96,6 +96,7 @@ pub fn extract_ts_inventory_from_program(
             lexical_parent_key,
             display_name,
             kind,
+            has_body: function_has_body(ast_kind),
             status: TsInventoryStatus::resolved(),
         });
     }
@@ -172,6 +173,16 @@ fn function_inventory_kind(
         AstKind::MethodDefinition(method) => Some(method_inventory_kind(method)),
         AstKind::StaticBlock(_) => Some(TsFunctionInventoryKind::ClassStaticBlock),
         _ => None,
+    }
+}
+
+/// Whether an inventoried function node carries a body. Arrows and static
+/// blocks always do; a function or method can be a body-less signature.
+fn function_has_body(kind: AstKind<'_>) -> bool {
+    match kind {
+        AstKind::Function(function) => function.body.is_some(),
+        AstKind::MethodDefinition(method) => method.value.body.is_some(),
+        _ => true,
     }
 }
 

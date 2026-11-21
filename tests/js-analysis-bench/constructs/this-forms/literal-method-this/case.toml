@@ -1,0 +1,3 @@
+construct = "this-forms"
+held_out = false
+description = "`this` in a method of an object literal, an arrow's lexical `this` and a method stored and called through another object."
