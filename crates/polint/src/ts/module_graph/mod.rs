@@ -2130,18 +2130,28 @@ impl ModeResolvers {
             ModeResolution::One(Ok(resolution)) => Some(resolution.path().to_path_buf()),
             _ => None,
         };
-        let Some(targets) =
+        let Some((root, reachable)) =
             self.conditional_targets(importer, specifier, resolved.as_deref(), mode)
         else {
             return answer;
         };
-        let mut found = Found::default();
+        let mut found = Found {
+            open: reachable.may_miss,
+            ..Found::default()
+        };
         match answer {
             ModeResolution::One(Ok(resolution)) => found.add(resolution),
-            ModeResolution::One(Err(error)) => found.error = Some(error),
-            ModeResolution::Split(paths) => found.paths.extend(paths),
+            ModeResolution::One(Err(error)) => {
+                found.open = true;
+                found.error = Some(error);
+            }
+            ModeResolution::Split(paths) => {
+                found.open = true;
+                found.paths.extend(paths);
+            }
         }
-        for (root, target) in targets {
+        for target in reachable.targets {
+            let (conditions::Reach::File(target) | conditions::Reach::Package(target)) = target;
             let importer = root.join("package.json");
             if seen.contains(&(importer.clone(), target.clone())) {
                 continue;
@@ -2153,7 +2163,7 @@ impl ModeResolvers {
             }
             match self.resolve_alternatives(&importer, &target, mode, seen) {
                 ModeResolution::One(Ok(resolution)) => found.add(resolution),
-                ModeResolution::One(Err(_)) => {}
+                ModeResolution::One(Err(_)) => found.open = true,
                 ModeResolution::Split(paths) => {
                     found.open = true;
                     found.paths.extend(paths);
@@ -2174,7 +2184,7 @@ impl ModeResolvers {
         specifier: &str,
         resolved: Option<&Path>,
         mode: LoadMode,
-    ) -> Option<Vec<(PathBuf, String)>> {
+    ) -> Option<(PathBuf, conditions::Reachable)> {
         let (root, manifest, key, exports) = if specifier.starts_with('#') {
             let (root, manifest) = importer
                 .ancestors()
@@ -2193,16 +2203,10 @@ impl ModeResolvers {
         let map = manifest
             .get(if exports { "exports" } else { "imports" })
             .filter(|map| !map.is_null())?;
-        Some(
-            conditions::reachable_targets(map, &key, exports, mode.condition())
-                .into_iter()
-                .map(|target| match target {
-                    conditions::Reach::File(target) | conditions::Reach::Package(target) => {
-                        (root.clone(), target)
-                    }
-                })
-                .collect(),
-        )
+        Some((
+            root,
+            conditions::reachable_targets(map, &key, exports, mode.condition()),
+        ))
     }
 
     /// The package named `name` that holds the file `resolved`.

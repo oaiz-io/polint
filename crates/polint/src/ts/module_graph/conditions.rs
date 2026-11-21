@@ -6,8 +6,8 @@
 //! conditions such as `development`. The walk follows Node's resolution of a
 //! map value under every such set at once: every condition but the mode's own
 //! and `default` may or may not be selected, including the other mode's
-//! condition if the user explicitly enables it. A map picks its first selected key whose value is not
-//! `undefined`: a nested map that selects nothing lets the loader go on to
+//! condition if the user explicitly enables it. A map picks its first selected
+//! key whose value is not `undefined`: a nested map that selects nothing lets the loader go on to
 //! the next key. A list gives its first entry that neither selects nothing,
 //! is `null` nor is an invalid target; any other error ends it. A map with a
 //! numeric key is an invalid package configuration, and a string that is not
@@ -31,8 +31,9 @@ pub(super) enum Reach {
 
 /// The ways a map value may end, as a set: [`Self::UNDEFINED`] where it
 /// selects nothing, [`Self::NULL`] where it is `null`, [`Self::INVALID`]
-/// where it is an invalid target and [`Self::STOPS`] where it gives a target
-/// or an error a list does not go on past.
+/// where it is an invalid target, [`Self::TARGET`] where it gives a target,
+/// and [`Self::BLOCKED`] for a result a list does not go on past but which
+/// does not select a runtime target.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 struct Ends(u8);
 
@@ -40,7 +41,8 @@ impl Ends {
     const UNDEFINED: Self = Self(1);
     const NULL: Self = Self(2);
     const INVALID: Self = Self(4);
-    const STOPS: Self = Self(8);
+    const TARGET: Self = Self(8);
+    const BLOCKED: Self = Self(16);
     /// The ends a list goes on past to its next entry.
     const PASSES: Self = Self(1 | 2 | 4);
 
@@ -61,13 +63,18 @@ impl Ends {
     }
 }
 
+pub(super) struct Reachable {
+    pub(super) targets: Vec<Reach>,
+    pub(super) may_miss: bool,
+}
+
 /// The targets `map` may give `key` in the mode whose condition is `own`.
 /// `map` is the `exports`
 /// value of a package when `exports` is set, with `key` `.` or a `./`
 /// subpath, and its `imports` value otherwise, with `key` a `#` specifier.
 /// Empty where `map` gives `key` nothing. Object order decides which key a
 /// loader picks, which the resolver's JSON maps keep.
-pub(super) fn reachable_targets(map: &Value, key: &str, exports: bool, own: &str) -> Vec<Reach> {
+pub(super) fn reachable_targets(map: &Value, key: &str, exports: bool, own: &str) -> Reachable {
     let found = match map {
         Value::Object(entries) if exports => match subpath_keys(entries) {
             Some(true) => entry(entries, key),
@@ -86,11 +93,16 @@ pub(super) fn reachable_targets(map: &Value, key: &str, exports: bool, own: &str
         own,
         targets: Vec::new(),
     };
-    if let Some((value, matched)) = found {
+    let ends = if let Some((value, matched)) = found {
         walk.matched = matched;
-        walk.value(value);
+        walk.value(value)
+    } else {
+        Ends::UNDEFINED
+    };
+    Reachable {
+        targets: walk.targets,
+        may_miss: ends != Ends::TARGET,
     }
-    walk.targets
 }
 
 /// Whether every key of an `exports` map is a subpath, `Some(false)` where
@@ -168,8 +180,9 @@ impl Walk<'_> {
                 // package manager writes.
                 if !target.starts_with('#') {
                     self.targets.push(Reach::Package(target));
+                    return Ends::TARGET;
                 }
-                return Ends::STOPS;
+                return Ends::BLOCKED;
             }
             return Ends::INVALID;
         };
@@ -178,15 +191,16 @@ impl Walk<'_> {
         }
         if self.matched.as_deref().is_some_and(has_invalid_segment) {
             // An invalid specifier, which no entry after it rescues.
-            return Ends::STOPS;
+            return Ends::BLOCKED;
         }
         let target = substitute(target);
         // A declaration file describes types for a compiler; no runtime
         // loads it.
-        if !is_declaration(&target) {
-            self.targets.push(Reach::File(target));
+        if is_declaration(&target) {
+            return Ends::BLOCKED;
         }
-        Ends::STOPS
+        self.targets.push(Reach::File(target));
+        Ends::TARGET
     }
 
     fn list(&mut self, values: &[Value]) -> Ends {
@@ -215,7 +229,7 @@ impl Walk<'_> {
 
     fn conditions(&mut self, conditions: &Map<String, Value>) -> Ends {
         if conditions.keys().any(|key| is_array_index(key)) {
-            return Ends::STOPS;
+            return Ends::BLOCKED;
         }
         let mut ends = Ends::default();
         for (condition, value) in conditions {
@@ -294,7 +308,7 @@ mod tests {
     use serde_json::json;
 
     fn targets(map: serde_json::Value, key: &str, exports: bool) -> Vec<Reach> {
-        reachable_targets(&map, key, exports, "import")
+        reachable_targets(&map, key, exports, "import").targets
     }
 
     fn files(names: &[&str]) -> Vec<Reach> {

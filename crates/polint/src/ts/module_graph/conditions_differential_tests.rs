@@ -4,10 +4,8 @@
 //! packages and, for every request, the file Node loaded under each of its
 //! condition sets in import and require mode. polint must name every file
 //! Node loads, and may name one file as the exact answer only where every
-//! condition set under which Node loads a file loads that one. A condition
-//! set under which Node loads no file runs no call, so it does not bear on
-//! the exact answer. A declaration file holds no function a call can reach,
-//! so polint does not name one and the test does not ask it to.
+//! condition set loads that file. No file or a declaration-only result
+//! cannot be used to claim one runtime file exactly.
 
 use super::{DiskResolver, DiskTarget};
 use crate::analysis_api::ImportSyntax;
@@ -121,50 +119,37 @@ fn every_file_node_loads_through_a_condition_map_is_named_and_one_file_only_wher
                 }
                 None => (BTreeSet::new(), false),
             };
-            let loaded: BTreeSet<&Path> = request
-                .loads
-                .keys()
-                .filter(|path| !is_declaration(path))
-                .map(Path::new)
-                .collect();
-            let missed: Vec<_> = loaded
+            let mut picks = vec![None; corpus.header.condition_sets.len()];
+            for (path, sets) in &request.loads {
+                for &set in sets {
+                    assert!(picks[set].replace(path.as_str()).is_none());
+                }
+            }
+            let failures_by_profile = picks
                 .iter()
-                .copied()
-                .filter(|path| !named.contains(*path))
-                .collect();
-            let wrong_exact = exact && loaded.len() > 1;
-            if missed.is_empty() && !wrong_exact {
+                .zip(&corpus.header.condition_sets)
+                .filter_map(|(pick, profile)| {
+                    let runtime_file = pick.filter(|path| !is_declaration(path)).map(Path::new);
+                    let named_here = runtime_file.is_some_and(|path| named.contains(path));
+                    let wrong = if exact {
+                        !named_here
+                    } else {
+                        runtime_file.is_some() && !named_here
+                    };
+                    wrong.then(|| format!("{profile:?}: {pick:?}"))
+                })
+                .collect::<Vec<_>>();
+            if failures_by_profile.is_empty() {
                 continue;
             }
-            let loads: Vec<String> = request
-                .loads
-                .iter()
-                .map(|(path, sets)| {
-                    let sets: Vec<String> = sets
-                        .iter()
-                        .map(|set| format!("{:?}", corpus.header.condition_sets[*set]))
-                        .collect();
-                    format!("{path} under {}", sets.join(" "))
-                })
-                .collect();
             failures.push(format!(
-                "{} {} `{}` from {}: {}{}\n  polint: {:?}\n  node:   {}\n  manifest: {}",
+                "{} {} `{}` from {}:\n  polint: {:?} (exact: {exact})\n  Node disagreements: {}\n  manifest: {}",
                 case.id,
                 request.mode,
                 request.specifier,
                 request.importer,
-                if wrong_exact {
-                    "one file claimed where Node loads several"
-                } else {
-                    ""
-                },
-                if missed.is_empty() {
-                    String::new()
-                } else {
-                    format!("misses {missed:?}")
-                },
                 named,
-                loads.join("; "),
+                failures_by_profile.join("; "),
                 case.manifest
             ));
         }

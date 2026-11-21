@@ -55,6 +55,9 @@ CONDITION_SETS = [
     ["worker", "browser"],
     ["browser", "module", "development"],
     ["feature", "production"],
+    ["require"],
+    ["import"],
+    ["polint-oracle-custom"],
 ]
 
 CONDITION_KEYS = [
@@ -283,6 +286,20 @@ def generate() -> list[dict]:
     rng = Rng(SEED)
     cases = [exports_case(rng, index) for index in range(EXPORTS_CASES)]
     cases += [imports_case(rng, index) for index in range(IMPORTS_CASES)]
+    directory = "pkgs/custom-condition"
+    cases.append({
+        "id": "custom-condition",
+        "kind": "imports",
+        "directory": directory,
+        "manifest": json.dumps({"imports": {
+            "#changes": {"polint-oracle-custom": "./custom.cjs", "default": "./default.cjs"},
+            "#blocked": {"polint-oracle-custom": None, "default": "./default.cjs"},
+        }}),
+        "files": [f"{directory}/{name}.cjs" for name in ("custom", "default")],
+        "requests": [[f"{directory}/main.{ext}", specifier, mode]
+                     for ext, mode in [("mjs", "import"), ("cjs", "require")]
+                     for specifier in ["#changes", "#blocked"]],
+    })
     return cases
 
 
