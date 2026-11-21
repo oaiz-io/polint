@@ -161,9 +161,10 @@ fn corrections_document(
     recording: &Recording<'_>,
 ) -> anyhow::Result<Value> {
     use crate::analysis_neutral::package_graph::corrections::{
-        Anchor, Op, apply, observed_corrections, recording_id,
+        Anchor, Op, RECORDING_MAX_BYTES, apply, observed_corrections, recording_id,
     };
-    let calls = std::fs::read_to_string(recording.calls)?;
+    let calls =
+        crate::repo_fs::read_file_to_string_with_limit(recording.calls, RECORDING_MAX_BYTES)?;
     let run = recording_id(recording.calls)?;
     let loaded = observed_corrections(graph, &calls, &run, recording.driver)?;
     let (corrected, report) = apply(graph, &loaded.corrections);

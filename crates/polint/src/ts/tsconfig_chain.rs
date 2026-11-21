@@ -113,15 +113,10 @@ pub(crate) fn read_tsconfig_json<T: DeserializeOwned>(
     parse_tsconfig_json(&source)
 }
 
-/// `source` read as JSON with comments, or nothing where it is not of the
-/// shape `T`.
+/// `source` read as JSON with comments, or nothing where it is too large, too
+/// deep or not of the shape `T`.
 pub(crate) fn parse_tsconfig_json<T: DeserializeOwned>(source: &str) -> Option<T> {
-    let mut source = source
-        .strip_prefix('\u{feff}')
-        .unwrap_or(source)
-        .to_string();
-    json_strip_comments::strip(&mut source).ok()?;
-    serde_json::from_str(&source).ok()
+    crate::bounded_json::from_jsonc_str(source, TOPOLOGY_MANIFEST_MAX_BYTES).ok()
 }
 
 fn resolve_tsconfig_extends_path(

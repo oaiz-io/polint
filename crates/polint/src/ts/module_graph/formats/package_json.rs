@@ -1,6 +1,8 @@
 use crate::analysis_neutral::module_graph::topology::{
     RequirementKind, TopologyPrecision, TopologyStatus,
 };
+use crate::bounded_json;
+use crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES;
 use serde_json::Value;
 
 pub(crate) const PACKAGE_JSON_SOURCE_LABEL: &str = "package.json";
@@ -42,11 +44,14 @@ pub(crate) struct PackageJsonUnsupported {
 
 pub(crate) fn parse_package_json(relative_path: &str, contents: &str) -> PackageJsonManifest {
     let mut manifest = empty_manifest(relative_path);
-    let Ok(value) = serde_json::from_str::<Value>(contents) else {
-        manifest
-            .unsupported
-            .push(unsupported(relative_path, "malformed json"));
-        return manifest;
+    let value = match bounded_json::from_str::<Value>(contents, TOPOLOGY_MANIFEST_MAX_BYTES) {
+        Ok(value) => value,
+        Err(error) => {
+            manifest
+                .unsupported
+                .push(unsupported(relative_path, &error.reason()));
+            return manifest;
+        }
     };
     let Some(object) = value.as_object() else {
         manifest.unsupported.push(unsupported(

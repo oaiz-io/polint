@@ -52,10 +52,19 @@ impl PackageIdentity {
         conditions: &[&str],
         models: &str,
     ) -> Self {
-        let manifest = std::fs::read_to_string(root.join("package.json"))
+        let manifest = crate::repo_fs::read_file_with_limit(
+            &root.join("package.json"),
+            crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES,
+        )
+        .ok()
+        .and_then(|bytes| {
+            crate::bounded_json::from_slice::<serde_json::Value>(
+                &bytes,
+                crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES,
+            )
             .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-            .unwrap_or(serde_json::Value::Null);
+        })
+        .unwrap_or(serde_json::Value::Null);
         let text = |field: &str| manifest.get(field).and_then(|value| value.as_str());
         let content = match integrity {
             Some(integrity) => format!("integrity:{integrity}"),

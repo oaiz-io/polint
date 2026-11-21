@@ -31,6 +31,8 @@ use crate::ts::tsconfig_chain::{
     resolve_tsconfig_file_candidate, walk_tsconfig_chain,
 };
 #[cfg(feature = "lang-typescript")]
+use crate::{bounded_json, repo_fs::read_file_with_limit};
+#[cfg(feature = "lang-typescript")]
 use bounded_fs::BoundedFs;
 use formats::js_lockfile::{
     JsLockfileKind, JsLockfileManifest, JsLockfilePackage, JsPackageManager, parse_js_lockfile,
@@ -339,7 +341,9 @@ fn package_json_name(root: &Path, module_root: &Path) -> Option<String> {
     let source =
         read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
             .ok()?;
-    let value = serde_json::from_str::<serde_json::Value>(&source).ok()?;
+    let value =
+        crate::bounded_json::from_str::<serde_json::Value>(&source, TOPOLOGY_MANIFEST_MAX_BYTES)
+            .ok()?;
     value
         .get("name")
         .and_then(serde_json::Value::as_str)
@@ -1489,15 +1493,9 @@ fn read_json_with_comments(
     root: &Path,
     relative_path: &str,
 ) -> Result<Option<serde_json::Value>, RepoFileReadError> {
-    let mut source =
+    let source =
         read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)?;
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return Ok(None);
-    }
-    Ok(serde_json::from_str(&source).ok())
+    Ok(crate::bounded_json::from_jsonc_str(&source, TOPOLOGY_MANIFEST_MAX_BYTES).ok())
 }
 
 fn classify_ts_source_set(file: &SourceFile) -> SourceSetKind {
@@ -2078,7 +2076,8 @@ impl ModeResolvers {
         )
     }
 
-    /// The `package.json` of `directory`, read once.
+    /// The `package.json` of `directory`, read once. `None` where it is
+    /// missing, or larger or deeper than the resolvers load.
     fn manifest(&self, directory: &Path) -> Option<Arc<serde_json::Value>> {
         let path = directory.join("package.json");
         let mut manifests = self
@@ -2088,8 +2087,10 @@ impl ModeResolvers {
         manifests
             .entry(path)
             .or_insert_with_key(|path| {
-                let source = fs::read_to_string(path).ok()?;
-                serde_json::from_str(&source).ok().map(Arc::new)
+                let bytes = read_file_with_limit(path, TOPOLOGY_MANIFEST_MAX_BYTES).ok()?;
+                bounded_json::from_slice(&bytes, TOPOLOGY_MANIFEST_MAX_BYTES)
+                    .ok()
+                    .map(Arc::new)
             })
             .clone()
     }

@@ -10,7 +10,15 @@
 //! resolver reports that as a config error, so every import under that
 //! config is reported unknown. A read error would not do: the resolver skips
 //! an unreadable `tsconfig.json` and goes on to the parent directory's.
+//!
+//! The resolver parses a `package.json` with a parser that recurses once per
+//! level of nesting and sets no limit of its own, and walks an `exports` or
+//! `imports` map the same way. A manifest larger than a manifest may be, or
+//! nested deeper than [`MAX_JSON_DEPTH`], reads as a manifest the resolver
+//! cannot parse, so every import through that package is reported unknown
+//! rather than resolved as if the package had no manifest.
 
+use crate::bounded_json::{MAX_JSON_DEPTH, check_bounds};
 use crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES;
 use crate::ts::tsconfig_chain::{MAX_TSCONFIG_CHAIN_CONFIGS, walk_tsconfig_chain};
 use oxc_resolver::{
@@ -22,8 +30,8 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-/// What a read gives in place of a config the resolver must not load: not
-/// JSON, so loading it fails.
+/// What a read gives in place of a config or a manifest the resolver must not
+/// load: not JSON, so loading it fails.
 const UNLOADABLE: &str = "{";
 
 pub(crate) struct BoundedFs {
@@ -51,7 +59,8 @@ impl BoundedFs {
         }
     }
 
-    /// The bytes of `path`, or `None` where the file is larger than `max`.
+    /// The bytes of `path`, or `None` where the file is larger than `max` or
+    /// nests deeper than [`MAX_JSON_DEPTH`].
     fn read_limited(path: &Path, max: u64) -> io::Result<Option<Vec<u8>>> {
         if std::fs::metadata(path)?.len() > max {
             return Ok(None);
@@ -60,7 +69,7 @@ impl BoundedFs {
         std::fs::File::open(path)?
             .take(max.saturating_add(1))
             .read_to_end(&mut bytes)?;
-        Ok((bytes.len() as u64 <= max).then_some(bytes))
+        Ok(check_bounds(&bytes, max).is_ok().then_some(bytes))
     }
 
     /// Whether the configs `config` reaches through `extends` are within the
@@ -157,8 +166,10 @@ impl FileSystem for BoundedFs {
         Self::with_checks(true)
     }
 
+    /// The resolver reads only manifests as bytes.
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
-        self.os.read(path)
+        Ok(Self::read_limited(path, TOPOLOGY_MANIFEST_MAX_BYTES)?
+            .unwrap_or_else(|| UNLOADABLE.as_bytes().to_vec()))
     }
 
     /// The resolver reads only configs as text.
@@ -221,5 +232,23 @@ mod tests {
                 .expect("read")
                 .contains("extends")
         );
+    }
+
+    #[test]
+    fn a_manifest_past_the_depth_bound_reads_as_unloadable() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let levels = MAX_JSON_DEPTH + 1;
+        let deep = format!(
+            r#"{{"exports":{}"./f.mjs"{}}}"#,
+            r#"{"default":"#.repeat(levels - 1),
+            "}".repeat(levels - 1)
+        );
+        let manifest = dir.path().join("package.json");
+        std::fs::write(&manifest, &deep).expect("write manifest");
+        let fs = BoundedFs::new();
+        assert_eq!(fs.read(&manifest).expect("read"), UNLOADABLE.as_bytes());
+        let shallow = r#"{"exports":{"default":"./f.mjs"}}"#;
+        std::fs::write(&manifest, shallow).expect("write manifest");
+        assert_eq!(fs.read(&manifest).expect("read"), shallow.as_bytes());
     }
 }

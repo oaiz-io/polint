@@ -115,6 +115,9 @@ struct ObservedEdge {
     callee_name: Option<String>,
 }
 
+/// The largest recording [`observed_corrections`] and [`recording_id`] read.
+pub(crate) const RECORDING_MAX_BYTES: u64 = 256 * 1_048_576;
+
 /// The edges a recorded run of the package saw, as corrections to `graph`.
 ///
 /// `calls` is the recorder's output for the package, with paths relative to
@@ -127,7 +130,7 @@ pub(crate) fn observed_corrections(
     run: &str,
     driver: &str,
 ) -> anyhow::Result<Loaded> {
-    let calls: ObservedCalls = serde_json::from_str(calls)?;
+    let calls: ObservedCalls = crate::bounded_json::from_str(calls, RECORDING_MAX_BYTES)?;
     anyhow::ensure!(
         OBSERVED_CALLS_SCHEMAS.contains(&calls.schema.as_str()),
         "unknown recorder schema {:?}",
@@ -188,7 +191,7 @@ pub(crate) fn observed_corrections(
 /// The run id of a recording: the hash of its bytes.
 pub(crate) fn recording_id(path: &Path) -> anyhow::Result<String> {
     use sha2::{Digest as _, Sha256};
-    let bytes = std::fs::read(path)?;
+    let bytes = crate::repo_fs::read_file_with_limit(path, RECORDING_MAX_BYTES)?;
     let digest = Sha256::digest(&bytes);
     Ok(format!(
         "sha256:{}",

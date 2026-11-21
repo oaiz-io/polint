@@ -237,7 +237,11 @@ fn typescript_at(
     source: TypeScriptSource,
 ) -> Result<ResolvedTypeScript, TsTypesProcessError> {
     let manifest = directory.join("package.json");
-    let contents = std::fs::read_to_string(&manifest).map_err(|error| {
+    let contents = crate::repo_fs::read_file_to_string_with_limit(
+        &manifest,
+        crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES,
+    )
+    .map_err(|error| {
         TsTypesProcessError::SetupMissing(format!(
             "failed to read `{}` for the TypeScript version: {error}",
             manifest.display()
@@ -278,7 +282,9 @@ fn typescript_at(
 /// Reads `"version"` out of a package manifest without a JSON dependency on
 /// the shape of the rest of the file.
 fn typescript_version_from_manifest(contents: &str) -> Option<String> {
-    let parsed: serde_json::Value = serde_json::from_str(contents).ok()?;
+    let parsed: serde_json::Value =
+        crate::bounded_json::from_str(contents, crate::repo_fs::TOPOLOGY_MANIFEST_MAX_BYTES)
+            .ok()?;
     let version = parsed.get("version")?.as_str()?.trim();
     (!version.is_empty()).then(|| version.to_string())
 }

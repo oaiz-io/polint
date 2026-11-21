@@ -112,12 +112,15 @@ pub(crate) fn write(
     Ok(())
 }
 
+/// The largest stored input [`read`] loads.
+const STORED_INPUT_MAX_BYTES: u64 = 1024 * 1_048_576;
+
 pub(crate) fn read(
     path: &Path,
     interner: &StableKeyInterner,
 ) -> anyhow::Result<(Vec<PointsToConstraintFact>, PointsToCallInputs)> {
-    let file = std::io::BufReader::new(std::fs::File::open(path)?);
-    let input: StoredInput = serde_json::from_reader(file)?;
+    let bytes = crate::repo_fs::read_file_with_limit(path, STORED_INPUT_MAX_BYTES)?;
+    let input: StoredInput = crate::bounded_json::from_slice(&bytes, STORED_INPUT_MAX_BYTES)?;
     let place = |place: StoredPlace| SignaturePlace {
         var: place.var,
         stable_key: interner.intern(place.key),

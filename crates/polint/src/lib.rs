@@ -24,6 +24,7 @@ pub(crate) mod analysis_kernel;
 pub(crate) mod analysis_neutral;
 pub(crate) mod analysis_plan;
 pub(crate) mod baseline;
+pub(crate) mod bounded_json;
 pub(crate) mod cache;
 pub(crate) mod cli;
 pub(crate) mod config;

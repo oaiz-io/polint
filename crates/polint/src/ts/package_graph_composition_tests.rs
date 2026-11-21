@@ -1062,6 +1062,59 @@ fn a_ten_thousand_link_tsconfig_extends_chain_finishes_with_an_unknown() {
     );
 }
 
+/// A `package.json` nested deeper than a manifest may be is not read: Node
+/// gives up on it with a `RangeError`, and the import of its package is
+/// reported unknown, in the whole program and in the stitch, rather than
+/// aborting the analysis.
+#[test]
+fn a_ten_thousand_deep_exports_map_finishes_with_an_unknown() {
+    let depth = 10_000;
+    let manifest = format!(
+        "{{\"name\":\"duo\",\"version\":\"1.0.0\",\"exports\":{}\"./f.mjs\"{}}}",
+        "{\"default\":".repeat(depth),
+        "}".repeat(depth)
+    );
+    let main = "import { f } from \"duo\";\nf();\n";
+    let temp = tempfile::tempdir().expect("tempdir");
+    write_files(
+        temp.path(),
+        &[
+            (
+                "package.json",
+                r#"{"name":"app","version":"1.0.0","type":"module"}"#,
+            ),
+            ("main.mjs", main),
+            ("node_modules/duo/package.json", &manifest),
+            ("node_modules/duo/f.mjs", "export function f() {}\n"),
+        ],
+    );
+    let whole = whole_program_answers(temp.path());
+    let answer = answer_in(&whole, ".:main.mjs", main.find("f()").expect("a call"));
+    assert!(
+        !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
+        "{answer:?}"
+    );
+    let packages = [
+        (".", temp.path().to_path_buf()),
+        ("node_modules/duo", temp.path().join("node_modules/duo")),
+    ]
+    .into_iter()
+    .filter_map(|(name, root)| {
+        let graph = package_graph_of(&root).ok()?;
+        Some((name.to_string(), root, graph))
+    })
+    .collect::<Vec<_>>();
+    let graphs = named(&packages);
+    if let Ok(stitched) = stitch(&graphs, &tree_of(&packages)) {
+        let stitched = stitched_portable(&stitched, &graphs);
+        let answer = answer_in(&stitched, ".:main.mjs", main.find("f()").expect("a call"));
+        assert!(
+            !answer.claim.contains("Exact") && !answer.claim.contains("Complete"),
+            "{answer:?}"
+        );
+    }
+}
+
 #[test]
 fn the_stitch_refuses_a_graph_its_budget_cut_short() {
     let temp = tempfile::tempdir().expect("tempdir");
