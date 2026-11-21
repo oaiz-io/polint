@@ -8,12 +8,13 @@
 //! same-named binding of the enclosing function scope. Every producer that
 //! claims a binding holds one value asks these questions here.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
 use std::path::Path;
 
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
-use oxc_ast::ast::{Argument, CallExpression, Expression, Program, Statement};
+use oxc_ast::ast::{Argument, BindingIdentifier, CallExpression, Expression, Program, Statement};
 use oxc_semantic::{
     AstNodes, ReferenceId, ScopeId, Scoping, SemanticBuilder, SymbolId as OxcSymbolId,
 };
@@ -120,6 +121,7 @@ pub(crate) fn dynamic_scope(
     let module = program.source_type.is_module()
         || program.body.iter().any(Statement::is_module_declaration);
     let mut scope = DynamicScope::default();
+    let mut calls = Vec::new();
     for node in nodes.iter() {
         let call = match node.kind() {
             AstKind::WithStatement(_) => {
@@ -140,37 +142,20 @@ pub(crate) fn dynamic_scope(
             Reach::Everything => true,
         };
         scope.wrapper |= wrapper_named && !module;
-        let call_scope = node.scope_id();
-        for ancestor in scoping.scope_ancestors(call_scope) {
-            for symbol in scoping.iter_bindings_in(ancestor) {
-                let name = scoping.symbol_name(symbol);
-                let (written, read) = match &reach {
-                    Reach::Nothing => (false, false),
-                    Reach::Names {
-                        named,
-                        written,
-                        declared,
-                    } => (
-                        written.contains(name) || declared.contains(name),
-                        named.contains(name),
-                    ),
-                    Reach::Everything => (true, true),
-                };
-                if written {
-                    scope.bindings.insert(symbol);
-                }
-                if read {
-                    scope.exposed.insert(symbol);
-                }
-            }
-        }
         if matches!(reach, Reach::Everything) {
             scope.open_contexts.insert(call.span);
         }
-        if !scoping.scope_flags(call_scope).is_strict_mode() {
-            shadow_globals(scoping, nodes, call_scope, &reach, &mut scope.shadowed);
-        }
+        calls.push(EvalCall {
+            scope: node.scope_id(),
+            reach,
+        });
     }
+    if calls.is_empty() {
+        return scope;
+    }
+    let order = ScopeOrder::new(scoping);
+    reached_bindings(scoping, &order, &calls, &mut scope);
+    shadow_globals(scoping, nodes, &order, &calls, &mut scope.shadowed);
     scope
 }
 
@@ -248,28 +233,208 @@ fn eval_reach(call: &CallExpression<'_>) -> Reach {
     }
 }
 
-/// Records the unresolved references a `var` of non-strict eval code at
-/// `call_scope` may shadow: those inside the nearest enclosing function
-/// scope, which the eval's declarations join, whose name the code declares.
+/// A direct eval call: the scope it runs in and the names its code mentions.
+struct EvalCall {
+    scope: ScopeId,
+    reach: Reach,
+}
+
+/// The scopes of a file in preorder, so that whether one scope lies inside
+/// another is two comparisons rather than a walk up the scopes between them.
+struct ScopeOrder {
+    /// The scopes, each before the scopes inside it.
+    preorder: Vec<ScopeId>,
+    /// The position of each scope in `preorder`.
+    position: Vec<usize>,
+    /// One past the position of the last scope inside each scope.
+    end: Vec<usize>,
+    /// The nearest function, class static block, namespace or top-level
+    /// scope at or around each scope: the one its `var` declarations join.
+    var_scope: Vec<Option<ScopeId>>,
+}
+
+impl ScopeOrder {
+    fn new(scoping: &Scoping) -> Self {
+        let len = scoping.scopes_len();
+        let mut children = vec![Vec::new(); len];
+        let mut roots = Vec::new();
+        for scope in scoping.scope_descendants_from_root() {
+            match scoping.scope_parent_id(scope) {
+                Some(parent) => children[parent.index()].push(scope),
+                None => roots.push(scope),
+            }
+        }
+        let mut order = Self {
+            preorder: Vec::with_capacity(len),
+            position: vec![0; len],
+            end: vec![0; len],
+            var_scope: vec![None; len],
+        };
+        let mut stack: Vec<(ScopeId, bool)> =
+            roots.iter().rev().map(|root| (*root, false)).collect();
+        while let Some((scope, left)) = stack.pop() {
+            if left {
+                order.end[scope.index()] = order.preorder.len();
+                continue;
+            }
+            order.position[scope.index()] = order.preorder.len();
+            order.preorder.push(scope);
+            order.var_scope[scope.index()] = if scoping.scope_flags(scope).is_var() {
+                Some(scope)
+            } else {
+                scoping
+                    .scope_parent_id(scope)
+                    .and_then(|parent| order.var_scope[parent.index()])
+            };
+            stack.push((scope, true));
+            stack.extend(
+                children[scope.index()]
+                    .iter()
+                    .rev()
+                    .map(|child| (*child, false)),
+            );
+        }
+        order
+    }
+
+    fn position(&self, scope: ScopeId) -> usize {
+        self.position[scope.index()]
+    }
+
+    /// The positions of `scope` and of every scope inside it.
+    fn subtree(&self, scope: ScopeId) -> Range<usize> {
+        self.position[scope.index()]..self.end[scope.index()]
+    }
+
+    fn var_scope(&self, scope: ScopeId) -> Option<ScopeId> {
+        self.var_scope[scope.index()]
+    }
+}
+
+/// Whether one of the sorted `positions` lies in `range`.
+fn any_within(positions: &[usize], range: &Range<usize>) -> bool {
+    let first = positions.partition_point(|position| *position < range.start);
+    positions
+        .get(first)
+        .is_some_and(|position| *position < range.end)
+}
+
+/// The union of some subtrees of the scope tree, as disjoint sorted ranges.
+/// Two subtrees are nested or apart, so a range that starts inside the last
+/// one kept lies inside it.
+struct Subtrees(Vec<Range<usize>>);
+
+impl Subtrees {
+    fn new(mut ranges: Vec<Range<usize>>) -> Self {
+        ranges.sort_by_key(|range| range.start);
+        let mut union: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
+        for range in ranges {
+            if union.last().is_none_or(|last| range.start >= last.end) {
+                union.push(range);
+            }
+        }
+        Self(union)
+    }
+
+    fn contains(&self, position: usize) -> bool {
+        let after = self.0.partition_point(|range| range.start <= position);
+        after > 0 && position < self.0[after - 1].end
+    }
+}
+
+/// Records the bindings each eval call can see whose names its code writes,
+/// declares or reads: those of the scope of the call and of every scope
+/// around it. A binding is reached when an eval call lies in its scope.
+fn reached_bindings(
+    scoping: &Scoping,
+    order: &ScopeOrder,
+    calls: &[EvalCall],
+    scope: &mut DynamicScope,
+) {
+    let mut everything = Vec::new();
+    let mut writes: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    let mut reads: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for call in calls {
+        let at = order.position(call.scope);
+        match &call.reach {
+            Reach::Nothing => {}
+            Reach::Names {
+                named,
+                written,
+                declared,
+            } => {
+                for name in written.union(declared) {
+                    writes.entry(name.as_str()).or_default().push(at);
+                }
+                for name in named {
+                    reads.entry(name.as_str()).or_default().push(at);
+                }
+            }
+            Reach::Everything => everything.push(at),
+        }
+    }
+    everything.sort_unstable();
+    for positions in writes.values_mut().chain(reads.values_mut()) {
+        positions.sort_unstable();
+    }
+    let reached = |positions: Option<&Vec<usize>>, range: &Range<usize>| {
+        positions.is_some_and(|positions| any_within(positions, range))
+    };
+    for binding_scope in scoping.scope_descendants_from_root() {
+        let range = order.subtree(binding_scope);
+        let everything = any_within(&everything, &range);
+        for symbol in scoping.iter_bindings_in(binding_scope) {
+            let name = scoping.symbol_name(symbol);
+            if everything || reached(writes.get(name), &range) {
+                scope.bindings.insert(symbol);
+            }
+            if everything || reached(reads.get(name), &range) {
+                scope.exposed.insert(symbol);
+            }
+        }
+    }
+}
+
+/// Records the unresolved references a `var` of non-strict eval code may
+/// shadow: those inside the nearest enclosing function scope of the call,
+/// which the eval's declarations join, whose name the code declares.
 fn shadow_globals(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
-    call_scope: ScopeId,
-    reach: &Reach,
+    order: &ScopeOrder,
+    calls: &[EvalCall],
     shadowed: &mut BTreeSet<ReferenceId>,
 ) {
-    let declared = match reach {
-        Reach::Nothing => return,
-        Reach::Names { declared, .. } if declared.is_empty() => return,
-        Reach::Names { declared, .. } => Some(declared),
-        Reach::Everything => None,
-    };
-    let Some(var_scope) = scoping
-        .scope_ancestors(call_scope)
-        .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
-    else {
+    let mut everything = Vec::new();
+    let mut declaring: BTreeMap<&str, Vec<Range<usize>>> = BTreeMap::new();
+    for call in calls {
+        if scoping.scope_flags(call.scope).is_strict_mode() {
+            continue;
+        }
+        let Some(var_scope) = order.var_scope(call.scope) else {
+            continue;
+        };
+        match &call.reach {
+            Reach::Nothing => {}
+            Reach::Names { declared, .. } => {
+                for name in declared {
+                    declaring
+                        .entry(name.as_str())
+                        .or_default()
+                        .push(order.subtree(var_scope));
+                }
+            }
+            Reach::Everything => everything.push(order.subtree(var_scope)),
+        }
+    }
+    if everything.is_empty() && declaring.is_empty() {
         return;
-    };
+    }
+    let everything = Subtrees::new(everything);
+    let declaring: BTreeMap<&str, Subtrees> = declaring
+        .into_iter()
+        .map(|(name, ranges)| (name, Subtrees::new(ranges)))
+        .collect();
     for node in nodes.iter() {
         let AstKind::IdentifierReference(identifier) = node.kind() else {
             continue;
@@ -277,14 +442,14 @@ fn shadow_globals(
         let Some(reference) = identifier.reference_id.get() else {
             continue;
         };
-        if scoping.get_reference(reference).symbol_id().is_some()
-            || declared.is_some_and(|declared| !declared.contains(identifier.name.as_str()))
-        {
+        if scoping.get_reference(reference).symbol_id().is_some() {
             continue;
         }
-        if scoping
-            .scope_ancestors(node.scope_id())
-            .any(|ancestor| ancestor == var_scope)
+        let at = order.position(node.scope_id());
+        if everything.contains(at)
+            || declaring
+                .get(identifier.name.as_str())
+                .is_some_and(|subtrees| subtrees.contains(at))
         {
             shadowed.insert(reference);
         }
@@ -304,7 +469,7 @@ pub(crate) fn bindings_written_by_block_functions(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
 ) -> BTreeSet<OxcSymbolId> {
-    let mut written = BTreeSet::new();
+    let mut functions = Vec::new();
     for node in nodes.iter() {
         let AstKind::Function(function) = node.kind() else {
             continue;
@@ -319,22 +484,226 @@ pub(crate) fn bindings_written_by_block_functions(
         if scoping.scope_flags(scope).is_strict_mode() {
             continue;
         }
-        let outer = scoping
-            .scope_ancestors(scope)
-            .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
-            .and_then(|function_scope| scoping.get_binding(function_scope, id.name));
-        if let Some(outer) = outer.filter(|outer| *outer != symbol) {
+        functions.push(BlockFunction {
+            id,
+            symbol,
+            scope,
+            declared_in: node.scope_id(),
+            declaration: function.is_declaration(),
+        });
+    }
+    if functions.is_empty() {
+        return BTreeSet::new();
+    }
+    let order = ScopeOrder::new(scoping);
+    let mut written = BTreeSet::new();
+    for function in &functions {
+        let outer = order
+            .var_scope(function.scope)
+            .and_then(|function_scope| scoping.get_binding(function_scope, function.id.name));
+        if let Some(outer) = outer.filter(|outer| *outer != function.symbol) {
             written.insert(outer);
         }
-        let declared_in = node.scope_id();
-        if function.is_declaration()
-            && scoping
-                .scope_ancestors(declared_in)
-                .take_while(|ancestor| *ancestor != scope)
-                .any(|between| scoping.get_binding(between, id.name).is_some())
-        {
-            written.insert(symbol);
+    }
+    written.extend(declarations_bound_between(scoping, &order, &functions));
+    written
+}
+
+/// A named function of non-strict code.
+struct BlockFunction<'n, 'a> {
+    id: &'n BindingIdentifier<'a>,
+    symbol: OxcSymbolId,
+    /// The scope Oxc binds the function's name in.
+    scope: ScopeId,
+    /// The scope the function is written in.
+    declared_in: ScopeId,
+    declaration: bool,
+}
+
+/// The function declarations whose name a scope binds from the one they are
+/// written in up to, and not including, the one Oxc binds them in.
+///
+/// One sweep over the scopes in preorder keeps, for each such name, the
+/// positions of the open scopes that bind it, so the innermost binder around
+/// a declaration is the last one kept.
+fn declarations_bound_between(
+    scoping: &Scoping,
+    order: &ScopeOrder,
+    functions: &[BlockFunction<'_, '_>],
+) -> Vec<OxcSymbolId> {
+    let mut declarations: Vec<&BlockFunction<'_, '_>> = functions
+        .iter()
+        .filter(|function| function.declaration)
+        .collect();
+    declarations.sort_by_key(|function| order.position(function.declared_in));
+    let mut binders: BTreeMap<&str, Vec<usize>> = declarations
+        .iter()
+        .map(|function| (scoping.symbol_name(function.symbol), Vec::new()))
+        .collect();
+    let mut bound = Vec::new();
+    let mut open: Vec<ScopeId> = Vec::new();
+    let mut next = declarations.iter().peekable();
+    for &scope in &order.preorder {
+        let at = order.position(scope);
+        while let Some(&last) = open.last() {
+            if order.subtree(last).end > at {
+                break;
+            }
+            open.pop();
+            for symbol in scoping.iter_bindings_in(last) {
+                if let Some(positions) = binders.get_mut(scoping.symbol_name(symbol)) {
+                    positions.pop();
+                }
+            }
+        }
+        open.push(scope);
+        for symbol in scoping.iter_bindings_in(scope) {
+            if let Some(positions) = binders.get_mut(scoping.symbol_name(symbol)) {
+                positions.push(at);
+            }
+        }
+        while let Some(function) = next.next_if(|function| function.declared_in == scope) {
+            let innermost = binders
+                .get(scoping.symbol_name(function.symbol))
+                .and_then(|positions| positions.last());
+            let between = if order.subtree(function.scope).contains(&at) {
+                innermost.is_some_and(|binder| *binder > order.position(function.scope))
+            } else {
+                innermost.is_some()
+            };
+            if between {
+                bound.push(function.symbol);
+            }
         }
     }
-    written
+    bound
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    /// Room for the parser and the semantic builder to nest a few thousand
+    /// blocks in an unoptimised build.
+    const STACK_BYTES: usize = 256 * 1024 * 1024;
+
+    /// What a file's eval calls reach, how many block functions write a
+    /// binding, the names of the shadowed references and how long the two
+    /// questions took, without the parse.
+    struct Answers {
+        shadowed: Vec<String>,
+        exposed: usize,
+        written_by_block_functions: usize,
+        elapsed: Duration,
+    }
+
+    fn answers(source: String) -> Answers {
+        std::thread::Builder::new()
+            .stack_size(STACK_BYTES)
+            .spawn(move || {
+                let allocator = Allocator::default();
+                let parsed = parse_ts_source(&allocator, Path::new("deep.cjs"), &source);
+                assert!(parsed.fully_parsed);
+                let semantic = SemanticBuilder::new().build(parsed.program()).semantic;
+                let started = Instant::now();
+                let dynamic = dynamic_scope(parsed.program(), semantic.scoping(), semantic.nodes());
+                let written =
+                    bindings_written_by_block_functions(semantic.scoping(), semantic.nodes());
+                let elapsed = started.elapsed();
+                let shadowed = semantic
+                    .nodes()
+                    .iter()
+                    .filter_map(|node| match node.kind() {
+                        AstKind::IdentifierReference(identifier) => identifier
+                            .reference_id
+                            .get()
+                            .filter(|reference| dynamic.shadows(*reference))
+                            .map(|_| identifier.name.to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                Answers {
+                    shadowed,
+                    exposed: dynamic.exposed().len(),
+                    written_by_block_functions: written.len(),
+                    elapsed,
+                }
+            })
+            .expect("spawn a thread with room for deep nesting")
+            .join()
+            .expect("the deep file is analysed")
+    }
+
+    fn nested_blocks(depth: usize, inner: &str) -> String {
+        let mut source = String::with_capacity(depth * 2 + inner.len());
+        source.push_str(&"{".repeat(depth));
+        source.push_str(inner);
+        source.push_str(&"}".repeat(depth));
+        source
+    }
+
+    /// The questions take time linear in the file: a walk from every reference
+    /// or binding up to the scopes around it would take minutes here.
+    const LINEAR_IN_THE_FILE: Duration = Duration::from_secs(5);
+
+    #[test]
+    fn an_eval_above_deeply_nested_references_shadows_them_in_time_linear_in_the_file() {
+        let references = "u;\n".repeat(50_000);
+        let mut source = String::from("eval(s);\n");
+        source.push_str(&nested_blocks(8_000, &references));
+        let answers = answers(source);
+        let shadowed_u = answers.shadowed.iter().filter(|name| *name == "u").count();
+        assert_eq!(
+            shadowed_u, 50_000,
+            "every reference to `u` may read a `var` of the eval"
+        );
+        assert!(
+            answers.elapsed < LINEAR_IN_THE_FILE,
+            "took {:?}",
+            answers.elapsed
+        );
+    }
+
+    #[test]
+    fn many_evals_below_many_bindings_expose_them_in_time_linear_in_the_file() {
+        let mut source = String::new();
+        for depth in 0..4_000 {
+            source.push_str(&format!("{{ let a{depth} = 0;\n"));
+        }
+        source.push_str(&"eval(s);\n".repeat(4_000));
+        source.push_str(&"}".repeat(4_000));
+        let answers = answers(source);
+        assert_eq!(
+            answers.exposed, 4_000,
+            "the evals may read every binding around them"
+        );
+        assert!(
+            answers.elapsed < LINEAR_IN_THE_FILE,
+            "took {:?}",
+            answers.elapsed
+        );
+    }
+
+    #[test]
+    fn functions_declared_in_deeply_nested_blocks_are_checked_in_time_linear_in_the_file() {
+        let mut inner = String::new();
+        for depth in 0..8_000 {
+            inner.push_str(&format!("{{ function f{depth}() {{}} let g{depth} = 0;\n"));
+        }
+        inner.push_str("function g0() {}\n");
+        inner.push_str(&"}".repeat(8_000));
+        let source = format!("function outer() {{ var f0;\n{inner}}}\n");
+        let answers = answers(source);
+        // `f0` is written in the function scope by its block function, and
+        // `g0` is bound by a block between the innermost `function g0` and
+        // the function scope, so that function stays in its block.
+        assert_eq!(answers.written_by_block_functions, 2);
+        assert!(
+            answers.elapsed < LINEAR_IN_THE_FILE,
+            "took {:?}",
+            answers.elapsed
+        );
+    }
 }
