@@ -12199,9 +12199,10 @@ go 1.24
                 .filter(|diagnostic| diagnostic["file"] == file)
                 .collect::<Vec<_>>()
         };
+        let packaged = from("src/ui/package.ts");
         assert!(
-            from("src/ui/package.ts").is_empty(),
-            "a package outside the analysed files stays external: {json:#?}"
+            packaged.len() == 1 && diagnostic_has_evidence(packaged[0], "reason", "ModeDependent"),
+            "distinct loader targets stay open even when outside the analysed files: {json:#?}"
         );
         let vendored = from("src/ui/vendored.ts");
         assert!(
