@@ -1,6 +1,34 @@
 //! Vendored tree-sitter-go grammar (0.25.0 plus Go 1.26 `new(expr)`).
 
-use tree_sitter::Language;
+use tree_sitter::{Language, Node};
+
+/// Deepest Go syntax tree polint analyses. tree-sitter parses without
+/// recursion, but the extractors and lowering that walk the tree recurse once
+/// per level, so a deeper file is reported and not analysed rather than
+/// overflowing the stack.
+pub(crate) const MAX_SYNTAX_DEPTH: usize = 10_000;
+
+/// Whether the tree under `root` is deeper than [`MAX_SYNTAX_DEPTH`]. Walks
+/// with a cursor, so the check itself does not recurse.
+pub(crate) fn syntax_too_deep(root: Node<'_>) -> bool {
+    let mut cursor = root.walk();
+    let mut depth = 0;
+    loop {
+        if cursor.goto_first_child() {
+            depth += 1;
+            if depth > MAX_SYNTAX_DEPTH {
+                return true;
+            }
+            continue;
+        }
+        while !cursor.goto_next_sibling() {
+            if !cursor.goto_parent() {
+                return false;
+            }
+            depth -= 1;
+        }
+    }
+}
 
 #[allow(
     unsafe_code,

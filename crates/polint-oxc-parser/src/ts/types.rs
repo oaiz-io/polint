@@ -13,6 +13,10 @@ use super::{super::js::FunctionKind, statement::CallOrConstructorSignature};
 
 impl<'a, C: Config> ParserImpl<'a, C> {
     pub(crate) fn parse_ts_type(&mut self) -> TSType<'a> {
+        self.nested(|p| p.parse_ts_type_unguarded())
+    }
+
+    fn parse_ts_type_unguarded(&mut self) -> TSType<'a> {
         if self.is_start_of_function_type_or_constructor_type() {
             return self.parse_function_or_constructor_type();
         }
@@ -266,6 +270,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     }
 
     fn parse_type_operator_or_higher(&mut self) -> TSType<'a> {
+        self.nested(|p| p.parse_type_operator_or_higher_unguarded())
+    }
+
+    fn parse_type_operator_or_higher_unguarded(&mut self) -> TSType<'a> {
         match self.cur_kind() {
             Kind::KeyOf => self.parse_type_operator(TSTypeOperatorOperator::Keyof),
             Kind::Unique => self.parse_type_operator(TSTypeOperatorOperator::Unique),
@@ -337,6 +345,9 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         let mut ty = self.parse_non_array_type();
 
         while !self.cur_token().is_on_new_line() {
+            if self.chain_link_too_deep() {
+                break;
+            }
             match self.cur_kind() {
                 Kind::Bang => {
                     self.bump_any();
@@ -383,6 +394,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     }
 
     fn parse_non_array_type(&mut self) -> TSType<'a> {
+        self.nested(|p| p.parse_non_array_type_unguarded())
+    }
+
+    fn parse_non_array_type_unguarded(&mut self) -> TSType<'a> {
         match self.cur_kind() {
             Kind::Any
             | Kind::Unknown
@@ -824,6 +839,9 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         mut left_name: TSTypeName<'a>,
     ) -> TSTypeName<'a> {
         while self.eat(Kind::Dot) {
+            if self.chain_link_too_deep() {
+                break;
+            }
             let right = self.parse_identifier_name();
             left_name = self.ast.ts_type_name_qualified_name(self.end_span(span), left_name, right);
         }
@@ -1132,6 +1150,9 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         let mut left = self.ast.ts_import_type_qualifier_identifier(ident.span, ident.name);
 
         while self.eat(Kind::Dot) {
+            if self.chain_link_too_deep() {
+                break;
+            }
             let right = self.parse_identifier_name();
             left =
                 self.ast.ts_import_type_qualifier_qualified_name(self.end_span(span), left, right);

@@ -13,7 +13,7 @@ pub use polint_macros::rule;
 
 /// CLI entry used by the `polint` binary (`src/main.rs`).
 pub fn run_main() -> anyhow::Result<u8> {
-    cli::run()
+    jobs::on_worker_stack(cli::run)?
 }
 
 pub(crate) mod analysis;

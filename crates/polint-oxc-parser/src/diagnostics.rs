@@ -47,6 +47,11 @@ pub fn overlong_source() -> OxcDiagnostic {
 }
 
 #[cold]
+pub fn nesting_too_deep(limit: u32, span: Span) -> OxcDiagnostic {
+    OxcDiagnostic::error(format!("Nesting is deeper than {limit} parser levels")).with_label(span)
+}
+
+#[cold]
 pub fn file_appears_to_be_binary() -> OxcDiagnostic {
     ts_error("1490", "File appears to be binary.")
 }

@@ -108,6 +108,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         &mut self,
         stmt_ctx: StatementContext,
     ) -> Statement<'a> {
+        self.nested(|p| p.parse_statement_list_item_unguarded(stmt_ctx))
+    }
+
+    fn parse_statement_list_item_unguarded(&mut self, stmt_ctx: StatementContext) -> Statement<'a> {
         let has_no_side_effects_comment =
             self.lexer.trivia_builder.previous_token_has_no_side_effects_comment();
         let pure_comment_index = self.lexer.trivia_builder.previous_token_has_pure_comment();

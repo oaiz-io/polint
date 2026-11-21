@@ -567,6 +567,10 @@ impl GoMirLowering {
             return;
         };
         let root = tree.root_node();
+        // Extraction reports a file this deep and records none of its functions.
+        if crate::go::grammar::syntax_too_deep(root) {
+            return;
+        }
         let mut functions = Vec::new();
         visit_named_descendants(root, &mut |node| {
             if matches!(node.kind(), "function_declaration" | "method_declaration") {

@@ -122,6 +122,17 @@ pub(crate) const MAX_LEN: usize = if size_of::<usize>() >= 8 {
     isize::MAX as usize
 };
 
+/// Deepest nesting of the parser's recursive productions it parses.
+///
+/// Each nested expression, statement, type, pattern, JSX element, namespace or
+/// decorator counts one level for every recursive production it passes
+/// through, so one level of source nesting counts a few. A source nested deeper
+/// is a fatal error and parses to an empty program, so a parse never recurses
+/// deeper than this, whatever the source. The limit is a count, not a
+/// measurement of the stack, so whether a source parses depends only on the
+/// source.
+pub const MAX_NESTING_DEPTH: u32 = 10_000;
+
 /// Return value of [`Parser::parse`] consisting of AST, errors and comments
 ///
 /// ## AST Validity
@@ -628,6 +639,14 @@ struct ParserImpl<'a, C: ParserConfig> {
 
     /// Precomputed typescript detection
     is_ts: bool,
+
+    /// Recursive productions the parser is inside.
+    nesting: u32,
+
+    /// Set once the source nested deeper than [`MAX_NESTING_DEPTH`].
+    /// Unlike `fatal_error`, rewinding a speculative parse does not clear it,
+    /// so every later recursive production fails at once.
+    nesting_exceeded: bool,
 }
 
 impl<'a, C: ParserConfig> ParserImpl<'a, C> {
@@ -660,6 +679,8 @@ impl<'a, C: ParserConfig> ParserImpl<'a, C> {
             ast: AstBuilder::new(allocator),
             module_record_builder: ModuleRecordBuilder::new(allocator, source_type),
             is_ts: source_type.is_typescript(),
+            nesting: 0,
+            nesting_exceeded: false,
         }
     }
 
@@ -672,10 +693,11 @@ impl<'a, C: ParserConfig> ParserImpl<'a, C> {
         let mut program = self.parse_program();
         let mut panicked = false;
 
+        self.report_nesting_exceeded();
         if let Some(fatal_error) = self.fatal_error.take() {
             panicked = true;
             self.errors.truncate(fatal_error.errors_len);
-            if !self.lexer.errors.is_empty() && self.cur_kind().is_eof() {
+            if !self.nesting_exceeded && !self.lexer.errors.is_empty() && self.cur_kind().is_eof() {
                 // Noop
             } else {
                 self.error(fatal_error.error);
@@ -753,6 +775,7 @@ impl<'a, C: ParserConfig> ParserImpl<'a, C> {
         // initialize cur_token and prev_token by moving onto the first token
         self.bump_any();
         let expr = self.parse_expr();
+        self.report_nesting_exceeded();
         if let Some(FatalError { error, .. }) = self.fatal_error.take() {
             return Err(vec![error]);
         }
@@ -879,6 +902,61 @@ impl<'a, C: ParserConfig> ParserImpl<'a, C> {
             return Some(diagnostics::overlong_source());
         }
         None
+    }
+
+    /// Run one recursive production, counting it as a level of nesting.
+    ///
+    /// Past [`MAX_NESTING_DEPTH`] levels, or once the source has nested that
+    /// deep anywhere, the production is not run: it is a fatal error.
+    /// The links of chains read inside the production count until it returns.
+    #[inline]
+    fn nested<T: Dummy<'a>>(&mut self, production: impl FnOnce(&mut Self) -> T) -> T {
+        if self.nesting >= MAX_NESTING_DEPTH || self.nesting_exceeded {
+            self.set_nesting_too_deep();
+            return Dummy::dummy(self.ast.allocator);
+        }
+        let nesting = self.nesting;
+        self.nesting += 1;
+        let node = production(self);
+        self.nesting = nesting;
+        node
+    }
+
+    /// Count one link of a chain the parser reads in a loop (`a.b.c`,
+    /// `a + b + c`, `T[][]`). Each link nests the chain so far one level deeper
+    /// in the syntax tree, so it counts as a level until the enclosing
+    /// recursive production returns. Past [`MAX_NESTING_DEPTH`] it records the
+    /// fatal error and returns true; the caller stops the chain.
+    #[inline]
+    fn chain_link_too_deep(&mut self) -> bool {
+        if self.nesting >= MAX_NESTING_DEPTH || self.nesting_exceeded {
+            self.set_nesting_too_deep();
+            return true;
+        }
+        self.nesting += 1;
+        false
+    }
+
+    #[cold]
+    fn set_nesting_too_deep(&mut self) {
+        self.nesting_exceeded = true;
+        self.set_fatal_error(diagnostics::nesting_too_deep(
+            MAX_NESTING_DEPTH,
+            self.cur_token().span(),
+        ));
+    }
+
+    /// Make the nesting limit the reported fatal error once the source passed
+    /// it, even where a speculative parse rewound the error it raised or an
+    /// earlier fatal error was recorded first.
+    fn report_nesting_exceeded(&mut self) {
+        if !self.nesting_exceeded {
+            return;
+        }
+        let errors_len =
+            self.fatal_error.as_ref().map_or(self.errors.len(), |fatal| fatal.errors_len);
+        let error = diagnostics::nesting_too_deep(MAX_NESTING_DEPTH, self.cur_token().span());
+        self.fatal_error = Some(FatalError { error, errors_len });
     }
 
     #[inline]

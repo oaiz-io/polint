@@ -985,30 +985,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oxc_parser"
-version = "0.129.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fcb901b425989d315e1c536f561d6f92260731a1e1c1418c1ba4cc203167124"
-dependencies = [
- "bitflags",
- "cow-utils",
- "memchr",
- "num-bigint",
- "num-traits",
- "oxc_allocator",
- "oxc_ast",
- "oxc_data_structures",
- "oxc_diagnostics",
- "oxc_ecmascript",
- "oxc_regular_expression",
- "oxc_span",
- "oxc_str",
- "oxc_syntax",
- "rustc-hash",
- "seq-macro",
-]
-
-[[package]]
 name = "oxc_regular_expression"
 version = "0.129.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1218,12 +1194,12 @@ dependencies = [
  "libc",
  "oxc_allocator",
  "oxc_ast",
- "oxc_parser",
  "oxc_resolver",
  "oxc_semantic",
  "oxc_span",
  "petgraph",
  "polint-macros",
+ "polint-oxc-parser",
  "predicates",
  "proptest",
  "rayon",
@@ -1398,6 +1374,28 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "polint-oxc-parser"
+version = "0.129.0-polint.1"
+dependencies = [
+ "bitflags",
+ "cow-utils",
+ "memchr",
+ "num-bigint",
+ "num-traits",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_data_structures",
+ "oxc_diagnostics",
+ "oxc_ecmascript",
+ "oxc_regular_expression",
+ "oxc_span",
+ "oxc_str",
+ "oxc_syntax",
+ "rustc-hash",
+ "seq-macro",
 ]
 
 [[package]]

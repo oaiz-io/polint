@@ -27,6 +27,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     }
 
     pub(crate) fn parse_binding_pattern_kind(&mut self) -> BindingPattern<'a> {
+        self.nested(|p| p.parse_binding_pattern_kind_unguarded())
+    }
+
+    fn parse_binding_pattern_kind_unguarded(&mut self) -> BindingPattern<'a> {
         match self.cur_kind() {
             Kind::LCurly => self.parse_object_binding_pattern(),
             Kind::LBrack => self.parse_array_binding_pattern(),

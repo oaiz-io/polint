@@ -38,6 +38,14 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     /// `JSXFragment` :
     ///   < > `JSXChildren_opt` < / >
     fn parse_jsx_fragment(&mut self, span: u32, in_jsx_child: bool) -> Box<'a, JSXFragment<'a>> {
+        self.nested(|p| p.parse_jsx_fragment_unguarded(span, in_jsx_child))
+    }
+
+    fn parse_jsx_fragment_unguarded(
+        &mut self,
+        span: u32,
+        in_jsx_child: bool,
+    ) -> Box<'a, JSXFragment<'a>> {
         self.expect_jsx_child(Kind::RAngle);
         let opening_fragment = self.ast.jsx_opening_fragment(self.end_span(span));
         let (children, closing) = self.parse_jsx_children_and_closing(in_jsx_child);
@@ -67,6 +75,14 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     ///     used for telling `JSXClosingElement` to parse the next jsx child or not
     ///     true when inside jsx element, false when at top level expression
     fn parse_jsx_element(&mut self, span: u32, in_jsx_child: bool) -> Box<'a, JSXElement<'a>> {
+        self.nested(|p| p.parse_jsx_element_unguarded(span, in_jsx_child))
+    }
+
+    fn parse_jsx_element_unguarded(
+        &mut self,
+        span: u32,
+        in_jsx_child: bool,
+    ) -> Box<'a, JSXElement<'a>> {
         let (opening_element, self_closing) = self.parse_jsx_opening_element(span, in_jsx_child);
         let (children, closing_element) = if self_closing {
             (self.ast.vec(), None)
@@ -199,6 +215,9 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         let mut property = None;
 
         while self.eat(Kind::Dot) && self.fatal_error.is_none() {
+            if self.chain_link_too_deep() {
+                break;
+            }
             // <foo.bar.baz>
             if let Some(prop) = property {
                 object =
@@ -507,27 +526,33 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         }
     }
 
+    /// Compares member chains in a loop: a chain can be as long as the source.
     fn jsx_member_expression_eq(
-        lhs: &JSXMemberExpression<'a>,
-        rhs: &JSXMemberExpression<'a>,
+        mut lhs: &JSXMemberExpression<'a>,
+        mut rhs: &JSXMemberExpression<'a>,
     ) -> bool {
-        if lhs.property.name != rhs.property.name {
-            return false;
-        }
-        match (&lhs.object, &rhs.object) {
-            (
-                JSXMemberExpressionObject::IdentifierReference(lhs),
-                JSXMemberExpressionObject::IdentifierReference(rhs),
-            ) => lhs.name == rhs.name,
-            (
-                JSXMemberExpressionObject::MemberExpression(lhs),
-                JSXMemberExpressionObject::MemberExpression(rhs),
-            ) => Self::jsx_member_expression_eq(lhs, rhs),
-            (
-                JSXMemberExpressionObject::ThisExpression(_),
-                JSXMemberExpressionObject::ThisExpression(_),
-            ) => true,
-            _ => false,
+        loop {
+            if lhs.property.name != rhs.property.name {
+                return false;
+            }
+            match (&lhs.object, &rhs.object) {
+                (
+                    JSXMemberExpressionObject::IdentifierReference(lhs),
+                    JSXMemberExpressionObject::IdentifierReference(rhs),
+                ) => return lhs.name == rhs.name,
+                (
+                    JSXMemberExpressionObject::MemberExpression(lhs_object),
+                    JSXMemberExpressionObject::MemberExpression(rhs_object),
+                ) => {
+                    lhs = lhs_object;
+                    rhs = rhs_object;
+                }
+                (
+                    JSXMemberExpressionObject::ThisExpression(_),
+                    JSXMemberExpressionObject::ThisExpression(_),
+                ) => return true,
+                _ => return false,
+            }
         }
     }
 }

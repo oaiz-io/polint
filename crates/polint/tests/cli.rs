@@ -10766,6 +10766,101 @@ mod capability_planning {
     }
 
     #[test]
+    fn a_file_nested_past_the_parser_limit_is_reported_and_the_rest_is_analysed() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".polint.toml"),
+            r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+        );
+        write_phase41_rule_pack(
+            temp.path(),
+            r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::list_functions()])
+}
+"#,
+            r#"use polint::sdk::prelude::*;
+
+#[polint::rule(id = "local/list-functions", description = "Lists exported functions", severity = "warning")]
+pub(crate) fn list_functions(ctx: &mut RuleCtx<'_>, functions: Functions<'_>) -> RuleResult {
+    for function in functions.iter().filter(|function| function.is_exported) {
+        ctx.report(Diagnostic::warning(
+            ctx.rule_id(),
+            ctx.file_path(function.file),
+            function.span.diagnostic_range(),
+            format!("function {}", function.name),
+        ));
+    }
+    Ok(())
+}
+"#,
+        );
+        let levels = 100_000;
+        write_file(
+            &temp.path().join("src/deep.js"),
+            &format!(
+                "export function inDeepJs() {{}}\nx = {}a{};\n",
+                "(".repeat(levels),
+                ")".repeat(levels)
+            ),
+        );
+        write_file(
+            &temp.path().join("src/deep.go"),
+            &format!(
+                "package p\n\nfunc InDeepGo() {{}}\n\nvar X = {}1{}\n",
+                "(".repeat(levels),
+                ")".repeat(levels)
+            ),
+        );
+        write_file(
+            &temp.path().join("src/ok.ts"),
+            "export function shallow(): void {}\n",
+        );
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        for (rule_id, file) in [("parser/ts", "src/deep.js"), ("parser/go", "src/deep.go")] {
+            assert!(
+                diagnostics(&json).iter().any(|diagnostic| {
+                    diagnostic["rule_id"] == rule_id
+                        && diagnostic["file"]
+                            .as_str()
+                            .is_some_and(|path| path_str_ends_with(path, file))
+                        && diagnostic["message"]
+                            .as_str()
+                            .is_some_and(|message| message.contains("deeper than"))
+                }),
+                "{file} should be reported as nested past the limit: {json:#?}"
+            );
+        }
+        let messages = diagnostics_for_rule(&json, "local/list-functions")
+            .iter()
+            .map(|diagnostic| {
+                diagnostic["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(messages, ["function shallow"], "{json:#?}");
+    }
+
+    #[test]
     fn call_graph_follows_ts_imports_and_const_function_literals_for_an_outside_rule() {
         let temp = tempfile::tempdir().unwrap();
         write_ts_call_graph_rule_repo(temp.path());

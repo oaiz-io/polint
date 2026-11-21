@@ -195,6 +195,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     ///     `TemplateLiteral`[?Yield, ?Await, ~Tagged]
     ///     `CoverParenthesizedExpressionAndArrowParameterList`[?Yield, ?Await]
     fn parse_primary_expression(&mut self) -> Expression<'a> {
+        self.nested(|p| p.parse_primary_expression_unguarded())
+    }
+
+    fn parse_primary_expression_unguarded(&mut self) -> Expression<'a> {
         // FunctionExpression, GeneratorExpression
         // AsyncFunctionExpression, AsyncGeneratorExpression
         if self.at_function_with_async() {
@@ -797,7 +801,7 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     ) -> Expression<'a> {
         let mut lhs = lhs;
         loop {
-            if self.fatal_error.is_some() {
+            if self.fatal_error.is_some() || self.chain_link_too_deep() {
                 return lhs;
             }
 
@@ -933,6 +937,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
 
     /// [NewExpression](https://tc39.es/ecma262/#sec-new-operator)
     fn parse_new_expression(&mut self) -> Expression<'a> {
+        self.nested(|p| p.parse_new_expression_unguarded())
+    }
+
+    fn parse_new_expression_unguarded(&mut self) -> Expression<'a> {
         let span = self.start_span();
         let identifier = self.parse_keyword_identifier(Kind::New);
 
@@ -1017,6 +1025,9 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     ) -> Expression<'a> {
         let mut lhs = lhs;
         while self.fatal_error.is_none() {
+            if self.chain_link_too_deep() {
+                break;
+            }
             lhs = self.parse_member_expression_rest(
                 lhs_span,
                 lhs,
@@ -1140,6 +1151,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
 
     /// Section 13.5 Unary Expression
     pub(crate) fn parse_unary_expression_or_higher(&mut self, lhs_span: u32) -> Expression<'a> {
+        self.nested(|p| p.parse_unary_expression_or_higher_unguarded(lhs_span))
+    }
+
+    fn parse_unary_expression_or_higher_unguarded(&mut self, lhs_span: u32) -> Expression<'a> {
         // ++ -- prefix update expressions
         if self.is_update_expression() {
             return self.parse_update_expression(lhs_span);
@@ -1148,6 +1163,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     }
 
     pub(crate) fn parse_simple_unary_expression(&mut self, lhs_span: u32) -> Expression<'a> {
+        self.nested(|p| p.parse_simple_unary_expression_unguarded(lhs_span))
+    }
+
+    fn parse_simple_unary_expression_unguarded(&mut self, lhs_span: u32) -> Expression<'a> {
         match self.cur_kind() {
             kind if kind.is_unary_operator() => self.parse_unary_expression(),
             Kind::LAngle => {
@@ -1188,6 +1207,13 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     }
 
     pub(crate) fn parse_binary_expression_or_higher(
+        &mut self,
+        lhs_precedence: Precedence,
+    ) -> Expression<'a> {
+        self.nested(|p| p.parse_binary_expression_or_higher_unguarded(lhs_precedence))
+    }
+
+    fn parse_binary_expression_or_higher_unguarded(
         &mut self,
         lhs_precedence: Precedence,
     ) -> Expression<'a> {
@@ -1242,6 +1268,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
             // RelationalExpression[In, Yield, Await] :
             // [+In] RelationalExpression[+In, ?Yield, ?Await] in ShiftExpression[?Yield, ?Await]
             if kind == Kind::In && !self.ctx.has_in() {
+                break;
+            }
+
+            if self.chain_link_too_deep() {
                 break;
             }
 
@@ -1350,6 +1380,17 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         &mut self,
         allow_return_type_in_arrow_function: bool,
     ) -> Expression<'a> {
+        self.nested(|p| {
+            p.parse_assignment_expression_or_higher_impl_unguarded(
+                allow_return_type_in_arrow_function,
+            )
+        })
+    }
+
+    fn parse_assignment_expression_or_higher_impl_unguarded(
+        &mut self,
+        allow_return_type_in_arrow_function: bool,
+    ) -> Expression<'a> {
         let has_no_side_effects_comment =
             self.lexer.trivia_builder.previous_token_has_no_side_effects_comment();
         let pure_comment_index = self.lexer.trivia_builder.previous_token_has_pure_comment();
@@ -1429,34 +1470,36 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         expr
     }
 
-    fn set_pure_on_call_or_new_expr(expr: &mut Expression<'a>) -> bool {
-        match &mut expr.get_inner_expression_mut() {
-            Expression::CallExpression(call_expr) => {
-                call_expr.pure = true;
-                true
-            }
-            Expression::NewExpression(new_expr) => {
-                new_expr.pure = true;
-                true
-            }
-            Expression::BinaryExpression(binary_expr) => {
-                Self::set_pure_on_call_or_new_expr(&mut binary_expr.left)
-            }
-            Expression::LogicalExpression(logical_expr) => {
-                Self::set_pure_on_call_or_new_expr(&mut logical_expr.left)
-            }
-            Expression::ConditionalExpression(conditional_expr) => {
-                Self::set_pure_on_call_or_new_expr(&mut conditional_expr.test)
-            }
-            Expression::ChainExpression(chain_expr) => {
-                if let ChainElement::CallExpression(call_expr) = &mut chain_expr.expression {
+    /// Walks to the left end of an operator chain in a loop: the chain can be as
+    /// long as the source.
+    fn set_pure_on_call_or_new_expr(mut expr: &mut Expression<'a>) -> bool {
+        loop {
+            match expr.get_inner_expression_mut() {
+                Expression::CallExpression(call_expr) => {
                     call_expr.pure = true;
-                    true
-                } else {
-                    false
+                    return true;
                 }
+                Expression::NewExpression(new_expr) => {
+                    new_expr.pure = true;
+                    return true;
+                }
+                Expression::BinaryExpression(binary_expr) => expr = &mut binary_expr.left,
+                Expression::LogicalExpression(logical_expr) => expr = &mut logical_expr.left,
+                Expression::ConditionalExpression(conditional_expr) => {
+                    expr = &mut conditional_expr.test;
+                }
+                Expression::ChainExpression(chain_expr) => {
+                    return if let ChainElement::CallExpression(call_expr) =
+                        &mut chain_expr.expression
+                    {
+                        call_expr.pure = true;
+                        true
+                    } else {
+                        false
+                    };
+                }
+                _ => return false,
             }
-            _ => false,
         }
     }
 
@@ -1628,6 +1671,10 @@ impl<'a, C: Config> ParserImpl<'a, C> {
     ///   ( `Expression`[+In, ?Yield, ?Await] )
     ///   `DecoratorCallExpression`
     pub(crate) fn parse_decorator(&mut self) -> Decorator<'a> {
+        self.nested(|p| p.parse_decorator_unguarded())
+    }
+
+    fn parse_decorator_unguarded(&mut self) -> Decorator<'a> {
         let span = self.start_span();
         self.bump_any(); // bump @
         let expr = self.context_add(Context::Decorator, Self::parse_lhs_expression_or_higher);

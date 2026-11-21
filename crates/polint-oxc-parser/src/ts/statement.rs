@@ -358,6 +358,15 @@ impl<'a, C: Config> ParserImpl<'a, C> {
         kind: TSModuleDeclarationKind,
         modifiers: &Modifiers,
     ) -> Box<'a, TSModuleDeclaration<'a>> {
+        self.nested(|p| p.parse_module_or_namespace_declaration_unguarded(span, kind, modifiers))
+    }
+
+    fn parse_module_or_namespace_declaration_unguarded(
+        &mut self,
+        span: u32,
+        kind: TSModuleDeclarationKind,
+        modifiers: &Modifiers,
+    ) -> Box<'a, TSModuleDeclaration<'a>> {
         let id = TSModuleDeclarationName::Identifier(self.parse_binding_identifier());
         let body = if self.eat(Kind::Dot) {
             let span = self.start_span();
