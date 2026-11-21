@@ -309,6 +309,33 @@ Its recall with corrections is 100% by construction, because the corrections
 come from the recording it is checked against; it proves the correction layer
 and is not an accuracy number. Neither flag changes any other section.
 
+## Condition maps
+
+`conditions/` checks polint's resolution of `exports` and `imports` maps
+against Node itself. `conditions.py` generates, from a fixed seed, 2,400
+packages (1,400 `exports` maps, 1,000 `imports` maps) that mix nested condition
+maps, arrays, `*` patterns, `null` and invalid targets, numeric keys, the
+`import`, `require`, `node`, `default`, `browser`, `worker`, `module-sync` and
+custom conditions, maps that select nothing, declaration files, bare and self
+references, and targets that name other specifiers, including cycles. Node
+(the pinned image) resolves every request once per condition set and in both
+modes, and `corpus.json` records each file it loaded and under which sets.
+
+```sh
+python3 tests/js-analysis-bench/conditions/conditions.py record   # needs docker
+python3 tests/js-analysis-bench/conditions/conditions.py check    # no docker
+```
+
+`record` runs `resolve.mjs` in the sandbox with `--network none` and the
+package tree mounted read-only. `check` regenerates the maps and fails unless
+they are the committed ones. The Rust test
+`every_file_node_loads_through_a_condition_map_is_named_and_one_file_only_where_node_agrees`
+reads the corpus with no Node and fails a request when polint does not name a
+file Node loads, or names one file as the exact answer where Node loads
+different files under different sets. A set under which Node loads nothing
+runs no call, so it does not bear on the exact answer, and a declaration file
+holds no function a call can reach.
+
 ## Limits
 
 - Labels are per line, so two sites on one line calling the same callee count

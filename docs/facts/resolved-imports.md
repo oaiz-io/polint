@@ -211,6 +211,20 @@ A package without `exports` loads its `main` under Node, but its `module` or
 and a bundler name the same file as well. A package specifier whose files are
 not analysed stays `External` either way, since its label is the specifier.
 
+An `exports` or `imports` map is read for every condition set at once. A
+condition the runtime always selects (`default`, and `import` or `require` for
+the file's mode) ends the search for its map; every other condition may or may
+not be set, so each file it reaches is a candidate. Arrays go on past `null`,
+an invalid target and an entry that selects nothing, as Node's do; a map with
+a numeric key, or an `exports` map that mixes subpaths and conditions, names
+nothing. A target that is another specifier, such as a package name or a
+self reference, is followed in turn, up to a fixed number of follows. An
+import resolves to one file only when every candidate is that file; a
+declaration file is not a candidate. Where a condition repeats under nested
+maps the candidates may include a file no runtime loads, so the list is
+conservative. The candidates are checked against Node on a generated corpus
+of maps (`tests/js-analysis-bench/conditions/`).
+
 A `ModeDependent` import lists in `alternatives` each analysed file one way of
 loading it names. The call graph follows each of them as a conservative
 target, so a call through the import may reach every candidate and none of

@@ -2,6 +2,8 @@
 mod bounded_fs;
 #[cfg(feature = "lang-typescript")]
 mod conditions;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod conditions_differential_tests;
 mod formats;
 use crate::analysis_api::{
     FactDatabase, ImportSyntax, ModuleEdgeKind, ResolutionPrecision, ResolutionStatus, SourceFile,
@@ -1924,6 +1926,40 @@ fn package_and_subpath(specifier: &str) -> Option<(&str, String)> {
     (!name.is_empty() && !name.ends_with('/')).then(|| (name, format!(".{rest}")))
 }
 
+/// The files the ways of loading one specifier name, gathered: the first
+/// file found, every file, and whether the list may be incomplete.
+#[cfg(feature = "lang-typescript")]
+#[derive(Default)]
+struct Found {
+    first: Option<oxc_resolver::Resolution>,
+    paths: Vec<PathBuf>,
+    error: Option<ResolveError>,
+    open: bool,
+}
+
+#[cfg(feature = "lang-typescript")]
+impl Found {
+    fn add(&mut self, resolution: oxc_resolver::Resolution) {
+        self.paths.push(resolution.path().to_path_buf());
+        self.first.get_or_insert(resolution);
+    }
+
+    /// The one file found where every way names it and the list is
+    /// complete, the error of a loader where none names a file, and `Split`
+    /// otherwise.
+    fn answer(self) -> ModeResolution {
+        match self.first {
+            Some(first) if !self.open && self.paths.iter().all(|path| path == first.path()) => {
+                ModeResolution::One(Ok(first))
+            }
+            None if !self.open && self.paths.is_empty() => ModeResolution::One(Err(self
+                .error
+                .unwrap_or(ResolveError::NotFound(String::new())))),
+            _ => ModeResolution::Split(self.paths),
+        }
+    }
+}
+
 #[cfg(feature = "lang-typescript")]
 impl ModeResolvers {
     pub(crate) fn new() -> Self {
@@ -1995,11 +2031,15 @@ impl ModeResolvers {
     }
 
     /// [`Self::resolve_in`], where `seen` holds the importers and specifiers
-    /// already followed. A target of a condition map may name another
-    /// specifier, even the one it came from; each pair is followed once, as
-    /// its files are already among the answers where it was first followed.
-    /// Past [`MAX_FOLLOWED_ALTERNATIVES`] pairs the answer is `Split`, an
-    /// open answer, so a crafted manifest cannot make the walk deep or long.
+    /// already followed. Where an `exports` or `imports` map governs the
+    /// specifier, its answer is every file a target of the map may give
+    /// under any conditions, with the files the loaders named; a loader that
+    /// rejects the map, where Node goes on past what it rejects, does not
+    /// hide them. A target may name another specifier, even the one it came
+    /// from; each pair is followed once, as its files are already among the
+    /// answers where it was first followed. Past [`MAX_FOLLOWED_ALTERNATIVES`]
+    /// pairs the answer is `Split`, an open answer, so a crafted manifest
+    /// cannot make the walk deep or long.
     fn resolve_alternatives(
         &self,
         importer: &Path,
@@ -2019,83 +2059,132 @@ impl ModeResolvers {
             ),
             ModeResolution::One(loaders.browser.resolve_file(importer, specifier)),
         );
-        let ModeResolution::One(Ok(resolution)) = answer else {
+        let resolved = match &answer {
+            ModeResolution::One(Ok(resolution)) => Some(resolution.path().to_path_buf()),
+            _ => None,
+        };
+        let Some(targets) =
+            self.conditional_targets(importer, specifier, resolved.as_deref(), mode)
+        else {
             return answer;
         };
-        let Some(targets) = self.conditional_targets(importer, specifier, resolution.path(), mode)
-        else {
-            return ModeResolution::One(Ok(resolution));
-        };
-        let mut paths = Vec::new();
+        let mut found = Found::default();
+        match answer {
+            ModeResolution::One(Ok(resolution)) => found.add(resolution),
+            ModeResolution::One(Err(error)) => found.error = Some(error),
+            ModeResolution::Split(paths) => found.paths.extend(paths),
+        }
         for (root, target) in targets {
             let importer = root.join("package.json");
             if seen.contains(&(importer.clone(), target.clone())) {
                 continue;
             }
             if seen.len() >= MAX_FOLLOWED_ALTERNATIVES {
-                return ModeResolution::Split(vec![resolution.into_path_buf()]);
+                found.open = true;
+                break;
             }
             match self.resolve_alternatives(&importer, &target, mode, seen) {
-                ModeResolution::One(Ok(other)) if other.path() == resolution.path() => {}
-                ModeResolution::One(Ok(other)) => paths.push(other.into_path_buf()),
+                ModeResolution::One(Ok(resolution)) => found.add(resolution),
                 ModeResolution::One(Err(_)) => {}
-                ModeResolution::Split(more) => paths.extend(more),
+                ModeResolution::Split(paths) => {
+                    found.open = true;
+                    found.paths.extend(paths);
+                }
             }
         }
-        if paths.is_empty() {
-            return ModeResolution::One(Ok(resolution));
-        }
-        paths.push(resolution.into_path_buf());
-        ModeResolution::Split(paths)
+        found.answer()
     }
 
     /// The targets, each with the package directory it is written in, that
     /// the `exports` map of the package `specifier` names (or, for a `#`
     /// specifier, the `imports` map of the importer's package) may give it in
     /// `mode` under any conditions. `None` where no such map applies;
-    /// `resolved` is the file Node loads.
+    /// `resolved` is the file a loader names, if one does.
     fn conditional_targets(
         &self,
         importer: &Path,
         specifier: &str,
-        resolved: &Path,
+        resolved: Option<&Path>,
         mode: LoadMode,
     ) -> Option<Vec<(PathBuf, String)>> {
         let (root, manifest, key, exports) = if specifier.starts_with('#') {
             let (root, manifest) = importer
                 .ancestors()
                 .skip(1)
-                .find_map(|directory| Some((directory, self.manifest(directory)?)))?;
+                .find_map(|directory| Some((directory.to_path_buf(), self.manifest(directory)?)))?;
             (root, manifest, specifier.to_string(), false)
         } else if is_external_package_specifier(specifier) {
             let (name, subpath) = package_and_subpath(specifier)?;
-            let (root, manifest) = resolved.ancestors().skip(1).find_map(|directory| {
-                let manifest = self.manifest(directory)?;
-                let named = directory.ends_with(Path::new("node_modules").join(name))
-                    || manifest.get("name").and_then(serde_json::Value::as_str) == Some(name);
-                named.then_some((directory, manifest))
-            })?;
+            let (root, manifest) = resolved
+                .and_then(|resolved| self.package_of_file(resolved, name))
+                .or_else(|| self.package_of_importer(importer, name))?;
             (root, manifest, subpath, true)
         } else {
             return None;
         };
-        let map = manifest.get(if exports { "exports" } else { "imports" })?;
-        let targets = conditions::reachable_targets(
-            map,
-            &key,
-            exports,
-            mode.condition(),
-            mode.other().condition(),
-        )?;
+        let map = manifest
+            .get(if exports { "exports" } else { "imports" })
+            .filter(|map| !map.is_null())?;
         Some(
-            targets
-                .into_iter()
-                // An `exports` target names a file of its package; Node
-                // rejects any other.
-                .filter(|target| !exports || target.starts_with("./"))
-                .map(|target| (root.to_path_buf(), target))
-                .collect(),
+            conditions::reachable_targets(
+                map,
+                &key,
+                exports,
+                mode.condition(),
+                mode.other().condition(),
+            )
+            .into_iter()
+            .map(|target| match target {
+                conditions::Reach::File(target) | conditions::Reach::Package(target) => {
+                    (root.clone(), target)
+                }
+            })
+            .collect(),
         )
+    }
+
+    /// The package named `name` that holds the file `resolved`.
+    fn package_of_file(
+        &self,
+        resolved: &Path,
+        name: &str,
+    ) -> Option<(PathBuf, Arc<serde_json::Value>)> {
+        resolved.ancestors().skip(1).find_map(|directory| {
+            let manifest = self.manifest(directory)?;
+            let named = directory.ends_with(Path::new("node_modules").join(name))
+                || manifest.get("name").and_then(serde_json::Value::as_str) == Some(name);
+            named.then(|| (directory.to_path_buf(), manifest))
+        })
+    }
+
+    /// The package named `name` that Node loads for a file `importer`: the
+    /// importer's own package where it has that name and an `exports` map,
+    /// and otherwise the first `node_modules/name` directory of its
+    /// ancestors.
+    fn package_of_importer(
+        &self,
+        importer: &Path,
+        name: &str,
+    ) -> Option<(PathBuf, Arc<serde_json::Value>)> {
+        let own = importer
+            .ancestors()
+            .skip(1)
+            .find_map(|directory| Some((directory.to_path_buf(), self.manifest(directory)?)));
+        if let Some((root, manifest)) = own
+            && manifest.get("name").and_then(serde_json::Value::as_str) == Some(name)
+            && manifest
+                .get("exports")
+                .is_some_and(|exports| !exports.is_null())
+        {
+            return Some((root, manifest));
+        }
+        let directory = importer
+            .ancestors()
+            .skip(1)
+            .map(|directory| directory.join("node_modules").join(name))
+            .find(|directory| directory.is_dir())?;
+        let manifest = self.manifest(&directory)?;
+        Some((directory, manifest))
     }
 
     /// The `package.json` of `directory`, read once. `None` where it is
