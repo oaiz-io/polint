@@ -227,10 +227,13 @@ impl<'a> Solve<'a> {
     fn edge(&mut self, src: usize, dst: usize) {
         if src != dst && self.edges.insert((src, dst)) {
             self.successors[src].push(dst);
-            let tokens = self.sets[src].iter().copied().collect::<Vec<_>>();
-            for token in tokens {
+            // `add` never touches `src` here, so its set is lent out
+            // instead of copied.
+            let tokens = std::mem::take(&mut self.sets[src]);
+            for &token in &tokens {
                 self.add(dst, token);
             }
+            self.sets[src] = tokens;
         }
     }
 
@@ -653,7 +656,10 @@ impl<'a> Solve<'a> {
             // Propagation may have changed any chain, so walks start afresh.
             self.found.clear();
             self.inherits_escaped.clear();
-            for (load, token) in self.lookups.clone() {
+            // A lookup may record further lookups; those wait for the
+            // next round, as they would over a snapshot.
+            for index in 0..self.lookups.len() {
+                let (load, token) = self.lookups[index];
                 if !self.stored.contains(&(token, load.field))
                     || self.inherits_escaped(token, 0, &mut HashSet::new())
                 {
