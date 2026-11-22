@@ -3,7 +3,7 @@
 //! This module owns the frontend-specific projection from semantic-graph constraints
 //! to Andersen constraints and the derived indirect-call edges.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::analysis_neutral::AnalysisHost;
 
@@ -200,6 +200,28 @@ pub fn solve_ts_points_to(
     inputs: &TsPointsToInputs,
     budget: &SolverBudget,
 ) -> TsPointsToSolveResult {
+    solve_ts_points_to_with_output(interner, inputs, budget, None)
+}
+
+pub(crate) fn solve_ts_call_sites(
+    interner: &crate::internal_core::StableKeyInterner,
+    inputs: &TsPointsToInputs,
+    budget: &SolverBudget,
+) -> TsPointsToSolveResult {
+    let selected = inputs
+        .callsites
+        .iter()
+        .map(|site| var_for_node(site.callsite_node))
+        .collect();
+    solve_ts_points_to_with_output(interner, inputs, budget, Some(&selected))
+}
+
+fn solve_ts_points_to_with_output(
+    interner: &crate::internal_core::StableKeyInterner,
+    inputs: &TsPointsToInputs,
+    budget: &SolverBudget,
+    selected: Option<&HashSet<PtVarId>>,
+) -> TsPointsToSolveResult {
     let constraints = project_constraints(interner, inputs);
     let calls = project_calls(inputs);
     let points_to = solve_points_to_logged(
@@ -208,6 +230,7 @@ pub fn solve_ts_points_to(
         &constraints,
         &calls,
         budget.points_to_budget(),
+        selected,
     );
     let sets = points_to
         .sets

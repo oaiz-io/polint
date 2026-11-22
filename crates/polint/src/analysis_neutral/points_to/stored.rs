@@ -218,6 +218,7 @@ mod tests {
                 &constraints,
                 &calls,
                 PointsToBudget::default(),
+                None,
             );
             eprintln!(
                 "{path}: {} ms, {} sets, {:?}",

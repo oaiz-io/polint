@@ -9,7 +9,9 @@ pub(crate) use crate::analysis_neutral::solver::policy::{SolverPolicy, SolverPol
 use super::budget::SolverBudget;
 use crate::go::rta::{GoRtaInputs, solve_go_rta};
 
-pub(crate) use crate::ts::points_to::{TsPointsToInputs, budget_status, solve_ts_points_to};
+#[cfg(test)]
+pub(crate) use crate::ts::points_to::solve_ts_points_to;
+pub(crate) use crate::ts::points_to::{TsPointsToInputs, budget_status, solve_ts_call_sites};
 
 pub(crate) fn ts_points_to_inputs_from_db(db: &crate::core::AnalysisDb) -> TsPointsToInputs {
     TsPointsToInputs::from_db(db)
@@ -77,7 +79,7 @@ impl SolverPolicy for TsPointsToPolicy {
         interner: &crate::core::StableKeyInterner,
         budget: &SolverBudget,
     ) -> SolverPolicyOutcome {
-        let output = solve_ts_points_to(interner, &self.inputs, budget);
+        let output = solve_ts_call_sites(interner, &self.inputs, budget);
         SolverPolicyOutcome {
             points_to: None,
             derived_edges: output.derived_edges,

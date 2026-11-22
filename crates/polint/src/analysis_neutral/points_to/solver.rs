@@ -197,21 +197,23 @@ pub fn solve_points_to_with_calls(
     calls: &PointsToCallInputs,
     budget: PointsToBudget,
 ) -> PointsToSolveResult {
-    solve_timed(interner, constraints, calls, budget).0
+    solve_timed(interner, constraints, calls, budget, None).0
 }
 
 /// Solves like [`solve_points_to_with_calls`] and logs the solve's
 /// [`PointsToSolveStats`], its time per step and its memory under the
 /// `polint::points_to` tracing target, named by `pass`.
+/// `selected` limits result rows, not propagation, budgets, or statistics.
 pub fn solve_points_to_logged(
     pass: &'static str,
     interner: &crate::internal_core::StableKeyInterner,
     constraints: &[PointsToConstraintFact],
     calls: &PointsToCallInputs,
     budget: PointsToBudget,
+    selected: Option<&HashSet<PtVarId>>,
 ) -> PointsToSolveResult {
     let rss_before = crate::measure::current_rss_bytes();
-    let (result, timings) = solve_timed(interner, constraints, calls, budget);
+    let (result, timings) = solve_timed(interner, constraints, calls, budget, selected);
     let stats = &result.stats;
     let rss_after = crate::measure::current_rss_bytes();
     let constraint_counts = stats
@@ -252,6 +254,7 @@ fn solve_timed(
     constraints: &[PointsToConstraintFact],
     calls: &PointsToCallInputs,
     budget: PointsToBudget,
+    selected: Option<&HashSet<PtVarId>>,
 ) -> (PointsToSolveResult, [std::time::Duration; 3]) {
     let started = std::time::Instant::now();
     let mut solver = Solver::new(interner, budget);
@@ -260,7 +263,7 @@ fn solve_timed(
     let initialized = started.elapsed();
     solver.run();
     let ran = started.elapsed();
-    let mut result = solver.into_result();
+    let mut result = solver.into_result(selected);
     let finished = started.elapsed();
     result.stats.constraints = constraint_counts(constraints);
     result.stats.calls = calls.calls.len();
@@ -1452,7 +1455,10 @@ impl<'a> Solver<'a> {
     /// The bindings that reached each variable along copy edges, the first
     /// [`MAX_BINDINGS_PER_VAR`] by key text. Keeping the first few of a union
     /// is a join, so the result does not depend on the order of the walk.
-    fn reached_bindings(&self) -> BTreeMap<PtVarId, Vec<CallBinding>> {
+    fn reached_bindings(
+        &self,
+        selected: impl Fn(usize) -> bool,
+    ) -> BTreeMap<PtVarId, Vec<CallBinding>> {
         let text = |binding: &CallBinding| {
             (
                 self.interner.resolve(binding.call),
@@ -1493,7 +1499,9 @@ impl<'a> Solver<'a> {
         reached
             .into_iter()
             .enumerate()
-            .filter(|(var, bindings)| !bindings.is_empty() && !self.set(*var).is_empty())
+            .filter(|(var, bindings)| {
+                !bindings.is_empty() && !self.set(*var).is_empty() && selected(*var)
+            })
             .map(|(var, bindings)| (self.var_ids[var], bindings))
             .collect()
     }
@@ -1577,7 +1585,8 @@ impl<'a> Solver<'a> {
         )
     }
 
-    fn into_result(self) -> PointsToSolveResult {
+    fn into_result(self, selected: Option<&HashSet<PtVarId>>) -> PointsToSolveResult {
+        let selected = |var: usize| selected.is_none_or(|vars| vars.contains(&self.var_ids[var]));
         let budget_status = if self.halted {
             PointsToBudgetStatus::BudgetExceeded
         } else {
@@ -1590,7 +1599,7 @@ impl<'a> Solver<'a> {
         let through_slot = self.through_slot_variables();
         let mut grounds = BTreeMap::new();
         for var in 0..self.vars.len() {
-            if self.set(var).is_empty() {
+            if self.set(var).is_empty() || !selected(var) {
                 continue;
             }
             let inflow = open[var]
@@ -1609,9 +1618,11 @@ impl<'a> Solver<'a> {
                 raise(&mut precisions[var], PointsToPrecision::Heuristic);
             }
         }
-        let call_bindings = self.reached_bindings();
+        let call_bindings = self.reached_bindings(selected);
         let mut variables = (0..self.vars.len())
-            .filter(|var| incomplete[*var] || bounded[*var] || !self.set(*var).is_empty())
+            .filter(|var| {
+                (incomplete[*var] || bounded[*var] || !self.set(*var).is_empty()) && selected(*var)
+            })
             .collect::<Vec<_>>();
         variables.sort_by_key(|var| self.var_ids[*var]);
         // Identities are written in parallel and interned in variable order, so
@@ -1807,6 +1818,7 @@ pub fn output_with_solved_sets(
         &constraints,
         &PointsToCallInputs::default(),
         budget,
+        None,
     );
     PointsToOutput {
         constraints,
@@ -1819,6 +1831,47 @@ pub fn output_with_solved_sets(
 mod tests {
     use super::*;
     use crate::analysis_neutral::ids::{PointsToConstraintId, ValueFactId};
+
+    #[test]
+    fn selecting_result_rows_keeps_transitive_values_and_budget_status() {
+        let interner = crate::internal_core::test_stable_key_interner();
+        let source = PtVarId(1);
+        let callee = PtVarId(2);
+        let constraints = [
+            constraint(
+                "selected-address",
+                PointsToConstraintKind::AddressOf {
+                    dst: source,
+                    object: ObjectTokenId(1),
+                },
+            ),
+            constraint(
+                "selected-copy",
+                PointsToConstraintKind::Copy {
+                    dst: callee,
+                    src: source,
+                },
+            ),
+        ];
+        let calls = PointsToCallInputs::default();
+        let selected = HashSet::from([callee]);
+        for budget in [
+            PointsToBudget::default(),
+            PointsToBudget {
+                max_steps: 0,
+                ..Default::default()
+            },
+        ] {
+            let (mut all, _) = solve_timed(&interner, &constraints, &calls, budget, None);
+            let (only_callee, _) =
+                solve_timed(&interner, &constraints, &calls, budget, Some(&selected));
+            assert!(all.sets.iter().any(|set| set.variable == source));
+            all.sets.retain(|set| set.variable == callee);
+            all.grounds.retain(|var, _| *var == callee);
+            all.call_bindings.retain(|var, _| *var == callee);
+            assert_eq!(only_callee, all);
+        }
+    }
 
     #[test]
     fn solver_handles_core_constraint_vocabulary_deterministically() {
