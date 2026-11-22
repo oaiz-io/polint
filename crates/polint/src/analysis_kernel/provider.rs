@@ -790,6 +790,15 @@ impl Provider for TypeValueAliasProvider {
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
         let go_points_to = go_points_to_requested(&ctx.plan, ctx.db);
+        let copies_only = ctx.plan.requests_capability("call_graph")
+            && !control_or_data_flow_requested(&ctx.plan, ctx.db)
+            && !ctx.plan.requests_per_point_domain_facts()
+            && ctx.db.extension_facts().is_empty()
+            && ctx
+                .db
+                .files()
+                .iter()
+                .all(|file| file.language.is_ts_family());
         let derivation =
             crate::analysis::types::provider::derive_type_value_alias_with_go_points_to(
                 ctx.db,
@@ -809,6 +818,7 @@ impl Provider for TypeValueAliasProvider {
                     ctx.dependency_digest("polint.ts.syntax"),
                 ],
                 go_points_to,
+                copies_only,
             );
         ProviderRunResult {
             counts: Default::default(),

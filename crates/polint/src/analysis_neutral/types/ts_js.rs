@@ -32,7 +32,10 @@ use crate::internal_core::{FileId, FunctionId, Language, Span};
 
 type RootPlaceKey = (PlaceRoot, Option<FileId>, Option<FunctionId>);
 
-pub fn derive_ts_js_type_value_alias(db: &impl AnalysisHost) -> TypeValueAliasOutput {
+pub fn derive_ts_js_type_value_alias(
+    db: &impl AnalysisHost,
+    copies_only: bool,
+) -> TypeValueAliasOutput {
     let interner_handle = db.stable_key_interner();
     let interner = &interner_handle;
     let body_by_id = db
@@ -50,6 +53,51 @@ pub fn derive_ts_js_type_value_alias(db: &impl AnalysisHost) -> TypeValueAliasOu
         .iter()
         .map(|place| (place.id, place))
         .collect::<BTreeMap<_, _>>();
+    if copies_only {
+        let file_by_id = db.files().iter().map(|file| (file.id, file)).collect();
+        let mut values = Vec::new();
+        let mut allocations = Vec::new();
+        for operation in db.mir_operations().iter().filter(|operation| {
+            body_by_id
+                .get(&operation.body)
+                .is_some_and(|body| body.language.is_ts_family())
+                && matches!(
+                    operation.kind,
+                    MirOperationKind::Bind {
+                        value: MirValue::Place(_),
+                        ..
+                    } | MirOperationKind::Assign {
+                        value: MirValue::Place(_),
+                        ..
+                    } | MirOperationKind::Write {
+                        value: MirValue::Place(_),
+                        ..
+                    } | MirOperationKind::Call { .. }
+                )
+        }) {
+            collect_values_for_operation(
+                interner,
+                operation,
+                &body_by_id,
+                &place_by_id,
+                &file_by_id,
+                &mut values,
+                &mut allocations,
+            );
+        }
+        values.retain(|fact| {
+            matches!(fact.subject, ValueSubject::Place(_))
+                && matches!(fact.kind, ValueKind::PlaceRef(_) | ValueKind::CallReturn(_))
+        });
+        return TypeValueAliasOutput {
+            values: ValueOutput {
+                values,
+                allocations: Vec::new(),
+            },
+            ..TypeValueAliasOutput::default()
+        }
+        .normalized(interner);
+    }
     let ts_places_by_function = ts_places_by_function(&place_by_id);
     let file_by_id = db
         .files()
@@ -1194,9 +1242,50 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn copies_only_retains_the_same_place_relations() {
+        let mut db = db_with_ts_mir();
+        let mut operations = db.mir_operations().to_vec();
+        let assignment = operations
+            .iter_mut()
+            .find(|operation| matches!(operation.kind, MirOperationKind::Assign { .. }))
+            .expect("fixture has an assignment");
+        assignment.span.end_byte = assignment.span.start_byte;
+        db.replace_semantic_mir(MirOutput {
+            bodies: db.mir_bodies().to_vec(),
+            places: db.mir_places().to_vec(),
+            operations,
+            ..MirOutput::default()
+        })
+        .expect("semantic MIR replacement");
+        let project = |output: TypeValueAliasOutput| {
+            output
+                .values
+                .values
+                .into_iter()
+                .filter_map(|fact| {
+                    let ValueSubject::Place(dst) = fact.subject else {
+                        return None;
+                    };
+                    match fact.kind {
+                        ValueKind::PlaceRef(src) | ValueKind::CallReturn(src) => {
+                            Some((fact.stable_key, dst, src))
+                        }
+                        _ => None,
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        let full = project(derive_ts_js_type_value_alias(&db, false));
+        let copies = derive_ts_js_type_value_alias(&db, true);
+        assert!(!full.is_empty());
+        assert!(copies.types.types.is_empty());
+        assert_eq!(project(copies), full);
+    }
+
+    #[test]
     fn ts_js_narrowing_rows_cover_high_yield_predicates() {
         let db = db_with_ts_mir();
-        let output = derive_ts_js_type_value_alias(&db);
+        let output = derive_ts_js_type_value_alias(&db, false);
         let evidence = output
             .types
             .narrowed
@@ -1224,7 +1313,7 @@ mod tests {
     #[test]
     fn ts_js_values_allocations_and_access_paths_distinguish_dynamic_cases() {
         let db = db_with_ts_mir();
-        let output = derive_ts_js_type_value_alias(&db);
+        let output = derive_ts_js_type_value_alias(&db, false);
 
         assert!(output.values.allocations.iter().any(|row| {
             matches!(
@@ -1259,7 +1348,7 @@ mod tests {
     fn ts_js_unsupported_dynamic_rows_never_claim_exact_precision() {
         let db = db_with_ts_mir();
         let interner = db.stable_key_interner();
-        let output = derive_ts_js_type_value_alias(&db);
+        let output = derive_ts_js_type_value_alias(&db, false);
 
         assert!(output.types.types.iter().any(|row| {
             row.status == TypeStatus::Unsupported
