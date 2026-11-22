@@ -9,8 +9,6 @@ pub(crate) use crate::analysis_neutral::solver::policy::{SolverPolicy, SolverPol
 use super::budget::SolverBudget;
 use crate::go::rta::{GoRtaInputs, solve_go_rta};
 
-#[cfg(test)]
-pub(crate) use crate::ts::points_to::solve_ts_points_to;
 pub(crate) use crate::ts::points_to::{TsPointsToInputs, budget_status, solve_ts_call_sites};
 
 pub(crate) fn ts_points_to_inputs_from_db(db: &crate::core::AnalysisDb) -> TsPointsToInputs {

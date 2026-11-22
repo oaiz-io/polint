@@ -409,7 +409,7 @@ fn go_rta_solver_output_is_byte_identical_under_permuted_fact_insertion_order() 
 #[test]
 fn ts_points_to_solver_is_deterministic_and_non_vacuous() {
     use crate::analysis::solver::budget::SolverBudget;
-    use crate::analysis::solver::policy::{TsPointsToInputs, solve_ts_points_to};
+    use crate::ts::points_to::{TsPointsToInputs, solve_ts_points_to};
 
     let fixture = load_native_fixture(&fixture_dir("ts_tokens")).expect("fixture loads");
     let temp = copy_fixture_repo_for_test(&fixture).expect("copy fixture repo");
