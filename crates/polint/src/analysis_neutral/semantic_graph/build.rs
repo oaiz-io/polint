@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use foldhash::HashMap;
 use rayon::prelude::*;
 
-use crate::analysis_api::{FactFamily, FunctionFact, PackageFact, stable_key_text_from_parts};
+use crate::analysis_api::{FactFamily, FunctionFact, PackageFact, write_stable_key_text};
 use crate::internal_core::{StableKeyId, StableKeyInterner};
 
 use crate::analysis_neutral::AnalysisHost;
@@ -16,7 +17,6 @@ use crate::analysis_neutral::semantic_graph::facts::{
     EdgeKind, NodeKind, SemanticEdgeFact, SemanticNodeFact, SemanticPrecision,
 };
 use crate::analysis_neutral::semantic_graph::store::SemanticGraphOutput;
-use crate::analysis_neutral::stable_key::semantic_stable_key;
 use crate::analysis_neutral::values::facts::{ValueKind, ValueSubject};
 
 #[doc(hidden)]
@@ -25,13 +25,10 @@ pub struct SemanticGraphBuilder {
     nodes: Vec<SemanticNodeFact>,
     edges: Vec<SemanticEdgeFact>,
     constraints: Vec<ConstraintFact>,
-    next_node: u64,
     /// node stable key -> pre-sort SemanticNodeId, so a node identity is projected
     /// at most once and edges/constraints can resolve their endpoints.
-    node_by_key: BTreeMap<StableKeyId, SemanticNodeId>,
-    /// pre-sort SemanticNodeId (as index) -> node stable key, the O(1) reverse of
-    /// `node_by_key` so `node_key_for` (called twice per edge) never linear-scans.
-    key_by_node: Vec<StableKeyId>,
+    node_by_key: HashMap<StableKeyId, SemanticNodeId>,
+    key_text: String,
     /// A language whose functions, packages, call sites, scopes and values the
     /// projections leave out: a run that derives no points-to facts for it has
     /// no reader for them.
@@ -49,25 +46,17 @@ impl SemanticGraphBuilder {
         stable_key_text: String,
     ) -> SemanticNodeId {
         let stable_key = interner.intern(stable_key_text);
-        if let Some(&id) = self.node_by_key.get(&stable_key) {
-            return id;
-        }
-        let id = SemanticNodeId(self.next_node);
-        self.next_node += 1;
-        self.node_by_key.insert(stable_key, id);
-        // key_by_node is index-aligned with the sequential pre-sort id, so id.0 ==
-        // key_by_node.len() at the moment of the push.
-        debug_assert_eq!(id.0 as usize, self.key_by_node.len());
-        self.key_by_node.push(stable_key);
-        self.nodes.push(SemanticNodeFact {
-            id,
-            kind,
-            // Conservative: graph rows are derived/aggregated, never `ResolvedStatic`
-            // (the Exact-equivalent ceiling). Plan 03 validates the ceiling.
-            precision: SemanticPrecision::Conservative,
-            stable_key,
-        });
-        id
+        *self.node_by_key.entry(stable_key).or_insert_with(|| {
+            let id = SemanticNodeId(self.nodes.len() as u64);
+            self.nodes.push(SemanticNodeFact {
+                id,
+                kind,
+                // A derived graph node starts with conservative precision.
+                precision: SemanticPrecision::Conservative,
+                stable_key,
+            });
+            id
+        })
     }
 
     pub fn push_edge(
@@ -82,17 +71,19 @@ impl SemanticGraphBuilder {
         // stable keys from the interned node table.
         let source_key = self.node_key_for(source);
         let target_key = self.node_key_for(target);
-        let stable_key = interner.intern(
-            semantic_stable_key(
+        {
+            let keys = interner.read_view();
+            write_stable_key_text(
+                &mut self.key_text,
                 FactFamily::Reference,
-                &[
-                    ("edge_kind", kind.as_str().to_string()),
-                    ("source", interner.resolve(source_key).to_string()),
-                    ("target", interner.resolve(target_key).to_string()),
+                &mut [
+                    ("edge_kind", kind.as_str()),
+                    ("source", keys.text(source_key)),
+                    ("target", keys.text(target_key)),
                 ],
-            )
-            .into_string(),
-        );
+            );
+        }
+        let stable_key = interner.intern(self.key_text.as_str());
         self.edges.push(SemanticEdgeFact {
             id: Default::default(),
             source,
@@ -155,15 +146,8 @@ impl SemanticGraphBuilder {
         origin: Option<&'static str>,
         precision: PointsToPrecision,
     ) {
-        let mut parts = vec![
-            ("constraint_kind", kind.as_str().to_string()),
-            ("identity", identity.to_string()),
-        ];
-        if let Some(origin) = origin {
-            parts.push(("origin", origin.to_string()));
-        }
-        let stable_key = interner
-            .intern(semantic_stable_key(FactFamily::PointsToConstraint, &parts).into_string());
+        write_constraint_key(&mut self.key_text, &kind, identity, origin);
+        let stable_key = interner.intern(self.key_text.as_str());
         self.constraints.push(ConstraintFact {
             id: Default::default(),
             kind,
@@ -184,13 +168,9 @@ impl SemanticGraphBuilder {
         let keys = constraints
             .par_iter()
             .map(|(kind, identity)| {
-                stable_key_text_from_parts(
-                    FactFamily::PointsToConstraint,
-                    &[
-                        ("constraint_kind", kind.as_str()),
-                        ("identity", identity.as_str()),
-                    ],
-                )
+                let mut text = String::new();
+                write_constraint_key(&mut text, kind, identity, None);
+                text
             })
             .collect::<Vec<_>>();
         for ((kind, _), key) in constraints.into_iter().zip(keys) {
@@ -204,15 +184,9 @@ impl SemanticGraphBuilder {
         }
     }
 
-    /// Resolves a pre-sort node id back to its stable key in O(1) via the
-    /// index-aligned `key_by_node` sidecar. `push_edge` only ever receives ids
-    /// returned by `intern_node`, so the index is always in range; an out-of-range
-    /// id is a builder invariant violation, not an expected empty-key fallback.
+    /// Node IDs are indices into the builder's insertion-ordered table.
     fn node_key_for(&self, id: SemanticNodeId) -> StableKeyId {
-        self.key_by_node
-            .get(id.0 as usize)
-            .copied()
-            .expect("edge endpoint must reference an interned node")
+        self.nodes[id.0 as usize].stable_key
     }
 
     /// Look up a pre-sort node by its composed stable-key text.
@@ -512,54 +486,69 @@ impl SemanticGraphBuilder {
     }
 }
 
+fn write_constraint_key(
+    text: &mut String,
+    kind: &ConstraintKind,
+    identity: &str,
+    origin: Option<&'static str>,
+) {
+    let mut parts = [
+        ("constraint_kind", kind.as_str()),
+        ("identity", identity),
+        ("origin", origin.unwrap_or_default()),
+    ];
+    let len = 2 + usize::from(origin.is_some());
+    write_stable_key_text(text, FactFamily::PointsToConstraint, &mut parts[..len]);
+}
+
 /// Compose a function node key from its stable source identity.
 pub fn function_node_key(db: &impl AnalysisHost, function: &FunctionFact) -> String {
     let path = db.path_for(function.file);
-    semantic_stable_key(
+    let mut text = String::new();
+    write_stable_key_text(
+        &mut text,
         FactFamily::Function,
-        &[
-            ("node_kind", "function".to_string()),
-            ("path", path),
-            ("name", function.name.clone()),
-            ("span", span_identity(&function.span)),
+        &mut [
+            ("node_kind", "function"),
+            ("path", &path),
+            ("name", &function.name),
+            ("span", &span_identity(&function.span)),
         ],
-    )
-    .into_string()
+    );
+    text
 }
 
 pub fn package_node_key(db: &impl AnalysisHost, package: &PackageFact) -> String {
     let path = db.path_for(package.file);
-    semantic_stable_key(
+    let mut text = String::new();
+    write_stable_key_text(
+        &mut text,
         FactFamily::Package,
-        &[
-            ("node_kind", "package".to_string()),
-            ("path", path),
-            ("name", package.name.clone()),
+        &mut [
+            ("node_kind", "package"),
+            ("path", &path),
+            ("name", &package.name),
         ],
-    )
-    .into_string()
+    );
+    text
 }
 
 pub fn node_key_from_identity(node_kind: &str, identity: &str) -> String {
-    semantic_stable_key(
-        FactFamily::Scope,
-        &[
-            ("node_kind", node_kind.to_string()),
-            ("identity", identity.to_string()),
-        ],
-    )
-    .into_string()
+    node_identity_key(FactFamily::Scope, node_kind, identity)
 }
 
 pub fn place_node_key(place_stable_key: &str) -> String {
-    semantic_stable_key(
-        FactFamily::Place,
-        &[
-            ("node_kind", "place".to_string()),
-            ("identity", place_stable_key.to_string()),
-        ],
-    )
-    .into_string()
+    node_identity_key(FactFamily::Place, "place", place_stable_key)
+}
+
+fn node_identity_key(family: FactFamily, kind: &str, identity: &str) -> String {
+    let mut text = String::new();
+    write_stable_key_text(
+        &mut text,
+        family,
+        &mut [("node_kind", kind), ("identity", identity)],
+    );
+    text
 }
 
 fn span_identity(span: &crate::internal_core::Span) -> String {

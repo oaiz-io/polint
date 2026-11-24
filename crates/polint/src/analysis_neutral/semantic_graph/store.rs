@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use foldhash::{HashMap, HashMapExt};
+
 use crate::analysis_neutral::error::AnalysisError;
 use crate::analysis_neutral::ids::{SemanticConstraintId, SemanticEdgeId, SemanticNodeId};
 use crate::analysis_neutral::semantic_graph::constraints::{ConstraintFact, ConstraintKind};
@@ -38,7 +40,7 @@ impl SemanticGraphOutput {
         interner.sort_by_key_text(&mut self.nodes, |row| row.stable_key, |row| row.id);
         // Map each node's pre-sort dense id to its post-sort dense id so edges can
         // be rewritten to the new node numbering.
-        let mut remap: BTreeMap<SemanticNodeId, SemanticNodeId> = BTreeMap::new();
+        let mut remap = HashMap::with_capacity(self.nodes.len());
         for (index, node) in self.nodes.iter_mut().enumerate() {
             let new_id = SemanticNodeId(index as u64);
             remap.insert(node.id, new_id);
