@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 use crate::analysis_neutral::error::AnalysisError;
 use crate::analysis_neutral::ids::{SemanticConstraintId, SemanticEdgeId, SemanticNodeId};
@@ -74,11 +75,18 @@ impl SemanticGraphOutput {
         self
     }
 
-    pub fn validate_references(&self, interner: &StableKeyInterner) -> Result<(), AnalysisError> {
-        let node_ids: BTreeSet<SemanticNodeId> = self.nodes.iter().map(|node| node.id).collect();
+    fn validate_normalized_references(
+        &self,
+        interner: &StableKeyInterner,
+    ) -> Result<(), AnalysisError> {
+        let has_node = |id: SemanticNodeId| {
+            self.nodes
+                .get(id.0 as usize)
+                .is_some_and(|node| node.id == id)
+        };
 
         for edge in &self.edges {
-            if !node_ids.contains(&edge.source) {
+            if !has_node(edge.source) {
                 return Err(AnalysisError::InvalidFact {
                     provider: SEMANTIC_GRAPH_PROVIDER_ID,
                     reason: format!(
@@ -88,7 +96,7 @@ impl SemanticGraphOutput {
                     ),
                 });
             }
-            if !node_ids.contains(&edge.target) {
+            if !has_node(edge.target) {
                 return Err(AnalysisError::InvalidFact {
                     provider: SEMANTIC_GRAPH_PROVIDER_ID,
                     reason: format!(
@@ -104,7 +112,7 @@ impl SemanticGraphOutput {
         // family) and is intentionally NOT checked here.
         for constraint in &self.constraints {
             for node in constraint.kind.referenced_nodes() {
-                if !node_ids.contains(&node) {
+                if !has_node(node) {
                     return Err(AnalysisError::InvalidFact {
                         provider: SEMANTIC_GRAPH_PROVIDER_ID,
                         reason: format!(
@@ -121,19 +129,20 @@ impl SemanticGraphOutput {
     }
 }
 
-/// Typed semantic-graph store with the deterministic read indexes consumers use
-/// (D-14): nodes-by-kind, edges-by-kind, outgoing (forward) adjacency, and incoming
-/// (backward) adjacency. The incoming index is the one the unified solver's
-/// reachability/RTA fixpoint traverses; it is built alongside the outgoing index in
-/// the same post-normalization pass, never on demand.
+/// The validated, normalized graph. Queries that need kind or adjacency indexes
+/// build them from the stored rows on first use.
 #[derive(Debug, Clone, Default)]
 pub struct SemanticGraphStore {
     nodes: Vec<SemanticNodeFact>,
     edges: Vec<SemanticEdgeFact>,
     constraints: Vec<ConstraintFact>,
+    indexes: OnceLock<SemanticGraphIndexes>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct SemanticGraphIndexes {
     nodes_by_kind: BTreeMap<&'static str, Vec<usize>>,
     edges_by_kind: BTreeMap<EdgeKind, Vec<usize>>,
-    /// Constraints indexed by their `ConstraintKind` snake_case tag (D-14).
     constraints_by_kind: BTreeMap<&'static str, Vec<usize>>,
     /// Forward/outgoing adjacency: edge source node -> edge IDs leaving it.
     outgoing: BTreeMap<SemanticNodeId, Vec<SemanticEdgeId>>,
@@ -142,10 +151,7 @@ pub struct SemanticGraphStore {
 }
 
 impl SemanticGraphStore {
-    /// Builds the store after `normalized()`, validating that every edge
-    /// `source`/`target` resolves to a stored node (dangling endpoint ->
-    /// [`AnalysisError::InvalidFact`], mirroring the reachability store) and building
-    /// the four deterministic index sidecars.
+    /// Normalizes the rows and validates every edge and constraint node reference.
     pub fn from_output(
         output: SemanticGraphOutput,
         interner: &StableKeyInterner,
@@ -157,47 +163,52 @@ impl SemanticGraphStore {
         output: SemanticGraphOutput,
         interner: &StableKeyInterner,
     ) -> Result<Self, AnalysisError> {
-        output.validate_references(interner)?;
-        let mut store = Self {
+        output.validate_normalized_references(interner)?;
+        Ok(Self {
             nodes: output.nodes,
             edges: output.edges,
             constraints: output.constraints,
-            ..Self::default()
-        };
+            indexes: OnceLock::new(),
+        })
+    }
 
-        for (index, node) in store.nodes.iter().enumerate() {
-            store
-                .nodes_by_kind
-                .entry(node.kind.as_str())
-                .or_default()
-                .push(index);
-        }
-
-        // Single post-normalization edge pass builds the by-kind index and BOTH
-        // adjacency directions so they stay deterministic and order-independent.
-        // Edges are already sorted by (stable_key, id), so each per-node edge-id
-        // vector is appended in stable order.
-        for (index, edge) in store.edges.iter().enumerate() {
-            store
-                .edges_by_kind
-                .entry(edge.kind)
-                .or_default()
-                .push(index);
-            store.outgoing.entry(edge.source).or_default().push(edge.id);
-            store.incoming.entry(edge.target).or_default().push(edge.id);
-        }
-
-        // Constraints are already sorted by (stable_key, id), so each per-kind index
-        // vector is appended in stable order.
-        for (index, constraint) in store.constraints.iter().enumerate() {
-            store
-                .constraints_by_kind
-                .entry(constraint.kind.as_str())
-                .or_default()
-                .push(index);
-        }
-
-        Ok(store)
+    fn indexes(&self) -> &SemanticGraphIndexes {
+        self.indexes.get_or_init(|| {
+            let mut indexes = SemanticGraphIndexes::default();
+            // The rows are already in stable order, including within each index entry.
+            for (index, node) in self.nodes.iter().enumerate() {
+                indexes
+                    .nodes_by_kind
+                    .entry(node.kind.as_str())
+                    .or_default()
+                    .push(index);
+            }
+            for (index, edge) in self.edges.iter().enumerate() {
+                indexes
+                    .edges_by_kind
+                    .entry(edge.kind)
+                    .or_default()
+                    .push(index);
+                indexes
+                    .outgoing
+                    .entry(edge.source)
+                    .or_default()
+                    .push(edge.id);
+                indexes
+                    .incoming
+                    .entry(edge.target)
+                    .or_default()
+                    .push(edge.id);
+            }
+            for (index, constraint) in self.constraints.iter().enumerate() {
+                indexes
+                    .constraints_by_kind
+                    .entry(constraint.kind.as_str())
+                    .or_default()
+                    .push(index);
+            }
+            indexes
+        })
     }
 
     pub fn nodes(&self) -> &[SemanticNodeFact] {
@@ -209,24 +220,34 @@ impl SemanticGraphStore {
     }
 
     pub fn nodes_for_kind(&self, kind: &NodeKind) -> &[usize] {
-        self.nodes_by_kind
+        self.indexes()
+            .nodes_by_kind
             .get(kind.as_str())
             .map_or(&[], Vec::as_slice)
     }
 
     pub fn edges_for_kind(&self, kind: EdgeKind) -> &[usize] {
-        self.edges_by_kind.get(&kind).map_or(&[], Vec::as_slice)
+        self.indexes()
+            .edges_by_kind
+            .get(&kind)
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Outgoing (forward) adjacency: the edge IDs whose `source` is `node`.
     pub fn outgoing_edges(&self, node: SemanticNodeId) -> &[SemanticEdgeId] {
-        self.outgoing.get(&node).map_or(&[], Vec::as_slice)
+        self.indexes()
+            .outgoing
+            .get(&node)
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Incoming (backward) adjacency: the edge IDs whose `target` is `node`. This
     /// is the index the unified solver's reachability/RTA fixpoint traverses.
     pub fn incoming_edges(&self, node: SemanticNodeId) -> &[SemanticEdgeId] {
-        self.incoming.get(&node).map_or(&[], Vec::as_slice)
+        self.indexes()
+            .incoming
+            .get(&node)
+            .map_or(&[], Vec::as_slice)
     }
 
     pub fn constraints(&self) -> &[ConstraintFact] {
@@ -236,7 +257,8 @@ impl SemanticGraphStore {
     /// Indices into [`Self::constraints`] for every constraint of the given kind
     /// tag (the `ConstraintKind::as_str()` snake_case label).
     pub fn constraints_for_kind(&self, kind: &ConstraintKind) -> &[usize] {
-        self.constraints_by_kind
+        self.indexes()
+            .constraints_by_kind
             .get(kind.as_str())
             .map_or(&[], Vec::as_slice)
     }
