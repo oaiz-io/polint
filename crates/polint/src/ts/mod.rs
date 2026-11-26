@@ -23,6 +23,8 @@ pub mod module_graph;
 #[cfg(feature = "lang-typescript")]
 #[doc(hidden)]
 pub use mir::lower_ts_mir;
+#[cfg(feature = "lang-typescript")]
+mod nesting;
 pub mod object_model;
 #[cfg(feature = "lang-typescript")]
 pub mod parse;

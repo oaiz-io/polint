@@ -177,6 +177,20 @@ Set by the owner on 2026-11-19. It outranks any plan, research document or agent
 - One iteration lands as one pull request to `main`, with the view that serves its
   results to users in it. Split only when the owner asks.
 
+## One Published Crate
+
+Set by the owner on 2026-11-26. It outranks any plan, research document or agent brief.
+
+- polint ships to users as one dependency: the `polint` crate. `polint-macros` is the
+  only other published crate, because Cargo requires a procedural macro to be its own
+  crate.
+- Never add a crate that must be published or maintained beside `polint`: no fork or
+  vendored copy of a third-party crate (Oxc, tree-sitter or any other), and no new
+  workspace crate that `polint` depends on.
+- Use third-party crates as their upstream releases from crates.io. When one lacks
+  something polint needs, solve it inside `polint`, around the call to that crate,
+  or get the change released upstream.
+
 ## Rust Skill Usage
 
 Before writing, reviewing, or refactoring Rust code, consult and apply

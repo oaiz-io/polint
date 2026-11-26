@@ -458,7 +458,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "polint"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "anyhow",
  "cc",
@@ -486,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "polint-macros"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "proc-macro2",
  "quote",

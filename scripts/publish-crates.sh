@@ -10,28 +10,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# In dependency order. polint-oxc-parser is outside the workspace (it keeps
-# upstream Oxc's lints and formatting), so it is published by manifest path and
-# resolves its own dependencies.
 PACKAGES=(
-  polint-oxc-parser
   polint-macros
   polint
 )
-OXC_PARSER_MANIFEST=crates/polint-oxc-parser/Cargo.toml
 
 crate_version() {
   cargo pkgid -p "$1" | sed 's/.*#//'
-}
-
-publish_package() {
-  local name="$1"
-  shift
-  if [[ "$name" == polint-oxc-parser ]]; then
-    cargo publish --manifest-path "$OXC_PARSER_MANIFEST" "$@"
-  else
-    cargo publish -p "$name" --locked "$@"
-  fi
 }
 
 crate_version_exists() {
@@ -48,7 +33,7 @@ crate_version_exists() {
   )
   status=$?
 
-  rmdir "$tmp_dir"
+  rm -rf "$tmp_dir"
   return "$status"
 }
 
@@ -78,27 +63,21 @@ publish_crate() {
   fi
 
   echo "Publishing ${name}..."
-  publish_package "$name"
+  cargo publish -p "$name" --locked
 
   wait_for_crate_version "$name" "$version"
 }
 
 if [[ "${DRY_RUN:-}" == "1" || "${DRY_RUN:-}" == "true" ]]; then
   echo "DRY_RUN: smoke-check packaging for ${PACKAGES[*]}."
-  publish_package polint-oxc-parser --dry-run --allow-dirty
-  publish_package polint-macros --dry-run --allow-dirty
+  cargo publish -p polint-macros --dry-run --locked --allow-dirty
 
-  unpublished=()
-  for dependency in polint-oxc-parser polint-macros; do
-    if ! crate_version_exists "$dependency" "$(crate_version "$dependency")"; then
-      unpublished+=("$dependency $(crate_version "$dependency")")
-    fi
-  done
-  if [[ ${#unpublished[@]} -eq 0 ]]; then
-    publish_package polint --dry-run --allow-dirty
+  macro_version="$(crate_version polint-macros)"
+  if crate_version_exists polint-macros "$macro_version"; then
+    cargo publish -p polint --dry-run --locked --allow-dirty
   else
-    echo "DRY_RUN: polint depends on ${unpublished[*]}, not on crates.io yet."
-    echo "DRY_RUN: checking polint package contents; full polint publish dry-run is possible after they are published."
+    echo "DRY_RUN: polint depends on polint-macros ${macro_version}, which is not on crates.io yet."
+    echo "DRY_RUN: checking polint package contents; full polint publish dry-run is possible after polint-macros is published."
     cargo package -p polint --list --locked --allow-dirty >/dev/null
   fi
 

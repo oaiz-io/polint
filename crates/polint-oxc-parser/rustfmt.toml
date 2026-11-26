@@ -1,6 +1,0 @@
-# Upstream Oxc's formatting, so the forked sources stay byte-identical to
-# upstream wherever polint has not changed them.
-style_edition = "2024"
-use_small_heuristics = "Max"
-use_field_init_shorthand = true
-reorder_modules = true

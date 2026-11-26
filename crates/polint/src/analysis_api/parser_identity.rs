@@ -25,9 +25,8 @@ pub const GO_PARSER_BACKEND: &str = "tree-sitter-0.26.8";
 /// The sources live in `crates/polint/vendor/tree-sitter-go`.
 pub const GO_PARSER_GRAMMAR: &str = "tree-sitter-go-0.25.0";
 
-/// Backend that parses TypeScript and JavaScript sources: Oxc's parser with a
-/// nesting limit, built from `crates/polint-oxc-parser`.
-pub const TS_PARSER_BACKEND: &str = "oxc-0.129.0-polint.1";
+/// Backend that parses TypeScript and JavaScript sources.
+pub const TS_PARSER_BACKEND: &str = "oxc-0.129.0";
 
 /// Resolver used to derive the TypeScript and JavaScript module graph.
 pub const TS_MODULE_RESOLVER: &str = "oxc-resolver-11.19.1";
@@ -92,35 +91,26 @@ mod tests {
                 .or_else(|| dependencies[crate_name].get("version")?.as_str())
                 .unwrap_or_else(|| panic!("{crate_name} has a version requirement"))
         };
-        // The dependency key in the manifest, then the package Cargo.lock resolves it to.
-        for (label, crate_name, package, prefix, constant) in [
+        for (label, crate_name, prefix, constant) in [
             (
                 "Go backend",
                 "tree-sitter",
                 "tree-sitter",
-                "tree-sitter",
                 GO_PARSER_BACKEND,
             ),
-            (
-                "TypeScript backend",
-                "oxc_parser",
-                "polint-oxc-parser",
-                "oxc",
-                TS_PARSER_BACKEND,
-            ),
+            ("TypeScript backend", "oxc_parser", "oxc", TS_PARSER_BACKEND),
             (
                 "TypeScript module resolver",
-                "oxc_resolver",
                 "oxc_resolver",
                 "oxc-resolver",
                 TS_MODULE_RESOLVER,
             ),
         ] {
-            let version = resolved(package);
+            let version = resolved(crate_name);
             assert_eq!(
                 constant,
                 format!("{prefix}-{version}"),
-                "the {label} label drifted from the locked {package} version; update the \
+                "the {label} label drifted from the locked {crate_name} version; update the \
                  constant, and for a Go label also add a semantic-store migration for the new \
                  CHECK value"
             );

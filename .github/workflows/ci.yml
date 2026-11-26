@@ -105,14 +105,14 @@ jobs:
           tree="$(cargo tree -p polint $FEATURE_ARGS --locked)"
           case "$FEATURE_NAME" in
             "no languages")
-              ! grep -Eq '(^| )(oxc_|polint-oxc-parser|tree-sitter)' <<<"$tree"
+              ! grep -Eq '(^| )(oxc_|tree-sitter)' <<<"$tree"
               ;;
             "Go only")
               grep -q 'tree-sitter v' <<<"$tree"
-              ! grep -Eq '(^| )(oxc_|polint-oxc-parser)' <<<"$tree"
+              ! grep -Eq '(^| )oxc_' <<<"$tree"
               ;;
             "TypeScript only")
-              grep -q 'polint-oxc-parser v' <<<"$tree"
+              grep -q 'oxc_parser v' <<<"$tree"
               ! grep -q 'tree-sitter v' <<<"$tree"
               ;;
           esac
