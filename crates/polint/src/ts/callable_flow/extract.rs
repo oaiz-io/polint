@@ -2298,8 +2298,8 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             if let Some(name) = binding_identifier_name(&declarator.id)
                 && let Some(Expression::ObjectExpression(object)) = &declarator.init
             {
-                env.objects
-                    .insert(name, self.object_literal_targets(object, Some(env)));
+                let targets = self.object_literal_targets(object, Some(env));
+                env.objects.insert(name, targets);
             }
             if let Some(init) = &declarator.init {
                 self.collect_expression(init, owner, env);
@@ -7747,60 +7747,116 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     }
 }
 
+/// A table of a [`FlowEnv`] or an [`ObjectTargets`] that copies share until
+/// one of them writes it. A callee walk starts from a copy of its caller's
+/// environment, and reading an object's member starts from a copy of the
+/// object; both usually write few tables or none, so a copy is a reference
+/// count per table and a table is copied only on its first write. Equality,
+/// hashing and debug output are those of the table itself.
+#[derive(Clone, Default, PartialEq, Eq, Hash)]
+struct Shared<T>(std::sync::Arc<T>);
+
+impl<T> std::ops::Deref for Shared<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: Clone> std::ops::DerefMut for Shared<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        std::sync::Arc::make_mut(&mut self.0)
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Shared<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl<T: Clone + IntoIterator> IntoIterator for Shared<T> {
+    type Item = T::Item;
+    type IntoIter = T::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        std::sync::Arc::unwrap_or_clone(self.0).into_iter()
+    }
+}
+
+impl<T: FromIterator<A>, A> FromIterator<A> for Shared<T> {
+    fn from_iter<I: IntoIterator<Item = A>>(iter: I) -> Self {
+        Shared(std::sync::Arc::new(T::from_iter(iter)))
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Shared<T>
+where
+    &'a T: IntoIterator,
+{
+    type Item = <&'a T as IntoIterator>::Item;
+    type IntoIter = <&'a T as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&*self.0).into_iter()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct FlowEnv {
-    bindings: BTreeMap<String, CollectionTargets>,
-    bound_functions: BTreeMap<String, Vec<BoundFunctionTarget>>,
-    objects: BTreeMap<String, ObjectTargets>,
+    bindings: Shared<BTreeMap<String, CollectionTargets>>,
+    bound_functions: Shared<BTreeMap<String, Vec<BoundFunctionTarget>>>,
+    objects: Shared<BTreeMap<String, ObjectTargets>>,
     /// Variable name -> class key in `classes`, for classes flowed through a
     /// variable (e.g. `var a = makeClass()` then `new a()` / `a.staticM()`).
-    class_bindings: BTreeMap<String, String>,
-    string_bindings: BTreeMap<String, String>,
-    bool_bindings: BTreeMap<String, bool>,
-    string_arrays: BTreeMap<String, Vec<String>>,
-    promises: BTreeMap<String, PromiseTargets>,
-    async_functions: BTreeMap<String, PromiseTargets>,
-    async_generators: BTreeMap<String, CollectionTargets>,
-    async_iterators: BTreeMap<String, CollectionTargets>,
+    class_bindings: Shared<BTreeMap<String, String>>,
+    string_bindings: Shared<BTreeMap<String, String>>,
+    bool_bindings: Shared<BTreeMap<String, bool>>,
+    string_arrays: Shared<BTreeMap<String, Vec<String>>>,
+    promises: Shared<BTreeMap<String, PromiseTargets>>,
+    async_functions: Shared<BTreeMap<String, PromiseTargets>>,
+    async_generators: Shared<BTreeMap<String, CollectionTargets>>,
+    async_iterators: Shared<BTreeMap<String, CollectionTargets>>,
     /// Ordered yield/return sequence of a generator **function** bound to a name
     /// (`function* g(){…}` / `const g = async function*(){…}`), used to resolve
     /// the k-th `.next()` on an instance of it to the k-th yielded value.
-    generator_sequences: BTreeMap<String, GeneratorSequence>,
+    generator_sequences: Shared<BTreeMap<String, GeneratorSequence>>,
     /// Ordered yield/return sequence of an **iterator instance** bound to a name
     /// (`const it = g()`), so `it.next()` is sequenced positionally and `for-of`
     /// over `it` iterates the yields without the `return` value.
-    iterator_sequences: BTreeMap<String, GeneratorSequence>,
+    iterator_sequences: Shared<BTreeMap<String, GeneratorSequence>>,
     this_object: ObjectTargets,
     this_callables: CollectionTargets,
     /// Loop variables bound by a `for (const k in obj)` head. A computed access
     /// `obj[k]` keyed on such a variable ranges over every own property, so it
     /// resolves to the union of the object's property values.
-    forin_keys: std::collections::BTreeSet<String>,
+    forin_keys: Shared<std::collections::BTreeSet<String>>,
     /// Variable names bound to a `merge-descriptors`-style property-copy helper
     /// (`var mixin = require('merge-descriptors')`). A call `mixin(dst, src, …)`
     /// copies every own property of each source onto `dst` in place (like the
     /// named-target `Object.assign`), which is how Express assembles `app`.
-    merge_helpers: std::collections::BTreeSet<String>,
+    merge_helpers: Shared<std::collections::BTreeSet<String>>,
     /// Explicit prototype object of a named object, recorded when
     /// `Object.setPrototypeOf(o, p)` / `o.__proto__ = p` is seen. Used to bind
     /// `super` while walking `o`'s own methods (object-literal `super.m()`).
     /// Kept separate from the prototype's members being merged into `o` (which
     /// drives direct `o.m()` dispatch) so `super` resolves to the proto only.
-    object_prototypes: BTreeMap<String, ObjectTargets>,
+    object_prototypes: Shared<BTreeMap<String, ObjectTargets>>,
     /// Parameter names that are KNOWN to be `undefined` in this invocation because
     /// the resolved call passed fewer positional arguments than the function
     /// declares (a syntactic arg-count shortfall — never inferred from value
     /// analysis). Lets `decide_branch` fold a guard like `if (depth == null)` to its
     /// live arm, so the dead arm's calls are never walked (demand-driven pruning of
     /// `array-flatten`'s `flattenWithDepth` recursion under express's no-`depth` call).
-    absent: std::collections::BTreeSet<String>,
+    absent: Shared<std::collections::BTreeSet<String>>,
     /// Local names bound directly to a resolvable `require(...)` result
     /// (`const mod = require('./lib')`). Only the *identity* of the module is
     /// kept; its shape already flows through `objects`/`bindings`. The interop
     /// helpers branch on the wrapped module's `__esModule` marker, which lives on
     /// that module's summary, so a helper handed a variable rather than the
     /// `require(...)` call itself needs this to find it.
-    module_bindings: BTreeMap<String, FileId>,
+    module_bindings: Shared<BTreeMap<String, FileId>>,
 }
 
 impl FlowEnv {
@@ -8115,11 +8171,11 @@ impl CollectionTargets {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct ObjectTargets {
-    properties: BTreeMap<String, Vec<FunctionId>>,
-    getter_properties: BTreeMap<String, Vec<FunctionId>>,
-    setter_properties: BTreeMap<String, Vec<FunctionId>>,
-    object_properties: BTreeMap<String, Box<ObjectTargets>>,
-    collection_properties: BTreeMap<String, CollectionTargets>,
+    properties: Shared<BTreeMap<String, Vec<FunctionId>>>,
+    getter_properties: Shared<BTreeMap<String, Vec<FunctionId>>>,
+    setter_properties: Shared<BTreeMap<String, Vec<FunctionId>>>,
+    object_properties: Shared<BTreeMap<String, Box<ObjectTargets>>>,
+    collection_properties: Shared<BTreeMap<String, CollectionTargets>>,
     /// Callable values reachable through a **dynamic** (computed, non-constant)
     /// property write keyed on a loop/iteration variable, e.g.
     /// `methods.forEach(m => { app[m] = fn })`. A read of a property with no
@@ -9687,5 +9743,58 @@ fn callee_text(expression: &Expression<'_>) -> Option<String> {
         }
         Expression::ParenthesizedExpression(expression) => callee_text(&expression.expression),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod shared_tests {
+    use std::collections::BTreeMap;
+    use std::hash::BuildHasher as _;
+
+    use super::Shared;
+
+    fn table(pairs: &[(&str, u32)]) -> BTreeMap<String, u32> {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), *value))
+            .collect()
+    }
+
+    /// A write to one copy is not seen by another, and a copy that is never
+    /// written still shares the table.
+    #[test]
+    fn a_write_to_one_copy_leaves_the_others_unchanged() {
+        let mut original: Shared<BTreeMap<String, u32>> = table(&[("a", 1)]).into_iter().collect();
+        let untouched = original.clone();
+        let mut written = original.clone();
+        written.insert("b".to_string(), 2);
+        original.remove("a");
+
+        assert_eq!(*untouched, table(&[("a", 1)]));
+        assert_eq!(*written, table(&[("a", 1), ("b", 2)]));
+        assert!(original.is_empty());
+        let shared = untouched.clone();
+        assert!(std::sync::Arc::ptr_eq(&shared.0, &untouched.0));
+    }
+
+    /// Equality, hashing and debug output are the table's, whether two values
+    /// share one table or hold equal copies.
+    #[test]
+    fn equality_hashing_and_debug_output_are_the_tables() {
+        let hasher = std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default();
+        let plain = table(&[("a", 1), ("b", 2)]);
+        let shared: Shared<BTreeMap<String, u32>> = plain.clone().into_iter().collect();
+        let mut copied = shared.clone();
+        copied.insert("c".to_string(), 3);
+        copied.remove("c");
+
+        assert!(!std::sync::Arc::ptr_eq(&shared.0, &copied.0));
+        assert_eq!(shared, copied);
+        assert_eq!(hasher.hash_one(&shared), hasher.hash_one(&plain));
+        assert_eq!(hasher.hash_one(&copied), hasher.hash_one(&plain));
+        assert_eq!(format!("{shared:?}"), format!("{plain:?}"));
+        let borrowed = (&shared).into_iter().collect::<Vec<_>>();
+        assert_eq!(borrowed, plain.iter().collect::<Vec<_>>());
+        assert_eq!(shared.into_iter().collect::<BTreeMap<_, _>>(), plain);
     }
 }
