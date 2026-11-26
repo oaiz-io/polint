@@ -854,7 +854,7 @@ fn extract_boundary_rows(
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
         };
-        let call_scope = scope_key_for_span(file, source, scope_keys, scoping, nodes, call.span)
+        let call_scope = scope_key_for_span(scope_keys, scoping, nodes, call.span)
             .unwrap_or_else(|| module_scope.clone());
         let Some((name, reason)) =
             boundary_reason(&call.callee, bindings, &scope_parents, call_scope.as_str())
@@ -965,14 +965,11 @@ fn visible_binding_in_rows<'a>(
 }
 
 fn scope_key_for_span(
-    file: &SourceFile,
-    _source: &str,
     scope_keys: &BTreeMap<OxcScopeId, String>,
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     span: oxc_span::Span,
 ) -> Option<String> {
-    let target = span_from_oxc(file, span);
     scoping
         .scope_descendants_from_root()
         .filter_map(|scope| {
@@ -981,12 +978,12 @@ fn scope_key_for_span(
             if kind == TsScopeKind::Module {
                 return None;
             }
-            let scope_span = span_from_oxc(file, nodes.kind(node_id).span());
-            if !span_contains(&scope_span, &target) {
+            let scope_span = nodes.kind(node_id).span();
+            if scope_span.start > span.start || scope_span.end < span.end {
                 return None;
             }
             Some((
-                scope_span.end_byte - scope_span.start_byte,
+                scope_span.end - scope_span.start,
                 scope_keys.get(&scope)?.clone(),
             ))
         })
@@ -1430,12 +1427,6 @@ fn length_prefixed(value: &str) -> String {
 
 fn span_from_oxc(file: &SourceFile, span: oxc_span::Span) -> Span {
     file.span_from_byte_range(span.start as usize, span.end as usize)
-}
-
-fn span_contains(container: &Span, span: &Span) -> bool {
-    container.file == span.file
-        && container.start_byte <= span.start_byte
-        && container.end_byte >= span.end_byte
 }
 
 #[cfg(test)]
