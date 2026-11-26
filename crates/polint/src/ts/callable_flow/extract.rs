@@ -273,69 +273,113 @@ impl Drop for WalkFrame {
     }
 }
 
-pub(in crate::ts) fn collect_callable_flows<'ast>(
+/// Parses every TypeScript/JavaScript file of `db` that `select` keeps and runs
+/// `walk` on each one that parses completely, on the thread that parsed it,
+/// since an Oxc tree cannot cross threads. Results come back in file order.
+/// Each walk reads its own file's tree and the shared tables it is handed,
+/// never another file's tree, so walking the files in parallel gives what
+/// walking them in turn does.
+fn walk_parsed_files<'db, H, T, F>(
+    db: &'db H,
+    select: impl Fn(&SourceFile) -> bool + Sync,
+    walk: F,
+) -> Vec<T>
+where
+    H: AnalysisHost + Sync,
+    T: Send,
+    F: for<'ast> Fn(&'db SourceFile, &'db FunctionFact, &'ast Program<'ast>) -> Option<T> + Sync,
+{
+    let files = db
+        .files()
+        .iter()
+        .filter(|file| file.language.is_ts_family() && select(file))
+        .collect::<Vec<_>>();
+    files
+        .par_iter()
+        .filter_map(|&file| {
+            let module = module_function(db, file)?;
+            let allocator = Allocator::default();
+            let parsed = parse_ts_file(&allocator, file);
+            if !parsed.fully_parsed {
+                return None;
+            }
+            walk(file, module, parsed.program())
+        })
+        .collect()
+}
+
+fn new_collector<'db, 'ast, 'env>(
+    file: &'db SourceFile,
+    module: &'db FunctionFact,
+    sites: &'db [&'db CallSiteFact],
+    functions_by_start: &'db BTreeMap<(FileId, u32), Vec<&'db FunctionFact>>,
+    resolution_map: &'env BTreeMap<(FileId, String), FileId>,
+    module_summaries: &'env BTreeMap<FileId, ModuleExportSummary>,
+    function_returns: &'env BTreeMap<FunctionId, ModuleExportSummary>,
+) -> TsCallableFlowCollector<'db, 'ast, 'env> {
+    TsCallableFlowCollector {
+        file,
+        module,
+        sites,
+        functions_by_start,
+        resolution_map,
+        module_summaries,
+        function_returns,
+        function_declarations: BTreeMap::new(),
+        function_flows_by_id: BTreeMap::new(),
+        classes: BTreeMap::new(),
+        class_expressions: Vec::new(),
+        exports: ModuleExportSummary::default(),
+        export_aliases: std::collections::BTreeSet::new(),
+        this_method_walk: false,
+        current_super: None,
+        invocation_depth: 0,
+        walk_guard: Rc::default(),
+        table_generation: 0,
+        invocations: HashMap::new(),
+        invocation_walks: 0,
+        tree_walks: 0,
+        invoking: Vec::new(),
+        iterator_next_ordinals: BTreeMap::new(),
+        iterator_next_starts: BTreeMap::new(),
+        rows: Vec::new(),
+    }
+}
+
+pub(in crate::ts) fn collect_callable_flows(
     db: &(impl AnalysisHost + Sync),
-    programs: &BTreeMap<FileId, &'ast Program<'ast>>,
 ) -> Vec<TsCallableFlow> {
-    let mut rows = Vec::new();
     let sites = db.call_sites();
     let sites_by_file = sites_by_file(sites);
     let functions_by_file_start = functions_by_file_start(db);
     let resolution_map = module_resolution_map(db);
     let module_summaries =
-        compute_module_export_summaries(db, programs, &functions_by_file_start, &resolution_map);
+        compute_module_export_summaries(db, &functions_by_file_start, &resolution_map);
     let function_returns = compute_function_return_summaries(
         db,
-        &programs.keys().copied().collect(),
         &functions_by_file_start,
         &resolution_map,
         &module_summaries,
     );
 
-    for file in db
-        .files()
-        .iter()
-        .filter(|file| file.language.is_ts_family())
-    {
-        let Some(file_sites) = sites_by_file.get(&file.id) else {
-            continue;
-        };
-        let Some(module) = module_function(db, file) else {
-            continue;
-        };
-        let Some(&program) = programs.get(&file.id) else {
-            continue;
-        };
-        let mut collector = TsCallableFlowCollector {
+    let has_sites = |file: &SourceFile| sites_by_file.contains_key(&file.id);
+    let mut rows = walk_parsed_files(db, has_sites, |file, module, program| {
+        let file_sites = sites_by_file.get(&file.id)?;
+        let mut collector = new_collector(
             file,
             module,
-            sites: file_sites,
-            functions_by_start: &functions_by_file_start,
-            resolution_map: &resolution_map,
-            module_summaries: &module_summaries,
-            function_returns: &function_returns,
-            function_declarations: BTreeMap::new(),
-            function_flows_by_id: BTreeMap::new(),
-            classes: BTreeMap::new(),
-            class_expressions: Vec::new(),
-            exports: ModuleExportSummary::default(),
-            export_aliases: std::collections::BTreeSet::new(),
-            this_method_walk: false,
-            current_super: None,
-            invocation_depth: 0,
-            walk_guard: Rc::default(),
-            table_generation: 0,
-            invocations: HashMap::new(),
-            invocation_walks: 0,
-            tree_walks: 0,
-            invoking: Vec::new(),
-            iterator_next_ordinals: BTreeMap::new(),
-            iterator_next_starts: BTreeMap::new(),
-            rows: Vec::new(),
-        };
+            file_sites,
+            &functions_by_file_start,
+            &resolution_map,
+            &module_summaries,
+            &function_returns,
+        );
         collector.collect_program(program);
-        rows.extend(collector.rows);
-    }
+        Some(collector.rows)
+    })
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
 
     rows.sort();
     rows.dedup();
@@ -517,9 +561,8 @@ fn module_resolution_map(db: &impl AnalysisHost) -> BTreeMap<(FileId, String), F
 /// upstream summaries (so only locally-defined exports resolve); each later
 /// round lets `require`/`import` results observe the previous round's
 /// summaries, converging re-export chains.
-fn compute_module_export_summaries<'ast>(
-    db: &impl AnalysisHost,
-    programs: &BTreeMap<FileId, &'ast Program<'ast>>,
+fn compute_module_export_summaries(
+    db: &(impl AnalysisHost + Sync),
     functions_by_file_start: &BTreeMap<(FileId, u32), Vec<&FunctionFact>>,
     resolution_map: &BTreeMap<(FileId, String), FileId>,
 ) -> BTreeMap<FileId, ModuleExportSummary> {
@@ -532,50 +575,26 @@ fn compute_module_export_summaries<'ast>(
     // Function-return seeding is not active while building export summaries.
     let empty_returns: BTreeMap<FunctionId, ModuleExportSummary> = BTreeMap::new();
     for _round in 0..MAX_MODULE_SUMMARY_ROUNDS {
-        let mut next: BTreeMap<FileId, ModuleExportSummary> = BTreeMap::new();
-        for file in db
-            .files()
-            .iter()
-            .filter(|file| file.language.is_ts_family())
-        {
-            let Some(module) = module_function(db, file) else {
-                continue;
-            };
-            let Some(&program) = programs.get(&file.id) else {
-                continue;
-            };
-            let mut collector = TsCallableFlowCollector {
-                file,
-                module,
-                sites: &[],
-                functions_by_start: functions_by_file_start,
-                resolution_map,
-                module_summaries: &summaries,
-                function_returns: &empty_returns,
-                function_declarations: BTreeMap::new(),
-                function_flows_by_id: BTreeMap::new(),
-                classes: BTreeMap::new(),
-                class_expressions: Vec::new(),
-                exports: ModuleExportSummary::default(),
-                export_aliases: std::collections::BTreeSet::new(),
-                this_method_walk: false,
-                current_super: None,
-                invocation_depth: 0,
-                walk_guard: Rc::default(),
-                table_generation: 0,
-                invocations: HashMap::new(),
-                invocation_walks: 0,
-                tree_walks: 0,
-                invoking: Vec::new(),
-                iterator_next_ordinals: BTreeMap::new(),
-                iterator_next_starts: BTreeMap::new(),
-                rows: Vec::new(),
-            };
-            collector.collect_program(program);
-            if !collector.exports.is_empty() {
-                next.insert(file.id, collector.exports);
-            }
-        }
+        // Every file of a round reads the previous round's summaries only.
+        let next: BTreeMap<FileId, ModuleExportSummary> = walk_parsed_files(
+            db,
+            |_| true,
+            |file, module, program| {
+                let mut collector = new_collector(
+                    file,
+                    module,
+                    &[],
+                    functions_by_file_start,
+                    resolution_map,
+                    &summaries,
+                    &empty_returns,
+                );
+                collector.collect_program(program);
+                (!collector.exports.is_empty()).then_some((file.id, collector.exports))
+            },
+        )
+        .into_iter()
+        .collect();
         if next == summaries {
             break;
         }
@@ -594,65 +613,32 @@ fn compute_module_export_summaries<'ast>(
 /// `require` boundary.
 /// Each file's return summaries depend only on the module summaries, never on
 /// another file's return summaries, so the files are summarised in parallel.
-/// An Oxc `Program` cannot cross threads, so each worker parses its own file
-/// again; `parsed_files` names the files that parsed in full. The per-file
-/// results are merged in file order, as the serial pass inserted them.
+/// The per-file results are merged in file order.
 fn compute_function_return_summaries(
     db: &(impl AnalysisHost + Sync),
-    parsed_files: &BTreeSet<FileId>,
     functions_by_file_start: &BTreeMap<(FileId, u32), Vec<&FunctionFact>>,
     resolution_map: &BTreeMap<(FileId, String), FileId>,
     module_summaries: &BTreeMap<FileId, ModuleExportSummary>,
 ) -> BTreeMap<FunctionId, ModuleExportSummary> {
-    let files = db
-        .files()
-        .iter()
-        .filter(|file| file.language.is_ts_family() && parsed_files.contains(&file.id))
-        .collect::<Vec<_>>();
-    let per_file = files
-        .par_iter()
-        .map(|file| {
+    let empty_returns = BTreeMap::new();
+    let per_file = walk_parsed_files(
+        db,
+        |_| true,
+        |file, module, program| {
             let mut returns = BTreeMap::new();
-            let Some(module) = module_function(db, file) else {
-                return returns;
-            };
-            let allocator = Allocator::default();
-            let parsed = parse_ts_file(&allocator, file);
-            if !parsed.fully_parsed {
-                return returns;
-            }
-            let empty_returns = BTreeMap::new();
-            let mut collector = TsCallableFlowCollector {
+            let mut collector = new_collector(
                 file,
                 module,
-                sites: &[],
-                functions_by_start: functions_by_file_start,
+                &[],
+                functions_by_file_start,
                 resolution_map,
                 module_summaries,
-                function_returns: &empty_returns,
-                function_declarations: BTreeMap::new(),
-                function_flows_by_id: BTreeMap::new(),
-                classes: BTreeMap::new(),
-                class_expressions: Vec::new(),
-                exports: ModuleExportSummary::default(),
-                export_aliases: std::collections::BTreeSet::new(),
-                this_method_walk: false,
-                current_super: None,
-                invocation_depth: 0,
-                walk_guard: Rc::default(),
-                table_generation: 0,
-                invocations: HashMap::new(),
-                invocation_walks: 0,
-                tree_walks: 0,
-                invoking: Vec::new(),
-                iterator_next_ordinals: BTreeMap::new(),
-                iterator_next_starts: BTreeMap::new(),
-                rows: Vec::new(),
-            };
-            collector.collect_return_summaries(parsed.program(), &mut returns);
-            returns
-        })
-        .collect::<Vec<_>>();
+                &empty_returns,
+            );
+            collector.collect_return_summaries(program, &mut returns);
+            Some(returns)
+        },
+    );
     let mut returns = BTreeMap::new();
     for file_returns in per_file {
         returns.extend(file_returns);
