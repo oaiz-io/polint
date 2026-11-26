@@ -121,6 +121,7 @@ fn lower_callable(
         file: location.file,
         span: location.span,
         name_span: location.name_span,
+        required_parameters: row.required_parameters,
     })
 }
 
@@ -137,6 +138,7 @@ fn lower_callsite(
         callsite: row.callsite.clone(),
         enclosing: non_empty(row.enclosing.as_str()),
         call_kind: row.call_kind.clone(),
+        signature_parameters: row.signature_parameters,
         status: call_status(row.status.as_str()),
         reason: non_empty(row.reason.as_str()),
         relative_file: location.relative_file,
@@ -180,6 +182,8 @@ fn lower_receiver(interner: &StableKeyInterner, row: &TsTypesRawFrame) -> TsType
         is_any: row.is_any,
         is_unknown: row.is_unknown,
         union_size: row.union_size,
+        is_intersection: row.is_intersection,
+        is_object_literal: row.is_object_literal,
     }
 }
 
@@ -293,6 +297,7 @@ fn dispatch_kind(dispatch: &str) -> TsTypeDispatch {
         "declared" => TsTypeDispatch::Declared,
         "implementation" => TsTypeDispatch::Implementation,
         "union_member" => TsTypeDispatch::UnionMember,
+        "inferred" => TsTypeDispatch::Inferred,
         _ => TsTypeDispatch::DeclaredSignature,
     }
 }
@@ -407,6 +412,19 @@ mod tests {
             TsTypeDispatch::DeclaredSignature
         );
         assert_eq!(dispatch_kind(""), TsTypeDispatch::DeclaredSignature);
+    }
+
+    #[test]
+    fn every_label_the_sidecar_writes_lowers_to_its_own_dispatch() {
+        for (label, dispatch) in [
+            ("declared", TsTypeDispatch::Declared),
+            ("declared_signature", TsTypeDispatch::DeclaredSignature),
+            ("implementation", TsTypeDispatch::Implementation),
+            ("union_member", TsTypeDispatch::UnionMember),
+            ("inferred", TsTypeDispatch::Inferred),
+        ] {
+            assert_eq!(dispatch_kind(label), dispatch, "{label}");
+        }
     }
 
     #[test]

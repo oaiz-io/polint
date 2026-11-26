@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::analysis_neutral::ids::{CallSiteId, CallTargetId, MirBodyId, MirOpId, PlaceId};
+use crate::analysis_neutral::points_to::tiers::Inflow;
 use crate::internal_core::{
     FileId, FunctionId, Language, ReferenceId, Span, StableKeyId, SymbolId,
 };
@@ -176,6 +177,12 @@ pub enum UnresolvedCallReason {
     SetupMissing,
     UnsupportedSyntax,
     BudgetExceeded,
+    /// The callee set may lack values that cross more field loads and stores
+    /// than the points-to solve's indirection bound lets through.
+    IndirectionBound,
+    /// Values the constraints do not describe reach the callee set, in the
+    /// way named, so the site may reach callees the graph does not list.
+    Inflow(Inflow),
     UnknownCallee,
     Unknown,
 }
@@ -189,6 +196,45 @@ pub enum CallPrecision {
     Ambiguous,
     Unknown,
     Unsupported,
+}
+
+/// The claim a call edge makes about its target, read from its precision.
+///
+/// `Exact` says the call reaches the target; `Conservative` says it may;
+/// `Apart` marks an edge that is reported but never counted as either, and
+/// `NoClaim` an edge that states no target at all. The variants are ordered
+/// from the strongest claim to none, so a greater tier claims less.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ClaimTier {
+    Exact,
+    Conservative,
+    Apart,
+    NoClaim,
+}
+
+impl ClaimTier {
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::Conservative => "conservative",
+            Self::Apart => "apart",
+            Self::NoClaim => "none",
+        }
+    }
+}
+
+impl CallPrecision {
+    /// The tier this precision claims. Every variant is listed, so a new
+    /// precision cannot reach a tier without a decision.
+    pub(crate) fn tier(self) -> ClaimTier {
+        match self {
+            Self::Exact | Self::SetupAware => ClaimTier::Exact,
+            Self::Conservative | Self::Ambiguous => ClaimTier::Conservative,
+            Self::Heuristic => ClaimTier::Apart,
+            Self::Unknown | Self::Unsupported => ClaimTier::NoClaim,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -305,5 +351,39 @@ mod tests {
 
         assert_eq!(statuses.len(), 5);
         assert_eq!(reasons.len(), 6);
+    }
+
+    #[test]
+    fn call_precision_tier_is_a_closed_list() {
+        // The exhaustive match makes a new precision a compile error here
+        // until its tier is written down.
+        fn expected(precision: CallPrecision) -> &'static str {
+            match precision {
+                CallPrecision::Exact => "exact",
+                CallPrecision::SetupAware => "exact",
+                CallPrecision::Conservative => "conservative",
+                CallPrecision::Ambiguous => "conservative",
+                CallPrecision::Heuristic => "apart",
+                CallPrecision::Unknown => "none",
+                CallPrecision::Unsupported => "none",
+            }
+        }
+        let all = [
+            CallPrecision::Exact,
+            CallPrecision::SetupAware,
+            CallPrecision::Conservative,
+            CallPrecision::Heuristic,
+            CallPrecision::Ambiguous,
+            CallPrecision::Unknown,
+            CallPrecision::Unsupported,
+        ];
+        for precision in all {
+            assert_eq!(
+                precision.tier().as_str(),
+                expected(precision),
+                "{precision:?}"
+            );
+        }
+        assert_eq!(CallPrecision::Heuristic.tier(), ClaimTier::Apart);
     }
 }

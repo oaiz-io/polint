@@ -105,14 +105,14 @@ jobs:
           tree="$(cargo tree -p polint $FEATURE_ARGS --locked)"
           case "$FEATURE_NAME" in
             "no languages")
-              ! grep -Eq '(^| )(oxc_|tree-sitter)' <<<"$tree"
+              ! grep -Eq '(^| )(oxc_|polint-oxc-parser|tree-sitter)' <<<"$tree"
               ;;
             "Go only")
               grep -q 'tree-sitter v' <<<"$tree"
-              ! grep -Eq '(^| )oxc_' <<<"$tree"
+              ! grep -Eq '(^| )(oxc_|polint-oxc-parser)' <<<"$tree"
               ;;
             "TypeScript only")
-              grep -q 'oxc_parser v' <<<"$tree"
+              grep -q 'polint-oxc-parser v' <<<"$tree"
               ! grep -q 'tree-sitter v' <<<"$tree"
               ;;
           esac
@@ -265,6 +265,25 @@ jobs:
           cargo test -p polint --lib --all-features --locked
           eval::bench::gate::tests::semantic_store_boundary::real_store_enabled_measurement_passes_locked_boundary
           -- --exact --ignored --test-threads=1 --nocapture
+
+  held-out-authorship:
+    name: held-out authorship (HELD-OUT.md rule 2)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: refuse analysis code and held-out bench files in one pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: >-
+          git diff --name-only --no-renames "$BASE_SHA...HEAD"
+          | python3 tests/js-analysis-bench/held_out_guard.py --base "$BASE_SHA"
+      - name: authorship guard test
+        run: python3 tests/js-analysis-bench/held_out_guard_test.py
+      - name: bench report self-test
+        run: python3 tests/js-analysis-bench/selftest.py
 
   # ── Artifact / smoke tests ─────────────────────────────────────────────────
 

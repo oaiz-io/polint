@@ -6,6 +6,8 @@ use crate::internal_core::{
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::internal_core::StableKeyInterner;
+
 pub use crate::analysis_api::{
     ScopeId, SemanticImportFact, SemanticImportId, SemanticImportKind, SemanticStatus,
 };
@@ -795,8 +797,8 @@ impl SemanticIndexBuilder {
                 semantic_import_sort_key(interner, row)
             }),
             exports: sort_rows(self.exports, |row| export_sort_key(interner, row)),
-            aliases: sort_rows(self.aliases, |row| alias_sort_key(interner, row)),
-            resolutions: sort_rows(self.resolutions, |row| resolution_sort_key(interner, row)),
+            aliases: sort_aliases(interner, self.aliases),
+            resolutions: sort_resolutions(interner, self.resolutions),
             generated_symbols: sort_rows(self.generated_symbols, |row| {
                 generated_symbol_sort_key(interner, row)
             }),
@@ -900,12 +902,8 @@ pub fn alias_reexport_closure(
     }
 
     AliasReexportClosureOutput {
-        aliases: sort_rows(closure_aliases.into_values().collect(), |row| {
-            alias_sort_key(interner, row)
-        }),
-        resolutions: sort_rows(closure_resolutions.into_values().collect(), |row| {
-            resolution_sort_key(interner, row)
-        }),
+        aliases: sort_aliases(interner, closure_aliases.into_values().collect()),
+        resolutions: sort_resolutions(interner, closure_resolutions.into_values().collect()),
     }
 }
 
@@ -957,9 +955,7 @@ pub fn emit_native_generated_symbol_hooks(
         generated_symbols: sort_rows(generated.into_values().collect(), |row| {
             generated_symbol_sort_key(interner, row)
         }),
-        resolutions: sort_rows(resolutions.into_values().collect(), |row| {
-            resolution_sort_key(interner, row)
-        }),
+        resolutions: sort_resolutions(interner, resolutions.into_values().collect()),
         diagnostics: diagnostics.into_values().collect(),
     }
 }
@@ -1516,52 +1512,54 @@ fn export_sort_key(
     )
 }
 
-fn alias_sort_key(
-    interner: &crate::internal_core::StableKeyInterner,
-    fact: &AliasFact,
-) -> (
-    String,
-    Option<FileId>,
-    String,
-    Vec<String>,
-    AliasKind,
-    SemanticStatus,
-) {
-    (
-        interner.resolve(fact.stable_key).to_string(),
-        fact.file,
-        interner.resolve(fact.source_symbol_stable_key).to_string(),
-        fact.target_symbol_stable_keys
-            .iter()
-            .map(|key| interner.resolve(*key).to_string())
-            .collect(),
-        fact.kind,
-        fact.status,
-    )
+fn sort_aliases(interner: &StableKeyInterner, mut rows: Vec<AliasFact>) -> Vec<AliasFact> {
+    let keys = interner.read_view();
+    rows.sort_by(|left, right| {
+        keys.text(left.stable_key)
+            .cmp(keys.text(right.stable_key))
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| {
+                keys.text(left.source_symbol_stable_key)
+                    .cmp(keys.text(right.source_symbol_stable_key))
+            })
+            .then_with(|| {
+                left.target_symbol_stable_keys
+                    .iter()
+                    .map(|key| keys.text(*key))
+                    .cmp(
+                        right
+                            .target_symbol_stable_keys
+                            .iter()
+                            .map(|key| keys.text(*key)),
+                    )
+            })
+            .then_with(|| (left.kind, left.status).cmp(&(right.kind, right.status)))
+    });
+    rows
 }
 
-fn resolution_sort_key(
-    interner: &crate::internal_core::StableKeyInterner,
-    fact: &ResolutionFact,
-) -> (
-    String,
-    Option<FileId>,
-    String,
-    Vec<String>,
-    ResolutionStepKind,
-    SemanticStatus,
-) {
-    (
-        interner.resolve(fact.stable_key).to_string(),
-        fact.file,
-        interner.resolve(fact.source_stable_key).to_string(),
-        fact.target_stable_keys
-            .iter()
-            .map(|key| interner.resolve(*key).to_string())
-            .collect(),
-        fact.step,
-        fact.status,
-    )
+fn sort_resolutions(
+    interner: &StableKeyInterner,
+    mut rows: Vec<ResolutionFact>,
+) -> Vec<ResolutionFact> {
+    let keys = interner.read_view();
+    rows.sort_by(|left, right| {
+        keys.text(left.stable_key)
+            .cmp(keys.text(right.stable_key))
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| {
+                keys.text(left.source_stable_key)
+                    .cmp(keys.text(right.source_stable_key))
+            })
+            .then_with(|| {
+                left.target_stable_keys
+                    .iter()
+                    .map(|key| keys.text(*key))
+                    .cmp(right.target_stable_keys.iter().map(|key| keys.text(*key)))
+            })
+            .then_with(|| (left.step, left.status).cmp(&(right.step, right.status)))
+    });
+    rows
 }
 
 fn generated_symbol_sort_key(

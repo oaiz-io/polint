@@ -17,6 +17,14 @@ pub(crate) const JOBS_ENV: &str = "POLINT_JOBS";
 /// Default fraction of available CPUs when neither `--jobs` nor `POLINT_JOBS` is set.
 pub(crate) const DEFAULT_PERCENT: u32 = 80;
 
+/// Stack each analysis worker thread gets.
+///
+/// Parsers and syntax-tree walks recurse once per nesting level, and the
+/// parser stops a file at a fixed nesting limit. This stack holds a parse and
+/// walk at that limit in an unoptimised build, with room to spare; the
+/// operating system commits only the pages a thread touches.
+pub(crate) const WORKER_STACK_BYTES: usize = 64 * 1024 * 1024;
+
 static RESOLVED: OnceLock<usize> = OnceLock::new();
 
 /// How the user asked to size the worker pool.
@@ -133,6 +141,7 @@ pub(crate) fn install(spec: JobsSpec) -> usize {
     let count = *RESOLVED.get_or_init(|| count);
     if let Err(error) = rayon::ThreadPoolBuilder::new()
         .num_threads(count)
+        .stack_size(WORKER_STACK_BYTES)
         .build_global()
     {
         tracing::debug!(
@@ -142,6 +151,25 @@ pub(crate) fn install(spec: JobsSpec) -> usize {
         );
     }
     count
+}
+
+/// Runs `work` on a thread with [`WORKER_STACK_BYTES`] of stack and returns its
+/// result. Analysis stages that do not run on the worker pool run on the
+/// thread that started them, so a command runs here rather than on the main
+/// thread, whose stack the operating system sizes. A panic in `work` resumes
+/// on the calling thread.
+pub(crate) fn on_worker_stack<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T> {
+    let handle = std::thread::Builder::new()
+        .name("polint-main".to_string())
+        .stack_size(WORKER_STACK_BYTES)
+        .spawn(work)
+        .context("start the command thread")?;
+    match handle.join() {
+        Ok(value) => Ok(value),
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
 
 pub(crate) fn resolved_job_count() -> usize {

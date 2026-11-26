@@ -1,0 +1,3 @@
+construct = "unary-iife"
+held_out = true
+description = "Function expressions called under `!`, `void`, `+` and `typeof` at module level; each body calls a module function."

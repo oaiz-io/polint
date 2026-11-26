@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "dayjs.min.js"
@@ -7,14 +7,229 @@
   "instrumented_functions": 57,
   "transformed_not_instrumented": [],
   "failures": [],
-  "edges": [
+  "entered_functions": [
     {
-      "kind": "call",
-      "site": "dayjs.min.js@1..7160",
-      "syntax": "expression",
-      "callee": "dayjs.min.js@1..199",
-      "callee_name": ""
+      "function": "dayjs.min.js@1..199",
+      "name": ""
     },
+    {
+      "function": "dayjs.min.js@1081..1277",
+      "name": "t"
+    },
+    {
+      "function": "dayjs.min.js@1280..1333",
+      "name": "a"
+    },
+    {
+      "function": "dayjs.min.js@1336..1446",
+      "name": "p"
+    },
+    {
+      "function": "dayjs.min.js@1449..1479",
+      "name": "u"
+    },
+    {
+      "function": "dayjs.min.js@1525..1573",
+      "name": "S"
+    },
+    {
+      "function": "dayjs.min.js@1576..1797",
+      "name": "t"
+    },
+    {
+      "function": "dayjs.min.js@1800..1911",
+      "name": "O"
+    },
+    {
+      "function": "dayjs.min.js@1932..2006",
+      "name": "w"
+    },
+    {
+      "function": "dayjs.min.js@2013..6829",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@2024..2116",
+      "name": "M"
+    },
+    {
+      "function": "dayjs.min.js@206..7158",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@2149..2565",
+      "name": "parse"
+    },
+    {
+      "function": "dayjs.min.js@2169..2549",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@2573..2778",
+      "name": "init"
+    },
+    {
+      "function": "dayjs.min.js@2819..2862",
+      "name": "isValid"
+    },
+    {
+      "function": "dayjs.min.js@2872..2941",
+      "name": "isSame"
+    },
+    {
+      "function": "dayjs.min.js@2952..2994",
+      "name": "isAfter"
+    },
+    {
+      "function": "dayjs.min.js@3006..3046",
+      "name": "isBefore"
+    },
+    {
+      "function": "dayjs.min.js@3052..3104",
+      "name": "$g"
+    },
+    {
+      "function": "dayjs.min.js@3112..3161",
+      "name": "unix"
+    },
+    {
+      "function": "dayjs.min.js@3172..3208",
+      "name": "valueOf"
+    },
+    {
+      "function": "dayjs.min.js@3219..3843",
+      "name": "startOf"
+    },
+    {
+      "function": "dayjs.min.js@3269..3361",
+      "name": "l"
+    },
+    {
+      "function": "dayjs.min.js@3364..3465",
+      "name": "$"
+    },
+    {
+      "function": "dayjs.min.js@3852..3890",
+      "name": "endOf"
+    },
+    {
+      "function": "dayjs.min.js@3898..4295",
+      "name": "$set"
+    },
+    {
+      "function": "dayjs.min.js@4302..4346",
+      "name": "set"
+    },
+    {
+      "function": "dayjs.min.js@4353..4387",
+      "name": "get"
+    },
+    {
+      "function": "dayjs.min.js@4394..4722",
+      "name": "add"
+    },
+    {
+      "function": "dayjs.min.js@4448..4518",
+      "name": "y"
+    },
+    {
+      "function": "dayjs.min.js@4734..4772",
+      "name": "subtract"
+    },
+    {
+      "function": "dayjs.min.js@4782..5946",
+      "name": "format"
+    },
+    {
+      "function": "dayjs.min.js@4978..5038",
+      "name": "h"
+    },
+    {
+      "function": "dayjs.min.js@5041..5080",
+      "name": "d"
+    },
+    {
+      "function": "dayjs.min.js@5086..5150",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@5171..5943",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@5195..5920",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@5959..6024",
+      "name": "utcOffset"
+    },
+    {
+      "function": "dayjs.min.js@6032..6367",
+      "name": "diff"
+    },
+    {
+      "function": "dayjs.min.js@6125..6152",
+      "name": "D"
+    },
+    {
+      "function": "dayjs.min.js@6382..6417",
+      "name": "daysInMonth"
+    },
+    {
+      "function": "dayjs.min.js@6428..6457",
+      "name": "$locale"
+    },
+    {
+      "function": "dayjs.min.js@6467..6554",
+      "name": "locale"
+    },
+    {
+      "function": "dayjs.min.js@6563..6599",
+      "name": "clone"
+    },
+    {
+      "function": "dayjs.min.js@6609..6652",
+      "name": "toDate"
+    },
+    {
+      "function": "dayjs.min.js@6662..6719",
+      "name": "toJSON"
+    },
+    {
+      "function": "dayjs.min.js@6734..6774",
+      "name": "toISOString"
+    },
+    {
+      "function": "dayjs.min.js@6786..6826",
+      "name": "toString"
+    },
+    {
+      "function": "dayjs.min.js@6951..7012",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@6971..7011",
+      "name": ""
+    },
+    {
+      "function": "dayjs.min.js@7024..7072",
+      "name": "extend"
+    },
+    {
+      "function": "dayjs.min.js@7103..7131",
+      "name": "unix"
+    },
+    {
+      "function": "dayjs.min.js@859..948",
+      "name": "m"
+    },
+    {
+      "function": "dayjs.min.js@958..1078",
+      "name": "z"
+    }
+  ],
+  "edges": [
     {
       "kind": "call",
       "site": "dayjs.min.js@1052..1062",
@@ -129,20 +344,6 @@
     },
     {
       "kind": "call",
-      "site": "dayjs.min.js@2013..6831",
-      "syntax": "expression",
-      "callee": "dayjs.min.js@2013..6829",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
-      "site": "dayjs.min.js@2013..6831",
-      "syntax": "expression",
-      "callee": "dayjs.min.js@3172..3208",
-      "callee_name": "valueOf"
-    },
-    {
-      "kind": "call",
       "site": "dayjs.min.js@2046..2065",
       "syntax": "identifier",
       "callee": "dayjs.min.js@1576..1797",
@@ -154,13 +355,6 @@
       "syntax": "member",
       "callee": "dayjs.min.js@2149..2565",
       "callee_name": "parse"
-    },
-    {
-      "kind": "call",
-      "site": "dayjs.min.js@2169..2552",
-      "syntax": "expression",
-      "callee": "dayjs.min.js@2169..2549",
-      "callee_name": ""
     },
     {
       "kind": "call",
@@ -563,13 +757,6 @@
     },
     {
       "kind": "call",
-      "site": "dayjs.min.js@5195..5923",
-      "syntax": "expression",
-      "callee": "dayjs.min.js@5195..5920",
-      "callee_name": ""
-    },
-    {
-      "kind": "call",
       "site": "dayjs.min.js@5274..5289",
       "syntax": "member",
       "callee": "dayjs.min.js@859..948",
@@ -847,6 +1034,69 @@
       "syntax": "implicit",
       "callee": "dayjs.min.js@3172..3208",
       "callee_name": "valueOf"
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@199",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@1..199",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@2549",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@2169..2549",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@2919",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@3172..3208",
+      "callee_name": "valueOf"
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@2925",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@3172..3208",
+      "callee_name": "valueOf"
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@2977",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@3172..3208",
+      "callee_name": "valueOf"
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@3040",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@3172..3208",
+      "callee_name": "valueOf"
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@5920",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@5195..5920",
+      "callee_name": ""
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@6120",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@3172..3208",
+      "callee_name": "valueOf"
+    },
+    {
+      "kind": "implicit",
+      "site": "dayjs.min.js@6829",
+      "syntax": "implicit",
+      "callee": "dayjs.min.js@2013..6829",
+      "callee_name": ""
     }
   ]
 }

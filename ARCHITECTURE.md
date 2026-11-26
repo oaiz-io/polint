@@ -27,8 +27,10 @@ The architecture is organized around four rules:
 
 The product publishes two Cargo packages: `polint` and `polint-macros`. The
 procedural macro remains separate because Cargo requires proc-macro crates to be
-distinct. All runtime implementation lives inside `polint`; `polint-eval` and
-`polint-bench` are unpublished workspace tooling.
+distinct. polint's runtime implementation lives inside `polint`; `polint-eval`
+and `polint-bench` are unpublished workspace tooling. A separately packaged
+implementation dependency, [`polint-oxc-parser`](crates/polint-oxc-parser/VENDOR.md),
+keeps JS/TS nesting bounded; it is not a rule-author API or a workspace member.
 
 Language implementations are compile-time optional inside the facade. The
 default and `all-languages` features enable both `lang-go` and

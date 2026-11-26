@@ -48,6 +48,8 @@ const files = new Map();
 /** @type {Array<{file: FileInfo, start: number, end: number, name: string}>} */
 const functions = [];
 const edges = new Map();
+/** Ids of the instrumented functions the run entered, from any caller. */
+const entered = new Set();
 const failures = [];
 const transformed = new Set();
 
@@ -60,7 +62,149 @@ function isTypeScript(file) {
 }
 
 // ---------------------------------------------------------------------------
-// Resolution: TypeScript sources import siblings with a `.js` suffix.
+// Resolution: TypeScript sources import siblings with a `.js` suffix, or with
+// no suffix at all as a bundler resolves them.
+
+function resolveTypeScriptSibling(specifier, context, nextResolve) {
+  if (/\.[cm]?js$/.test(specifier)) {
+    return nextResolve(specifier.replace(/\.([cm]?)js$/, ".$1ts"), context);
+  }
+  if (!isTypeScript(fileURLToPath(context.parentURL)) || path.extname(specifier) !== "") return null;
+  for (const candidate of [`${specifier}.ts`, `${specifier}/index.ts`]) {
+    try {
+      return nextResolve(candidate, context);
+    } catch {
+      // The next candidate.
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Type-only names in value import lists. Type stripping keeps `import { T }`
+// when `T` is declared with `interface` or `type`, and ESM linking then fails
+// on the missing export. A bundler drops such names; the recorder blanks them
+// with spaces, which keeps every other position. A name counts as type-only
+// when some TypeScript file of the package declares it as a type and none
+// declares it at the top level as a value.
+
+const TYPE_DECLARATION =
+  /^[ \t]*(?:export[ \t]+)?(?:declare[ \t]+)?(?:interface[ \t]+([A-Za-z_$][\w$]*)|type[ \t]+([A-Za-z_$][\w$]*)[ \t]*[=<])/gm;
+let typeOnly = null;
+
+function packageTypeScriptFiles(directory, out = []) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) packageTypeScriptFiles(full, out);
+    else if (isTypeScript(entry.name) && !/\.d\.[cm]?ts$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+function topLevelValueNames(ast, names) {
+  const declare = (node) => {
+    if (!node) return;
+    if (node.type === "VariableDeclaration") {
+      for (const declarator of node.declarations) walk(declarator.id, (part) => part.type === "Identifier" && names.add(part.name));
+    } else if ((node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") && node.id) {
+      names.add(node.id.name);
+    }
+  };
+  for (const node of ast.body) {
+    declare(node);
+    if (node.type === "ExportNamedDeclaration" || node.type === "ExportDefaultDeclaration") declare(node.declaration);
+  }
+}
+
+function typeOnlyNames() {
+  if (typeOnly) return typeOnly;
+  const types = new Set();
+  const values = new Set();
+  for (const file of packageTypeScriptFiles(ROOT)) {
+    const original = fs.readFileSync(file, "utf8");
+    for (const match of original.matchAll(TYPE_DECLARATION)) types.add(match[1] ?? match[2]);
+    let executable;
+    try {
+      executable = stripTypeScriptTypes(original, { mode: "strip" });
+    } catch {
+      executable = stripTypeScriptTypes(original, { mode: "transform" });
+    }
+    try {
+      topLevelValueNames(parse(executable, "module"), values);
+    } catch {
+      // Not a module; it declares no names an import list can name.
+    }
+  }
+  typeOnly = new Set([...types].filter((name) => !values.has(name)));
+  return typeOnly;
+}
+
+function blankTypeOnlySpecifiers(executable, format) {
+  if (format !== "module") return executable;
+  const names = typeOnlyNames();
+  if (names.size === 0) return executable;
+  let ast;
+  try {
+    ast = parse(executable, format);
+  } catch {
+    return executable;
+  }
+  const blanks = [];
+  for (const node of ast.body) {
+    const relativeSource = node.source && typeof node.source.value === "string" && node.source.value.startsWith(".");
+    let specifiers = [];
+    if (node.type === "ImportDeclaration" && relativeSource) {
+      specifiers = node.specifiers.filter((spec) => spec.type === "ImportSpecifier" && names.has(spec.imported.name));
+    } else if (node.type === "ExportNamedDeclaration" && !node.declaration && (relativeSource || !node.source)) {
+      specifiers = node.specifiers.filter((spec) => names.has(spec.local.name));
+    }
+    for (const spec of specifiers) {
+      // The specifier and the comma after it.
+      let end = spec.end;
+      while (end < executable.length && /\s/.test(executable[end])) end++;
+      if (executable[end] === ",") end++;
+      blanks.push([spec.start, end]);
+    }
+  }
+  if (blanks.length === 0) return executable;
+  let out = "";
+  let position = 0;
+  for (const [start, end] of blanks) {
+    out += executable.slice(position, start) + executable.slice(start, end).replace(/[^\n\r]/g, " ");
+    position = end;
+  }
+  return out + executable.slice(position);
+}
+
+const MODULE_SYNTAX = /^[ \t]*(?:import|export)\b/m;
+
+// The `"type"` of the nearest package.json inside the tree, or null.
+function packageType(file) {
+  for (let directory = path.dirname(file); directory.startsWith(ROOT); directory = path.dirname(directory)) {
+    const manifest = path.join(directory, "package.json");
+    if (fs.existsSync(manifest)) return JSON.parse(fs.readFileSync(manifest, "utf8")).type ?? null;
+    if (directory === ROOT) break;
+  }
+  return null;
+}
+
+// Node strips a TypeScript file before this hook sees it and refuses enums and
+// namespaces there. The hook reads and transforms the source itself, so for
+// such a file it asks Node only for the format, decided as Node decides it for
+// a `.ts` file outside a `"type"` scope: module syntax makes it a module.
+function loadFormat(url, context, nextLoad) {
+  try {
+    return nextLoad(url, context);
+  } catch (error) {
+    if (!url.startsWith(ROOT_URL) || !isTypeScript(url)) throw error;
+    const file = fileURLToPath(url);
+    let format = "commonjs";
+    if (file.endsWith(".mts")) format = "module";
+    else if (!file.endsWith(".cts") && MODULE_SYNTAX.test(fs.readFileSync(file, "utf8"))) format = "module";
+    return nextLoad(url, { ...context, format });
+  }
+}
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -68,20 +212,15 @@ registerHooks({
       return nextResolve(specifier, context);
     } catch (error) {
       const parent = context.parentURL;
-      if (
-        parent &&
-        parent.startsWith(ROOT_URL) &&
-        specifier.startsWith(".") &&
-        /\.[cm]?js$/.test(specifier)
-      ) {
-        const candidate = specifier.replace(/\.([cm]?)js$/, ".$1ts");
-        return nextResolve(candidate, context);
+      if (parent && parent.startsWith(ROOT_URL) && specifier.startsWith(".")) {
+        const resolved = resolveTypeScriptSibling(specifier, context, nextResolve);
+        if (resolved) return resolved;
       }
       throw error;
     }
   },
   load(url, context, nextLoad) {
-    const loaded = nextLoad(url, context);
+    const loaded = loadFormat(url, context, nextLoad);
     if (!url.startsWith(ROOT_URL)) return loaded;
     const file = fileURLToPath(url);
     if (!SOURCE_EXTENSIONS.has(path.extname(file))) return loaded;
@@ -90,8 +229,21 @@ registerHooks({
     let format = loaded.format;
     if (format === "module-typescript") format = "module";
     if (format === "commonjs-typescript") format = "commonjs";
-    // A `require` of a `.js` file outside any `"type"` scope reports no format.
-    if (format == null) format = file.endsWith(".mjs") ? "module" : "commonjs";
+    // A `require` of a file outside any `"type"` scope reports no format, or
+    // `typescript` for a `.ts` file, and leaves the choice to Node.
+    if (format == null || format === "typescript") format = file.endsWith(".mjs") ? "module" : "commonjs";
+    // Node then runs such a `.ts` file as a module when its syntax says so.
+    // The hook decides as Node does, so type-only names are blanked on that
+    // path too.
+    if (
+      format === "commonjs" &&
+      isTypeScript(file) &&
+      !file.endsWith(".cts") &&
+      packageType(file) === null &&
+      MODULE_SYNTAX.test(original)
+    ) {
+      format = "module";
+    }
     let executable = original;
     let stripped = true;
     if (isTypeScript(file)) {
@@ -105,6 +257,7 @@ registerHooks({
         stripped = false;
         if (selected) transformed.add(relative(file));
       }
+      executable = blankTypeOnlySpecifiers(executable, format);
     }
     if (MODE === "calls" && selected && stripped && (format === "module" || format === "commonjs")) {
       try {
@@ -130,6 +283,8 @@ class FileInfo {
     this.instrumented = executable;
     this.lineStarts = null;
     this.byteCache = new Map();
+    // Original UTF-16 offset -> innermost call node there, or null.
+    this.siteCache = new Map();
   }
 
   // UTF-16 offset in the original text -> UTF-8 byte offset.
@@ -282,6 +437,16 @@ function calleeRegionEnd(text, end) {
 }
 
 function callSiteAt(info, offset) {
+  // A test suite calls the same sites many times; each offset is searched once.
+  let cached = info.siteCache.get(offset);
+  if (cached === undefined) {
+    cached = findCallSite(info, offset);
+    info.siteCache.set(offset, cached);
+  }
+  return cached;
+}
+
+function findCallSite(info, offset) {
   let best = null;
   const visit = (node) => {
     if (!node || typeof node.type !== "string") return;
@@ -292,7 +457,12 @@ function callSiteAt(info, offset) {
         : node.type === "TaggedTemplateExpression"
           ? node.tag
           : null;
-    if (callee && offset >= node.start && offset <= calleeRegionEnd(info.original, callee.end)) {
+    if (
+      callee &&
+      offset >= node.start &&
+      offset <= calleeRegionEnd(info.original, callee.end) &&
+      !insideFunction(callee, offset)
+    ) {
       if (!best || node.end - node.start <= best.end - best.start) best = node;
     }
     for (const key of Object.keys(node)) {
@@ -304,6 +474,31 @@ function callSiteAt(info, offset) {
   };
   visit(info.ast);
   return best;
+}
+
+// A position inside a function written in the callee, such as the body of an
+// immediately invoked function, belongs to a call in that body, never to the
+// call that invokes the function.
+function insideFunction(node, offset) {
+  if (!node || typeof node.type !== "string") return false;
+  if (offset < node.start || offset > node.end) return false;
+  if (
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "ClassExpression"
+  ) {
+    return true;
+  }
+  for (const key of Object.keys(node)) {
+    if (key === "type" || key === "start" || key === "end") continue;
+    const child = node[key];
+    if (Array.isArray(child)) {
+      if (child.some((item) => insideFunction(item, offset))) return true;
+    } else if (child && typeof child.type === "string" && insideFunction(child, offset)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function spanKey(info, start, end) {
@@ -330,6 +525,7 @@ function record(kind, site, syntax, fn) {
 
 let busy = false;
 globalThis[PROBE] = function enter(id) {
+  entered.add(id);
   if (busy) return;
   busy = true;
   try {
@@ -400,13 +596,19 @@ function writeCalls() {
   // Code-unit order, independent of the host locale.
   const rows = [...edges.values()].sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : 0));
   const instrumented = [...files.values()].map((info) => info.rel).sort();
+  const key = (fn) => `${fn.file.rel}@${fn.file.byte(fn.start)}..${fn.file.byte(fn.end)}`;
+  const enteredRows = [...entered]
+    .map((id) => ({ function: key(functions[id]), name: functions[id].name }))
+    .sort((a, b) => (a.function < b.function ? -1 : a.function > b.function ? 1 : 0));
   const document = {
-    schema: "polint-js-bench-observed-calls-1",
+    schema: "polint-js-bench-observed-calls-2",
     node: process.version,
     instrumented_files: instrumented,
     instrumented_functions: functions.length,
     transformed_not_instrumented: [...transformed].sort(),
     failures,
+    // Driver coverage: every function entered, whether or not its caller is in the tree.
+    entered_functions: enteredRows,
     edges: rows,
   };
   fs.writeFileSync(OUT, JSON.stringify(document, null, 2) + "\n");

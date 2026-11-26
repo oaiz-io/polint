@@ -1,10 +1,10 @@
 use crate::analysis_api::{
     AnalysisCache, CacheStats, CachedFileAnalysis, CachedFileFacts, Digest, DigestKind,
     DisabledAnalysisCache, FactDatabase, FileCacheKeyParts, FileCacheReadStatus, FunctionFact,
-    ImportFact, JsxAttributeFact, LayerCacheEntryDigests, LayerCacheKeyParts, LayerCacheKind,
-    LayerCachePrecision, LayerCacheReadStatus, LayerCacheWriteStatus, ProviderRunResult,
-    SourceFile, StringLiteralFact, TS_JS_MODULE_FUNCTION_NAME, TS_PARSER_BACKEND, TsClassFact,
-    TsComponentFact,
+    ImportFact, ImportSyntax, JsxAttributeFact, LayerCacheEntryDigests, LayerCacheKeyParts,
+    LayerCacheKind, LayerCachePrecision, LayerCacheReadStatus, LayerCacheWriteStatus,
+    ProviderRunResult, SourceFile, StringLiteralFact, TS_JS_MODULE_FUNCTION_NAME,
+    TS_PARSER_BACKEND, TsClassFact, TsComponentFact,
 };
 use crate::internal_core::{
     Diagnostic, DiagnosticRange as TextRange, FileId, FunctionId, Language, Span,
@@ -14,11 +14,11 @@ use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrayExpressionElement, ArrowFunctionExpression, AssignmentTarget, BinaryOperator,
     BindingPattern, Class, ClassElement, Declaration, ExportDefaultDeclarationKind, Expression,
-    ForStatementInit, ForStatementLeft, Function, FunctionBody, ImportOrExportKind,
-    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild, JSXElement, JSXExpression,
-    JSXFragment, MethodDefinition, MethodDefinitionKind, ModuleExportName, ObjectProperty,
-    ObjectPropertyKind, Program, PropertyKey, RegExpLiteral, Statement, TemplateLiteral,
-    VariableDeclarator,
+    ForStatementInit, ForStatementLeft, FormalParameters, Function, FunctionBody,
+    ImportOrExportKind, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild,
+    JSXElement, JSXExpression, JSXFragment, MethodDefinition, MethodDefinitionKind,
+    ModuleExportName, ObjectProperty, ObjectPropertyKind, Program, PropertyKey, RegExpLiteral,
+    Statement, TemplateLiteral, VariableDeclarator,
 };
 use oxc_span::GetSpan;
 use rayon::prelude::*;
@@ -885,7 +885,7 @@ fn collect_require_imports_from_expression(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             collect_require_imports_from_expression(db, ctx, &call.callee);
             for argument in &call.arguments {
@@ -1035,7 +1035,7 @@ fn collect_require_imports_from_export_default(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             for argument in &call.arguments {
                 collect_require_imports_from_argument(db, ctx, argument);
@@ -1122,7 +1122,7 @@ fn collect_require_imports_from_for_init(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             for argument in &call.arguments {
                 collect_require_imports_from_argument(db, ctx, argument);
@@ -1149,7 +1149,7 @@ fn collect_require_imports_from_argument(
                 && let Some(Argument::StringLiteral(path)) = call.arguments.first()
             {
                 let span = span_from_oxc(db, ctx.file, path.span);
-                push_module_import(db, ctx.file, path.value.as_str(), span, ctx.language);
+                push_require_import(db, ctx.file, path.value.as_str(), span, ctx.language);
             }
             for argument in &call.arguments {
                 collect_require_imports_from_argument(db, ctx, argument);
@@ -1201,14 +1201,38 @@ fn push_module_import(
     span: Span,
     language: Language,
 ) {
-    db.push_import(ImportFact::new(
-        crate::internal_core::ImportId::from_raw(0),
-        file,
-        None,
-        path.to_string(),
-        span,
-        language,
-    ));
+    push_import_written(db, file, path, span, language, ImportSyntax::Import);
+}
+
+fn push_require_import(
+    db: &mut dyn FactDatabase,
+    file: FileId,
+    path: &str,
+    span: Span,
+    language: Language,
+) {
+    push_import_written(db, file, path, span, language, ImportSyntax::Require);
+}
+
+fn push_import_written(
+    db: &mut dyn FactDatabase,
+    file: FileId,
+    path: &str,
+    span: Span,
+    language: Language,
+    syntax: ImportSyntax,
+) {
+    db.push_import(
+        ImportFact::new(
+            crate::internal_core::ImportId::from_raw(0),
+            file,
+            None,
+            path.to_string(),
+            span,
+            language,
+        )
+        .with_syntax(syntax),
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -1498,6 +1522,16 @@ fn extract_variable_declarator(
     }
 }
 
+fn extract_anonymous_callables_from_statements(
+    db: &mut dyn FactDatabase,
+    ctx: TsAstCtx<'_>,
+    statements: &[Statement<'_>],
+) {
+    for statement in statements {
+        extract_anonymous_callables_from_statement(db, ctx, statement);
+    }
+}
+
 fn extract_anonymous_callables_from_statement(
     db: &mut dyn FactDatabase,
     ctx: TsAstCtx<'_>,
@@ -1505,9 +1539,7 @@ fn extract_anonymous_callables_from_statement(
 ) {
     match statement {
         Statement::BlockStatement(block) => {
-            for statement in &block.body {
-                extract_anonymous_callables_from_statement(db, ctx, statement);
-            }
+            extract_anonymous_callables_from_statements(db, ctx, &block.body);
         }
         Statement::ExpressionStatement(statement) => {
             extract_anonymous_callables_from_expression(db, ctx, &statement.expression, true);
@@ -1553,9 +1585,7 @@ fn extract_anonymous_callables_from_statement(
                     },
                 );
             }
-            if let Some(body) = function.body.as_deref() {
-                extract_anonymous_callables_from_function_body(db, ctx, body);
-            }
+            extract_anonymous_callables_from_function(db, ctx, function);
         }
         Statement::ClassDeclaration(class) => {
             // Nested class declarations (inside a function/block) are not visited by the
@@ -1634,6 +1664,25 @@ fn extract_anonymous_callables_from_statement(
                 }
             }
         }
+        Statement::TryStatement(statement) => {
+            extract_anonymous_callables_from_statements(db, ctx, &statement.block.body);
+            if let Some(handler) = &statement.handler {
+                if let Some(parameter) = &handler.param {
+                    extract_anonymous_callables_from_binding_pattern(db, ctx, &parameter.pattern);
+                }
+                extract_anonymous_callables_from_statements(db, ctx, &handler.body.body);
+            }
+            if let Some(finalizer) = &statement.finalizer {
+                extract_anonymous_callables_from_statements(db, ctx, &finalizer.body);
+            }
+        }
+        Statement::LabeledStatement(statement) => {
+            extract_anonymous_callables_from_statement(db, ctx, &statement.body);
+        }
+        Statement::WithStatement(statement) => {
+            extract_anonymous_callables_from_expression(db, ctx, &statement.object, true);
+            extract_anonymous_callables_from_statement(db, ctx, &statement.body);
+        }
         Statement::ExportNamedDeclaration(export) => {
             if let Some(declaration) = &export.declaration {
                 extract_anonymous_callables_from_declaration(db, ctx, declaration);
@@ -1641,11 +1690,36 @@ fn extract_anonymous_callables_from_statement(
         }
         Statement::ExportDefaultDeclaration(export) => match &export.declaration {
             ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
-                if let Some(body) = function.body.as_deref() {
-                    extract_anonymous_callables_from_function_body(db, ctx, body);
+                // A named default function was emitted under its name by the
+                // module-level pass; an anonymous one is named by its span.
+                if function.id.is_none() {
+                    push_ts_function(
+                        db,
+                        ctx,
+                        TsFunctionSpec {
+                            name: anonymous_callable_name(function.span.start, function.span.end),
+                            span: function.span,
+                            is_exported: true,
+                            cyclomatic_complexity: ts_cyclomatic_complexity(function),
+                            calls: function_body_calls(function.body.as_deref()),
+                            is_component_like: function_returns_jsx(function),
+                        },
+                    );
                 }
+                extract_anonymous_callables_from_function(db, ctx, function);
             }
             ExportDefaultDeclarationKind::ClassDeclaration(class) => {
+                if class.id.is_none() {
+                    push_ts_class(
+                        db,
+                        ctx.file,
+                        ctx.source,
+                        ctx.language,
+                        class_callable_name(class),
+                        class,
+                        true,
+                    );
+                }
                 extract_anonymous_callables_from_class(db, ctx, class);
             }
             // `export default <expression>` evaluates its expression while the
@@ -1669,15 +1743,14 @@ fn extract_anonymous_callables_from_declaration(
 ) {
     match declaration {
         Declaration::FunctionDeclaration(function) => {
-            if let Some(body) = function.body.as_deref() {
-                extract_anonymous_callables_from_function_body(db, ctx, body);
-            }
+            extract_anonymous_callables_from_function(db, ctx, function);
         }
         Declaration::ClassDeclaration(class) => {
             extract_anonymous_callables_from_class(db, ctx, class);
         }
         Declaration::VariableDeclaration(variable) => {
             for declarator in &variable.declarations {
+                extract_anonymous_callables_from_binding_pattern(db, ctx, &declarator.id);
                 if let Some(init) = &declarator.init {
                     extract_anonymous_callables_from_expression(db, ctx, init, false);
                 }
@@ -1736,9 +1809,7 @@ fn extract_anonymous_callables_from_class(
                 }
             }
             ClassElement::MethodDefinition(method) => {
-                if let Some(body) = method.value.body.as_deref() {
-                    extract_anonymous_callables_from_function_body(db, ctx, body);
-                }
+                extract_anonymous_callables_from_function(db, ctx, &method.value);
             }
             ClassElement::PropertyDefinition(property) => {
                 if let Some(value) = &property.value {
@@ -1760,8 +1831,45 @@ fn extract_anonymous_callables_from_function_body(
     ctx: TsAstCtx<'_>,
     body: &FunctionBody<'_>,
 ) {
-    for statement in &body.statements {
-        extract_anonymous_callables_from_statement(db, ctx, statement);
+    extract_anonymous_callables_from_statements(db, ctx, &body.statements);
+}
+
+/// Walk a function's parameter defaults and then its body. A default value
+/// (`function f(cb = () => {})`) is evaluated on each call, so a callable in
+/// it is a call target like any other.
+fn extract_anonymous_callables_from_function(
+    db: &mut dyn FactDatabase,
+    ctx: TsAstCtx<'_>,
+    function: &Function<'_>,
+) {
+    extract_anonymous_callables_from_parameters(db, ctx, &function.params);
+    if let Some(body) = function.body.as_deref() {
+        extract_anonymous_callables_from_function_body(db, ctx, body);
+    }
+}
+
+fn extract_anonymous_callables_from_arrow(
+    db: &mut dyn FactDatabase,
+    ctx: TsAstCtx<'_>,
+    function: &ArrowFunctionExpression<'_>,
+) {
+    extract_anonymous_callables_from_parameters(db, ctx, &function.params);
+    extract_anonymous_callables_from_function_body(db, ctx, &function.body);
+}
+
+fn extract_anonymous_callables_from_parameters(
+    db: &mut dyn FactDatabase,
+    ctx: TsAstCtx<'_>,
+    parameters: &FormalParameters<'_>,
+) {
+    for parameter in &parameters.items {
+        if let Some(initializer) = &parameter.initializer {
+            extract_anonymous_callables_from_expression(db, ctx, initializer, true);
+        }
+        extract_anonymous_callables_from_binding_pattern(db, ctx, &parameter.pattern);
+    }
+    if let Some(rest) = &parameters.rest {
+        extract_anonymous_callables_from_binding_pattern(db, ctx, &rest.rest.argument);
     }
 }
 
@@ -1787,7 +1895,7 @@ fn extract_anonymous_callables_from_expression(
                     },
                 );
             }
-            extract_anonymous_callables_from_function_body(db, ctx, &function.body);
+            extract_anonymous_callables_from_arrow(db, ctx, function);
         }
         Expression::FunctionExpression(function) => {
             if include_self {
@@ -1804,9 +1912,7 @@ fn extract_anonymous_callables_from_expression(
                     },
                 );
             }
-            if let Some(body) = function.body.as_deref() {
-                extract_anonymous_callables_from_function_body(db, ctx, body);
-            }
+            extract_anonymous_callables_from_function(db, ctx, function);
         }
         Expression::ClassExpression(class) => {
             // Emit constructor + method FunctionFacts so value-flow can resolve calls
@@ -1887,6 +1993,42 @@ fn extract_anonymous_callables_from_expression(
         Expression::LogicalExpression(expression) => {
             extract_anonymous_callables_from_expression(db, ctx, &expression.left, true);
             extract_anonymous_callables_from_expression(db, ctx, &expression.right, true);
+        }
+        // `!function(){}()` and `void function(){}()` run their function as the
+        // statement executes; operands of every operator are evaluated, so the
+        // functions in them are call targets like any other.
+        Expression::UnaryExpression(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.argument, true);
+        }
+        Expression::BinaryExpression(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.left, true);
+            extract_anonymous_callables_from_expression(db, ctx, &expression.right, true);
+        }
+        Expression::TemplateLiteral(template) => {
+            for expression in &template.expressions {
+                extract_anonymous_callables_from_expression(db, ctx, expression, true);
+            }
+        }
+        Expression::ImportExpression(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.source, true);
+            if let Some(options) = &expression.options {
+                extract_anonymous_callables_from_expression(db, ctx, options, true);
+            }
+        }
+        Expression::TSAsExpression(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.expression, true);
+        }
+        Expression::TSSatisfiesExpression(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.expression, true);
+        }
+        Expression::TSNonNullExpression(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.expression, true);
+        }
+        Expression::TSTypeAssertion(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.expression, true);
+        }
+        Expression::TSInstantiationExpression(expression) => {
+            extract_anonymous_callables_from_expression(db, ctx, &expression.expression, true);
         }
         Expression::ObjectExpression(object) => {
             for property in &object.properties {
@@ -1982,7 +2124,7 @@ fn extract_anonymous_callables_from_argument(
                     is_component_like: arrow_returns_jsx(function),
                 },
             );
-            extract_anonymous_callables_from_function_body(db, ctx, &function.body);
+            extract_anonymous_callables_from_arrow(db, ctx, function);
         }
         Argument::FunctionExpression(function) => {
             push_ts_function(
@@ -1997,9 +2139,7 @@ fn extract_anonymous_callables_from_argument(
                     is_component_like: function_returns_jsx(function),
                 },
             );
-            if let Some(body) = function.body.as_deref() {
-                extract_anonymous_callables_from_function_body(db, ctx, body);
-            }
+            extract_anonymous_callables_from_function(db, ctx, function);
         }
         _ => {
             extract_anonymous_callables_from_expression(db, ctx, argument.to_expression(), true);
@@ -2164,10 +2304,13 @@ fn push_ts_class(
             // Folded into the class function above.
             ClassElement::MethodDefinition(method)
                 if method.kind == MethodDefinitionKind::Constructor => {}
+            // A method whose key is computed at run time (`[Symbol.iterator]()`)
+            // has no static name; it is named by its span, as MIR names it.
             ClassElement::MethodDefinition(method) => {
-                let Some(method_name) = method_name(method) else {
-                    continue;
-                };
+                let function_name = method_name(method).map_or_else(
+                    || anonymous_callable_name(method.span.start, method.span.end),
+                    |method_name| format!("{name}.{method_name}"),
+                );
                 push_ts_function(
                     db,
                     TsAstCtx {
@@ -2176,7 +2319,7 @@ fn push_ts_class(
                         language,
                     },
                     TsFunctionSpec {
-                        name: format!("{name}.{method_name}"),
+                        name: function_name,
                         span: class_method_function_span(method, source),
                         is_exported,
                         cyclomatic_complexity: ts_cyclomatic_complexity(&method.value),
@@ -2315,9 +2458,7 @@ fn extract_anonymous_callables_from_object_property(
                 is_component_like: function_returns_jsx(function),
             },
         );
-        if let Some(body) = function.body.as_deref() {
-            extract_anonymous_callables_from_function_body(db, ctx, body);
-        }
+        extract_anonymous_callables_from_function(db, ctx, function);
         return;
     }
 
@@ -2350,7 +2491,10 @@ fn class_constructor<'ast>(class: &'ast Class<'ast>) -> Option<&'ast MethodDefin
     })
 }
 
-fn class_method_function_span(method: &MethodDefinition<'_>, source: &str) -> oxc_span::Span {
+pub(crate) fn class_method_function_span(
+    method: &MethodDefinition<'_>,
+    source: &str,
+) -> oxc_span::Span {
     if method.r#static && method.kind == MethodDefinitionKind::Method {
         // Drop the `static` modifier but keep the whole key syntax. For a
         // computed key (`static ["x"]() {}`) Jelly's function span starts at the

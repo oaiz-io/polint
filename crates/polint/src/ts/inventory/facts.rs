@@ -113,6 +113,10 @@ pub struct TsInventoryFunctionFact {
     pub lexical_parent_key: Option<StableKeyId>,
     pub display_name: Option<String>,
     pub kind: TsFunctionInventoryKind,
+    /// False for a function written without a body: an overload signature, an
+    /// ambient `declare function` or an abstract member. Such a row is a type,
+    /// not a value, so no call reaches it.
+    pub has_body: bool,
     pub status: TsInventoryStatus,
 }
 
@@ -196,6 +200,7 @@ mod tests {
             lexical_parent_key: Some(interner.intern("file=src/a.ts|scope=module")),
             display_name: Some("handler".to_string()),
             kind: TsFunctionInventoryKind::Arrow,
+            has_body: true,
             status: TsInventoryStatus::resolved(),
         };
         let callsite = TsInventoryCallsiteFact {

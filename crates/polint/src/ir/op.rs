@@ -164,6 +164,27 @@ impl UnsupportedSemanticFact {
     }
 }
 
+/// Longest source excerpt, in bytes, that a fact keeps as evidence.
+///
+/// Evidence names a construct for a reader; the fact's span locates its full
+/// text. A construct can enclose a whole function, and a copy of all of it in
+/// every row that cites it multiplies the source text many times over.
+const SOURCE_EVIDENCE_MAX_BYTES: usize = 160;
+
+/// `text` trimmed, and cut on a character boundary to at most
+/// [`SOURCE_EVIDENCE_MAX_BYTES`] with `…` marking the cut.
+pub(crate) fn source_evidence_excerpt(text: &str) -> String {
+    let text = text.trim();
+    if text.len() <= SOURCE_EVIDENCE_MAX_BYTES {
+        return text.to_string();
+    }
+    let mut end = SOURCE_EVIDENCE_MAX_BYTES;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", text[..end].trim_end())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum UnsupportedDomain {
     Mir,
@@ -188,4 +209,28 @@ pub enum UnsupportedPrecision {
     Partial,
     Unknown,
     Unsupported,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_evidence_excerpt_keeps_short_text_whole() {
+        assert_eq!(
+            source_evidence_excerpt("  with (scope) {}\n"),
+            "with (scope) {}"
+        );
+    }
+
+    #[test]
+    fn source_evidence_excerpt_cuts_long_text_on_a_char_boundary() {
+        let text = "é".repeat(SOURCE_EVIDENCE_MAX_BYTES);
+        let excerpt = source_evidence_excerpt(&text);
+
+        assert!(excerpt.ends_with('…'));
+        let kept = excerpt.trim_end_matches('…');
+        assert!(kept.len() <= SOURCE_EVIDENCE_MAX_BYTES);
+        assert!(text.starts_with(kept));
+    }
 }

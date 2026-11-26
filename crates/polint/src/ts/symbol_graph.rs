@@ -20,6 +20,7 @@ use crate::internal_core::{
     SymbolId as PolintSymbolId,
 };
 use crate::ts::parse::parse_ts_file;
+use crate::ts::sealed_bindings::{bindings_written_by_block_functions, dynamic_scope};
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
@@ -32,6 +33,7 @@ use oxc_semantic::{
     SymbolFlags, SymbolId as OxcSymbolId,
 };
 use oxc_span::GetSpan;
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Request passed by the composition root to the TypeScript/JavaScript symbol adapter.
@@ -151,13 +153,21 @@ pub fn derive_ts_symbols(
         return output;
     }
 
+    // Each file's semantic index depends only on that file, so the indexes are
+    // built on worker threads; the symbols and references go through the one
+    // builder in path order. An Oxc tree cannot cross threads, so the loop
+    // parses each file again.
+    let indexes = files
+        .par_iter()
+        .map(|file| derive_ts_file_semantic_index(interner, file, requests_references))
+        .collect::<Vec<_>>();
     let mut summaries = Vec::new();
-    for file in files {
+    for (file, index) in files.into_iter().zip(indexes) {
         summaries.push(derive_ts_file_symbols(
-            interner,
             builder,
             &mut output,
             file,
+            index,
             requests_references,
         ));
     }
@@ -204,11 +214,37 @@ fn supported_language_support(
         .collect()
 }
 
-fn derive_ts_file_symbols(
+/// The semantic index of one file, or `None` when the file does not parse.
+fn derive_ts_file_semantic_index(
     interner: &crate::internal_core::StableKeyInterner,
+    file: &SourceFile,
+    requests_references: bool,
+) -> Option<SemanticIndexOutput> {
+    let allocator = Allocator::default();
+    let parsed = parse_ts_file(&allocator, file);
+    if parsed.is_catastrophic() {
+        return None;
+    }
+    let semantic = SemanticBuilder::new()
+        .with_check_syntax_error(true)
+        .build(parsed.program())
+        .semantic;
+    Some(derive_ts_semantic_index(
+        interner,
+        file,
+        file.source.as_ref(),
+        parsed.program(),
+        semantic.scoping(),
+        semantic.nodes(),
+        requests_references,
+    ))
+}
+
+fn derive_ts_file_symbols(
     builder: &mut SymbolGraphBuilder,
     output: &mut LanguageSymbolOutput,
     file: &SourceFile,
+    index: Option<SemanticIndexOutput>,
     requests_references: bool,
 ) -> TsFileSymbolSummary {
     let source = file.source.as_ref();
@@ -239,15 +275,9 @@ fn derive_ts_file_symbols(
     let semantic = semantic_return.semantic;
     let scoping = semantic.scoping();
     let nodes = semantic.nodes();
-    output.semantic.extend(derive_ts_semantic_index(
-        interner,
-        file,
-        source,
-        parsed.program(),
-        scoping,
-        nodes,
-        requests_references,
-    ));
+    if let Some(index) = index {
+        output.semantic.extend(index);
+    }
     let export_names = collect_export_names(parsed.program(), scoping);
     let parameter_symbols = collect_parameter_symbols(nodes);
     let namespace_member_calls = if requests_references {
@@ -413,9 +443,10 @@ fn derive_ts_semantic_index(
         })
         .collect::<Vec<_>>();
     semantic_nodes.sort_by_key(|(start, end, _, kind)| (*start, *end, *kind));
+    let semantic_parents = semantic_scope_parents(nodes);
 
     for (_, _, node_id, kind) in semantic_nodes {
-        let scope_path = scope_path_for_node(file, nodes, node_id);
+        let scope_path = scope_path_for_node(file, nodes, &semantic_parents, node_id);
         let stable_key = ScopeFact::stable_key_for(
             interner,
             file.language,
@@ -428,9 +459,15 @@ fn derive_ts_semantic_index(
         if ids_by_stable_key.contains_key(&stable_key) {
             continue;
         }
-        let parent =
-            nearest_semantic_scope_parent(interner, file, nodes, node_id, &ids_by_stable_key)
-                .or(module_scope_id);
+        let parent = nearest_semantic_scope_parent(
+            interner,
+            file,
+            nodes,
+            &semantic_parents,
+            node_id,
+            &ids_by_stable_key,
+        )
+        .or(module_scope_id);
         let id = builder.add_scope(
             interner,
             ScopeFact {
@@ -479,16 +516,21 @@ fn derive_ts_semantic_index(
 /// Each function declaration or named function expression gets an
 /// [`ValueFunctionKind::Implementation`] or [`ValueFunctionKind::Signature`]
 /// row from its own body, provided its symbol is never written and every
-/// declaration of the symbol is a function, interface or namespace.
+/// declaration of the symbol is a function, interface or namespace. A class
+/// declaration or named class expression gets the same row for the class,
+/// which is the function a `new` of it runs, provided its symbol is never
+/// written and every declaration is the class, an interface or a namespace;
+/// an ambient (`declare`) class gets a signature row. A variable initialized
+/// with a class expression gets a literal row as for a function.
 ///
 /// A `let`, `var` or function binding that a block-level function declaration
 /// overwrites gets no row: see [`bindings_written_by_block_functions`].
 ///
-/// A file that mentions `eval` or has a `with` statement gets no rows at all:
-/// a direct eval can write a binding or declare a `var` that shadows one, and
-/// a `with` body can see an object property instead of the binding, neither
-/// through a reference Oxc sees. Any call through an identifier named `eval`
-/// counts, since a parameter or local of that name may hold the global.
+/// A binding a direct `eval` can reach gets no row, and a file with a `with`
+/// statement gets no rows at all: an eval can write a binding its call can see
+/// or declare a `var` that shadows one, and a `with` body can see an object
+/// property instead of the binding, neither through a reference Oxc sees. See
+/// [`dynamic_scope`].
 fn add_ts_value_function_rows(
     builder: &mut SemanticIndexBuilder,
     file: &SourceFile,
@@ -496,12 +538,8 @@ fn add_ts_value_function_rows(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
 ) {
-    let bindings_are_sealed = !nodes.iter().any(|node| match node.kind() {
-        AstKind::IdentifierReference(identifier) => identifier.name == "eval",
-        AstKind::WithStatement(_) => true,
-        _ => false,
-    });
-    if !bindings_are_sealed {
+    let dynamic = dynamic_scope(program, scoping, nodes);
+    if dynamic.whole_file() {
         return;
     }
     let root_is_module_scope = program.body.iter().any(Statement::is_module_declaration);
@@ -518,6 +556,7 @@ fn add_ts_value_function_rows(
                 let function_span = match &declarator.init {
                     Some(Expression::ArrowFunctionExpression(function)) => function.span,
                     Some(Expression::FunctionExpression(function)) => function.span,
+                    Some(Expression::ClassExpression(class)) => class.span,
                     _ => continue,
                 };
                 let single_value = match declarator.kind {
@@ -553,62 +592,34 @@ fn add_ts_value_function_rows(
                 };
                 (symbol, function.span, kind)
             }
+            AstKind::Class(class) => {
+                let Some(symbol) = class.id.as_ref().and_then(|id| id.symbol_id.get()) else {
+                    continue;
+                };
+                if scoping.symbol_is_mutated(symbol)
+                    || written_by_block_functions.contains(&symbol)
+                    || !only_class_declarations(scoping, nodes, symbol)
+                {
+                    continue;
+                }
+                let kind = if class.declare {
+                    ValueFunctionKind::Signature
+                } else {
+                    ValueFunctionKind::Implementation
+                };
+                (symbol, class.span, kind)
+            }
             _ => continue,
         };
+        if dynamic.reaches(symbol) {
+            continue;
+        }
         builder.add_value_function(ValueFunctionFact {
             binding: span_from_oxc(file, scoping.symbol_span(symbol)),
             function: span_from_oxc(file, function_span),
             kind,
         });
     }
-}
-
-/// Bindings whose value a function declaration in a nested block of non-strict
-/// code decides in a way no Oxc reference shows.
-///
-/// When such a block runs, its function is also assigned to the same-named
-/// binding of the enclosing function scope. Oxc keeps the block's function a
-/// separate symbol when that scope already binds the name, so the outer symbol
-/// is written without a write reference. Otherwise Oxc moves the block's
-/// function into the function scope, which is wrong when a scope between the
-/// two binds the name: the function then stays in its block.
-fn bindings_written_by_block_functions(
-    scoping: &Scoping,
-    nodes: &AstNodes<'_>,
-) -> BTreeSet<OxcSymbolId> {
-    let mut written = BTreeSet::new();
-    for node in nodes.iter() {
-        let AstKind::Function(function) = node.kind() else {
-            continue;
-        };
-        let Some(id) = &function.id else {
-            continue;
-        };
-        let Some(symbol) = id.symbol_id.get() else {
-            continue;
-        };
-        let scope = scoping.symbol_scope_id(symbol);
-        if scoping.scope_flags(scope).is_strict_mode() {
-            continue;
-        }
-        let outer = scoping
-            .scope_ancestors(scope)
-            .find(|ancestor| scoping.scope_flags(*ancestor).is_var())
-            .and_then(|function_scope| scoping.get_binding(function_scope, id.name));
-        if let Some(outer) = outer.filter(|outer| *outer != symbol) {
-            written.insert(outer);
-        }
-        let declared_in = node.scope_id();
-        if function.is_declaration()
-            && scoping
-                .scope_ancestors(declared_in)
-                .take_while(|ancestor| *ancestor != scope)
-                .any(|between| scoping.get_binding(between, id.name).is_some())
-        {
-            written.insert(symbol);
-        }
-    }
-    written
 }
 
 /// Whether every declaration of `symbol` is a function, or a type-side
@@ -623,6 +634,19 @@ fn only_function_declarations(
         matches!(
             nodes.kind(declaration),
             AstKind::Function(_)
+                | AstKind::TSInterfaceDeclaration(_)
+                | AstKind::TSModuleDeclaration(_)
+        )
+    })
+}
+
+/// Whether every declaration of `symbol` is a class, or a type-side interface
+/// or namespace merged with one.
+fn only_class_declarations(scoping: &Scoping, nodes: &AstNodes<'_>, symbol: OxcSymbolId) -> bool {
+    scoping.symbol_declarations(symbol).all(|declaration| {
+        matches!(
+            nodes.kind(declaration),
+            AstKind::Class(_)
                 | AstKind::TSInterfaceDeclaration(_)
                 | AstKind::TSModuleDeclaration(_)
         )
@@ -1641,35 +1665,88 @@ fn semantic_unresolved_reference_key(
     .stable_key()
 }
 
+/// Enclosing scopes a scope path or an owner chain names. A path names the
+/// innermost of them and stands one segment for the rest, so the identities
+/// of a file grow linearly with its nesting depth. Each segment carries its
+/// scope's span, so a shortened path still names one scope.
+const MAX_NAMED_ENCLOSING_SCOPES: usize = 64;
+
+/// The segment that stands for the enclosing scopes a path does not name.
+const OMITTED_ENCLOSING_SCOPES: &str = "...";
+
+/// Orders scope segments given innermost first from the outermost one named,
+/// naming at most [`MAX_NAMED_ENCLOSING_SCOPES`] of them.
+fn bounded_outermost_first(innermost_first: impl Iterator<Item = String>) -> Vec<String> {
+    let mut segments = innermost_first
+        .take(MAX_NAMED_ENCLOSING_SCOPES + 1)
+        .collect::<Vec<_>>();
+    if segments.len() > MAX_NAMED_ENCLOSING_SCOPES {
+        segments.truncate(MAX_NAMED_ENCLOSING_SCOPES);
+        segments.push(OMITTED_ENCLOSING_SCOPES.to_string());
+    }
+    segments.reverse();
+    segments
+}
+
 fn scope_path_for_scope(
     file: &SourceFile,
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     scope_id: oxc_semantic::ScopeId,
 ) -> Vec<String> {
-    let mut ancestors = scoping.scope_ancestors(scope_id).collect::<Vec<_>>();
-    ancestors.reverse();
     let mut path = vec![file.relative_path.clone()];
-    path.extend(ancestors.into_iter().map(|scope| {
-        let kind = nodes.kind(scoping.get_node_id(scope));
-        scope_path_segment(kind)
-    }));
+    path.extend(bounded_outermost_first(
+        scoping
+            .scope_ancestors(scope_id)
+            .map(|scope| scope_path_segment(nodes.kind(scoping.get_node_id(scope)))),
+    ));
     path
+}
+
+/// The nearest enclosing node that opens a semantic scope, for every node,
+/// indexed by node id. A node is created after its parent, so one pass in id
+/// order finds each from its parent's.
+fn semantic_scope_parents(nodes: &AstNodes<'_>) -> Vec<Option<oxc_semantic::NodeId>> {
+    let mut parents: Vec<Option<oxc_semantic::NodeId>> = Vec::with_capacity(nodes.len());
+    for (node_id, _) in nodes.iter_enumerated() {
+        let parent = nodes.parent_id(node_id);
+        let nearest = (parent.index() < node_id.index())
+            .then(|| {
+                if semantic_scope_kind_for_ast(nodes.kind(parent)).is_some() {
+                    Some(parent)
+                } else {
+                    parents.get(parent.index()).copied().flatten()
+                }
+            })
+            .flatten();
+        parents.push(nearest);
+    }
+    parents
+}
+
+/// The enclosing semantic scope nodes of `node_id`, innermost first.
+fn semantic_scope_ancestors<'n>(
+    semantic_parents: &'n [Option<oxc_semantic::NodeId>],
+    node_id: oxc_semantic::NodeId,
+) -> impl Iterator<Item = oxc_semantic::NodeId> + 'n {
+    std::iter::successors(
+        semantic_parents.get(node_id.index()).copied().flatten(),
+        |ancestor| semantic_parents.get(ancestor.index()).copied().flatten(),
+    )
 }
 
 fn scope_path_for_node(
     file: &SourceFile,
     nodes: &AstNodes<'_>,
+    semantic_parents: &[Option<oxc_semantic::NodeId>],
     node_id: oxc_semantic::NodeId,
 ) -> Vec<String> {
-    let mut ancestors = nodes
-        .ancestors_enumerated(node_id)
-        .filter_map(|(_, node)| semantic_scope_kind_for_ast(node.kind()).map(|_| node.kind()))
-        .collect::<Vec<_>>();
-    ancestors.reverse();
     let mut path = vec![file.relative_path.clone()];
-    path.extend(ancestors.into_iter().map(scope_path_segment));
-    path.push(scope_path_segment(nodes.kind(node_id)));
+    path.extend(bounded_outermost_first(
+        std::iter::once(node_id)
+            .chain(semantic_scope_ancestors(semantic_parents, node_id))
+            .map(|scope| scope_path_segment(nodes.kind(scope))),
+    ));
     path
 }
 
@@ -1677,12 +1754,13 @@ fn nearest_semantic_scope_parent(
     interner: &crate::internal_core::StableKeyInterner,
     file: &SourceFile,
     nodes: &AstNodes<'_>,
+    semantic_parents: &[Option<oxc_semantic::NodeId>],
     node_id: oxc_semantic::NodeId,
     ids_by_stable_key: &BTreeMap<StableKeyId, ScopeId>,
 ) -> Option<ScopeId> {
-    nodes.ancestors_enumerated(node_id).find_map(|(_, node)| {
-        let kind = semantic_scope_kind_for_ast(node.kind())?;
-        let scope_path = scope_path_for_node(file, nodes, node.id());
+    semantic_scope_ancestors(semantic_parents, node_id).find_map(|ancestor| {
+        let kind = semantic_scope_kind_for_ast(nodes.kind(ancestor))?;
+        let scope_path = scope_path_for_node(file, nodes, semantic_parents, ancestor);
         let stable_key = ScopeFact::stable_key_for(
             interner,
             file.language,
@@ -2359,25 +2437,20 @@ fn owner_chain(
     nodes: &AstNodes<'_>,
     scope_id: oxc_semantic::ScopeId,
 ) -> Vec<String> {
-    let mut scopes = scoping.scope_ancestors(scope_id).collect::<Vec<_>>();
-    scopes.reverse();
-    scopes
-        .into_iter()
-        .filter_map(|scope| {
-            let node_id = scoping.get_node_id(scope);
-            let kind = nodes.kind(node_id);
-            if matches!(kind, AstKind::Program(_)) {
-                return None;
-            }
-            let span = kind.span();
-            Some(format!(
-                "{}@{}-{}",
-                ast_kind_label(kind),
-                span.start,
-                span.end
-            ))
-        })
-        .collect()
+    bounded_outermost_first(scoping.scope_ancestors(scope_id).filter_map(|scope| {
+        let node_id = scoping.get_node_id(scope);
+        let kind = nodes.kind(node_id);
+        if matches!(kind, AstKind::Program(_)) {
+            return None;
+        }
+        let span = kind.span();
+        Some(format!(
+            "{}@{}-{}",
+            ast_kind_label(kind),
+            span.start,
+            span.end
+        ))
+    }))
 }
 
 fn ast_kind_label(kind: AstKind<'_>) -> &'static str {

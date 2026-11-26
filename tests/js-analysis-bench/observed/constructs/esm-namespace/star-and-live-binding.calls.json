@@ -1,0 +1,61 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "barrel.mjs",
+    "impl.mjs",
+    "inner.mjs",
+    "main.mjs"
+  ],
+  "instrumented_functions": 4,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "impl.mjs@177..232",
+      "name": "swap"
+    },
+    {
+      "function": "impl.mjs@25..78",
+      "name": "firstImpl"
+    },
+    {
+      "function": "impl.mjs@80..135",
+      "name": "secondImpl"
+    },
+    {
+      "function": "inner.mjs@24..72",
+      "name": "deep"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.mjs@119..128",
+      "syntax": "identifier",
+      "callee": "impl.mjs@80..135",
+      "callee_name": "secondImpl"
+    },
+    {
+      "kind": "call",
+      "site": "main.mjs@151..157",
+      "syntax": "identifier",
+      "callee": "inner.mjs@24..72",
+      "callee_name": "deep"
+    },
+    {
+      "kind": "call",
+      "site": "main.mjs@65..74",
+      "syntax": "identifier",
+      "callee": "impl.mjs@25..78",
+      "callee_name": "firstImpl"
+    },
+    {
+      "kind": "call",
+      "site": "main.mjs@96..102",
+      "syntax": "identifier",
+      "callee": "impl.mjs@177..232",
+      "callee_name": "swap"
+    }
+  ]
+}

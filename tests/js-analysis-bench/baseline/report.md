@@ -1,12 +1,13 @@
 # JS/TS analysis benchmark
 
-polint 0.5.2. Written by `python3 tests/js-analysis-bench/bench.py report`;
+polint 0.5.4. Written by `python3 tests/js-analysis-bench/bench.py report`;
 see `tests/js-analysis-bench/README.md` for the measures, the decisions and their limits.
 There is no overall accuracy number on purpose: read the rows.
 
 - **base** is what a rule gets from `CallGraph` (capabilities `syntax, call_graph, symbols, references`).
-- **refined** is the refined call-edge layer (adds `calls, control_flow, dataflow`). It has no public view;
-  it is read through the internal benchmark dump only.
+- **refined** is the raw refined call-edge rows, every status included (adds `calls, control_flow,
+  dataflow`). `CallGraph` serves the rows of this layer that claim a target, so the two columns differ only
+  where a row's status withholds or weakens its claim.
 - Precision is measured against hand labels only. **Observed calls give recall, never precision**:
   a run sees the paths it exercised, so an edge polint reports that the run did not take is not wrong.
 
@@ -17,24 +18,50 @@ compare their rows with the other cases to see whether a change generalises.
 
 | construct | cases (held out) | call recall base | call recall refined | callback recall base | callback recall refined | precision base | precision refined | hidden paths base: reported / false-complete / silent | hidden paths refined | false-complete call lines base / refined | stops at import binding (base) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| callback | 2 (0) | 3/7 (43%) | 5/7 (71%) | 0/3 (0%) | 0/3 (0%) | 3/3 (100%) | 5/5 (100%) | – | – | 0 / 0 | 0 |
-| cjs-exports-property | 2 (0) | 0/4 (0%) | 3/4 (75%) | – | – | – | 3/3 (100%) | – | – | 0 / 0 | 0 |
-| cjs-module-exports | 2 (1) | 1/6 (17%) | 5/6 (83%) | – | – | 1/1 (100%) | 5/5 (100%) | – | – | 0 / 0 | 0 |
-| class-method | 2 (1) | 3/9 (33%) | 6/9 (67%) | – | – | 3/3 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
-| closure | 2 (0) | 3/7 (43%) | 6/7 (86%) | – | – | 3/3 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
+| accessor | 2 (1) | 3/6 (50%) | 3/6 (50%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0 / 0 | 0 |
+| argument-flow | 2 (1) | 14/14 (100%) | 14/14 (100%) | 1/1 (100%) | 1/1 (100%) | 15/15 (100%) | 15/15 (100%) | – | – | 0 / 0 | 0 |
+| await | 2 (1) | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
+| block-function | 2 (1) | 9/9 (100%) | 9/9 (100%) | – | – | 9/9 (100%) | 9/9 (100%) | – | – | 0 / 0 | 0 |
+| call-apply-bind | 2 (1) | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 0 / 0 | 0 |
+| callback | 3 (1) | 9/9 (100%) | 9/9 (100%) | 4/4 (100%) | 4/4 (100%) | 12/12 (100%) | 12/12 (100%) | – | – | 0 / 0 | 0 |
+| cjs-exports-property | 3 (1) | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
+| cjs-interop | 2 (1) | 3/4 (75%) | 3/4 (75%) | – | – | 3/4 (75%) | 3/4 (75%) | – | – | 0 / 0 | 0 |
+| cjs-module-exports | 2 (1) | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
+| class-features | 2 (1) | 12/13 (92%) | 12/13 (92%) | – | – | 12/14 (86%) | 12/14 (86%) | – | – | 0 / 0 | 0 |
+| class-method | 2 (1) | 9/9 (100%) | 9/9 (100%) | – | – | 9/9 (100%) | 9/9 (100%) | – | – | 0 / 0 | 0 |
+| closure | 3 (1) | 9/11 (82%) | 9/11 (82%) | – | – | 9/9 (100%) | 9/9 (100%) | – | – | 0 / 0 | 0 |
+| computed-key-foldable | 2 (1) | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0 / 0 | 0 |
+| computed-key-unknown | 2 (1) | 4/6 (67%) | 4/6 (67%) | – | – | 4/4 (100%) | 4/4 (100%) | 1 / 0 / 0 | 1 / 0 / 0 | 0 / 0 | 0 |
+| constant-key-field | 2 (1) | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
+| destructuring | 2 (1) | 7/7 (100%) | 7/7 (100%) | – | – | 7/7 (100%) | 7/7 (100%) | – | – | 0 / 0 | 0 |
 | dynamic-import | 2 (0) | 1/2 (50%) | 1/2 (50%) | – | – | 1/1 (100%) | 1/1 (100%) | 1 / 0 / 0 | 1 / 0 / 0 | 0 / 0 | 0 |
 | dynamic-property | 2 (1) | 0/2 (0%) | 0/2 (0%) | – | – | – | – | 1 / 0 / 0 | 1 / 0 / 0 | 0 / 0 | 0 |
+| esm-namespace | 2 (1) | 7/7 (100%) | 7/7 (100%) | – | – | 7/9 (78%) | 7/9 (78%) | – | – | 0 / 0 | 0 |
 | esm-reexport | 2 (1) | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0 / 0 | 0 |
 | eval | 2 (1) | – | – | – | – | – | – | 2 / 0 / 0 | 2 / 0 / 0 | 0 / 0 | 0 |
-| module-initializer | 6 (2) | 13/23 (57%) | 17/23 (74%) | – | – | 13/13 (100%) | 17/17 (100%) | – | – | 0 / 0 | 0 |
-| object-of-functions | 2 (0) | 1/5 (20%) | 5/5 (100%) | – | – | 1/1 (100%) | 5/5 (100%) | – | – | 0 / 0 | 0 |
-| promise | 2 (1) | 4/4 (100%) | 4/4 (100%) | 0/1 (0%) | 0/1 (0%) | 4/4 (100%) | 4/4 (100%) | – | – | 0 / 0 | 0 |
-| prototype | 2 (1) | 2/7 (29%) | 4/7 (57%) | – | – | 2/2 (100%) | 4/4 (100%) | – | – | 0 / 0 | 0 |
-| returned-function | 4 (2) | 8/23 (35%) | 14/23 (61%) | – | – | 8/8 (100%) | 14/14 (100%) | – | – | 0 / 0 | 0 |
+| exported-initializer | 2 (1) | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
+| function-object | 2 (1) | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 0 / 0 | 0 |
+| iteration | 2 (1) | 8/8 (100%) | 8/8 (100%) | – | – | 8/9 (89%) | 8/9 (89%) | – | – | 0 / 0 | 0 |
+| literal-spread | 2 (1) | 5/7 (71%) | 5/7 (71%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 0 / 0 | 0 |
+| logical-join | 2 (1) | 21/21 (100%) | 21/21 (100%) | – | – | 21/21 (100%) | 21/21 (100%) | – | – | 0 / 0 | 0 |
+| module-initializer | 6 (2) | 23/23 (100%) | 23/23 (100%) | – | – | 23/23 (100%) | 23/23 (100%) | – | – | 0 / 0 | 0 |
+| new-and-prototype | 2 (1) | 8/8 (100%) | 8/8 (100%) | – | – | 8/8 (100%) | 8/8 (100%) | – | – | 0 / 0 | 0 |
+| object-of-functions | 3 (1) | 8/8 (100%) | 8/8 (100%) | – | – | 8/8 (100%) | 8/8 (100%) | – | – | 0 / 0 | 0 |
+| optional-chaining | 2 (1) | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 0 / 0 | 0 |
+| package-vendor | 2 (1) | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0 / 0 | 0 |
+| promise | 2 (1) | 4/4 (100%) | 4/4 (100%) | 1/1 (100%) | 1/1 (100%) | 5/6 (83%) | 5/6 (83%) | – | – | 0 / 0 | 0 |
+| prototype | 3 (1) | 11/11 (100%) | 11/11 (100%) | – | – | 11/11 (100%) | 11/11 (100%) | – | – | 0 / 0 | 0 |
+| prototype-chain | 3 (2) | 11/11 (100%) | 11/11 (100%) | – | – | 11/11 (100%) | 11/11 (100%) | – | – | 0 / 0 | 0 |
+| returned-function | 4 (2) | 23/23 (100%) | 23/23 (100%) | – | – | 23/23 (100%) | 23/23 (100%) | – | – | 0 / 0 | 0 |
+| same-name-member | 2 (1) | 4/4 (100%) | 4/4 (100%) | – | – | 4/6 (67%) | 4/6 (67%) | – | – | 0 / 0 | 0 |
+| sequence-callee | 2 (1) | 8/8 (100%) | 8/8 (100%) | – | – | 8/8 (100%) | 8/8 (100%) | – | – | 0 / 0 | 0 |
+| this-forms | 2 (1) | 11/11 (100%) | 11/11 (100%) | – | – | 11/11 (100%) | 11/11 (100%) | – | – | 0 / 0 | 0 |
+| typed-join | 10 (5) | 32/32 (100%) | 32/32 (100%) | 1/2 (50%) | 1/2 (50%) | 33/37 (89%) | 33/37 (89%) | – | – | 0 / 0 | 0 |
+| unary-iife | 2 (1) | 13/13 (100%) | 13/13 (100%) | 1/1 (100%) | 1/1 (100%) | 13/13 (100%) | 13/13 (100%) | – | – | 0 / 0 | 0 |
 
-**False-complete count** (a labelled hidden path where polint gives a resolved answer with no unresolved marker): base 0, refined 0, over 4 labelled hidden paths.
+**False-complete count** (a labelled hidden path where polint gives a resolved answer with no unresolved marker): base 0, refined 0, over 5 labelled hidden paths.
 
-**False-complete call lines** (a labelled call line where polint gives resolved targets that miss a labelled callee, with no unresolved marker on the line): base 0, refined 0, over 83 labelled call lines.
+**False-complete call lines** (a labelled call line where polint gives resolved targets that miss a labelled callee, with no unresolved marker on the line): base 0, refined 0, over 297 labelled call lines.
 
 | case | plan | line | resolved to | missed |
 |---|---|---|---|---|
@@ -44,55 +71,148 @@ compare their rows with the other cases to see whether a change generalises.
 
 | case | held out | calls base | calls refined | callbacks base | callbacks refined | precision base | precision refined | hidden paths base | hidden paths refined | unresolved call share base | labels = observed |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| callback/builtin-invoked | no | 1/1 (100%) | 1/1 (100%) | 0/3 (0%) | 0/3 (0%) | 1/1 (100%) | 1/1 (100%) | – | – | 75% | yes |
-| callback/higher-order-parameter | no | 2/6 (33%) | 4/6 (67%) | – | – | 2/2 (100%) | 4/4 (100%) | – | – | 71% | yes |
-| cjs-exports-property/function-expressions | no | 0/2 (0%) | 1/2 (50%) | – | – | – | 1/1 (100%) | – | – | 100% | yes |
-| cjs-exports-property/renamed-destructuring | no | 0/2 (0%) | 2/2 (100%) | – | – | – | 2/2 (100%) | – | – | 100% | yes |
-| cjs-module-exports/function-with-property | yes | 0/3 (0%) | 2/3 (67%) | – | – | – | 2/2 (100%) | – | – | 100% | yes |
-| cjs-module-exports/object-literal | no | 1/3 (33%) | 3/3 (100%) | – | – | 1/1 (100%) | 3/3 (100%) | – | – | 80% | yes |
-| class-method/instance-and-static | no | 2/5 (40%) | 5/5 (100%) | – | – | 2/2 (100%) | 5/5 (100%) | – | – | 67% | yes |
-| class-method/subclass-override | yes | 1/4 (25%) | 1/4 (25%) | – | – | 1/1 (100%) | 1/1 (100%) | – | – | 80% | yes |
-| closure/captured-callback | no | 1/4 (25%) | 3/4 (75%) | – | – | 1/1 (100%) | 3/3 (100%) | – | – | 75% | yes |
-| closure/factory-returned-function | no | 2/3 (67%) | 3/3 (100%) | – | – | 2/2 (100%) | 3/3 (100%) | – | – | 25% | yes |
+| accessor/class-accessor-pair | yes | 2/4 (50%) | 2/4 (50%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 67% | yes |
+| accessor/getter-returns-function | no | 1/2 (50%) | 1/2 (50%) | – | – | 1/1 (100%) | 1/1 (100%) | – | – | 100% | yes |
+| argument-flow/parameter-and-return | no | 8/8 (100%) | 8/8 (100%) | – | – | 8/8 (100%) | 8/8 (100%) | – | – | 0% | yes |
+| argument-flow/rest-and-spread | yes | 6/6 (100%) | 6/6 (100%) | 1/1 (100%) | 1/1 (100%) | 7/7 (100%) | 7/7 (100%) | – | – | 33% | yes |
+| await/awaited-function | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 33% | yes |
+| await/promise-resolve-value | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 25% | yes |
+| block-function/catch-and-finally | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 17% | yes |
+| block-function/try-and-if | no | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 25% | yes |
+| call-apply-bind/bind | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 100% | yes |
+| call-apply-bind/call-and-apply | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 100% | yes |
+| callback/builtin-invoked | no | 1/1 (100%) | 1/1 (100%) | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | 3/3 (100%) | – | – | 75% | yes |
+| callback/higher-order-parameter | no | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0% | yes |
+| callback/nested-higher-order | yes | 2/2 (100%) | 2/2 (100%) | 1/1 (100%) | 1/1 (100%) | 3/3 (100%) | 3/3 (100%) | – | – | 25% | yes |
+| cjs-exports-property/exports-of-factory-result | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 50% | yes |
+| cjs-exports-property/function-expressions | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 50% | yes |
+| cjs-exports-property/renamed-destructuring | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 33% | yes |
+| cjs-interop/compiled-default | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 50% | yes |
+| cjs-interop/define-property-export | yes | 1/2 (50%) | 1/2 (50%) | – | – | 1/2 (50%) | 1/2 (50%) | – | – | 100% | yes |
+| cjs-module-exports/function-with-property | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 25% | yes |
+| cjs-module-exports/object-literal | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 40% | yes |
+| class-features/class-expression | yes | 3/4 (75%) | 3/4 (75%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| class-features/fields-statics-super | no | 9/9 (100%) | 9/9 (100%) | – | – | 9/11 (82%) | 9/11 (82%) | – | – | 0% | yes |
+| class-method/instance-and-static | no | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 17% | yes |
+| class-method/subclass-override | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 60% | yes |
+| closure/captured-callback | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| closure/captured-parameter | yes | 2/4 (50%) | 2/4 (50%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 25% | yes |
+| closure/factory-returned-function | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| computed-key-foldable/const-key-literal | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 50% | yes |
+| computed-key-foldable/constant-concatenation | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 0% | yes |
+| computed-key-unknown/escaped-object | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | reported-unknown | reported-unknown | 33% | yes |
+| computed-key-unknown/known-literal-table | no | 2/4 (50%) | 2/4 (50%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 60% | yes |
+| constant-key-field/private-field | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 0% | yes |
+| constant-key-field/string-and-numeric-keys | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| destructuring/array-and-nested | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 67% | yes |
+| destructuring/object-defaults-and-rest | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 75% | yes |
 | dynamic-import/computed-specifier | no | – | – | – | – | – | – | reported-unknown | reported-unknown | 100% | yes |
 | dynamic-import/literal-specifier | no | 1/2 (50%) | 1/2 (50%) | – | – | 1/1 (100%) | 1/1 (100%) | – | – | 50% | yes |
 | dynamic-property/computed-key-known-set | no | 0/2 (0%) | 0/2 (0%) | – | – | – | – | – | – | 100% | yes |
 | dynamic-property/key-from-input | yes | – | – | – | – | – | – | reported-unknown | reported-unknown | 100% | yes |
+| esm-namespace/namespace-object | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 40% | yes |
+| esm-namespace/star-and-live-binding | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/6 (67%) | 4/6 (67%) | – | – | 0% | yes |
 | esm-reexport/named-barrel | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 50% | yes |
 | esm-reexport/star-and-alias | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 0% | yes |
 | eval/direct-eval | no | – | – | – | – | – | – | reported-unknown | reported-unknown | 100% | yes |
 | eval/function-constructor | yes | – | – | – | – | – | – | reported-unknown | reported-unknown | 100% | yes |
-| module-initializer/arrow-in-initializer | no | 2/4 (50%) | 3/4 (75%) | – | – | 2/2 (100%) | 3/3 (100%) | – | – | 60% | yes |
-| module-initializer/chained-call | yes | 3/5 (60%) | 3/5 (60%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 50% | yes |
-| module-initializer/class-expression | yes | 1/4 (25%) | 2/4 (50%) | – | – | 1/1 (100%) | 2/2 (100%) | – | – | 80% | yes |
+| exported-initializer/cjs-exports | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| exported-initializer/esm-declarators | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| function-object/factory-made-constructor | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 40% | yes |
+| function-object/own-properties | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 0% | yes |
+| iteration/for-of-array | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 67% | yes |
+| iteration/generator | yes | 5/5 (100%) | 5/5 (100%) | – | – | 5/6 (83%) | 5/6 (83%) | – | – | 25% | yes |
+| literal-spread/object-spread | no | 3/4 (75%) | 3/4 (75%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 100% | yes |
+| literal-spread/override-after-spread | yes | 2/3 (67%) | 2/3 (67%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 100% | yes |
+| logical-join/conditional-callee | yes | 10/10 (100%) | 10/10 (100%) | – | – | 10/10 (100%) | 10/10 (100%) | – | – | 0% | yes |
+| logical-join/default-operand | no | 11/11 (100%) | 11/11 (100%) | – | – | 11/11 (100%) | 11/11 (100%) | – | – | 0% | yes |
+| module-initializer/arrow-in-initializer | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 20% | yes |
+| module-initializer/chained-call | yes | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 50% | yes |
+| module-initializer/class-expression | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 60% | yes |
 | module-initializer/exported-call | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 0% | yes |
-| module-initializer/local-initializer | no | 3/4 (75%) | 4/4 (100%) | – | – | 3/3 (100%) | 4/4 (100%) | – | – | 25% | yes |
-| module-initializer/object-literal-methods | no | 2/4 (50%) | 3/4 (75%) | – | – | 2/2 (100%) | 3/3 (100%) | – | – | 50% | yes |
-| object-of-functions/literal-methods | no | 0/2 (0%) | 2/2 (100%) | – | – | – | 2/2 (100%) | – | – | 100% | yes |
-| object-of-functions/registry-built-later | no | 1/3 (33%) | 3/3 (100%) | – | – | 1/1 (100%) | 3/3 (100%) | – | – | 67% | yes |
+| module-initializer/local-initializer | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| module-initializer/object-literal-methods | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| new-and-prototype/constructor-function | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| new-and-prototype/return-override | yes | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 20% | yes |
+| object-of-functions/literal-methods | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 0% | yes |
+| object-of-functions/registry-built-later | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| object-of-functions/registry-passed-around | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| optional-chaining/optional-call | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/2 (100%) | 2/2 (100%) | – | – | 0% | yes |
+| optional-chaining/optional-member-chain | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 33% | yes |
+| package-vendor/cjs-require | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 50% | yes |
+| package-vendor/esm-import | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 25% | yes |
 | promise/async-await | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
-| promise/then-chain | no | 1/1 (100%) | 1/1 (100%) | 0/1 (0%) | 0/1 (0%) | 1/1 (100%) | 1/1 (100%) | – | – | 60% | no |
-| prototype/constructor-function | no | 1/3 (33%) | 3/3 (100%) | – | – | 1/1 (100%) | 3/3 (100%) | – | – | 67% | yes |
-| prototype/inherited-method | yes | 1/4 (25%) | 1/4 (25%) | – | – | 1/1 (100%) | 1/1 (100%) | – | – | 60% | yes |
-| returned-function/branch-returns | no | 1/4 (25%) | 4/4 (100%) | – | – | 1/1 (100%) | 4/4 (100%) | – | – | 50% | yes |
-| returned-function/conditional-default | yes | 3/9 (33%) | 3/9 (33%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 50% | yes |
-| returned-function/stored-in-property | yes | 1/4 (25%) | 1/4 (25%) | – | – | 1/1 (100%) | 1/1 (100%) | – | – | 50% | yes |
-| returned-function/two-levels | no | 3/6 (50%) | 6/6 (100%) | – | – | 3/3 (100%) | 6/6 (100%) | – | – | 25% | yes |
+| promise/then-chain | no | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 1/1 (100%) | 2/3 (67%) | 2/3 (67%) | – | – | 60% | no |
+| prototype-chain/escaped-subclass-instance | yes | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 60% | yes |
+| prototype-chain/object-create | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| prototype-chain/set-prototype-of | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 25% | yes |
+| prototype/constructor-function | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| prototype/escaped-instance | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 50% | yes |
+| prototype/inherited-method | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 60% | yes |
+| returned-function/branch-returns | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| returned-function/conditional-default | yes | 9/9 (100%) | 9/9 (100%) | – | – | 9/9 (100%) | 9/9 (100%) | – | – | 0% | yes |
+| returned-function/stored-in-property | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| returned-function/two-levels | no | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0% | yes |
+| same-name-member/cjs-static-method | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/3 (67%) | 2/3 (67%) | – | – | 33% | yes |
+| same-name-member/wrapper-of-static-method | no | 2/2 (100%) | 2/2 (100%) | – | – | 2/3 (67%) | 2/3 (67%) | – | – | 0% | yes |
+| sequence-callee/compiled-interop | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 33% | yes |
+| sequence-callee/local-sequence | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| this-forms/literal-method-this | no | 5/5 (100%) | 5/5 (100%) | – | – | 5/5 (100%) | 5/5 (100%) | – | – | 80% | yes |
+| this-forms/union-receiver | yes | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 0% | yes |
+| typed-join/closure-field-assigned | yes | 4/4 (100%) | 4/4 (100%) | – | – | 4/5 (80%) | 4/5 (80%) | – | – | 75% | yes |
+| typed-join/closure-field-typed | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/4 (75%) | 3/4 (75%) | – | – | 0% | yes |
+| typed-join/external-base-emit | no | 2/2 (100%) | 2/2 (100%) | 1/1 (100%) | 1/1 (100%) | 3/3 (100%) | 3/3 (100%) | – | – | 67% | yes |
+| typed-join/external-base-super-emit | yes | 2/2 (100%) | 2/2 (100%) | 0/1 (0%) | 0/1 (0%) | 2/2 (100%) | 2/2 (100%) | – | – | 67% | yes |
+| typed-join/factory-constructor-function | yes | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| typed-join/factory-mixin-class | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/3 (100%) | 3/3 (100%) | – | – | 0% | yes |
+| typed-join/reassigned-call-initializer | no | 3/3 (100%) | 3/3 (100%) | – | – | 3/4 (75%) | 3/4 (75%) | – | – | 25% | yes |
+| typed-join/reassigned-function-initializer | yes | 2/2 (100%) | 2/2 (100%) | – | – | 2/3 (67%) | 2/3 (67%) | – | – | 0% | yes |
+| typed-join/union-parameter-jsdoc | yes | 6/6 (100%) | 6/6 (100%) | – | – | 6/6 (100%) | 6/6 (100%) | – | – | 20% | yes |
+| typed-join/union-parameter-typed | no | 4/4 (100%) | 4/4 (100%) | – | – | 4/4 (100%) | 4/4 (100%) | – | – | 0% | yes |
+| unary-iife/umd-prologue | no | 5/5 (100%) | 5/5 (100%) | 1/1 (100%) | 1/1 (100%) | 5/5 (100%) | 5/5 (100%) | – | – | 58% | yes |
+| unary-iife/unary-operators | yes | 8/8 (100%) | 8/8 (100%) | – | – | 8/8 (100%) | 8/8 (100%) | – | – | 0% | no |
 
 ## Packages (observed calls: recall only)
 
 Recall is over observed edges at call expressions (`call` and `callback`); `implicit` calls (getters,
 coercions, iterator and thenable protocol) have no call expression and are listed by kind only.
 
-| package | format | files analysed / selected | source KB | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| axios 1.21.1 | ESM source, Node and browser adapters | 72 / 72 | 282 | 675 | 270/675 (40%) | 270/675 (40%) | 1 | 20 | 64% | 74% / 74% | 9% |
-| zod 4.6.7 | TypeScript ESM source | 332 / 332 | 3088 | 1308 | 719/1308 (55%) | 719/1308 (55%) | 0 | 9 | 65% | 89% / 89% | 7% |
-| commander 14.0.3 | CommonJS only | 7 / 7 | 127 | 318 | 21/318 (7%) | 119/318 (37%) | 0 | 1 | 92% | 95% / 77% | 10% |
-| async 3.2.6 | CommonJS transpiled from ESM | 129 / 129 | 321 | 637 | 324/637 (51%) | 328/637 (51%) | 0 | 1 | 63% | 73% / 72% | 27% |
-| chalk 6.0.1 | ESM only, with subpath imports | 2 / 5 | 10 | 72 | 17/72 (24%) | 17/72 (24%) | 0 | 47 | 52% | 70% / 70% | 9% |
-| dayjs 1.11.23 | minified UMD | 1 / 1 | 7 | 117 | 0/117 (0%) | 0/117 (0%) | 0 | 117 | 100% | 100% / 100% | 7% |
-| underscore 1.13.8 | bundled UMD (Rollup) | 1 / 1 | 69 | 262 | 157/262 (60%) | 158/262 (60%) | 0 | 0 | 55% | 58% / 58% | 6% |
+Coverage is the share of the analysed files' functions (syntax census, classes and static blocks left out)
+that the recording entered.
+
+| package | format | files analysed / selected | source KB | coverage | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| axios 1.21.1 | ESM source, Node and browser adapters | 72 / 72 | 282 | 300/534 (56%) | 675 | 604/675 (89%) | 604/675 (89%) | 0 | 0 | 63% | 47% / 47% | 9% |
+| zod 4.6.7 | TypeScript ESM source | 125 / 125 | 1354 | 566/2469 (23%) (flagged) | 1308 | 1181/1308 (90%) | 1181/1308 (90%) | 0 | 0 | 68% | 34% / 34% | 5% |
+| commander 14.0.3 | CommonJS only | 7 / 7 | 127 | 218/296 (74%) | 318 | 183/318 (58%) | 183/318 (58%) | 0 | 0 | 89% | 66% / 66% | 10% |
+| async 3.2.6 | CommonJS transpiled from ESM | 129 / 129 | 321 | 308/504 (61%) | 637 | 631/637 (99%) | 631/637 (99%) | 0 | 0 | 62% | 40% / 40% | 27% |
+| chalk 6.0.1 | ESM only, with subpath imports | 5 / 5 | 22 | 41/53 (77%) | 72 | 56/72 (78%) | 56/72 (78%) | 0 | 0 | 44% | 55% / 55% | 12% |
+| dayjs 1.11.23 | minified UMD | 1 / 1 | 7 | 55/57 (96%) | 112 | 88/112 (79%) | 88/112 (79%) | 0 | 0 | 72% | 48% / 48% | 7% |
+| underscore 1.13.8 | bundled UMD (Rollup) | 1 / 1 | 69 | 159/186 (85%) | 260 | 250/260 (96%) | 250/260 (96%) | 0 | 0 | 38% | 29% / 29% | 6% |
+
+## Recall targets
+
+The iteration's recall targets (`research/package-graphs/ITERATION-1-CLASSICAL.md`) over the pooled tune
+set. They are reported, not enforced: a target not met does not fail the run.
+
+| measure | plan | tier | recall | target | met |
+|---|---|---|---|---|---|
+| recall, no types | refined | exact + conservative | 67.9% | 80% | no |
+| recall, no types, floor | refined | exact + conservative | 67.9% | 75% | no |
+| recall, exact tier alone, no types | refined | exact | 47.5% | 60% | no |
+| recall with types | typed | exact + conservative | 75.6% | 85% | no |
+
+Per package, refined, exact + conservative, target 65%:
+
+| package | recall | met |
+|---|---|---|
+| axios | 84.3% | yes |
+| zod | 58.3% | no |
+| commander | 26.7% | no |
+| async | 76.1% | yes |
+| chalk | 77.8% | yes |
+| dayjs | 78.6% | yes |
+| underscore | 96.2% | yes |
 
 ### Claimed targets the run never called
 
@@ -104,32 +224,21 @@ by its end byte can also inflate both counts.
 
 | package | base: single / multi | refined: single / multi | typed: single / multi |
 |---|---|---|---|
-| axios | 0 / 0 | 0 / 0 | 2 / 2 |
-| zod | 0 / 0 | 0 / 0 | 1 / 0 |
-| commander | 0 / 0 | 0 / 0 | 5 / 0 |
-| async | 0 / 0 | 0 / 0 | 0 / 0 |
+| axios | 1 / 30 | 1 / 30 | 1 / 30 |
+| zod | 0 / 40 | 0 / 40 | 0 / 40 |
+| commander | 0 / 0 | 0 / 0 | 1 / 0 |
+| async | 0 / 764 | 0 / 764 | 0 / 764 |
 | chalk | 0 / 0 | 0 / 0 | 0 / 0 |
 | dayjs | 0 / 0 | 0 / 0 | 0 / 0 |
-| underscore | 0 / 0 | 0 / 0 | 7 / 0 |
-| **total** | **0 / 0** | **0 / 0** | **15 / 2** |
+| underscore | 0 / 249 | 0 / 249 | 0 / 249 |
+| **total** | **1 / 1083** | **1 / 1083** | **2 / 1083** |
 
 | package | plan | site | site text | single-target answer | the run called |
 |---|---|---|---|---|---|
-| axios | typed | lib/helpers/AxiosTransformStream.js:86 | `this.emit('progress', internals.bytesSeen)` | lib/helpers/AxiosTransformStream.js:8 AxiosTransformStream | lib/helpers/progressEventReducer.js:41 <polint:anonymous:1209:1307> |
-| axios | typed | lib/helpers/AxiosTransformStream.js:88 | `this.push(_chunk)` | lib/helpers/AxiosTransformStream.js:8 AxiosTransformStream | lib/adapters/http.js:1382 <polint:anonymous:47809:48564> |
-| zod | typed | src/v4/classic/schemas.ts:2402 | `new ZodDefault({ type: "default", innerType: innerType as any as core.$ZodType, get defau…` | src/v4/core/util.ts:558 shallowClone | src/v4/core/core.ts:118 _ |
-| commander | typed | lib/command.js:535 | `this._exitCallback(new CommanderError(exitCode, code, message))` | lib/command.js:13 Command | lib/command.js:512 <polint:anonymous:17297:17494> |
+| axios | base | lib/core/mergeConfig.js:220 | `merge(a, b, prop, config1, config2)` | lib/core/mergeConfig.js:79 mergeDeepProperties | lib/core/mergeConfig.js:130 mergeDirectKeys |
+| axios | refined | lib/core/mergeConfig.js:220 | `merge(a, b, prop, config1, config2)` | lib/core/mergeConfig.js:79 mergeDeepProperties | lib/core/mergeConfig.js:130 mergeDirectKeys |
+| axios | typed | lib/core/mergeConfig.js:220 | `merge(a, b, prop, config1, config2)` | lib/core/mergeConfig.js:79 mergeDeepProperties | lib/core/mergeConfig.js:130 mergeDirectKeys |
 | commander | typed | lib/command.js:601 | `target.parseArg(value, previous)` | lib/argument.js:100 <polint:anonymous:2195:2491> | lib/option.js:183 <polint:anonymous:4994:5290> |
-| commander | typed | lib/command.js:1787 | `this.emit('option:${activeVariadicOption.name()}', arg)` | lib/command.js:13 Command | lib/command.js:720 <polint:anonymous:23441:23614> |
-| commander | typed | lib/command.js:1799 | `this.emit('option:${option.name()}', value)` | lib/command.js:13 Command | lib/command.js:720 <polint:anonymous:23441:23614> |
-| commander | typed | lib/command.js:1812 | `this.emit('option:${option.name()}')` | lib/command.js:13 Command | lib/command.js:720 <polint:anonymous:23441:23614>, lib/command.js:2204 <polint:anonymous:70854:70968> |
-| underscore | typed | underscore-umd.js:589 | `isFunction$1(obj[key])` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
-| underscore | typed | underscore-umd.js:759 | `isFunction$1(value)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
-| underscore | typed | underscore-umd.js:982 | `isFunction$1(prop)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
-| underscore | typed | underscore-umd.js:1036 | `isFunction$1(func)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
-| underscore | typed | underscore-umd.js:1457 | `isFunction$1(path)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
-| underscore | typed | underscore-umd.js:1653 | `isFunction$1(iteratee)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
-| underscore | typed | underscore-umd.js:1672 | `isFunction$1(iteratee)` | underscore-umd.js:116 <polint:anonymous:4470:4532> | underscore-umd.js:141 <polint:anonymous:5181:5250> |
 
 ### What types add (refined vs typed, TypeScript 5.9.3)
 
@@ -139,13 +248,39 @@ Dump time and peak RSS are one fact dump each, sidecar included.
 
 | package | recall refined | recall typed | false-complete refined / typed | type callsite rows | dump s refined / typed | dump peak MB refined / typed |
 |---|---|---|---|---|---|---|
-| axios | 270/675 (40%) | 511/675 (76%) | 0 / 0 | 2098 | 2.1 / 3.2 | 288.4 / 311.8 |
-| zod | 719/1308 (55%) | 764/1308 (58%) | 0 / 0 | 49041 | 48.8 / 58.7 | 3837.5 / 4362.2 |
-| commander | 119/318 (37%) | 248/318 (78%) | 0 / 0 | 814 | 1.7 / 2.4 | 153.8 / 235.1 |
-| async | 328/637 (51%) | 338/637 (53%) | 0 / 0 | 1605 | 1.9 / 2.7 | 296.4 / 298.5 |
-| chalk | 17/72 (24%) | 17/72 (24%) | 0 / 0 | 60 | 0.1 / 0.6 | 41.4 / 211.5 |
-| dayjs | 0/117 (0%) | 0/117 (0%) | 0 / 0 | 181 | 0.1 / 0.6 | 35.2 / 217.8 |
-| underscore | 158/262 (60%) | 202/262 (77%) | 0 / 0 | 455 | 0.7 / 1.3 | 126.0 / 225.3 |
+| axios | 604/675 (89%) | 606/675 (90%) | 0 / 0 | 2098 | 2.0 / 2.7 | 450.0 / 469.3 |
+| zod | 1181/1308 (90%) | 1189/1308 (91%) | 0 / 0 | 6125 | 8.5 / 10.2 | 1590.6 / 1587.6 |
+| commander | 183/318 (58%) | 306/318 (96%) | 0 / 0 | 814 | 1.5 / 2.2 | 231.1 / 243.8 |
+| async | 631/637 (99%) | 631/637 (99%) | 0 / 0 | 1605 | 8.0 / 9.0 | 1909.0 / 1905.3 |
+| chalk | 56/72 (78%) | 56/72 (78%) | 0 / 0 | 144 | 0.2 / 0.7 | 75.9 / 226.4 |
+| dayjs | 88/112 (79%) | 88/112 (79%) | 0 / 0 | 181 | 0.3 / 0.6 | 77.0 / 228.5 |
+| underscore | 250/260 (96%) | 250/260 (96%) | 0 / 0 | 455 | 0.7 / 1.3 | 196.0 / 241.4 |
+
+How the type rows joined the syntax facts. A callsite row joins a call site by span and adds nothing when it does not. A deferred callsite joined but sits in a file dense with `any` and is not resolved, so it adds nothing either. A callee row joins a function by span, then by name for the kinds a call runs (an accessor joins by span only); a callee outside the tree counts as matched. An unmatched callee is a declaration in the tree that names no function polint extracted, and adds no edge.
+
+| package | callsites matched / unmatched / deferred | callees matched / unmatched |
+|---|---|---|
+| axios | 2,098 / 0 / 7 | 931 / 0 |
+| zod | 6,108 / 17 / 0 | 3,112 / 80 |
+| commander | 814 / 0 / 0 | 395 / 0 |
+| async | 1,605 / 0 / 145 | 467 / 0 |
+| chalk | 144 / 0 / 0 | 47 / 0 |
+| dayjs | 181 / 0 / 0 | 60 / 0 |
+| underscore | 455 / 0 / 0 | 273 / 0 |
+
+What the type step changed in the refined plan's answer: `type_mismatch` is an exact edge to a function whose declared kind or arity the checker says the call cannot run, moved to the conservative tier and kept; `type_seed` is a method of the receiver's declared class listed as a conservative candidate at an open site.
+
+| package | type_mismatch | type_seed |
+|---|---|---|
+| axios | 0 | 0 |
+| zod | 0 | 0 |
+| commander | 0 | 0 |
+| async | 0 | 0 |
+| chalk | 0 | 0 |
+| dayjs | 0 | 0 |
+| underscore | 0 | 0 |
+
+Typed against refined, every package and the held-out set, in exact_complete, exact, exact_conservative: no package loses an observed edge.
 
 Constructs, typed: false-complete hidden paths 0, false-complete call lines 0.
 
@@ -153,68 +288,67 @@ Constructs, typed: false-complete hidden paths 0, false-complete call lines 0.
 
 | package | kind / syntax | observed | base | refined |
 |---|---|---|---|---|
-| axios | kind: call | 632 | 269/632 (43%) | 269/632 (43%) |
-| axios | kind: callback | 43 | 1/43 (2%) | 1/43 (2%) |
+| axios | kind: call | 632 | 575/632 (91%) | 575/632 (91%) |
+| axios | kind: callback | 43 | 29/43 (67%) | 29/43 (67%) |
 | axios | kind: implicit | 6 | 0/6 (0%) | 0/6 (0%) |
-| axios | syntax: computed-member | 2 | 0/2 (0%) | 0/2 (0%) |
+| axios | syntax: computed-member | 2 | 1/2 (50%) | 1/2 (50%) |
 | axios | syntax: expression | 8 | 8/8 (100%) | 8/8 (100%) |
-| axios | syntax: identifier | 317 | 246/317 (78%) | 246/317 (78%) |
-| axios | syntax: member | 326 | 1/326 (0%) | 1/326 (0%) |
-| axios | syntax: new | 21 | 15/21 (71%) | 15/21 (71%) |
-| axios | syntax: super | 1 | 0/1 (0%) | 0/1 (0%) |
-| zod | kind: call | 1265 | 719/1265 (57%) | 719/1265 (57%) |
-| zod | kind: callback | 43 | 0/43 (0%) | 0/43 (0%) |
+| axios | syntax: identifier | 317 | 306/317 (97%) | 306/317 (97%) |
+| axios | syntax: member | 326 | 268/326 (82%) | 268/326 (82%) |
+| axios | syntax: new | 21 | 20/21 (95%) | 20/21 (95%) |
+| axios | syntax: super | 1 | 1/1 (100%) | 1/1 (100%) |
+| zod | kind: call | 1265 | 1150/1265 (91%) | 1150/1265 (91%) |
+| zod | kind: callback | 43 | 31/43 (72%) | 31/43 (72%) |
 | zod | kind: implicit | 18 | 0/18 (0%) | 0/18 (0%) |
 | zod | syntax: computed-member | 5 | 0/5 (0%) | 0/5 (0%) |
 | zod | syntax: expression | 1 | 1/1 (100%) | 1/1 (100%) |
-| zod | syntax: identifier | 408 | 244/408 (60%) | 244/408 (60%) |
-| zod | syntax: member | 829 | 472/829 (57%) | 472/829 (57%) |
-| zod | syntax: new | 65 | 2/65 (3%) | 2/65 (3%) |
-| commander | kind: call | 264 | 21/264 (8%) | 119/264 (45%) |
-| commander | kind: callback | 54 | 0/54 (0%) | 0/54 (0%) |
-| commander | syntax: identifier | 35 | 20/35 (57%) | 22/35 (63%) |
-| commander | syntax: member | 274 | 0/274 (0%) | 90/274 (33%) |
-| commander | syntax: new | 8 | 1/8 (12%) | 7/8 (88%) |
-| commander | syntax: super | 1 | 0/1 (0%) | 0/1 (0%) |
-| async | kind: call | 622 | 324/622 (52%) | 328/622 (53%) |
-| async | kind: callback | 15 | 0/15 (0%) | 0/15 (0%) |
+| zod | syntax: identifier | 408 | 378/408 (93%) | 378/408 (93%) |
+| zod | syntax: member | 829 | 738/829 (89%) | 738/829 (89%) |
+| zod | syntax: new | 65 | 64/65 (98%) | 64/65 (98%) |
+| commander | kind: call | 264 | 134/264 (51%) | 134/264 (51%) |
+| commander | kind: callback | 54 | 49/54 (91%) | 49/54 (91%) |
+| commander | syntax: identifier | 35 | 34/35 (97%) | 34/35 (97%) |
+| commander | syntax: member | 274 | 140/274 (51%) | 140/274 (51%) |
+| commander | syntax: new | 8 | 8/8 (100%) | 8/8 (100%) |
+| commander | syntax: super | 1 | 1/1 (100%) | 1/1 (100%) |
+| async | kind: call | 622 | 616/622 (99%) | 616/622 (99%) |
+| async | kind: callback | 15 | 15/15 (100%) | 15/15 (100%) |
 | async | kind: implicit | 4 | 0/4 (0%) | 0/4 (0%) |
-| async | syntax: expression | 157 | 0/157 (0%) | 0/157 (0%) |
-| async | syntax: identifier | 403 | 324/403 (80%) | 324/403 (80%) |
-| async | syntax: member | 73 | 0/73 (0%) | 4/73 (5%) |
-| async | syntax: new | 4 | 0/4 (0%) | 0/4 (0%) |
-| chalk | kind: call | 71 | 17/71 (24%) | 17/71 (24%) |
-| chalk | kind: callback | 1 | 0/1 (0%) | 0/1 (0%) |
+| async | syntax: expression | 157 | 157/157 (100%) | 157/157 (100%) |
+| async | syntax: identifier | 403 | 398/403 (99%) | 398/403 (99%) |
+| async | syntax: member | 73 | 72/73 (99%) | 72/73 (99%) |
+| async | syntax: new | 4 | 4/4 (100%) | 4/4 (100%) |
+| chalk | kind: call | 71 | 55/71 (77%) | 55/71 (77%) |
+| chalk | kind: callback | 1 | 1/1 (100%) | 1/1 (100%) |
 | chalk | kind: implicit | 1 | 0/1 (0%) | 0/1 (0%) |
 | chalk | syntax: computed-member | 10 | 0/10 (0%) | 0/10 (0%) |
-| chalk | syntax: identifier | 43 | 17/43 (40%) | 17/43 (40%) |
-| chalk | syntax: member | 19 | 0/19 (0%) | 0/19 (0%) |
-| dayjs | kind: call | 115 | 0/115 (0%) | 0/115 (0%) |
-| dayjs | kind: callback | 2 | 0/2 (0%) | 0/2 (0%) |
-| dayjs | kind: implicit | 3 | 0/3 (0%) | 0/3 (0%) |
+| chalk | syntax: identifier | 43 | 43/43 (100%) | 43/43 (100%) |
+| chalk | syntax: member | 19 | 13/19 (68%) | 13/19 (68%) |
+| dayjs | kind: call | 110 | 86/110 (78%) | 86/110 (78%) |
+| dayjs | kind: callback | 2 | 2/2 (100%) | 2/2 (100%) |
+| dayjs | kind: implicit | 12 | 0/12 (0%) | 0/12 (0%) |
 | dayjs | syntax: computed-member | 1 | 0/1 (0%) | 0/1 (0%) |
-| dayjs | syntax: expression | 5 | 0/5 (0%) | 0/5 (0%) |
-| dayjs | syntax: identifier | 35 | 0/35 (0%) | 0/35 (0%) |
-| dayjs | syntax: member | 75 | 0/75 (0%) | 0/75 (0%) |
-| dayjs | syntax: new | 1 | 0/1 (0%) | 0/1 (0%) |
-| underscore | kind: call | 257 | 157/257 (61%) | 158/257 (61%) |
-| underscore | kind: callback | 5 | 0/5 (0%) | 0/5 (0%) |
-| underscore | syntax: expression | 2 | 2/2 (100%) | 2/2 (100%) |
-| underscore | syntax: identifier | 234 | 154/234 (66%) | 155/234 (66%) |
-| underscore | syntax: member | 25 | 0/25 (0%) | 0/25 (0%) |
+| dayjs | syntax: identifier | 35 | 35/35 (100%) | 35/35 (100%) |
+| dayjs | syntax: member | 75 | 52/75 (69%) | 52/75 (69%) |
+| dayjs | syntax: new | 1 | 1/1 (100%) | 1/1 (100%) |
+| underscore | kind: call | 255 | 247/255 (97%) | 247/255 (97%) |
+| underscore | kind: callback | 5 | 3/5 (60%) | 3/5 (60%) |
+| underscore | kind: implicit | 2 | 0/2 (0%) | 0/2 (0%) |
+| underscore | syntax: identifier | 234 | 232/234 (99%) | 232/234 (99%) |
+| underscore | syntax: member | 25 | 17/25 (68%) | 17/25 (68%) |
 | underscore | syntax: new | 1 | 1/1 (100%) | 1/1 (100%) |
 
 ### Why observed edges were missed (base / refined)
 
-| package | callee not a polint function | found | no target, marked unresolved | no target, no unresolved marker | other targets, marked unresolved | site not a polint call site | site or callee in a file polint does not analyse | stops at import binding |
-|---|---|---|---|---|---|---|---|---|
-| axios | 9 / 9 / 9 | 270 / 270 / 511 | 376 / 376 / 132 | 8 / 9 / 0 | 0 / 0 / 12 | 11 / 11 / 11 | 0 / 0 / 0 | 1 / 0 / 0 |
-| zod | 6 / 6 / 6 | 719 / 719 / 764 | 579 / 579 / 532 | 1 / 1 / 1 | 0 / 0 / 2 | 3 / 3 / 3 | 0 / 0 / 0 | 0 / 0 / 0 |
-| commander | 1 / 1 / 1 | 21 / 119 / 248 | 296 / 198 / 63 | 0 / 0 / 0 | 0 / 0 / 6 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
-| async | 1 / 1 / 1 | 324 / 328 / 338 | 312 / 308 / 296 | 0 / 0 / 0 | 0 / 0 / 2 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
-| chalk | 0 / 0 / 0 | 17 / 17 / 17 | 8 / 8 / 8 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | 47 / 47 / 47 | 0 / 0 / 0 |
-| dayjs | 1 / 1 / 1 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | 116 / 116 / 116 | 0 / 0 / 0 | 0 / 0 / 0 |
-| underscore | 0 / 0 / 0 | 157 / 158 / 202 | 105 / 104 / 53 | 0 / 0 / 0 | 0 / 0 / 7 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| package | found | no target, marked unresolved | other targets, marked unresolved |
+|---|---|---|---|
+| axios | 604 / 604 / 606 | 49 / 49 / 47 | 22 / 22 / 22 |
+| zod | 1181 / 1181 / 1189 | 120 / 120 / 112 | 7 / 7 / 7 |
+| commander | 183 / 183 / 306 | 134 / 134 / 10 | 1 / 1 / 2 |
+| async | 631 / 631 / 631 | 4 / 4 / 4 | 2 / 2 / 2 |
+| chalk | 56 / 56 / 56 | 16 / 16 / 16 | 0 / 0 / 0 |
+| dayjs | 88 / 88 / 88 | 24 / 24 / 24 | 0 / 0 / 0 |
+| underscore | 250 / 250 / 250 | 8 / 8 / 8 | 2 / 2 / 2 |
 
 ### Missed edges ranked by gap
 
@@ -226,27 +360,27 @@ charged to the outermost function around it that polint does not extract. **attr
 once; **applying** counts every gap whose condition holds. The recall gain is an upper bound: it assumes
 every attributed edge is found once the gap is fixed. The syntax census behind this is described in the README.
 
-Base: 1881 missed of 3389 observed edges. Refined: 1778 missed of 3389.
+Base: 389 missed of 3382 observed edges. Refined: 389 missed of 3382.
 
 | rank | gap | attributed base | applying base | recall gain base (upper bound) | attributed refined | recall gain refined (upper bound) | base by package |
 |---|---|---|---|---|---|---|---|
-| 1 | _other member calls (object-literal functions, namespaces)_ | 633 | 0 | 18.7% | 632 | 18.6% | zod 304, axios 247, async 52, underscore 20, commander 10 |
-| 2 | _other resolution misses_ | 532 | 0 | 15.7% | 530 | 15.6% | async 235, zod 145, underscore 79, axios 58, commander 15 |
-| 3 | prototype and class methods, incl. inheritance | 273 | 277 | 8.1% | 180 | 5.3% | commander 210, axios 34, zod 20, async 8, underscore 1 |
-| 4 | callbacks invoked by built-ins | 151 | 162 | 4.5% | 151 | 4.5% | commander 53, zod 43, axios 37, async 13, underscore 5 |
-| 5 | functions under a unary operator (unary IIFEs) | 118 | 118 | 3.5% | 118 | 3.5% | dayjs 117, axios 1 |
-| 6 | class constructors and `new` | 81 | 83 | 2.4% | 75 | 2.2% | zod 63, commander 8, axios 6, async 4 |
-| 7 | _file not analysed (discovery excludes)_ | 47 | 0 | 1.4% | 47 | 1.4% | chalk 47 |
-| 8 | functions declared in try / catch / if blocks | 17 | 17 | 0.5% | 17 | 0.5% | axios 16, commander 1 |
-| 9 | computed-key member calls | 15 | 18 | 0.4% | 15 | 0.4% | chalk 8, zod 5, axios 2 |
-| 10 | _other call sites or functions not extracted_ | 13 | 0 | 0.4% | 13 | 0.4% | zod 9, axios 3, async 1 |
-| 11 | _identifier call stops at import binding_ | 1 | 0 | 0.0% | 0 | 0.0% | axios 1 |
-| 12 | calls in exported initializers | 0 | 0 | 0.0% | 0 | 0.0% | – |
+| 1 | _other member calls (object-literal functions, namespaces)_ | 163 | 0 | 4.8% | 163 | 4.8% | zod 81, axios 38, dayjs 23, commander 8, chalk 6, underscore 6, async 1 |
+| 2 | prototype and class methods, incl. inheritance | 139 | 140 | 4.1% | 139 | 4.1% | commander 121, zod 10, axios 7, underscore 1 |
+| 3 | _other resolution misses_ | 36 | 0 | 1.1% | 36 | 1.1% | zod 18, axios 11, async 5, commander 1, underscore 1 |
+| 4 | callbacks invoked by built-ins | 32 | 33 | 0.9% | 32 | 0.9% | axios 13, zod 12, commander 5, underscore 2 |
+| 5 | computed-key member calls | 17 | 17 | 0.5% | 17 | 0.5% | chalk 10, zod 5, axios 1, dayjs 1 |
+| 6 | class constructors and `new` | 2 | 2 | 0.1% | 2 | 0.1% | axios 1, zod 1 |
+| 7 | functions declared in try / catch / if blocks | 0 | 0 | 0.0% | 0 | 0.0% | – |
+| 8 | calls in exported initializers | 0 | 0 | 0.0% | 0 | 0.0% | – |
+| 9 | _identifier call stops at import binding_ | 0 | 0 | 0.0% | 0 | 0.0% | – |
+| 10 | _file not analysed (discovery excludes)_ | 0 | 0 | 0.0% | 0 | 0.0% | – |
+| 11 | _other call sites or functions not extracted_ | 0 | 0 | 0.0% | 0 | 0.0% | – |
+| 12 | functions under a unary operator (unary IIFEs) | 0 | 0 | 0.0% | 0 | 0.0% | – |
 
 Rows in italics are remainders, not one of the named extraction or resolution gaps. Of the base
 prototype and class method misses, 2 go through `super` or a `this`
 call into another class; that split reads the receiver syntactically and is approximate.
-'Other resolution misses' by call syntax and callee kind (base): identifier call to arrow 239, expression call to declaration 134, identifier call to expression 96, identifier call to declaration 39, expression call to arrow 14, expression call to expression 9, identifier call to method 1. An `expression` call is one whose callee is neither a name nor a member, such as the `(0, f)(x)`
+'Other resolution misses' by call syntax and callee kind (base): identifier call to arrow 24, identifier call to declaration 7, identifier call to expression 4, identifier call to method 1. An `expression` call is one whose callee is neither a name nor a member, such as the `(0, f)(x)`
 form compiled CommonJS uses.
 
 ### Other targets and no unresolved marker (every case)
@@ -265,139 +399,1114 @@ The polint site column shows which call expression the observed site was matched
 
 | package | plan | outcome | observed site | syntax / kind | observed callee | polint answer |
 |---|---|---|---|---|---|---|
-| axios | base | callee not a polint function | lib/adapters/fetch.js:432 `trackRequestStream(_request.body, onProgress, flush)` | identifier / call | lib/adapters/fetch.js:381 trackRequestStream | no target, marked unresolved |
-| axios | base | found | lib/adapters/adapters.js:80 `isResolvedHandle(nameOrAdapter)` | identifier / call | lib/adapters/adapters.js:52 isResolvedHandle | targets lib/adapters/adapters.js:52 isResolvedHandle, no unresolved marker |
-| axios | base | no target, marked unresolved | lib/adapters/adapters.js:53 `utils.isFunction(adapter)` | member / call | lib/utils.js:194 <anonymous> | no target, marked unresolved |
-| axios | base | no target, no unresolved marker | lib/adapters/fetch.js:535 `AxiosHeaders.from(response.headers)` | member / call | lib/core/AxiosHeaders.js:423 from | no target, no unresolved marker |
-| axios | base | site not a polint call site | lib/adapters/fetch.js:382 `trackStream( stream, DEFAULT_CHUNK_SIZE, (loadedBytes) => { if (hasMaxBodyLength && loade…` | identifier / call | lib/helpers/trackStream.js:45 trackStream | no call site |
-| axios | base | stops at import binding | lib/core/AxiosHeaders.js:244 `parseHeaders(header)` | identifier / call | lib/helpers/parseHeaders.js:41 <anonymous> | import binding, no unresolved marker |
-| axios | refined | callee not a polint function | lib/adapters/fetch.js:432 `trackRequestStream(_request.body, onProgress, flush)` | identifier / call | lib/adapters/fetch.js:381 trackRequestStream | no target, marked unresolved |
-| axios | refined | found | lib/adapters/adapters.js:80 `isResolvedHandle(nameOrAdapter)` | identifier / call | lib/adapters/adapters.js:52 isResolvedHandle | targets lib/adapters/adapters.js:52 isResolvedHandle, no unresolved marker |
-| axios | refined | no target, marked unresolved | lib/adapters/adapters.js:53 `utils.isFunction(adapter)` | member / call | lib/utils.js:194 <anonymous> | no target, marked unresolved |
-| axios | refined | no target, no unresolved marker | lib/adapters/fetch.js:535 `AxiosHeaders.from(response.headers)` | member / call | lib/core/AxiosHeaders.js:423 from | no target, no unresolved marker |
-| axios | refined | site not a polint call site | lib/adapters/fetch.js:382 `trackStream( stream, DEFAULT_CHUNK_SIZE, (loadedBytes) => { if (hasMaxBodyLength && loade…` | identifier / call | lib/helpers/trackStream.js:45 trackStream | no call site |
-| axios | typed | callee not a polint function | lib/adapters/fetch.js:432 `trackRequestStream(_request.body, onProgress, flush)` | identifier / call | lib/adapters/fetch.js:381 trackRequestStream | targets lib/adapters/fetch.js:214 <polint:anonymous:6074:23281>, marked unresolved |
+| axios | base | found | lib/adapters/adapters.js:53 `utils.isFunction(adapter)` | member / call | lib/utils.js:194 <anonymous> | targets lib/utils.js:194 <polint:anonymous:5832:5864>, marked unresolved |
+| axios | base | no target, marked unresolved | lib/adapters/adapters.js:88 `adapter.get(config)` | member / call | lib/adapters/fetch.js:718 getFetch | no target, marked unresolved |
+| axios | base | other targets, marked unresolved | lib/adapters/fetch.js:480 `headers.set('User-Agent', 'axios/' + VERSION, false)` | member / call | lib/core/AxiosHeaders.js:478 get | targets lib/core/AxiosHeaders.js:216 AxiosHeaders.set, marked unresolved |
+| axios | refined | found | lib/adapters/adapters.js:53 `utils.isFunction(adapter)` | member / call | lib/utils.js:194 <anonymous> | targets lib/utils.js:194 <polint:anonymous:5832:5864>, marked unresolved |
+| axios | refined | no target, marked unresolved | lib/adapters/adapters.js:88 `adapter.get(config)` | member / call | lib/adapters/fetch.js:718 getFetch | no target, marked unresolved |
+| axios | refined | other targets, marked unresolved | lib/adapters/fetch.js:480 `headers.set('User-Agent', 'axios/' + VERSION, false)` | member / call | lib/core/AxiosHeaders.js:478 get | targets lib/core/AxiosHeaders.js:216 AxiosHeaders.set, marked unresolved |
 | axios | typed | found | lib/adapters/adapters.js:53 `utils.isFunction(adapter)` | member / call | lib/utils.js:194 <anonymous> | targets lib/utils.js:194 <polint:anonymous:5832:5864>, marked unresolved |
 | axios | typed | no target, marked unresolved | lib/adapters/adapters.js:88 `adapter.get(config)` | member / call | lib/adapters/fetch.js:718 getFetch | no target, marked unresolved |
-| axios | typed | other targets, marked unresolved | lib/adapters/http.js:909 `AxiosHeaders.from(config.headers).normalize()` | member / call | lib/core/AxiosHeaders.js:478 get | targets lib/core/AxiosHeaders.js:361 AxiosHeaders.normalize, marked unresolved |
-| axios | typed | site not a polint call site | lib/adapters/fetch.js:382 `trackStream( stream, DEFAULT_CHUNK_SIZE, (loadedBytes) => { if (hasMaxBodyLength && loade…` | identifier / call | lib/helpers/trackStream.js:45 trackStream | no call site |
-| zod | base | callee not a polint function | src/v3/ZodError.ts:315 `mapper(sub)` | identifier / call | src/v3/ZodError.ts:308 <anonymous> | no target, marked unresolved |
-| zod | base | found | src/v3/ZodError.ts:272 `processError(this)` | identifier / call | src/v3/ZodError.ts:224 processError | targets src/v3/ZodError.ts:224 <polint:anonymous:5894:7736>, no unresolved marker |
-| zod | base | no target, marked unresolved | src/v3/ZodError.ts:264 `mapper(issue)` | identifier / call | src/v3/ZodError.ts:220 <anonymous> | no target, marked unresolved |
-| zod | base | no target, no unresolved marker | src/v4/core/json-schema-processors.ts:750 `JSON.stringify(value, (_, val) => { if (typeof val !== "bigint") return val; unrepresenta…` | member / callback | src/v4/core/json-schema-processors.ts:750 <anonymous> | no target, no unresolved marker |
-| zod | base | site not a polint call site | src/v4/classic/schemas.ts:2406 `util.shallowClone(defaultValue)` | member / call | src/v4/core/util.ts:558 shallowClone | no call site |
-| zod | refined | callee not a polint function | src/v3/ZodError.ts:315 `mapper(sub)` | identifier / call | src/v3/ZodError.ts:308 <anonymous> | no target, marked unresolved |
-| zod | refined | found | src/v3/ZodError.ts:272 `processError(this)` | identifier / call | src/v3/ZodError.ts:224 processError | targets src/v3/ZodError.ts:224 <polint:anonymous:5894:7736>, no unresolved marker |
-| zod | refined | no target, marked unresolved | src/v3/ZodError.ts:264 `mapper(issue)` | identifier / call | src/v3/ZodError.ts:220 <anonymous> | no target, marked unresolved |
-| zod | refined | no target, no unresolved marker | src/v4/core/json-schema-processors.ts:750 `JSON.stringify(value, (_, val) => { if (typeof val !== "bigint") return val; unrepresenta…` | member / callback | src/v4/core/json-schema-processors.ts:750 <anonymous> | no target, no unresolved marker |
-| zod | refined | site not a polint call site | src/v4/classic/schemas.ts:2406 `util.shallowClone(defaultValue)` | member / call | src/v4/core/util.ts:558 shallowClone | no call site |
-| zod | typed | callee not a polint function | src/v3/ZodError.ts:315 `mapper(sub)` | identifier / call | src/v3/ZodError.ts:308 <anonymous> | no target, marked unresolved |
-| zod | typed | found | src/v3/ZodError.ts:272 `processError(this)` | identifier / call | src/v3/ZodError.ts:224 processError | targets src/v3/ZodError.ts:224 <polint:anonymous:5894:7736>, no unresolved marker |
-| zod | typed | no target, marked unresolved | src/v3/ZodError.ts:264 `mapper(issue)` | identifier / call | src/v3/ZodError.ts:220 <anonymous> | no target, marked unresolved |
-| zod | typed | no target, no unresolved marker | src/v4/core/json-schema-processors.ts:750 `JSON.stringify(value, (_, val) => { if (typeof val !== "bigint") return val; unrepresenta…` | member / callback | src/v4/core/json-schema-processors.ts:750 <anonymous> | no target, no unresolved marker |
-| zod | typed | other targets, marked unresolved | src/v4/classic/schemas.ts:2402 `new ZodDefault({ type: "default", innerType: innerType as any as core.$ZodType, get defau…` | new / call | src/v4/core/core.ts:118 _ | targets src/v4/core/util.ts:558 shallowClone, marked unresolved |
-| zod | typed | site not a polint call site | src/v4/classic/schemas.ts:2406 `util.shallowClone(defaultValue)` | member / call | src/v4/core/util.ts:558 shallowClone | no call site |
-| commander | base | callee not a polint function | lib/help.js:331 `option.argChoices.map((choice) => JSON.stringify(choice))` | member / callback | lib/help.js:331 <anonymous> | no target, marked unresolved |
-| commander | base | found | lib/command.js:649 `knownBy(command)` | identifier / call | lib/command.js:645 knownBy | targets lib/command.js:645 <polint:anonymous:20982:21047>, no unresolved marker |
-| commander | base | no target, marked unresolved | index.js:7 `new Command()` | new / call | lib/command.js:20 constructor | no target, marked unresolved |
-| commander | refined | callee not a polint function | lib/help.js:331 `option.argChoices.map((choice) => JSON.stringify(choice))` | member / callback | lib/help.js:331 <anonymous> | no target, marked unresolved |
+| axios | typed | other targets, marked unresolved | lib/adapters/fetch.js:480 `headers.set('User-Agent', 'axios/' + VERSION, false)` | member / call | lib/core/AxiosHeaders.js:478 get | targets lib/core/AxiosHeaders.js:216 AxiosHeaders.set, marked unresolved |
+| zod | base | found | src/v3/ZodError.ts:264 `mapper(issue)` | identifier / call | src/v3/ZodError.ts:220 <anonymous> | targets src/v3/ZodError.ts:220 <polint:anonymous:5731:5797>, marked unresolved |
+| zod | base | no target, marked unresolved | src/v4/classic/from-json-schema.ts:505 `z.string()` | member / call | src/v4/classic/schemas.ts:619 string | no target, marked unresolved |
+| zod | base | other targets, marked unresolved | src/v4/core/core.ts:124 `fn()` | identifier / call | src/v4/core/memoizer.ts:228 <anonymous> | targets src/v4/core/schemas.ts:229 <polint:anonymous:7915:7971>, marked unresolved |
+| zod | refined | found | src/v3/ZodError.ts:264 `mapper(issue)` | identifier / call | src/v3/ZodError.ts:220 <anonymous> | targets src/v3/ZodError.ts:220 <polint:anonymous:5731:5797>, marked unresolved |
+| zod | refined | no target, marked unresolved | src/v4/classic/from-json-schema.ts:505 `z.string()` | member / call | src/v4/classic/schemas.ts:619 string | no target, marked unresolved |
+| zod | refined | other targets, marked unresolved | src/v4/core/core.ts:124 `fn()` | identifier / call | src/v4/core/memoizer.ts:228 <anonymous> | targets src/v4/core/schemas.ts:229 <polint:anonymous:7915:7971>, marked unresolved |
+| zod | typed | found | src/v3/ZodError.ts:264 `mapper(issue)` | identifier / call | src/v3/ZodError.ts:220 <anonymous> | targets src/v3/ZodError.ts:220 <polint:anonymous:5731:5797>, marked unresolved |
+| zod | typed | no target, marked unresolved | src/v4/classic/from-json-schema.ts:505 `z.string()` | member / call | src/v4/classic/schemas.ts:619 string | no target, marked unresolved |
+| zod | typed | other targets, marked unresolved | src/v4/core/core.ts:124 `fn()` | identifier / call | src/v4/core/memoizer.ts:228 <anonymous> | targets src/v4/core/schemas.ts:229 <polint:anonymous:7915:7971>, marked unresolved |
+| commander | base | found | index.js:7 `new Command()` | new / call | lib/command.js:20 constructor | targets lib/command.js:13 Command, no unresolved marker |
+| commander | base | no target, marked unresolved | lib/argument.js:144 `arg.name()` | member / call | lib/argument.js:48 name | no target, marked unresolved |
+| commander | base | other targets, marked unresolved | lib/command.js:1488 `fn()` | identifier / call | lib/command.js:1515 <anonymous> | targets lib/command.js:1363 <polint:anonymous:45378:45588>; lib/command.js:1603 <polint:anonymous:52130:52183>; lib/command.js:1607 <polint:anonymous:52274:52362>, marked unresolved |
 | commander | refined | found | index.js:7 `new Command()` | new / call | lib/command.js:20 constructor | targets lib/command.js:13 Command, no unresolved marker |
 | commander | refined | no target, marked unresolved | lib/argument.js:144 `arg.name()` | member / call | lib/argument.js:48 name | no target, marked unresolved |
-| commander | typed | callee not a polint function | lib/help.js:331 `option.argChoices.map((choice) => JSON.stringify(choice))` | member / callback | lib/help.js:331 <anonymous> | no target, marked unresolved |
+| commander | refined | other targets, marked unresolved | lib/command.js:1488 `fn()` | identifier / call | lib/command.js:1515 <anonymous> | targets lib/command.js:1363 <polint:anonymous:45378:45588>; lib/command.js:1603 <polint:anonymous:52130:52183>; lib/command.js:1607 <polint:anonymous:52274:52362>, marked unresolved |
 | commander | typed | found | index.js:7 `new Command()` | new / call | lib/command.js:20 constructor | targets lib/command.js:13 Command, no unresolved marker |
 | commander | typed | no target, marked unresolved | lib/command.js:646 `cmd.name()` | member / call | lib/command.js:2331 name | no target, marked unresolved |
 | commander | typed | other targets, marked unresolved | lib/command.js:601 `target.parseArg(value, previous)` | member / call | lib/option.js:183 parseArg | targets lib/argument.js:100 <polint:anonymous:2195:2491>, marked unresolved |
-| async | base | callee not a polint function | memoize.js:67 `hasher(...args)` | identifier / call | memoize.js:62 <anonymous> | no target, marked unresolved |
 | async | base | found | applyEach.js:9 `_interopRequireDefault(_applyEach)` | identifier / call | applyEach.js:15 _interopRequireDefault | targets applyEach.js:15 _interopRequireDefault, no unresolved marker |
-| async | base | no target, marked unresolved | applyEach.js:56 `(0, _applyEach2.default)(_map2.default)` | expression / call | internal/applyEach.js:7 default | no target, marked unresolved |
-| async | refined | callee not a polint function | memoize.js:67 `hasher(...args)` | identifier / call | memoize.js:62 <anonymous> | no target, marked unresolved |
+| async | base | no target, marked unresolved | asyncify.js:111 `callback(error, value)` | identifier / call | internal/map.js:22 <anonymous> | no target, marked unresolved |
+| async | base | other targets, marked unresolved | auto.js:293 `taskFn(results, taskCallback)` | identifier / call | autoInject.js:173 newTask | targets all.js:115 every; all.js:116 <polint:anonymous:3398:3411>; all.js:116 <polint:anonymous:3413:3424>; allSeries.js:41 everySeries; allSeries.js:42 <polint:anonymous:1472:1485>; allSeries.js:42 <polint:anonymous:1487:1498>; any.js:118 some; any.js:119 <polint:anonymous:3659:3669>; anySeries.js:42 someSeries; anySeries.js:43 <polint:anonymous:1524:1534>; asyncify.js:78 <polint:anonymous:2637:2828>; auto.js:265 <polint:anonymous:9708:10464>; concat.js:111 concat; concatLimit.js:41 concatLimit; concatLimit.js:43 <polint:anonymous:1575:1733>; concatLimit.js:44 <polint:anonymous:1617:1725>; concatLimit.js:48 <polint:anonymous:1735:1996>; concatSeries.js:37 concatSeries; detect.js:92 detect; detect.js:93 <polint:anonymous:3080:3092>; detect.js:93 <polint:anonymous:3094:3113>; doDuring.js:44 doWhilst; doDuring.js:50 next; doUntil.js:41 <polint:anonymous:1547:1655>; doWhilst.js:44 doWhilst; doWhilst.js:50 next; during.js:55 whilst; during.js:61 next; during.js:68 check; each.js:124 eachLimit; eachLimit.js:46 eachLimit; eachOf.js:48 iteratorCallback; eachOf.js:179 eachOf; eachOfLimit.js:42 eachOfLimit; eachOfSeries.js:35 eachOfSeries; eachSeries.js:40 eachSeries; ensureAsync.js:53 <polint:anonymous:1897:2274>; every.js:115 every; every.js:116 <polint:anonymous:3398:3411>; every.js:116 <polint:anonymous:3413:3424>; everySeries.js:41 everySeries; everySeries.js:42 <polint:anonymous:1472:1485>; everySeries.js:42 <polint:anonymous:1487:1498>; filter.js:89 filter; filterSeries.js:39 filterSeries; find.js:92 detect; find.js:93 <polint:anonymous:3080:3092>; find.js:93 <polint:anonymous:3094:3113>; flatMap.js:111 concat; flatMapLimit.js:41 concatLimit; flatMapLimit.js:43 <polint:anonymous:1575:1733>; flatMapLimit.js:44 <polint:anonymous:1617:1725>; flatMapLimit.js:48 <polint:anonymous:1735:1996>; flatMapSeries.js:37 concatSeries; foldl.js:142 reduce; foldl.js:145 <polint:anonymous:4633:4758>; foldl.js:146 <polint:anonymous:4680:4750>; foldl.js:150 <polint:anonymous:4760:4786>; forEach.js:124 eachLimit; forEachLimit.js:46 eachLimit; forEachOf.js:48 iteratorCallback; forEachOf.js:179 eachOf; forEachOfLimit.js:42 eachOfLimit; forEachOfSeries.js:35 eachOfSeries; forEachSeries.js:40 eachSeries; forever.js:56 forever; forever.js:60 next; groupByLimit.js:41 groupByLimit; groupByLimit.js:43 <polint:anonymous:1587:1749>; groupByLimit.js:44 <polint:anonymous:1629:1741>; groupByLimit.js:48 <polint:anonymous:1751:2347>; inject.js:142 reduce; inject.js:145 <polint:anonymous:4633:4758>; inject.js:146 <polint:anonymous:4680:4750>; inject.js:150 <polint:anonymous:4760:4786>; internal/applyEach.js:7 default; internal/applyEach.js:8 <polint:anonymous:132:451>; internal/applyEach.js:9 <polint:anonymous:214:424>; internal/applyEach.js:11 <polint:anonymous:296:402>; internal/asyncEachOfLimit.js:46 iterateeCallback; internal/awaitify.js:9 awaitify; internal/awaitify.js:12 awaitable; internal/createTester.js:34 <polint:anonymous:1062:1183>; internal/createTester.js:18 _createTester; internal/createTester.js:19 <polint:anonymous:467:1191>; internal/createTester.js:23 <polint:anonymous:639:1060>; internal/createTester.js:24 <polint:anonymous:693:1048>; internal/eachOfLimit.js:32 <polint:anonymous:765:2599>; internal/filter.js:38 <polint:anonymous:1043:1218>; internal/filter.js:45 <polint:anonymous:1228:1366>; internal/filter.js:51 _filter; internal/filter.js:20 <polint:anonymous:532:670>; internal/filter.js:21 <polint:anonymous:576:662>; internal/filter.js:25 <polint:anonymous:672:895>; internal/filter.js:37 <polint:anonymous:999:1226>; internal/initialParams.js:8 <polint:anonymous:128:250>; internal/iterator.js:21 <polint:anonymous:521:606>; internal/iterator.js:28 <polint:anonymous:680:834>; internal/iterator.js:40 <polint:anonymous:976:1159>; internal/map.js:14 _asyncMap; internal/map.js:20 <polint:anonymous:507:675>; internal/map.js:22 <polint:anonymous:587:667>; internal/map.js:26 <polint:anonymous:677:723>; internal/once.js:8 wrapper; internal/onlyOnce.js:8 <polint:anonymous:145:323>; internal/parallel.js:21 <polint:anonymous:526:923>; internal/parallel.js:24 <polint:anonymous:639:888>; internal/parallel.js:25 <polint:anonymous:703:880>; internal/parallel.js:32 <polint:anonymous:890:919>; internal/promiseCallback.js:10 callback; internal/queue.js:92 <polint:anonymous:2672:2767>; internal/queue.js:107 <polint:anonymous:3018:3803>; internal/queue.js:141 <polint:anonymous:3990:4012>; internal/queue.js:212 <polint:anonymous:6162:7313>; internal/reject.js:18 reject; internal/reject.js:20 <polint:anonymous:550:647>; internal/reject.js:21 <polint:anonymous:591:639>; internal/withoutIndex.js:8 <polint:anonymous:161:214>; internal/wrapAsync.js:26 wrapAsync; map.js:138 map; mapSeries.js:40 mapSeries; mapValuesLimit.js:47 mapValuesLimit; mapValuesLimit.js:51 <polint:anonymous:1804:1986>; mapValuesLimit.js:52 <polint:anonymous:1854:1978>; mapValuesLimit.js:57 <polint:anonymous:1988:2016>; memoize.js:66 <polint:anonymous:2234:2955>; memoize.js:69 <polint:anonymous:2358:2392>; queue.js:9 <polint:anonymous:218:271>; race.js:57 race; reduce.js:142 reduce; reduce.js:145 <polint:anonymous:4633:4758>; reduce.js:146 <polint:anonymous:4680:4750>; reduce.js:150 <polint:anonymous:4760:4786>; reflect.js:59 <polint:anonymous:1714:2228>; reject.js:83 reject; rejectLimit.js:41 rejectLimit; rejectSeries.js:39 rejectSeries; retry.js:132 <polint:anonymous:4598:4944>; retryable.js:63 <polint:anonymous:2064:2497>; retryable.js:68 taskFn; select.js:89 filter; selectSeries.js:39 filterSeries; seq.js:70 <polint:anonymous:2358:2516>; seq.js:74 <polint:anonymous:2518:2555>; some.js:118 some; some.js:119 <polint:anonymous:3659:3669>; someSeries.js:42 someSeries; someSeries.js:43 <polint:anonymous:1524:1534>; sortBy.js:171 sortBy; sortBy.js:173 <polint:anonymous:5666:5832>; sortBy.js:174 <polint:anonymous:5704:5824>; sortBy.js:178 <polint:anonymous:5834:5966>; timeout.js:62 <polint:anonymous:1994:2717>; transform.js:168 <polint:anonymous:5373:5436>; transform.js:170 <polint:anonymous:5438:5471>; tryEach.js:59 tryEach; tryEach.js:62 <polint:anonymous:2074:2418>; tryEach.js:63 <polint:anonymous:2133:2410>; tryEach.js:74 <polint:anonymous:2420:2449>; until.js:59 <polint:anonymous:1978:2022>; until.js:59 <polint:anonymous:1990:2021>; waterfall.js:82 waterfall; waterfall.js:93 next; whilst.js:55 whilst; whilst.js:61 next; whilst.js:68 check, marked unresolved |
 | async | refined | found | applyEach.js:9 `_interopRequireDefault(_applyEach)` | identifier / call | applyEach.js:15 _interopRequireDefault | targets applyEach.js:15 _interopRequireDefault, no unresolved marker |
-| async | refined | no target, marked unresolved | applyEach.js:56 `(0, _applyEach2.default)(_map2.default)` | expression / call | internal/applyEach.js:7 default | no target, marked unresolved |
-| async | typed | callee not a polint function | memoize.js:67 `hasher(...args)` | identifier / call | memoize.js:62 <anonymous> | no target, marked unresolved |
+| async | refined | no target, marked unresolved | asyncify.js:111 `callback(error, value)` | identifier / call | internal/map.js:22 <anonymous> | no target, marked unresolved |
+| async | refined | other targets, marked unresolved | auto.js:293 `taskFn(results, taskCallback)` | identifier / call | autoInject.js:173 newTask | targets all.js:115 every; all.js:116 <polint:anonymous:3398:3411>; all.js:116 <polint:anonymous:3413:3424>; allSeries.js:41 everySeries; allSeries.js:42 <polint:anonymous:1472:1485>; allSeries.js:42 <polint:anonymous:1487:1498>; any.js:118 some; any.js:119 <polint:anonymous:3659:3669>; anySeries.js:42 someSeries; anySeries.js:43 <polint:anonymous:1524:1534>; asyncify.js:78 <polint:anonymous:2637:2828>; auto.js:265 <polint:anonymous:9708:10464>; concat.js:111 concat; concatLimit.js:41 concatLimit; concatLimit.js:43 <polint:anonymous:1575:1733>; concatLimit.js:44 <polint:anonymous:1617:1725>; concatLimit.js:48 <polint:anonymous:1735:1996>; concatSeries.js:37 concatSeries; detect.js:92 detect; detect.js:93 <polint:anonymous:3080:3092>; detect.js:93 <polint:anonymous:3094:3113>; doDuring.js:44 doWhilst; doDuring.js:50 next; doUntil.js:41 <polint:anonymous:1547:1655>; doWhilst.js:44 doWhilst; doWhilst.js:50 next; during.js:55 whilst; during.js:61 next; during.js:68 check; each.js:124 eachLimit; eachLimit.js:46 eachLimit; eachOf.js:48 iteratorCallback; eachOf.js:179 eachOf; eachOfLimit.js:42 eachOfLimit; eachOfSeries.js:35 eachOfSeries; eachSeries.js:40 eachSeries; ensureAsync.js:53 <polint:anonymous:1897:2274>; every.js:115 every; every.js:116 <polint:anonymous:3398:3411>; every.js:116 <polint:anonymous:3413:3424>; everySeries.js:41 everySeries; everySeries.js:42 <polint:anonymous:1472:1485>; everySeries.js:42 <polint:anonymous:1487:1498>; filter.js:89 filter; filterSeries.js:39 filterSeries; find.js:92 detect; find.js:93 <polint:anonymous:3080:3092>; find.js:93 <polint:anonymous:3094:3113>; flatMap.js:111 concat; flatMapLimit.js:41 concatLimit; flatMapLimit.js:43 <polint:anonymous:1575:1733>; flatMapLimit.js:44 <polint:anonymous:1617:1725>; flatMapLimit.js:48 <polint:anonymous:1735:1996>; flatMapSeries.js:37 concatSeries; foldl.js:142 reduce; foldl.js:145 <polint:anonymous:4633:4758>; foldl.js:146 <polint:anonymous:4680:4750>; foldl.js:150 <polint:anonymous:4760:4786>; forEach.js:124 eachLimit; forEachLimit.js:46 eachLimit; forEachOf.js:48 iteratorCallback; forEachOf.js:179 eachOf; forEachOfLimit.js:42 eachOfLimit; forEachOfSeries.js:35 eachOfSeries; forEachSeries.js:40 eachSeries; forever.js:56 forever; forever.js:60 next; groupByLimit.js:41 groupByLimit; groupByLimit.js:43 <polint:anonymous:1587:1749>; groupByLimit.js:44 <polint:anonymous:1629:1741>; groupByLimit.js:48 <polint:anonymous:1751:2347>; inject.js:142 reduce; inject.js:145 <polint:anonymous:4633:4758>; inject.js:146 <polint:anonymous:4680:4750>; inject.js:150 <polint:anonymous:4760:4786>; internal/applyEach.js:7 default; internal/applyEach.js:8 <polint:anonymous:132:451>; internal/applyEach.js:9 <polint:anonymous:214:424>; internal/applyEach.js:11 <polint:anonymous:296:402>; internal/asyncEachOfLimit.js:46 iterateeCallback; internal/awaitify.js:9 awaitify; internal/awaitify.js:12 awaitable; internal/createTester.js:34 <polint:anonymous:1062:1183>; internal/createTester.js:18 _createTester; internal/createTester.js:19 <polint:anonymous:467:1191>; internal/createTester.js:23 <polint:anonymous:639:1060>; internal/createTester.js:24 <polint:anonymous:693:1048>; internal/eachOfLimit.js:32 <polint:anonymous:765:2599>; internal/filter.js:38 <polint:anonymous:1043:1218>; internal/filter.js:45 <polint:anonymous:1228:1366>; internal/filter.js:51 _filter; internal/filter.js:20 <polint:anonymous:532:670>; internal/filter.js:21 <polint:anonymous:576:662>; internal/filter.js:25 <polint:anonymous:672:895>; internal/filter.js:37 <polint:anonymous:999:1226>; internal/initialParams.js:8 <polint:anonymous:128:250>; internal/iterator.js:21 <polint:anonymous:521:606>; internal/iterator.js:28 <polint:anonymous:680:834>; internal/iterator.js:40 <polint:anonymous:976:1159>; internal/map.js:14 _asyncMap; internal/map.js:20 <polint:anonymous:507:675>; internal/map.js:22 <polint:anonymous:587:667>; internal/map.js:26 <polint:anonymous:677:723>; internal/once.js:8 wrapper; internal/onlyOnce.js:8 <polint:anonymous:145:323>; internal/parallel.js:21 <polint:anonymous:526:923>; internal/parallel.js:24 <polint:anonymous:639:888>; internal/parallel.js:25 <polint:anonymous:703:880>; internal/parallel.js:32 <polint:anonymous:890:919>; internal/promiseCallback.js:10 callback; internal/queue.js:92 <polint:anonymous:2672:2767>; internal/queue.js:107 <polint:anonymous:3018:3803>; internal/queue.js:141 <polint:anonymous:3990:4012>; internal/queue.js:212 <polint:anonymous:6162:7313>; internal/reject.js:18 reject; internal/reject.js:20 <polint:anonymous:550:647>; internal/reject.js:21 <polint:anonymous:591:639>; internal/withoutIndex.js:8 <polint:anonymous:161:214>; internal/wrapAsync.js:26 wrapAsync; map.js:138 map; mapSeries.js:40 mapSeries; mapValuesLimit.js:47 mapValuesLimit; mapValuesLimit.js:51 <polint:anonymous:1804:1986>; mapValuesLimit.js:52 <polint:anonymous:1854:1978>; mapValuesLimit.js:57 <polint:anonymous:1988:2016>; memoize.js:66 <polint:anonymous:2234:2955>; memoize.js:69 <polint:anonymous:2358:2392>; queue.js:9 <polint:anonymous:218:271>; race.js:57 race; reduce.js:142 reduce; reduce.js:145 <polint:anonymous:4633:4758>; reduce.js:146 <polint:anonymous:4680:4750>; reduce.js:150 <polint:anonymous:4760:4786>; reflect.js:59 <polint:anonymous:1714:2228>; reject.js:83 reject; rejectLimit.js:41 rejectLimit; rejectSeries.js:39 rejectSeries; retry.js:132 <polint:anonymous:4598:4944>; retryable.js:63 <polint:anonymous:2064:2497>; retryable.js:68 taskFn; select.js:89 filter; selectSeries.js:39 filterSeries; seq.js:70 <polint:anonymous:2358:2516>; seq.js:74 <polint:anonymous:2518:2555>; some.js:118 some; some.js:119 <polint:anonymous:3659:3669>; someSeries.js:42 someSeries; someSeries.js:43 <polint:anonymous:1524:1534>; sortBy.js:171 sortBy; sortBy.js:173 <polint:anonymous:5666:5832>; sortBy.js:174 <polint:anonymous:5704:5824>; sortBy.js:178 <polint:anonymous:5834:5966>; timeout.js:62 <polint:anonymous:1994:2717>; transform.js:168 <polint:anonymous:5373:5436>; transform.js:170 <polint:anonymous:5438:5471>; tryEach.js:59 tryEach; tryEach.js:62 <polint:anonymous:2074:2418>; tryEach.js:63 <polint:anonymous:2133:2410>; tryEach.js:74 <polint:anonymous:2420:2449>; until.js:59 <polint:anonymous:1978:2022>; until.js:59 <polint:anonymous:1990:2021>; waterfall.js:82 waterfall; waterfall.js:93 next; whilst.js:55 whilst; whilst.js:61 next; whilst.js:68 check, marked unresolved |
 | async | typed | found | applyEach.js:9 `_interopRequireDefault(_applyEach)` | identifier / call | applyEach.js:15 _interopRequireDefault | targets applyEach.js:15 _interopRequireDefault, no unresolved marker |
-| async | typed | no target, marked unresolved | applyEach.js:56 `(0, _applyEach2.default)(_map2.default)` | expression / call | internal/applyEach.js:7 default | no target, marked unresolved |
-| async | typed | other targets, marked unresolved | eachOf.js:181 `eachOfImplementation(coll, (0, _wrapAsync2.default)(iteratee), callback)` | identifier / call | eachOf.js:66 eachOfGeneric | targets eachOf.js:38 eachOfArrayLike, marked unresolved |
+| async | typed | no target, marked unresolved | asyncify.js:111 `callback(error, value)` | identifier / call | internal/map.js:22 <anonymous> | no target, marked unresolved |
+| async | typed | other targets, marked unresolved | auto.js:293 `taskFn(results, taskCallback)` | identifier / call | autoInject.js:173 newTask | targets all.js:115 every; all.js:116 <polint:anonymous:3398:3411>; all.js:116 <polint:anonymous:3413:3424>; allSeries.js:41 everySeries; allSeries.js:42 <polint:anonymous:1472:1485>; allSeries.js:42 <polint:anonymous:1487:1498>; any.js:118 some; any.js:119 <polint:anonymous:3659:3669>; anySeries.js:42 someSeries; anySeries.js:43 <polint:anonymous:1524:1534>; asyncify.js:78 <polint:anonymous:2637:2828>; auto.js:265 <polint:anonymous:9708:10464>; concat.js:111 concat; concatLimit.js:41 concatLimit; concatLimit.js:43 <polint:anonymous:1575:1733>; concatLimit.js:44 <polint:anonymous:1617:1725>; concatLimit.js:48 <polint:anonymous:1735:1996>; concatSeries.js:37 concatSeries; detect.js:92 detect; detect.js:93 <polint:anonymous:3080:3092>; detect.js:93 <polint:anonymous:3094:3113>; doDuring.js:44 doWhilst; doDuring.js:50 next; doUntil.js:41 <polint:anonymous:1547:1655>; doWhilst.js:44 doWhilst; doWhilst.js:50 next; during.js:55 whilst; during.js:61 next; during.js:68 check; each.js:124 eachLimit; eachLimit.js:46 eachLimit; eachOf.js:48 iteratorCallback; eachOf.js:179 eachOf; eachOfLimit.js:42 eachOfLimit; eachOfSeries.js:35 eachOfSeries; eachSeries.js:40 eachSeries; ensureAsync.js:53 <polint:anonymous:1897:2274>; every.js:115 every; every.js:116 <polint:anonymous:3398:3411>; every.js:116 <polint:anonymous:3413:3424>; everySeries.js:41 everySeries; everySeries.js:42 <polint:anonymous:1472:1485>; everySeries.js:42 <polint:anonymous:1487:1498>; filter.js:89 filter; filterSeries.js:39 filterSeries; find.js:92 detect; find.js:93 <polint:anonymous:3080:3092>; find.js:93 <polint:anonymous:3094:3113>; flatMap.js:111 concat; flatMapLimit.js:41 concatLimit; flatMapLimit.js:43 <polint:anonymous:1575:1733>; flatMapLimit.js:44 <polint:anonymous:1617:1725>; flatMapLimit.js:48 <polint:anonymous:1735:1996>; flatMapSeries.js:37 concatSeries; foldl.js:142 reduce; foldl.js:145 <polint:anonymous:4633:4758>; foldl.js:146 <polint:anonymous:4680:4750>; foldl.js:150 <polint:anonymous:4760:4786>; forEach.js:124 eachLimit; forEachLimit.js:46 eachLimit; forEachOf.js:48 iteratorCallback; forEachOf.js:179 eachOf; forEachOfLimit.js:42 eachOfLimit; forEachOfSeries.js:35 eachOfSeries; forEachSeries.js:40 eachSeries; forever.js:56 forever; forever.js:60 next; groupByLimit.js:41 groupByLimit; groupByLimit.js:43 <polint:anonymous:1587:1749>; groupByLimit.js:44 <polint:anonymous:1629:1741>; groupByLimit.js:48 <polint:anonymous:1751:2347>; inject.js:142 reduce; inject.js:145 <polint:anonymous:4633:4758>; inject.js:146 <polint:anonymous:4680:4750>; inject.js:150 <polint:anonymous:4760:4786>; internal/applyEach.js:7 default; internal/applyEach.js:8 <polint:anonymous:132:451>; internal/applyEach.js:9 <polint:anonymous:214:424>; internal/applyEach.js:11 <polint:anonymous:296:402>; internal/asyncEachOfLimit.js:46 iterateeCallback; internal/awaitify.js:9 awaitify; internal/awaitify.js:12 awaitable; internal/createTester.js:34 <polint:anonymous:1062:1183>; internal/createTester.js:18 _createTester; internal/createTester.js:19 <polint:anonymous:467:1191>; internal/createTester.js:23 <polint:anonymous:639:1060>; internal/createTester.js:24 <polint:anonymous:693:1048>; internal/eachOfLimit.js:32 <polint:anonymous:765:2599>; internal/filter.js:38 <polint:anonymous:1043:1218>; internal/filter.js:45 <polint:anonymous:1228:1366>; internal/filter.js:51 _filter; internal/filter.js:20 <polint:anonymous:532:670>; internal/filter.js:21 <polint:anonymous:576:662>; internal/filter.js:25 <polint:anonymous:672:895>; internal/filter.js:37 <polint:anonymous:999:1226>; internal/initialParams.js:8 <polint:anonymous:128:250>; internal/iterator.js:21 <polint:anonymous:521:606>; internal/iterator.js:28 <polint:anonymous:680:834>; internal/iterator.js:40 <polint:anonymous:976:1159>; internal/map.js:14 _asyncMap; internal/map.js:20 <polint:anonymous:507:675>; internal/map.js:22 <polint:anonymous:587:667>; internal/map.js:26 <polint:anonymous:677:723>; internal/once.js:8 wrapper; internal/onlyOnce.js:8 <polint:anonymous:145:323>; internal/parallel.js:21 <polint:anonymous:526:923>; internal/parallel.js:24 <polint:anonymous:639:888>; internal/parallel.js:25 <polint:anonymous:703:880>; internal/parallel.js:32 <polint:anonymous:890:919>; internal/promiseCallback.js:10 callback; internal/queue.js:92 <polint:anonymous:2672:2767>; internal/queue.js:107 <polint:anonymous:3018:3803>; internal/queue.js:141 <polint:anonymous:3990:4012>; internal/queue.js:212 <polint:anonymous:6162:7313>; internal/reject.js:18 reject; internal/reject.js:20 <polint:anonymous:550:647>; internal/reject.js:21 <polint:anonymous:591:639>; internal/withoutIndex.js:8 <polint:anonymous:161:214>; internal/wrapAsync.js:26 wrapAsync; map.js:138 map; mapSeries.js:40 mapSeries; mapValuesLimit.js:47 mapValuesLimit; mapValuesLimit.js:51 <polint:anonymous:1804:1986>; mapValuesLimit.js:52 <polint:anonymous:1854:1978>; mapValuesLimit.js:57 <polint:anonymous:1988:2016>; memoize.js:66 <polint:anonymous:2234:2955>; memoize.js:69 <polint:anonymous:2358:2392>; queue.js:9 <polint:anonymous:218:271>; race.js:57 race; reduce.js:142 reduce; reduce.js:145 <polint:anonymous:4633:4758>; reduce.js:146 <polint:anonymous:4680:4750>; reduce.js:150 <polint:anonymous:4760:4786>; reflect.js:59 <polint:anonymous:1714:2228>; reject.js:83 reject; rejectLimit.js:41 rejectLimit; rejectSeries.js:39 rejectSeries; retry.js:132 <polint:anonymous:4598:4944>; retryable.js:63 <polint:anonymous:2064:2497>; retryable.js:68 taskFn; select.js:89 filter; selectSeries.js:39 filterSeries; seq.js:70 <polint:anonymous:2358:2516>; seq.js:74 <polint:anonymous:2518:2555>; some.js:118 some; some.js:119 <polint:anonymous:3659:3669>; someSeries.js:42 someSeries; someSeries.js:43 <polint:anonymous:1524:1534>; sortBy.js:171 sortBy; sortBy.js:173 <polint:anonymous:5666:5832>; sortBy.js:174 <polint:anonymous:5704:5824>; sortBy.js:178 <polint:anonymous:5834:5966>; timeout.js:62 <polint:anonymous:1994:2717>; transform.js:168 <polint:anonymous:5373:5436>; transform.js:170 <polint:anonymous:5438:5471>; tryEach.js:59 tryEach; tryEach.js:62 <polint:anonymous:2074:2418>; tryEach.js:63 <polint:anonymous:2133:2410>; tryEach.js:74 <polint:anonymous:2420:2449>; until.js:59 <polint:anonymous:1978:2022>; until.js:59 <polint:anonymous:1990:2021>; waterfall.js:82 waterfall; waterfall.js:93 next; whilst.js:55 whilst; whilst.js:61 next; whilst.js:68 check, marked unresolved |
 | chalk | base | found | source/index.js:37 `assertValidLevel(options.level)` | identifier / call | source/index.js:17 assertValidLevel | targets source/index.js:17 assertValidLevel, no unresolved marker |
-| chalk | base | no target, marked unresolved | source/index.js:125 `converters[this.level](first, second, third)` | computed-member / call | source/index.js:91 ansi | no target, marked unresolved |
-| chalk | base | site or callee in a file polint does not analyse | source/index.js:91 `style.ansi(ansiStyles.rgbToAnsi(red, green, blue))` | member / call | source/vendor/ansi-styles/index.js:4 <anonymous> | no target, marked unresolved |
+| chalk | base | no target, marked unresolved | source/index.js:91 `style.ansi(ansiStyles.rgbToAnsi(red, green, blue))` | member / call | source/vendor/ansi-styles/index.js:4 <anonymous> | no target, marked unresolved |
 | chalk | refined | found | source/index.js:37 `assertValidLevel(options.level)` | identifier / call | source/index.js:17 assertValidLevel | targets source/index.js:17 assertValidLevel, no unresolved marker |
-| chalk | refined | no target, marked unresolved | source/index.js:125 `converters[this.level](first, second, third)` | computed-member / call | source/index.js:91 ansi | no target, marked unresolved |
-| chalk | refined | site or callee in a file polint does not analyse | source/index.js:91 `style.ansi(ansiStyles.rgbToAnsi(red, green, blue))` | member / call | source/vendor/ansi-styles/index.js:4 <anonymous> | no target, marked unresolved |
+| chalk | refined | no target, marked unresolved | source/index.js:91 `style.ansi(ansiStyles.rgbToAnsi(red, green, blue))` | member / call | source/vendor/ansi-styles/index.js:4 <anonymous> | no target, marked unresolved |
 | chalk | typed | found | source/index.js:37 `assertValidLevel(options.level)` | identifier / call | source/index.js:17 assertValidLevel | targets source/index.js:17 assertValidLevel, no unresolved marker |
-| chalk | typed | no target, marked unresolved | source/index.js:125 `converters[this.level](first, second, third)` | computed-member / call | source/index.js:91 ansi | no target, marked unresolved |
-| chalk | typed | site or callee in a file polint does not analyse | source/index.js:91 `style.ansi(ansiStyles.rgbToAnsi(red, green, blue))` | member / call | source/vendor/ansi-styles/index.js:4 <anonymous> | no target, marked unresolved |
-| dayjs | base | callee not a polint function | dayjs.min.js:1 `function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"fu…` | expression / call | dayjs.min.js:1 <anonymous> | no target, marked unresolved |
-| dayjs | base | site not a polint call site | dayjs.min.js:1 `m(r,2,"0")` | identifier / call | dayjs.min.js:1 m | no call site |
-| dayjs | refined | callee not a polint function | dayjs.min.js:1 `function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"fu…` | expression / call | dayjs.min.js:1 <anonymous> | no target, marked unresolved |
-| dayjs | refined | site not a polint call site | dayjs.min.js:1 `m(r,2,"0")` | identifier / call | dayjs.min.js:1 m | no call site |
-| dayjs | typed | callee not a polint function | dayjs.min.js:1 `function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"fu…` | expression / call | dayjs.min.js:1 <anonymous> | targets dayjs.min.js:1 <polint:module>, marked unresolved |
-| dayjs | typed | site not a polint call site | dayjs.min.js:1 `m(r,2,"0")` | identifier / call | dayjs.min.js:1 m | no call site |
-| underscore | base | found | underscore-umd.js:1 `function (global, factory) { typeof exports === 'object' && typeof module !== 'undefined'…` | expression / call | underscore-umd.js:1 <anonymous> | targets underscore-umd.js:1 <polint:anonymous:1:451>, no unresolved marker |
-| underscore | base | no target, marked unresolved | underscore-umd.js:304 `getLength(obj)` | identifier / call | underscore-umd.js:223 <anonymous> | no target, marked unresolved |
-| underscore | refined | found | underscore-umd.js:1 `function (global, factory) { typeof exports === 'object' && typeof module !== 'undefined'…` | expression / call | underscore-umd.js:1 <anonymous> | targets underscore-umd.js:1 <polint:anonymous:1:451>, no unresolved marker |
-| underscore | refined | no target, marked unresolved | underscore-umd.js:304 `getLength(obj)` | identifier / call | underscore-umd.js:223 <anonymous> | no target, marked unresolved |
-| underscore | typed | found | underscore-umd.js:1 `function (global, factory) { typeof exports === 'object' && typeof module !== 'undefined'…` | expression / call | underscore-umd.js:1 <anonymous> | targets underscore-umd.js:1 <polint:anonymous:1:451>, no unresolved marker |
-| underscore | typed | no target, marked unresolved | underscore-umd.js:602 `keysFunc(source)` | identifier / call | underscore-umd.js:288 keys | no target, marked unresolved |
-| underscore | typed | other targets, marked unresolved | underscore-umd.js:589 `isFunction$1(obj[key])` | identifier / call | underscore-umd.js:141 isFunction | targets underscore-umd.js:116 <polint:anonymous:4470:4532>, marked unresolved |
+| chalk | typed | no target, marked unresolved | source/index.js:91 `style.ansi(ansiStyles.rgbToAnsi(red, green, blue))` | member / call | source/vendor/ansi-styles/index.js:4 <anonymous> | no target, marked unresolved |
+| dayjs | base | found | dayjs.min.js:1 `m(r,2,"0")` | identifier / call | dayjs.min.js:1 m | targets dayjs.min.js:1 <polint:anonymous:859:948>, no unresolved marker |
+| dayjs | base | no target, marked unresolved | dayjs.min.js:1 `e.date()` | member / call | dayjs.min.js:1 <anonymous> | no target, marked unresolved |
+| dayjs | refined | found | dayjs.min.js:1 `m(r,2,"0")` | identifier / call | dayjs.min.js:1 m | targets dayjs.min.js:1 <polint:anonymous:859:948>, no unresolved marker |
+| dayjs | refined | no target, marked unresolved | dayjs.min.js:1 `e.date()` | member / call | dayjs.min.js:1 <anonymous> | no target, marked unresolved |
+| dayjs | typed | found | dayjs.min.js:1 `m(r,2,"0")` | identifier / call | dayjs.min.js:1 m | targets dayjs.min.js:1 <polint:anonymous:859:948>, no unresolved marker |
+| dayjs | typed | no target, marked unresolved | dayjs.min.js:1 `e.date()` | member / call | dayjs.min.js:1 <anonymous> | no target, marked unresolved |
+| underscore | base | found | underscore-umd.js:289 `isObject(obj)` | identifier / call | underscore-umd.js:88 isObject | targets underscore-umd.js:88 isObject, no unresolved marker |
+| underscore | base | no target, marked unresolved | underscore-umd.js:1006 `sourceFunc.apply(context, args)` | member / call | underscore-umd.js:1238 before | no target, marked unresolved |
+| underscore | base | other targets, marked unresolved | underscore-umd.js:1664 `iteratee(value, key, obj)` | identifier / call | underscore-umd.js:1677 iteratee | targets underscore-umd.js:710 identity; underscore-umd.js:718 <polint:anonymous:25165:25220>; underscore-umd.js:727 <polint:anonymous:25455:25509>; underscore-umd.js:738 <polint:anonymous:25846:25913>; underscore-umd.js:742 <polint:anonymous:26006:26111>; underscore-umd.js:745 <polint:anonymous:26134:26265>; underscore-umd.js:749 <polint:anonymous:26284:26347>; underscore-umd.js:1209 <polint:anonymous:42056:42122>; underscore-umd.js:1412 <polint:anonymous:49081:49179>; underscore-umd.js:1464 <polint:anonymous:50883:51216>; underscore-umd.js:1502 <polint:anonymous:52164:52401>; underscore-umd.js:1527 <polint:anonymous:53017:53252>; underscore-umd.js:1582 <polint:anonymous:54836:54985>; underscore-umd.js:1604 <polint:anonymous:55513:55630>; underscore-umd.js:1645 keyInObj; underscore-umd.js:1729 <polint:anonymous:60125:60184>; underscore-umd.js:1866 <polint:anonymous:64437:64679>; underscore-umd.js:1878 <polint:anonymous:64831:65181>; underscore-umd.js:1893 <polint:anonymous:65277:65505>; underscore-umd.js:202 isNaN$1; underscore-umd.js:223 <polint:anonymous:7915:7982>, marked unresolved |
+| underscore | refined | found | underscore-umd.js:289 `isObject(obj)` | identifier / call | underscore-umd.js:88 isObject | targets underscore-umd.js:88 isObject, no unresolved marker |
+| underscore | refined | no target, marked unresolved | underscore-umd.js:1006 `sourceFunc.apply(context, args)` | member / call | underscore-umd.js:1238 before | no target, marked unresolved |
+| underscore | refined | other targets, marked unresolved | underscore-umd.js:1664 `iteratee(value, key, obj)` | identifier / call | underscore-umd.js:1677 iteratee | targets underscore-umd.js:710 identity; underscore-umd.js:718 <polint:anonymous:25165:25220>; underscore-umd.js:727 <polint:anonymous:25455:25509>; underscore-umd.js:738 <polint:anonymous:25846:25913>; underscore-umd.js:742 <polint:anonymous:26006:26111>; underscore-umd.js:745 <polint:anonymous:26134:26265>; underscore-umd.js:749 <polint:anonymous:26284:26347>; underscore-umd.js:1209 <polint:anonymous:42056:42122>; underscore-umd.js:1412 <polint:anonymous:49081:49179>; underscore-umd.js:1464 <polint:anonymous:50883:51216>; underscore-umd.js:1502 <polint:anonymous:52164:52401>; underscore-umd.js:1527 <polint:anonymous:53017:53252>; underscore-umd.js:1582 <polint:anonymous:54836:54985>; underscore-umd.js:1604 <polint:anonymous:55513:55630>; underscore-umd.js:1645 keyInObj; underscore-umd.js:1729 <polint:anonymous:60125:60184>; underscore-umd.js:1866 <polint:anonymous:64437:64679>; underscore-umd.js:1878 <polint:anonymous:64831:65181>; underscore-umd.js:1893 <polint:anonymous:65277:65505>; underscore-umd.js:202 isNaN$1; underscore-umd.js:223 <polint:anonymous:7915:7982>, marked unresolved |
+| underscore | typed | found | underscore-umd.js:289 `isObject(obj)` | identifier / call | underscore-umd.js:88 isObject | targets underscore-umd.js:88 isObject, no unresolved marker |
+| underscore | typed | no target, marked unresolved | underscore-umd.js:1006 `sourceFunc.apply(context, args)` | member / call | underscore-umd.js:1238 before | no target, marked unresolved |
+| underscore | typed | other targets, marked unresolved | underscore-umd.js:1664 `iteratee(value, key, obj)` | identifier / call | underscore-umd.js:1677 iteratee | targets underscore-umd.js:710 identity; underscore-umd.js:718 <polint:anonymous:25165:25220>; underscore-umd.js:727 <polint:anonymous:25455:25509>; underscore-umd.js:738 <polint:anonymous:25846:25913>; underscore-umd.js:742 <polint:anonymous:26006:26111>; underscore-umd.js:745 <polint:anonymous:26134:26265>; underscore-umd.js:749 <polint:anonymous:26284:26347>; underscore-umd.js:1209 <polint:anonymous:42056:42122>; underscore-umd.js:1412 <polint:anonymous:49081:49179>; underscore-umd.js:1464 <polint:anonymous:50883:51216>; underscore-umd.js:1502 <polint:anonymous:52164:52401>; underscore-umd.js:1527 <polint:anonymous:53017:53252>; underscore-umd.js:1582 <polint:anonymous:54836:54985>; underscore-umd.js:1604 <polint:anonymous:55513:55630>; underscore-umd.js:1645 keyInObj; underscore-umd.js:1729 <polint:anonymous:60125:60184>; underscore-umd.js:1866 <polint:anonymous:64437:64679>; underscore-umd.js:1878 <polint:anonymous:64831:65181>; underscore-umd.js:1893 <polint:anonymous:65277:65505>; underscore-umd.js:202 isNaN$1; underscore-umd.js:223 <polint:anonymous:7915:7982>, marked unresolved |
+
+## Tiers
+
+Recall over the same observed edges as above, split by the tier of the edge that found the callee
+(`research/package-graphs/TIERS.md`): `Exact` and `SetupAware` are exact, except typed-hierarchy edges
+that dispatch to an `implementation` or `union_member`, which are candidates and count as conservative;
+`Conservative` and `Ambiguous` are conservative; `Heuristic` is apart and never counts in the first three
+columns. **exact-complete** also needs the site to be complete: at least one exact or conservative target and
+no unresolved row.
+
+| package | plan | observed edges | exact-complete | exact | exact + conservative | apart only | apart edges |
+|---|---|---|---|---|---|---|---|
+| axios | base | 675 | 300/675 (44%) | 301/675 (45%) | 569/675 (84%) | 35/675 (5%) | 55 |
+| axios | refined | 675 | 300/675 (44%) | 301/675 (45%) | 569/675 (84%) | 35/675 (5%) | 186 |
+| axios | typed | 675 | 300/675 (44%) | 301/675 (45%) | 603/675 (89%) | 3/675 (0%) | 186 |
+| zod | base | 1308 | 502/1308 (38%) | 674/1308 (52%) | 763/1308 (58%) | 418/1308 (32%) | 3015 |
+| zod | refined | 1308 | 502/1308 (38%) | 674/1308 (52%) | 763/1308 (58%) | 418/1308 (32%) | 3588 |
+| zod | typed | 1308 | 502/1308 (38%) | 674/1308 (52%) | 771/1308 (59%) | 418/1308 (32%) | 3588 |
+| commander | base | 318 | 34/318 (11%) | 34/318 (11%) | 85/318 (27%) | 98/318 (31%) | 146 |
+| commander | refined | 318 | 34/318 (11%) | 34/318 (11%) | 85/318 (27%) | 98/318 (31%) | 146 |
+| commander | typed | 318 | 34/318 (11%) | 34/318 (11%) | 298/318 (94%) | 8/318 (3%) | 146 |
+| async | base | 637 | 325/637 (51%) | 325/637 (51%) | 485/637 (76%) | 146/637 (23%) | 45951 |
+| async | refined | 637 | 325/637 (51%) | 325/637 (51%) | 485/637 (76%) | 146/637 (23%) | 45951 |
+| async | typed | 637 | 325/637 (51%) | 325/637 (51%) | 490/637 (77%) | 141/637 (22%) | 45951 |
+| chalk | base | 72 | 43/72 (60%) | 43/72 (60%) | 56/72 (78%) | 0/72 (0%) | 0 |
+| chalk | refined | 72 | 43/72 (60%) | 43/72 (60%) | 56/72 (78%) | 0/72 (0%) | 2 |
+| chalk | typed | 72 | 43/72 (60%) | 43/72 (60%) | 56/72 (78%) | 0/72 (0%) | 2 |
+| dayjs | base | 112 | 34/112 (30%) | 34/112 (30%) | 88/112 (79%) | 0/112 (0%) | 0 |
+| dayjs | refined | 112 | 34/112 (30%) | 34/112 (30%) | 88/112 (79%) | 0/112 (0%) | 8 |
+| dayjs | typed | 112 | 34/112 (30%) | 34/112 (30%) | 88/112 (79%) | 0/112 (0%) | 8 |
+| underscore | base | 260 | 196/260 (75%) | 196/260 (75%) | 250/260 (96%) | 0/260 (0%) | 0 |
+| underscore | refined | 260 | 196/260 (75%) | 196/260 (75%) | 250/260 (96%) | 0/260 (0%) | 8 |
+| underscore | typed | 260 | 196/260 (75%) | 196/260 (75%) | 250/260 (96%) | 0/260 (0%) | 8 |
+| **total** | base | 3382 | 1434/3382 (42%) | 1607/3382 (48%) | 2296/3382 (68%) | 697/3382 (21%) | 49167 |
+| **total** | refined | 3382 | 1434/3382 (42%) | 1607/3382 (48%) | 2296/3382 (68%) | 697/3382 (21%) | 49889 |
+| **total** | typed | 3382 | 1434/3382 (42%) | 1607/3382 (48%) | 2556/3382 (76%) | 570/3382 (17%) | 49889 |
+
+Targets per site that claims any in the tier: mean / p95 (nearest rank) / max.
+
+| package | plan | exact | conservative | exact + conservative | apart |
+|---|---|---|---|---|---|
+| axios | base | 1.0 / 1 / 1 (612 sites) | 1.17 / 2 / 19 (443 sites) | 1.07 / 1 / 19 (1055 sites) | 1.0 / 1 / 1 (55 sites) |
+| axios | refined | 1.0 / 1 / 1 (612 sites) | 1.17 / 2 / 19 (443 sites) | 1.07 / 1 / 19 (1055 sites) | 1.0 / 1 / 1 (118 sites) |
+| axios | typed | 1.0 / 1 / 1 (612 sites) | 1.15 / 2 / 19 (495 sites) | 1.07 / 1 / 19 (1107 sites) | 1.0 / 1 / 1 (118 sites) |
+| zod | base | 1.0 / 1 / 1 (2530 sites) | 1.18 / 1 / 39 (832 sites) | 1.04 / 1 / 39 (3362 sites) | 4.63 / 47 / 252 (651 sites) |
+| zod | refined | 1.0 / 1 / 1 (2530 sites) | 1.09 / 1 / 39 (1680 sites) | 1.04 / 1 / 39 (3362 sites) | 3.57 / 36 / 252 (921 sites) |
+| zod | typed | 1.0 / 1 / 1 (2530 sites) | 1.12 / 1 / 39 (1868 sites) | 1.06 / 1 / 39 (3550 sites) | 3.57 / 36 / 252 (921 sites) |
+| commander | base | 1.0 / 1 / 1 (62 sites) | 1.01 / 1 / 2 (76 sites) | 1.01 / 1 / 2 (138 sites) | 1.04 / 1 / 3 (140 sites) |
+| commander | refined | 1.0 / 1 / 1 (62 sites) | 1.01 / 1 / 2 (76 sites) | 1.01 / 1 / 2 (138 sites) | 1.04 / 1 / 3 (140 sites) |
+| commander | typed | 1.0 / 1 / 1 (62 sites) | 1.0 / 1 / 2 (408 sites) | 1.0 / 1 / 2 (470 sites) | 1.04 / 1 / 3 (140 sites) |
+| async | base | 1.0 / 1 / 1 (448 sites) | 10.95 / 166 / 183 (217 sites) | 4.25 / 4 / 183 (665 sites) | 154.2 / 169 / 180 (298 sites) |
+| async | refined | 1.0 / 1 / 1 (448 sites) | 10.95 / 166 / 183 (217 sites) | 4.25 / 4 / 183 (665 sites) | 154.2 / 169 / 180 (298 sites) |
+| async | typed | 1.0 / 1 / 1 (448 sites) | 10.51 / 12 / 183 (227 sites) | 4.2 / 4 / 183 (675 sites) | 154.2 / 169 / 180 (298 sites) |
+| chalk | base | 1.0 / 1 / 1 (47 sites) | 1.0 / 1 / 1 (18 sites) | 1.0 / 1 / 1 (65 sites) | – |
+| chalk | refined | 1.0 / 1 / 1 (47 sites) | 1.0 / 1 / 1 (18 sites) | 1.0 / 1 / 1 (65 sites) | 1.0 / 1 / 1 (1 sites) |
+| chalk | typed | 1.0 / 1 / 1 (47 sites) | 1.0 / 1 / 1 (18 sites) | 1.0 / 1 / 1 (65 sites) | 1.0 / 1 / 1 (1 sites) |
+| dayjs | base | 1.0 / 1 / 1 (41 sites) | 1.0 / 1 / 1 (54 sites) | 1.0 / 1 / 1 (95 sites) | – |
+| dayjs | refined | 1.0 / 1 / 1 (41 sites) | 1.0 / 1 / 1 (54 sites) | 1.0 / 1 / 1 (95 sites) | 1.0 / 1 / 1 (4 sites) |
+| dayjs | typed | 1.0 / 1 / 1 (41 sites) | 1.0 / 1 / 1 (54 sites) | 1.0 / 1 / 1 (95 sites) | 1.0 / 1 / 1 (4 sites) |
+| underscore | base | 1.0 / 1 / 1 (246 sites) | 8.37 / 21 / 22 (78 sites) | 2.77 / 21 / 22 (324 sites) | – |
+| underscore | refined | 1.0 / 1 / 1 (246 sites) | 8.37 / 21 / 22 (78 sites) | 2.77 / 21 / 22 (324 sites) | 1.0 / 1 / 1 (4 sites) |
+| underscore | typed | 1.0 / 1 / 1 (246 sites) | 8.37 / 21 / 22 (78 sites) | 2.77 / 21 / 22 (324 sites) | 1.0 / 1 / 1 (4 sites) |
+
+## Precision by tier
+
+At executed sites only: a site counts once the run was seen calling a polint function from it, and a
+claimed target counts when it is a function in an instrumented file. **precision** is the share of those
+targets the run called there; it is a lower bound, since a run takes only some paths. A target the run never
+called on a single-target answer in the exact tier is a **wrong exact target**; the gate is 0.
+
+| package | plan | exact: precision, single / multi not called | conservative: precision, single / multi not called | apart: precision, single / multi not called |
+|---|---|---|---|---|
+| axios | base | 301/301 (100%), 0 / 0 | 268/299 (90%), 1 / 30 | 35/35 (100%), 0 / 0 |
+| axios | refined | 301/301 (100%), 0 / 0 | 268/299 (90%), 1 / 30 | 45/45 (100%), 0 / 0 |
+| axios | typed | 301/301 (100%), 0 / 0 | 302/333 (91%), 1 / 30 | 45/45 (100%), 0 / 0 |
+| zod | base | 674/674 (100%), 0 / 0 | 89/129 (69%), 0 / 40 | 418/1645 (25%), 0 / 1227 |
+| zod | refined | 674/674 (100%), 0 / 0 | 261/301 (87%), 0 / 40 | 679/1906 (36%), 0 / 1227 |
+| zod | typed | 674/674 (100%), 0 / 0 | 269/309 (87%), 0 / 40 | 679/1906 (36%), 0 / 1227 |
+| commander | base | 34/34 (100%), 0 / 0 | 51/51 (100%), 0 / 0 | 98/98 (100%), 0 / 0 |
+| commander | refined | 34/34 (100%), 0 / 0 | 51/51 (100%), 0 / 0 | 98/98 (100%), 0 / 0 |
+| commander | typed | 34/34 (100%), 0 / 0 | 264/265 (100%), 1 / 0 | 98/98 (100%), 0 / 0 |
+| async | base | 325/325 (100%), 0 / 0 | 160/924 (17%), 0 / 764 | 146/14812 (1%), 0 / 14666 |
+| async | refined | 325/325 (100%), 0 / 0 | 160/924 (17%), 0 / 764 | 146/14812 (1%), 0 / 14666 |
+| async | typed | 325/325 (100%), 0 / 0 | 165/929 (18%), 0 / 764 | 146/14812 (1%), 0 / 14666 |
+| chalk | base | 43/43 (100%), 0 / 0 | 13/13 (100%), 0 / 0 | – |
+| chalk | refined | 43/43 (100%), 0 / 0 | 13/13 (100%), 0 / 0 | – |
+| chalk | typed | 43/43 (100%), 0 / 0 | 13/13 (100%), 0 / 0 | – |
+| dayjs | base | 34/34 (100%), 0 / 0 | 54/54 (100%), 0 / 0 | – |
+| dayjs | refined | 34/34 (100%), 0 / 0 | 54/54 (100%), 0 / 0 | – |
+| dayjs | typed | 34/34 (100%), 0 / 0 | 54/54 (100%), 0 / 0 | – |
+| underscore | base | 196/196 (100%), 0 / 0 | 54/303 (18%), 0 / 249 | – |
+| underscore | refined | 196/196 (100%), 0 / 0 | 54/303 (18%), 0 / 249 | 1/1 (100%), 0 / 0 |
+| underscore | typed | 196/196 (100%), 0 / 0 | 54/303 (18%), 0 / 249 | 1/1 (100%), 0 / 0 |
+| **total** | base | **1607/1607 (100%), 0 / 0** | **689/1773 (39%), 1 / 1083** | **697/16590 (4%), 0 / 15893** |
+| **total** | refined | **1607/1607 (100%), 0 / 0** | **861/1945 (44%), 1 / 1083** | **969/16862 (6%), 0 / 15893** |
+| **total** | typed | **1607/1607 (100%), 0 / 0** | **1121/2206 (51%), 2 / 1083** | **969/16862 (6%), 0 / 15893** |
+
+| package | plan | wrong exact target at | site text | target | the run called |
+|---|---|---|---|---|---|
+| none | | | | | |
+
+## Open sites
+
+A site is open when it has no exact or conservative target, or the answer marks it unresolved. Each open
+site counts under every reason its answer gives; `none recorded` is an open site whose answer gives none,
+which the engine must not produce.
+
+| package | plan | call sites | complete | open | open with a claimed target | open by reason |
+|---|---|---|---|---|---|---|
+| axios | base | 2098 | 616/2098 (29%) | 1482 | 439 | DynamicProperty 853, MissingSemanticReference 397, Inflow(EscapedObject) 271, none recorded 170, Unknown 113, Inflow(InwardParameter) 41, CallApplyBind 35, Inflow(OutsideValue) 15, Inflow(InwardThis) 3, Inflow(OpenResult) 2, MissingImportResolution 2 |
+| axios | refined | 2098 | 616/2098 (29%) | 1482 | 439 | DynamicProperty 853, MissingSemanticReference 397, Inflow(EscapedObject) 271, none recorded 170, Unknown 113, Inflow(InwardParameter) 41, CallApplyBind 35, Inflow(OutsideValue) 15, Inflow(InwardThis) 3, Inflow(OpenResult) 2, MissingImportResolution 2 |
+| axios | typed | 2098 | 616/2098 (29%) | 1482 | 491 | DynamicProperty 853, MissingSemanticReference 397, UnknownCallee 359, Inflow(EscapedObject) 271, none recorded 157, Unknown 113, Inflow(InwardParameter) 41, CallApplyBind 35, Inflow(OutsideValue) 15, Inflow(InwardThis) 3, Inflow(OpenResult) 2, MissingImportResolution 2 |
+| zod | base | 6109 | 1689/6109 (28%) | 4420 | 1673 | DynamicProperty 2269, Inflow(EscapedObject) 974, MissingSemanticReference 921, Inflow(InwardParameter) 335, none recorded 295, Unknown 239, Inflow(InwardThis) 123, CallApplyBind 45, MissingImportResolution 3, Inflow(OutsideValue) 2, Reflection 1 |
+| zod | refined | 6109 | 1689/6109 (28%) | 4420 | 1673 | DynamicProperty 2269, Inflow(EscapedObject) 974, MissingSemanticReference 921, Inflow(InwardParameter) 335, none recorded 295, Unknown 239, Inflow(InwardThis) 123, CallApplyBind 45, MissingImportResolution 3, Inflow(OutsideValue) 2, Reflection 1 |
+| zod | typed | 6109 | 1689/6109 (28%) | 4420 | 1861 | DynamicProperty 2269, Inflow(EscapedObject) 974, MissingSemanticReference 921, Inflow(InwardParameter) 335, none recorded 295, Unknown 239, Inflow(InwardThis) 123, UnknownCallee 122, CallApplyBind 45, MissingImportResolution 3, Inflow(OutsideValue) 2, Reflection 1 |
+| commander | base | 814 | 63/814 (8%) | 751 | 75 | DynamicProperty 588, MissingSemanticReference 135, Unknown 75, none recorded 27, CallApplyBind 1 |
+| commander | refined | 814 | 63/814 (8%) | 751 | 75 | DynamicProperty 588, MissingSemanticReference 135, Unknown 75, none recorded 27, CallApplyBind 1 |
+| commander | typed | 814 | 63/814 (8%) | 751 | 407 | DynamicProperty 588, MissingSemanticReference 135, UnknownCallee 110, Unknown 75, none recorded 26, CallApplyBind 1 |
+| async | base | 1605 | 451/1605 (28%) | 1154 | 214 | MissingSemanticReference 622, DynamicProperty 362, Inflow(EscapedObject) 159, none recorded 155, Unknown 48, CallApplyBind 14, Inflow(InwardParameter) 4, Inflow(OutsideValue) 3, UnsupportedSyntax 1 |
+| async | refined | 1605 | 451/1605 (28%) | 1154 | 214 | MissingSemanticReference 622, DynamicProperty 362, Inflow(EscapedObject) 159, none recorded 155, Unknown 48, CallApplyBind 14, Inflow(InwardParameter) 4, Inflow(OutsideValue) 3, UnsupportedSyntax 1 |
+| async | typed | 1605 | 451/1605 (28%) | 1154 | 224 | UnknownCallee 666, MissingSemanticReference 622, DynamicProperty 362, Inflow(EscapedObject) 159, none recorded 155, Unknown 48, CallApplyBind 14, Inflow(InwardParameter) 4, Inflow(OutsideValue) 3, UnsupportedSyntax 1 |
+| chalk | base | 144 | 47/144 (33%) | 97 | 18 | DynamicProperty 39, none recorded 33, MissingSemanticReference 23, Inflow(EscapedObject) 12, Unknown 6 |
+| chalk | refined | 144 | 47/144 (33%) | 97 | 18 | DynamicProperty 39, none recorded 33, MissingSemanticReference 23, Inflow(EscapedObject) 12, Unknown 6 |
+| chalk | typed | 144 | 47/144 (33%) | 97 | 18 | DynamicProperty 39, none recorded 33, UnknownCallee 24, MissingSemanticReference 23, Inflow(EscapedObject) 12, Unknown 6 |
+| dayjs | base | 181 | 41/181 (23%) | 140 | 54 | DynamicProperty 89, MissingSemanticReference 41, Inflow(InwardParameter) 28, Inflow(EscapedObject) 20, none recorded 10, Inflow(InwardThis) 4, Unknown 2 |
+| dayjs | refined | 181 | 41/181 (23%) | 140 | 54 | DynamicProperty 89, MissingSemanticReference 41, Inflow(InwardParameter) 28, Inflow(EscapedObject) 20, none recorded 10, Inflow(InwardThis) 4, Unknown 2 |
+| dayjs | typed | 181 | 41/181 (23%) | 140 | 54 | DynamicProperty 89, UnknownCallee 44, MissingSemanticReference 41, Inflow(InwardParameter) 28, Inflow(EscapedObject) 20, none recorded 10, Inflow(InwardThis) 4, Unknown 2 |
+| underscore | base | 455 | 270/455 (59%) | 185 | 54 | MissingSemanticReference 86, DynamicProperty 44, CallApplyBind 41, Inflow(InwardParameter) 19, Unknown 18, none recorded 14, Inflow(OutsideValue) 10, Inflow(EscapedObject) 7 |
+| underscore | refined | 455 | 270/455 (59%) | 185 | 54 | MissingSemanticReference 86, DynamicProperty 44, CallApplyBind 41, Inflow(InwardParameter) 19, Unknown 18, none recorded 14, Inflow(OutsideValue) 10, Inflow(EscapedObject) 7 |
+| underscore | typed | 455 | 270/455 (59%) | 185 | 54 | MissingSemanticReference 86, DynamicProperty 44, CallApplyBind 41, UnknownCallee 30, Inflow(InwardParameter) 19, Unknown 18, none recorded 14, Inflow(OutsideValue) 10, Inflow(EscapedObject) 7 |
+
+## Budget events
+
+The solver's budget status for each dump and every budget it reported as reached. The target is none on
+the tune set, and a budget event must never discard an edge already derived.
+
+| package | plan | status | reasons |
+|---|---|---|---|
+| axios | base | WithinBudget | – |
+| axios | refined | WithinBudget | – |
+| axios | typed | WithinBudget | – |
+| zod | base | WithinBudget | – |
+| zod | refined | WithinBudget | – |
+| zod | typed | WithinBudget | – |
+| commander | base | WithinBudget | – |
+| commander | refined | WithinBudget | – |
+| commander | typed | WithinBudget | – |
+| async | base | WithinBudget | – |
+| async | refined | WithinBudget | – |
+| async | typed | WithinBudget | – |
+| chalk | base | WithinBudget | – |
+| chalk | refined | WithinBudget | – |
+| chalk | typed | WithinBudget | – |
+| dayjs | base | WithinBudget | – |
+| dayjs | refined | WithinBudget | – |
+| dayjs | typed | WithinBudget | – |
+| underscore | base | WithinBudget | – |
+| underscore | refined | WithinBudget | – |
+| underscore | typed | WithinBudget | – |
+
+## Refined edges
+
+Every refined row by the tier the bench gives it, its algorithm, status and precision, and whether it
+names a function. Rows with a status other than `Resolved` or `Ambiguous` claim nothing.
+
+| package | plan | tier | algorithm | status | precision | names a function | rows |
+|---|---|---|---|---|---|---|---|
+| axios | refined | none | PointsTo | Unresolved | Unknown | no | 1730 |
+| axios | refined | exact | PointsTo | Resolved | Exact | yes | 612 |
+| axios | refined | conservative | PointsTo | Resolved | Conservative | yes | 524 |
+| axios | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 488 |
+| axios | refined | exact | DirectReference | Resolved | SetupAware | yes | 388 |
+| axios | refined | exact | ImportBinding | Resolved | SetupAware | yes | 94 |
+| axios | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 67 |
+| axios | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 67 |
+| axios | refined | apart | PointsTo | Resolved | Heuristic | yes | 52 |
+| axios | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 6 |
+| axios | refined | exact | ImportBinding | Resolved | SetupAware | no | 6 |
+| axios | refined | exact | SummaryAssisted | Resolved | SetupAware | no | 6 |
+| axios | refined | conservative | ImportBinding | Ambiguous | Conservative | no | 2 |
+| axios | refined | conservative | SummaryAssisted | Ambiguous | Conservative | no | 2 |
+| axios | typed | none | PointsTo | Unresolved | Unknown | no | 1730 |
+| axios | typed | exact | PointsTo | Resolved | Exact | yes | 612 |
+| axios | typed | conservative | PointsTo | Resolved | Conservative | yes | 524 |
+| axios | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 488 |
+| axios | typed | exact | DirectReference | Resolved | SetupAware | yes | 388 |
+| axios | typed | none | TypeHierarchy | Unresolved | Unknown | no | 359 |
+| axios | typed | exact | ImportBinding | Resolved | SetupAware | yes | 94 |
+| axios | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 67 |
+| axios | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 67 |
+| axios | typed | apart | PointsTo | Resolved | Heuristic | yes | 52 |
+| axios | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 52 |
+| axios | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 6 |
+| axios | typed | exact | ImportBinding | Resolved | SetupAware | no | 6 |
+| axios | typed | exact | SummaryAssisted | Resolved | SetupAware | no | 6 |
+| axios | typed | conservative | ImportBinding | Ambiguous | Conservative | no | 2 |
+| axios | typed | conservative | SummaryAssisted | Ambiguous | Conservative | no | 2 |
+| zod | refined | none | PointsTo | Unresolved | Unknown | no | 4908 |
+| zod | refined | apart | PointsTo | Resolved | Heuristic | yes | 3268 |
+| zod | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 2506 |
+| zod | refined | conservative | PointsTo | Resolved | Conservative | yes | 1828 |
+| zod | refined | exact | PointsTo | Resolved | Exact | yes | 1422 |
+| zod | refined | exact | ImportBinding | Resolved | SetupAware | yes | 1300 |
+| zod | refined | exact | DirectReference | Resolved | SetupAware | yes | 1081 |
+| zod | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 160 |
+| zod | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 160 |
+| zod | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 125 |
+| zod | refined | conservative | ImportBinding | Ambiguous | Conservative | no | 3 |
+| zod | refined | conservative | SummaryAssisted | Ambiguous | Conservative | no | 3 |
+| zod | refined | none | PointsTo | Unresolved | Unsupported | no | 1 |
+| zod | typed | none | PointsTo | Unresolved | Unknown | no | 4908 |
+| zod | typed | apart | PointsTo | Resolved | Heuristic | yes | 3268 |
+| zod | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 2506 |
+| zod | typed | conservative | PointsTo | Resolved | Conservative | yes | 1828 |
+| zod | typed | exact | PointsTo | Resolved | Exact | yes | 1422 |
+| zod | typed | exact | ImportBinding | Resolved | SetupAware | yes | 1300 |
+| zod | typed | exact | DirectReference | Resolved | SetupAware | yes | 1081 |
+| zod | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 258 |
+| zod | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 160 |
+| zod | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 160 |
+| zod | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 125 |
+| zod | typed | none | TypeHierarchy | Unresolved | Unknown | no | 122 |
+| zod | typed | conservative | ImportBinding | Ambiguous | Conservative | no | 3 |
+| zod | typed | conservative | SummaryAssisted | Ambiguous | Conservative | no | 3 |
+| zod | typed | none | PointsTo | Unresolved | Unsupported | no | 1 |
+| commander | refined | none | PointsTo | Unresolved | Unknown | no | 799 |
+| commander | refined | apart | PointsTo | Resolved | Heuristic | yes | 146 |
+| commander | refined | conservative | PointsTo | Resolved | Conservative | yes | 77 |
+| commander | refined | exact | PointsTo | Resolved | Exact | yes | 62 |
+| commander | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 42 |
+| commander | refined | exact | DirectReference | Resolved | SetupAware | yes | 41 |
+| commander | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 1 |
+| commander | typed | none | PointsTo | Unresolved | Unknown | no | 799 |
+| commander | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 332 |
+| commander | typed | apart | PointsTo | Resolved | Heuristic | yes | 146 |
+| commander | typed | none | TypeHierarchy | Unresolved | Unknown | no | 110 |
+| commander | typed | conservative | PointsTo | Resolved | Conservative | yes | 77 |
+| commander | typed | exact | PointsTo | Resolved | Exact | yes | 62 |
+| commander | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 42 |
+| commander | typed | exact | DirectReference | Resolved | SetupAware | yes | 41 |
+| commander | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 1 |
+| async | refined | apart | PointsTo | Resolved | Heuristic | yes | 45951 |
+| async | refined | conservative | PointsTo | Resolved | Conservative | yes | 2376 |
+| async | refined | none | PointsTo | Unresolved | Unknown | no | 1212 |
+| async | refined | exact | PointsTo | Resolved | Exact | yes | 448 |
+| async | refined | exact | DirectReference | Resolved | SetupAware | yes | 440 |
+| async | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 440 |
+| async | refined | none | FrameworkModel | Unsupported | Conservative | no | 1 |
+| async | typed | apart | PointsTo | Resolved | Heuristic | yes | 45951 |
+| async | typed | conservative | PointsTo | Resolved | Conservative | yes | 2376 |
+| async | typed | none | PointsTo | Unresolved | Unknown | no | 1212 |
+| async | typed | none | TypeHierarchy | Unresolved | Unknown | no | 666 |
+| async | typed | exact | PointsTo | Resolved | Exact | yes | 448 |
+| async | typed | exact | DirectReference | Resolved | SetupAware | yes | 440 |
+| async | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 440 |
+| async | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 10 |
+| async | typed | none | FrameworkModel | Unsupported | Conservative | no | 1 |
+| chalk | refined | none | PointsTo | Unresolved | Unknown | no | 80 |
+| chalk | refined | exact | PointsTo | Resolved | Exact | yes | 47 |
+| chalk | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 46 |
+| chalk | refined | exact | DirectReference | Resolved | SetupAware | yes | 44 |
+| chalk | refined | conservative | PointsTo | Resolved | Conservative | yes | 18 |
+| chalk | refined | exact | ImportBinding | Resolved | SetupAware | yes | 2 |
+| chalk | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 1 |
+| chalk | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 1 |
+| chalk | typed | none | PointsTo | Unresolved | Unknown | no | 80 |
+| chalk | typed | exact | PointsTo | Resolved | Exact | yes | 47 |
+| chalk | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 46 |
+| chalk | typed | exact | DirectReference | Resolved | SetupAware | yes | 44 |
+| chalk | typed | none | TypeHierarchy | Unresolved | Unknown | no | 24 |
+| chalk | typed | conservative | PointsTo | Resolved | Conservative | yes | 18 |
+| chalk | typed | exact | ImportBinding | Resolved | SetupAware | yes | 2 |
+| chalk | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 1 |
+| chalk | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 1 |
+| dayjs | refined | none | PointsTo | Unresolved | Unknown | no | 184 |
+| dayjs | refined | conservative | PointsTo | Resolved | Conservative | yes | 54 |
+| dayjs | refined | exact | PointsTo | Resolved | Exact | yes | 41 |
+| dayjs | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 34 |
+| dayjs | refined | exact | DirectReference | Resolved | SetupAware | yes | 23 |
+| dayjs | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 11 |
+| dayjs | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 4 |
+| dayjs | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 4 |
+| dayjs | typed | none | PointsTo | Unresolved | Unknown | no | 184 |
+| dayjs | typed | conservative | PointsTo | Resolved | Conservative | yes | 54 |
+| dayjs | typed | none | TypeHierarchy | Unresolved | Unknown | no | 44 |
+| dayjs | typed | exact | PointsTo | Resolved | Exact | yes | 41 |
+| dayjs | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 34 |
+| dayjs | typed | exact | DirectReference | Resolved | SetupAware | yes | 23 |
+| dayjs | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 11 |
+| dayjs | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 4 |
+| dayjs | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 4 |
+| underscore | refined | conservative | PointsTo | Resolved | Conservative | yes | 653 |
+| underscore | refined | exact | PointsTo | Resolved | Exact | yes | 246 |
+| underscore | refined | none | PointsTo | Unresolved | Unknown | no | 225 |
+| underscore | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 187 |
+| underscore | refined | exact | DirectReference | Resolved | SetupAware | yes | 186 |
+| underscore | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 4 |
+| underscore | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 4 |
+| underscore | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 1 |
+| underscore | typed | conservative | PointsTo | Resolved | Conservative | yes | 653 |
+| underscore | typed | exact | PointsTo | Resolved | Exact | yes | 246 |
+| underscore | typed | none | PointsTo | Unresolved | Unknown | no | 225 |
+| underscore | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 187 |
+| underscore | typed | exact | DirectReference | Resolved | SetupAware | yes | 186 |
+| underscore | typed | none | TypeHierarchy | Unresolved | Unknown | no | 30 |
+| underscore | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 4 |
+| underscore | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 4 |
+| underscore | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 1 |
+
+## Sites gained by the refined plan
+
+Sites where a refined plan claims an exact or conservative target and the base plan claims none, by file.
+**test path** marks a file in a test or benchmark folder or named `*.test.*` / `*.spec.*`; **executed** counts
+the gained sites the run called a polint function from, the only ones recall can credit.
+
+| package | plan | sites gained | in test paths | executed | top files |
+|---|---|---|---|---|---|
+| axios | refined | 0 | 0 | 0 | – |
+| axios | typed | 52 | 0 | 34 | lib/core/Axios.js 15, lib/adapters/http.js 12, lib/core/AxiosHeaders.js 10 |
+| zod | refined | 0 | 0 | 0 | – |
+| zod | typed | 188 | 0 | 8 | src/v3/types.ts 107, src/v4/classic/from-json-schema.ts 64, src/v4/core/to-json-schema.ts 7 |
+| commander | refined | 0 | 0 | 0 | – |
+| commander | typed | 332 | 0 | 214 | lib/command.js 235, lib/help.js 89, lib/option.js 6 |
+| async | refined | 0 | 0 | 0 | – |
+| async | typed | 10 | 0 | 5 | internal/DoublyLinkedList.js 6, internal/Heap.js 3, internal/queue.js 1 |
+| chalk | refined | 0 | 0 | 0 | – |
+| chalk | typed | 0 | 0 | 0 | – |
+| dayjs | refined | 0 | 0 | 0 | – |
+| dayjs | typed | 0 | 0 | 0 | – |
+| underscore | refined | 0 | 0 | 0 | – |
+| underscore | typed | 0 | 0 | 0 | – |
+
+## Analysed set: globs alone against shipped source
+
+The analysed set of every package is its shipped source: the `analysed` globs without test and benchmark
+paths. Reports written before this rule analysed what the globs alone select; each package listed here is
+scored both ways once, so this report reads against them. Every other table uses the shipped set.
+
+| package | set | files | source KB | plan | recall | exact / exact + conservative | wrong targets single / multi | wrong exact targets | call sites | dump s | dump peak MB |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| zod | globs alone | 332 | 3088 | base | 1190/1308 (91%) | 674 / 763 | 0 / 40 | 0 | 49016 | 19.1 | 3208 |
+| zod | globs alone | 332 | 3088 | refined | 1190/1308 (91%) | 674 / 763 | 0 / 40 | 0 | 49016 | 35.6 | 4981 |
+| zod | globs alone | 332 | 3088 | typed | 1197/1308 (92%) | 674 / 771 | 0 / 40 | 0 | 49016 | 39.4 | 4611 |
+| zod | shipped | 125 | 1354 | base | 1181/1308 (90%) | 674 / 763 | 0 / 40 | 0 | 6109 | 4.5 | 1089 |
+| zod | shipped | 125 | 1354 | refined | 1181/1308 (90%) | 674 / 763 | 0 / 40 | 0 | 6109 | 8.5 | 1591 |
+| zod | shipped | 125 | 1354 | typed | 1189/1308 (91%) | 674 / 771 | 0 / 40 | 0 | 6109 | 10.2 | 1588 |
+
+## Outside tools
+
+Jelly at `62e60eb4fd5b991c5bf4cfc992f018984f560ea4`, run by `bench.py outside` in the bench sandbox and scored
+from the committed outputs under `baseline/outside/` with the bench's site and callee matching.
+Recall is over observed `call` and `callback` edges. Wrong targets are claimed targets at executed
+sites that the run never called there, split by answers with one target and with several.
+
+| package | polint base | polint refined | polint typed | jelly-static | jelly-approx |
+|---|---|---|---|---|---|
+| async | 99.1% | 99.1% | 99.1% | 55.7% | 55.7% |
+| axios | 89.5% | 89.5% | 89.8% | 89.2% | 89.3% |
+| chalk | 77.8% | 77.8% | 77.8% | 86.1% | 86.1% |
+| commander | 57.6% | 57.6% | 96.2% | 96.5% | 96.5% |
+| dayjs | 78.6% | 78.6% | 78.6% | 77.7% | 87.5% |
+| underscore | 96.2% | 96.2% | 96.2% | 96.2% | 98.9% |
+| zod | 90.3% | 90.3% | 90.9% | 91.6% | 92.0% |
+| **total** | **88.5%** | **88.5%** | **92.4%** | **84.6%** | **85.3%** |
+
+### jelly-static
+
+| package | observed | found | recall | functions | calls | edges | targets per site, mean / p95 / max | wrong single | wrong multi | executed sites | wall s | exit |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| async | 637 | 355 | 55.7% | 504 | 1610 | 14352 | 14.53 / 76 / 82 | 0 | 3679 | 571 | 1.3 | 0 |
+| axios | 675 | 602 | 89.2% | 535 | 2281 | 1448 | 1.09 / 2 / 20 | 12 | 78 | 620 | 1.3 | 0 |
+| chalk | 72 | 62 | 86.1% | 53 | 148 | 72 | 1.07 / 1 / 6 | 0 | 0 | 63 | 0.7 | 0 |
+| commander | 318 | 307 | 96.5% | 296 | 814 | 517 | 1.03 / 1 / 5 | 0 | 4 | 311 | 1.8 | 0 |
+| dayjs | 112 | 87 | 77.7% | 57 | 181 | 97 | 1.01 / 1 / 2 | 0 | 0 | 112 | 0.6 | 0 |
+| underscore | 260 | 250 | 96.2% | 186 | 455 | 1120 | 3.37 / 26 / 27 | 1 | 330 | 231 | 0.8 | 0 |
+| zod | 1308 | 1198 | 91.6% | 2421 | 6502 | 8375 | 1.83 / 1 / 252 | 0 | 1709 | 1079 | 4.2 | 0 |
+
+### jelly-approx
+
+| package | observed | found | recall | functions | calls | edges | targets per site, mean / p95 / max | wrong single | wrong multi | executed sites | wall s | exit |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| async | 637 | 355 | 55.7% | 504 | 1610 | 14352 | 14.53 / 76 / 82 | 0 | 3679 | 571 | 3.1 | 0 |
+| axios | 675 | 603 | 89.3% | 535 | 2304 | 1474 | 1.09 / 2 / 20 | 12 | 78 | 620 | 3.2 | 0 |
+| chalk | 72 | 62 | 86.1% | 53 | 148 | 72 | 1.07 / 1 / 6 | 0 | 0 | 63 | 1.3 | 0 |
+| commander | 318 | 307 | 96.5% | 296 | 814 | 517 | 1.03 / 1 / 5 | 0 | 4 | 311 | 2.9 | 0 |
+| dayjs | 112 | 98 | 87.5% | 57 | 181 | 108 | 1.01 / 1 / 2 | 0 | 0 | 112 | 1.2 | 0 |
+| underscore | 260 | 257 | 98.9% | 186 | 455 | 2232 | 6.38 / 34 / 116 | 0 | 638 | 231 | 1.6 | 0 |
+| zod | 1308 | 1204 | 92.0% | 2421 | 6651 | 9079 | 1.91 / 1 / 252 | 0 | 1867 | 1079 | 9.6 | 0 |
+
+Deviations from polint's scoring:
+
+- Jelly has no tiers and no notion of a complete answer or of a heuristic edge, so every Jelly edge counts as claimed, its edges to external callbacks included. Its wrong-target counts are an upper bound and are not comparable with polint's exact tier.
+- Jelly's per-file module entries are left out of callee matching, as polint's `module` functions are.
+- Jelly is given the same shipped source files polint analyses, as entry files; `-b <package>` makes its paths relative to the package root.
+- Jelly models `_interopRequireDefault` and similar helpers natively instead of analysing their bodies; polint analyses the helper as code. On async this alone accounts for most of Jelly's misses.
+- polint's outcome classes ("stops at import binding", "marked unresolved") have no counterpart in Jelly's output.
+- Wall time is the docker wall time of one run, container start included, on the machine that recorded the committed outputs; it is not measured with polint's cost runs.
+- ACG (js-callgraph) is not run: its parser rejects ES2020 and drops such files silently, so it cannot analyse these packages.
+
+## Held-out packages
+
+Packages no analysis change may be tuned on (`research/package-graphs/HELD-OUT.md`). They get the tune
+set's measures with no gap ranking, no cause and no example of a missed edge. Wrong exact targets and
+answers with other targets and no unresolved marker keep their examples: either is a defect to fix.
+A package whose recording entered under 40% of its functions is flagged and left out
+of the held-out recall.
+
+| package | format | files analysed / selected | source KB | census functions | entered | coverage | observed edges | recall base | recall refined | recall typed |
+|---|---|---|---|---|---|---|---|---|---|---|
+| co 4.6.0 | CommonJS, generator and promise control flow | 1 / 1 | 5 | 20 | 20 | 20/20 (100%) | 22 | 22/22 (100%) | 22/22 (100%) | 22/22 (100%) |
+| pako 2.1.0 | minified UMD (Rollup and terser) | 1 / 1 | 47 | 99 | 94 | 94/99 (95%) | 257 | 255/257 (99%) | 255/257 (99%) | 255/257 (99%) |
+| nanostores 1.5.5 | ESM source | 14 / 14 | 18 | 97 | 91 | 91/97 (94%) | 103 | 71/103 (69%) | 71/103 (69%) | 71/103 (69%) |
+| express 5.3.0 | CommonJS framework with dependencies | 7 / 7 | 62 | 109 | 109 | 109/109 (100%) | 166 | 67/166 (40%) | 67/166 (40%) | 73/166 (44%) |
+| immer 11.2.10 | TypeScript source | 17 / 17 | 96 | 181 | 142 | 142/181 (78%) | 295 | 253/295 (86%) | 253/295 (86%) | 260/295 (88%) |
+| js-yaml 4.1.0 | CommonJS source, table-driven schema compilation | 25 / 25 | 110 | 146 | 143 | 143/146 (98%) | 338 | 276/338 (82%) | 276/338 (82%) | 276/338 (82%) |
+| acorn 8.19.0 | bundled ESM output | 1 / 1 | 235 | 358 | 333 | 333/358 (93%) | 1141 | 1119/1141 (98%) | 1119/1141 (98%) | 1119/1141 (98%) |
+| node-forge 1.4.3 | CommonJS, large | 49 / 49 | 972 | 960 | 649 | 649/960 (68%) | 3131 | 2762/3131 (88%) | 2762/3131 (88%) | 2762/3131 (88%) |
+
+### Held-out gate
+
+Recall per tier pooled over the tune set and over the unflagged held-out packages (acorn, co, express, immer, js-yaml, nanostores, node-forge, pako; flagged: none). The gate holds when held-out recall is at most 5 points below the tune set's in every tier,
+and no held-out package, flagged or not, has a wrong exact target or an answer with other targets and no
+unresolved marker.
+
+| plan | tier | tune | held-out | points below tune | within |
+|---|---|---|---|---|---|
+| base | exact-complete | 42.4% | 32.3% | 10.1 | no |
+| base | exact | 47.5% | 32.3% | 15.3 | no |
+| base | exact + conservative | 67.9% | 83.5% | -15.7 | yes |
+| refined | exact-complete | 42.4% | 32.3% | 10.1 | no |
+| refined | exact | 47.5% | 32.3% | 15.3 | no |
+| refined | exact + conservative | 67.9% | 83.5% | -15.7 | yes |
+| typed | exact-complete | 42.4% | 32.3% | 10.1 | no |
+| typed | exact | 47.5% | 32.3% | 15.3 | no |
+| typed | exact + conservative | 75.6% | 84.3% | -8.8 | yes |
+
+| plan | wrong exact targets | other targets, no unresolved marker |
+|---|---|---|
+| base | 0 | 0 |
+| refined | 0 | 0 |
+| typed | 0 | 0 |
+
+### Claimed targets the run never called
+
+A claimed target is resolved and not heuristic. It counts here when the run executed the site, the target is
+in an instrumented file, and the run never called it from that site. On a **single-target** answer that is a
+false precise edge: every execution of the site went elsewhere. On a **multi-target** answer it is an upper
+bound only, since the run may not have taken the paths to the other targets. A site matched to a polint site
+by its end byte can also inflate both counts.
+
+| package | base: single / multi | refined: single / multi | typed: single / multi |
+|---|---|---|---|
+| co | 0 / 0 | 0 / 0 | 0 / 0 |
+| pako | 0 / 0 | 0 / 0 | 0 / 0 |
+| nanostores | 0 / 4 | 0 / 4 | 0 / 4 |
+| express | 0 / 0 | 0 / 0 | 0 / 0 |
+| immer | 0 / 3 | 0 / 3 | 0 / 7 |
+| js-yaml | 0 / 0 | 0 / 0 | 0 / 0 |
+| acorn | 0 / 0 | 0 / 0 | 0 / 0 |
+| node-forge | 0 / 64 | 0 / 64 | 0 / 64 |
+| **total** | **0 / 71** | **0 / 71** | **0 / 75** |
+
+| package | plan | site | site text | single-target answer | the run called |
+|---|---|---|---|---|---|
+| none | | | | | |
+
+### Other targets and no unresolved marker (every case)
+
+The observed callee is not among polint's targets for the site, and the site carries no unresolved marker.
+The polint site column shows which call expression the observed site was matched to.
+
+| package | plan | observed site | syntax / kind | observed callee | polint answer | observed site text | polint site text |
+|---|---|---|---|---|---|---|---|
+| none | | | | | | | |
+
+## Tiers (held-out)
+
+Recall over the same observed edges as above, split by the tier of the edge that found the callee
+(`research/package-graphs/TIERS.md`): `Exact` and `SetupAware` are exact, except typed-hierarchy edges
+that dispatch to an `implementation` or `union_member`, which are candidates and count as conservative;
+`Conservative` and `Ambiguous` are conservative; `Heuristic` is apart and never counts in the first three
+columns. **exact-complete** also needs the site to be complete: at least one exact or conservative target and
+no unresolved row.
+
+| package | plan | observed edges | exact-complete | exact | exact + conservative | apart only | apart edges |
+|---|---|---|---|---|---|---|---|
+| co | base | 22 | 12/22 (55%) | 12/22 (55%) | 22/22 (100%) | 0/22 (0%) | 0 |
+| co | refined | 22 | 12/22 (55%) | 12/22 (55%) | 22/22 (100%) | 0/22 (0%) | 0 |
+| co | typed | 22 | 12/22 (55%) | 12/22 (55%) | 22/22 (100%) | 0/22 (0%) | 0 |
+| pako | base | 257 | 235/257 (91%) | 235/257 (91%) | 255/257 (99%) | 0/257 (0%) | 0 |
+| pako | refined | 257 | 235/257 (91%) | 235/257 (91%) | 255/257 (99%) | 0/257 (0%) | 22 |
+| pako | typed | 257 | 235/257 (91%) | 235/257 (91%) | 255/257 (99%) | 0/257 (0%) | 22 |
+| nanostores | base | 103 | 32/103 (31%) | 32/103 (31%) | 71/103 (69%) | 0/103 (0%) | 0 |
+| nanostores | refined | 103 | 32/103 (31%) | 32/103 (31%) | 71/103 (69%) | 0/103 (0%) | 0 |
+| nanostores | typed | 103 | 32/103 (31%) | 32/103 (31%) | 71/103 (69%) | 0/103 (0%) | 0 |
+| express | base | 166 | 33/166 (20%) | 33/166 (20%) | 43/166 (26%) | 24/166 (14%) | 25 |
+| express | refined | 166 | 33/166 (20%) | 33/166 (20%) | 43/166 (26%) | 24/166 (14%) | 25 |
+| express | typed | 166 | 33/166 (20%) | 33/166 (20%) | 58/166 (35%) | 15/166 (9%) | 25 |
+| immer | base | 295 | 226/295 (77%) | 226/295 (77%) | 253/295 (86%) | 0/295 (0%) | 1 |
+| immer | refined | 295 | 226/295 (77%) | 226/295 (77%) | 253/295 (86%) | 0/295 (0%) | 2 |
+| immer | typed | 295 | 226/295 (77%) | 226/295 (77%) | 260/295 (88%) | 0/295 (0%) | 2 |
+| js-yaml | base | 338 | 265/338 (78%) | 265/338 (78%) | 276/338 (82%) | 0/338 (0%) | 0 |
+| js-yaml | refined | 338 | 265/338 (78%) | 265/338 (78%) | 276/338 (82%) | 0/338 (0%) | 4 |
+| js-yaml | typed | 338 | 265/338 (78%) | 265/338 (78%) | 276/338 (82%) | 0/338 (0%) | 4 |
+| acorn | base | 1141 | 179/1141 (16%) | 179/1141 (16%) | 1113/1141 (98%) | 6/1141 (1%) | 9 |
+| acorn | refined | 1141 | 179/1141 (16%) | 179/1141 (16%) | 1113/1141 (98%) | 6/1141 (1%) | 12 |
+| acorn | typed | 1141 | 179/1141 (16%) | 179/1141 (16%) | 1119/1141 (98%) | 0/1141 (0%) | 12 |
+| node-forge | base | 3131 | 777/3131 (25%) | 777/3131 (25%) | 2523/3131 (81%) | 239/3131 (8%) | 389 |
+| node-forge | refined | 3131 | 777/3131 (25%) | 777/3131 (25%) | 2523/3131 (81%) | 239/3131 (8%) | 407 |
+| node-forge | typed | 3131 | 777/3131 (25%) | 777/3131 (25%) | 2538/3131 (81%) | 224/3131 (7%) | 407 |
+| **total** | base | 5453 | 1759/5453 (32%) | 1759/5453 (32%) | 4556/5453 (84%) | 269/5453 (5%) | 424 |
+| **total** | refined | 5453 | 1759/5453 (32%) | 1759/5453 (32%) | 4556/5453 (84%) | 269/5453 (5%) | 472 |
+| **total** | typed | 5453 | 1759/5453 (32%) | 1759/5453 (32%) | 4599/5453 (84%) | 239/5453 (4%) | 472 |
+
+Targets per site that claims any in the tier: mean / p95 (nearest rank) / max.
+
+| package | plan | exact | conservative | exact + conservative | apart |
+|---|---|---|---|---|---|
+| co | base | 1.0 / 1 / 1 (12 sites) | 1.08 / 2 / 2 (13 sites) | 1.04 / 1 / 2 (25 sites) | – |
+| co | refined | 1.0 / 1 / 1 (12 sites) | 1.08 / 2 / 2 (13 sites) | 1.04 / 1 / 2 (25 sites) | – |
+| co | typed | 1.0 / 1 / 1 (12 sites) | 1.08 / 2 / 2 (13 sites) | 1.04 / 1 / 2 (25 sites) | – |
+| pako | base | 1.0 / 1 / 1 (276 sites) | 1.0 / 1 / 1 (25 sites) | 1.0 / 1 / 1 (301 sites) | – |
+| pako | refined | 1.0 / 1 / 1 (276 sites) | 1.0 / 1 / 1 (25 sites) | 1.0 / 1 / 1 (301 sites) | 1.0 / 1 / 1 (11 sites) |
+| pako | typed | 1.0 / 1 / 1 (276 sites) | 1.0 / 1 / 1 (25 sites) | 1.0 / 1 / 1 (301 sites) | 1.0 / 1 / 1 (11 sites) |
+| nanostores | base | 1.0 / 1 / 1 (37 sites) | 1.32 / 2 / 5 (38 sites) | 1.16 / 2 / 5 (75 sites) | – |
+| nanostores | refined | 1.0 / 1 / 1 (37 sites) | 1.32 / 2 / 5 (38 sites) | 1.16 / 2 / 5 (75 sites) | – |
+| nanostores | typed | 1.0 / 1 / 1 (37 sites) | 1.32 / 2 / 5 (38 sites) | 1.16 / 2 / 5 (75 sites) | – |
+| express | base | 1.0 / 1 / 1 (35 sites) | 1.0 / 1 / 1 (13 sites) | 1.0 / 1 / 1 (48 sites) | 1.0 / 1 / 1 (25 sites) |
+| express | refined | 1.0 / 1 / 1 (35 sites) | 1.0 / 1 / 1 (13 sites) | 1.0 / 1 / 1 (48 sites) | 1.0 / 1 / 1 (25 sites) |
+| express | typed | 1.0 / 1 / 1 (35 sites) | 1.0 / 1 / 1 (28 sites) | 1.0 / 1 / 1 (63 sites) | 1.0 / 1 / 1 (25 sites) |
+| immer | base | 1.0 / 1 / 1 (303 sites) | 1.48 / 6 / 6 (27 sites) | 1.04 / 1 / 6 (330 sites) | 1.0 / 1 / 1 (1 sites) |
+| immer | refined | 1.0 / 1 / 1 (303 sites) | 1.48 / 6 / 6 (27 sites) | 1.04 / 1 / 6 (330 sites) | 1.0 / 1 / 1 (1 sites) |
+| immer | typed | 1.0 / 1 / 1 (303 sites) | 1.17 / 2 / 6 (98 sites) | 1.04 / 1 / 6 (401 sites) | 1.0 / 1 / 1 (1 sites) |
+| js-yaml | base | 1.0 / 1 / 1 (305 sites) | 1.0 / 1 / 1 (11 sites) | 1.0 / 1 / 1 (316 sites) | – |
+| js-yaml | refined | 1.0 / 1 / 1 (305 sites) | 1.0 / 1 / 1 (11 sites) | 1.0 / 1 / 1 (316 sites) | 1.0 / 1 / 1 (2 sites) |
+| js-yaml | typed | 1.0 / 1 / 1 (305 sites) | 1.0 / 1 / 1 (11 sites) | 1.0 / 1 / 1 (316 sites) | 1.0 / 1 / 1 (2 sites) |
+| acorn | base | 1.0 / 1 / 1 (200 sites) | 1.01 / 1 / 8 (1308 sites) | 1.01 / 1 / 8 (1508 sites) | 1.0 / 1 / 1 (9 sites) |
+| acorn | refined | 1.0 / 1 / 1 (200 sites) | 1.01 / 1 / 8 (1308 sites) | 1.01 / 1 / 8 (1508 sites) | 1.0 / 1 / 1 (9 sites) |
+| acorn | typed | 1.0 / 1 / 1 (200 sites) | 1.01 / 1 / 8 (1314 sites) | 1.01 / 1 / 8 (1514 sites) | 1.0 / 1 / 1 (9 sites) |
+| node-forge | base | 1.0 / 1 / 1 (941 sites) | 1.11 / 2 / 6 (2086 sites) | 1.08 / 1 / 6 (3027 sites) | 1.22 / 3 / 6 (319 sites) |
+| node-forge | refined | 1.0 / 1 / 1 (941 sites) | 1.11 / 2 / 6 (2086 sites) | 1.08 / 1 / 6 (3027 sites) | 1.21 / 3 / 6 (328 sites) |
+| node-forge | typed | 1.0 / 1 / 1 (941 sites) | 1.11 / 2 / 6 (2114 sites) | 1.08 / 1 / 6 (3055 sites) | 1.21 / 3 / 6 (328 sites) |
+
+## Precision by tier (held-out)
+
+At executed sites only: a site counts once the run was seen calling a polint function from it, and a
+claimed target counts when it is a function in an instrumented file. **precision** is the share of those
+targets the run called there; it is a lower bound, since a run takes only some paths. A target the run never
+called on a single-target answer in the exact tier is a **wrong exact target**; the gate is 0.
+
+| package | plan | exact: precision, single / multi not called | conservative: precision, single / multi not called | apart: precision, single / multi not called |
+|---|---|---|---|---|
+| co | base | 12/12 (100%), 0 / 0 | 10/10 (100%), 0 / 0 | – |
+| co | refined | 12/12 (100%), 0 / 0 | 10/10 (100%), 0 / 0 | – |
+| co | typed | 12/12 (100%), 0 / 0 | 10/10 (100%), 0 / 0 | – |
+| pako | base | 235/235 (100%), 0 / 0 | 20/20 (100%), 0 / 0 | – |
+| pako | refined | 235/235 (100%), 0 / 0 | 20/20 (100%), 0 / 0 | 8/8 (100%), 0 / 0 |
+| pako | typed | 235/235 (100%), 0 / 0 | 20/20 (100%), 0 / 0 | 8/8 (100%), 0 / 0 |
+| nanostores | base | 32/32 (100%), 0 / 0 | 39/43 (91%), 0 / 4 | – |
+| nanostores | refined | 32/32 (100%), 0 / 0 | 39/43 (91%), 0 / 4 | – |
+| nanostores | typed | 32/32 (100%), 0 / 0 | 39/43 (91%), 0 / 4 | – |
+| express | base | 33/33 (100%), 0 / 0 | 10/10 (100%), 0 / 0 | 24/24 (100%), 0 / 0 |
+| express | refined | 33/33 (100%), 0 / 0 | 10/10 (100%), 0 / 0 | 24/24 (100%), 0 / 0 |
+| express | typed | 33/33 (100%), 0 / 0 | 25/25 (100%), 0 / 0 | 24/24 (100%), 0 / 0 |
+| immer | base | 226/226 (100%), 0 / 0 | 27/30 (90%), 0 / 3 | – |
+| immer | refined | 226/226 (100%), 0 / 0 | 27/30 (90%), 0 / 3 | – |
+| immer | typed | 226/226 (100%), 0 / 0 | 34/41 (83%), 0 / 7 | – |
+| js-yaml | base | 265/265 (100%), 0 / 0 | 11/11 (100%), 0 / 0 | – |
+| js-yaml | refined | 265/265 (100%), 0 / 0 | 11/11 (100%), 0 / 0 | – |
+| js-yaml | typed | 265/265 (100%), 0 / 0 | 11/11 (100%), 0 / 0 | – |
+| acorn | base | 179/179 (100%), 0 / 0 | 934/934 (100%), 0 / 0 | 6/9 (67%), 3 / 0 |
+| acorn | refined | 179/179 (100%), 0 / 0 | 934/934 (100%), 0 / 0 | 6/9 (67%), 3 / 0 |
+| acorn | typed | 179/179 (100%), 0 / 0 | 940/940 (100%), 0 / 0 | 6/9 (67%), 3 / 0 |
+| node-forge | base | 777/777 (100%), 0 / 0 | 1746/1810 (96%), 0 / 64 | 239/275 (87%), 0 / 36 |
+| node-forge | refined | 777/777 (100%), 0 / 0 | 1746/1810 (96%), 0 / 64 | 246/282 (87%), 0 / 36 |
+| node-forge | typed | 777/777 (100%), 0 / 0 | 1761/1825 (96%), 0 / 64 | 246/282 (87%), 0 / 36 |
+| **total** | base | **1759/1759 (100%), 0 / 0** | **2797/2868 (98%), 0 / 71** | **269/308 (87%), 3 / 36** |
+| **total** | refined | **1759/1759 (100%), 0 / 0** | **2797/2868 (98%), 0 / 71** | **284/323 (88%), 3 / 36** |
+| **total** | typed | **1759/1759 (100%), 0 / 0** | **2840/2915 (97%), 0 / 75** | **284/323 (88%), 3 / 36** |
+
+| package | plan | wrong exact target at | site text | target | the run called |
+|---|---|---|---|---|---|
+| none | | | | | |
+
+## Open sites (held-out)
+
+A site is open when it has no exact or conservative target, or the answer marks it unresolved. Each open
+site counts under every reason its answer gives; `none recorded` is an open site whose answer gives none,
+which the engine must not produce.
+
+| package | plan | call sites | complete | open | open with a claimed target | open by reason |
+|---|---|---|---|---|---|---|
+| co | base | 46 | 12/46 (26%) | 34 | 13 | Unknown 13, CallApplyBind 12, MissingSemanticReference 11, DynamicProperty 7, none recorded 4 |
+| co | refined | 46 | 12/46 (26%) | 34 | 13 | Unknown 13, CallApplyBind 12, MissingSemanticReference 11, DynamicProperty 7, none recorded 4 |
+| co | typed | 46 | 12/46 (26%) | 34 | 13 | Unknown 13, CallApplyBind 12, MissingSemanticReference 11, DynamicProperty 7, UnknownCallee 5, none recorded 4 |
+| pako | base | 430 | 276/430 (64%) | 154 | 25 | DynamicProperty 73, MissingSemanticReference 64, Inflow(EscapedObject) 12, Inflow(InwardThis) 9, CallApplyBind 8, Inflow(InwardParameter) 4, none recorded 4 |
+| pako | refined | 430 | 276/430 (64%) | 154 | 25 | DynamicProperty 73, MissingSemanticReference 64, Inflow(EscapedObject) 12, Inflow(InwardThis) 9, CallApplyBind 8, Inflow(InwardParameter) 4, none recorded 4 |
+| pako | typed | 430 | 276/430 (64%) | 154 | 25 | DynamicProperty 73, MissingSemanticReference 64, UnknownCallee 47, Inflow(EscapedObject) 12, Inflow(InwardThis) 9, CallApplyBind 8, Inflow(InwardParameter) 4, none recorded 4 |
+| nanostores | base | 164 | 37/164 (23%) | 127 | 38 | MissingSemanticReference 61, DynamicProperty 56, Inflow(EscapedObject) 15, Unknown 15, none recorded 9, Inflow(OutsideValue) 8 |
+| nanostores | refined | 164 | 37/164 (23%) | 127 | 38 | MissingSemanticReference 61, DynamicProperty 56, Inflow(EscapedObject) 15, Unknown 15, none recorded 9, Inflow(OutsideValue) 8 |
+| nanostores | typed | 164 | 37/164 (23%) | 127 | 38 | MissingSemanticReference 61, DynamicProperty 56, UnknownCallee 54, Inflow(EscapedObject) 15, Unknown 15, none recorded 9, Inflow(OutsideValue) 8 |
+| express | base | 466 | 35/466 (8%) | 431 | 13 | DynamicProperty 192, MissingSemanticReference 175, none recorded 51, Unknown 13, CallApplyBind 11, UnknownCallee 1 |
+| express | refined | 466 | 35/466 (8%) | 431 | 13 | DynamicProperty 192, MissingSemanticReference 175, none recorded 51, Unknown 13, CallApplyBind 11, UnknownCallee 1 |
+| express | typed | 466 | 35/466 (8%) | 431 | 28 | UnknownCallee 273, DynamicProperty 192, MissingSemanticReference 175, none recorded 45, Unknown 13, CallApplyBind 11 |
+| immer | base | 575 | 303/575 (53%) | 272 | 27 | MissingSemanticReference 111, DynamicProperty 110, none recorded 33, CallApplyBind 18, Unknown 15, Inflow(EscapedObject) 6, Inflow(InwardParameter) 4, Inflow(OutsideValue) 2 |
+| immer | refined | 575 | 303/575 (53%) | 272 | 27 | MissingSemanticReference 111, DynamicProperty 110, none recorded 33, CallApplyBind 18, Unknown 15, Inflow(EscapedObject) 6, Inflow(InwardParameter) 4, Inflow(OutsideValue) 2 |
+| immer | typed | 575 | 303/575 (53%) | 272 | 98 | MissingSemanticReference 111, DynamicProperty 110, UnknownCallee 32, none recorded 26, CallApplyBind 18, Unknown 15, Inflow(EscapedObject) 6, Inflow(InwardParameter) 4, Inflow(OutsideValue) 2 |
+| js-yaml | base | 709 | 305/709 (43%) | 404 | 11 | DynamicProperty 193, MissingSemanticReference 127, none recorded 55, CallApplyBind 29, Unknown 8, Inflow(EscapedObject) 3 |
+| js-yaml | refined | 709 | 305/709 (43%) | 404 | 11 | DynamicProperty 193, MissingSemanticReference 127, none recorded 55, CallApplyBind 29, Unknown 8, Inflow(EscapedObject) 3 |
+| js-yaml | typed | 709 | 305/709 (43%) | 404 | 11 | UnknownCallee 237, DynamicProperty 193, MissingSemanticReference 127, none recorded 55, CallApplyBind 29, Unknown 8, Inflow(EscapedObject) 3 |
+| acorn | base | 1809 | 201/1809 (11%) | 1608 | 1307 | DynamicProperty 1539, Inflow(InwardThis) 1099, Inflow(InwardParameter) 185, MissingSemanticReference 43, none recorded 19, Inflow(OutsideValue) 11, Inflow(EscapedObject) 8, CallApplyBind 6, Unknown 4, DynamicImport 1 |
+| acorn | refined | 1809 | 201/1809 (11%) | 1608 | 1307 | DynamicProperty 1539, Inflow(InwardThis) 1099, Inflow(InwardParameter) 185, MissingSemanticReference 43, none recorded 19, Inflow(OutsideValue) 11, Inflow(EscapedObject) 8, CallApplyBind 6, Unknown 4, DynamicImport 1 |
+| acorn | typed | 1809 | 201/1809 (11%) | 1608 | 1313 | DynamicProperty 1539, Inflow(InwardThis) 1099, Inflow(InwardParameter) 185, UnknownCallee 183, MissingSemanticReference 43, none recorded 19, Inflow(OutsideValue) 11, Inflow(EscapedObject) 8, CallApplyBind 6, Unknown 4, DynamicImport 1 |
+| node-forge | base | 5283 | 947/5283 (18%) | 4336 | 2080 | DynamicProperty 3152, Inflow(EscapedObject) 1097, MissingSemanticReference 938, Inflow(InwardThis) 551, Inflow(InwardParameter) 411, none recorded 196, Unknown 19, CallApplyBind 15, Inflow(OutsideValue) 2 |
+| node-forge | refined | 5283 | 947/5283 (18%) | 4336 | 2080 | DynamicProperty 3152, Inflow(EscapedObject) 1097, MissingSemanticReference 938, Inflow(InwardThis) 551, Inflow(InwardParameter) 411, none recorded 196, Unknown 19, CallApplyBind 15, Inflow(OutsideValue) 2 |
+| node-forge | typed | 5283 | 947/5283 (18%) | 4336 | 2108 | DynamicProperty 3152, UnknownCallee 1290, Inflow(EscapedObject) 1097, MissingSemanticReference 938, Inflow(InwardThis) 551, Inflow(InwardParameter) 411, none recorded 191, Unknown 19, CallApplyBind 15, Inflow(OutsideValue) 2 |
+
+## Budget events (held-out)
+
+The solver's budget status for each dump and every budget it reported as reached. The target is none on
+the tune set, and a budget event must never discard an edge already derived.
+
+| package | plan | status | reasons |
+|---|---|---|---|
+| co | base | WithinBudget | – |
+| co | refined | WithinBudget | – |
+| co | typed | WithinBudget | – |
+| pako | base | WithinBudget | – |
+| pako | refined | WithinBudget | – |
+| pako | typed | WithinBudget | – |
+| nanostores | base | WithinBudget | – |
+| nanostores | refined | WithinBudget | – |
+| nanostores | typed | WithinBudget | – |
+| express | base | WithinBudget | – |
+| express | refined | WithinBudget | – |
+| express | typed | WithinBudget | – |
+| immer | base | WithinBudget | – |
+| immer | refined | WithinBudget | – |
+| immer | typed | WithinBudget | – |
+| js-yaml | base | WithinBudget | – |
+| js-yaml | refined | WithinBudget | – |
+| js-yaml | typed | WithinBudget | – |
+| acorn | base | WithinBudget | – |
+| acorn | refined | WithinBudget | – |
+| acorn | typed | WithinBudget | – |
+| node-forge | base | WithinBudget | – |
+| node-forge | refined | WithinBudget | – |
+| node-forge | typed | WithinBudget | – |
+
+## Refined edges (held-out)
+
+Every refined row by the tier the bench gives it, its algorithm, status and precision, and whether it
+names a function. Rows with a status other than `Resolved` or `Ambiguous` claim nothing.
+
+| package | plan | tier | algorithm | status | precision | names a function | rows |
+|---|---|---|---|---|---|---|---|
+| co | refined | none | PointsTo | Unresolved | Unknown | no | 43 |
+| co | refined | conservative | PointsTo | Resolved | Conservative | yes | 14 |
+| co | refined | exact | DirectReference | Resolved | SetupAware | yes | 12 |
+| co | refined | exact | PointsTo | Resolved | Exact | yes | 12 |
+| co | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 12 |
+| co | typed | none | PointsTo | Unresolved | Unknown | no | 43 |
+| co | typed | conservative | PointsTo | Resolved | Conservative | yes | 14 |
+| co | typed | exact | DirectReference | Resolved | SetupAware | yes | 12 |
+| co | typed | exact | PointsTo | Resolved | Exact | yes | 12 |
+| co | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 12 |
+| co | typed | none | TypeHierarchy | Unresolved | Unknown | no | 5 |
+| pako | refined | exact | PointsTo | Resolved | Exact | yes | 276 |
+| pako | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 249 |
+| pako | refined | none | PointsTo | Unresolved | Unknown | no | 170 |
+| pako | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 148 |
+| pako | refined | exact | DirectReference | Resolved | SetupAware | yes | 101 |
+| pako | refined | conservative | PointsTo | Resolved | Conservative | yes | 25 |
+| pako | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 11 |
+| pako | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 11 |
+| pako | typed | exact | PointsTo | Resolved | Exact | yes | 276 |
+| pako | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 249 |
+| pako | typed | none | PointsTo | Unresolved | Unknown | no | 170 |
+| pako | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 148 |
+| pako | typed | exact | DirectReference | Resolved | SetupAware | yes | 101 |
+| pako | typed | none | TypeHierarchy | Unresolved | Unknown | no | 47 |
+| pako | typed | conservative | PointsTo | Resolved | Conservative | yes | 25 |
+| pako | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 11 |
+| pako | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 11 |
+| nanostores | refined | none | PointsTo | Unresolved | Unknown | no | 155 |
+| nanostores | refined | conservative | PointsTo | Resolved | Conservative | yes | 50 |
+| nanostores | refined | exact | PointsTo | Resolved | Exact | yes | 37 |
+| nanostores | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 36 |
+| nanostores | refined | exact | DirectReference | Resolved | SetupAware | yes | 22 |
+| nanostores | refined | exact | ImportBinding | Resolved | SetupAware | yes | 14 |
+| nanostores | typed | none | PointsTo | Unresolved | Unknown | no | 155 |
+| nanostores | typed | none | TypeHierarchy | Unresolved | Unknown | no | 54 |
+| nanostores | typed | conservative | PointsTo | Resolved | Conservative | yes | 50 |
+| nanostores | typed | exact | PointsTo | Resolved | Exact | yes | 37 |
+| nanostores | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 36 |
+| nanostores | typed | exact | DirectReference | Resolved | SetupAware | yes | 22 |
+| nanostores | typed | exact | ImportBinding | Resolved | SetupAware | yes | 14 |
+| express | refined | none | PointsTo | Unresolved | Unknown | no | 392 |
+| express | refined | exact | PointsTo | Resolved | Exact | yes | 35 |
+| express | refined | apart | PointsTo | Resolved | Heuristic | yes | 25 |
+| express | refined | exact | DirectReference | Resolved | SetupAware | yes | 24 |
+| express | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 24 |
+| express | refined | conservative | PointsTo | Resolved | Conservative | yes | 13 |
+| express | typed | none | PointsTo | Unresolved | Unknown | no | 392 |
+| express | typed | none | TypeHierarchy | Unresolved | Unknown | no | 273 |
+| express | typed | exact | PointsTo | Resolved | Exact | yes | 35 |
+| express | typed | apart | PointsTo | Resolved | Heuristic | yes | 25 |
+| express | typed | exact | DirectReference | Resolved | SetupAware | yes | 24 |
+| express | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 24 |
+| express | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 15 |
+| express | typed | conservative | PointsTo | Resolved | Conservative | yes | 13 |
+| immer | refined | exact | PointsTo | Resolved | Exact | yes | 303 |
+| immer | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 302 |
+| immer | refined | none | PointsTo | Unresolved | Unknown | no | 266 |
+| immer | refined | exact | ImportBinding | Resolved | SetupAware | yes | 173 |
+| immer | refined | exact | DirectReference | Resolved | SetupAware | yes | 127 |
+| immer | refined | conservative | PointsTo | Resolved | Conservative | yes | 40 |
+| immer | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 2 |
+| immer | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 1 |
+| immer | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 1 |
+| immer | typed | exact | PointsTo | Resolved | Exact | yes | 303 |
+| immer | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 302 |
+| immer | typed | none | PointsTo | Unresolved | Unknown | no | 266 |
+| immer | typed | exact | ImportBinding | Resolved | SetupAware | yes | 173 |
+| immer | typed | exact | DirectReference | Resolved | SetupAware | yes | 127 |
+| immer | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 75 |
+| immer | typed | conservative | PointsTo | Resolved | Conservative | yes | 40 |
+| immer | typed | none | TypeHierarchy | Unresolved | Unknown | no | 32 |
+| immer | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 2 |
+| immer | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 1 |
+| immer | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 1 |
+| js-yaml | refined | none | PointsTo | Unresolved | Unknown | no | 360 |
+| js-yaml | refined | exact | PointsTo | Resolved | Exact | yes | 305 |
+| js-yaml | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 254 |
+| js-yaml | refined | exact | DirectReference | Resolved | SetupAware | yes | 252 |
+| js-yaml | refined | conservative | PointsTo | Resolved | Conservative | yes | 11 |
+| js-yaml | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 2 |
+| js-yaml | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 2 |
+| js-yaml | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 2 |
+| js-yaml | typed | none | PointsTo | Unresolved | Unknown | no | 360 |
+| js-yaml | typed | exact | PointsTo | Resolved | Exact | yes | 305 |
+| js-yaml | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 254 |
+| js-yaml | typed | exact | DirectReference | Resolved | SetupAware | yes | 252 |
+| js-yaml | typed | none | TypeHierarchy | Unresolved | Unknown | no | 237 |
+| js-yaml | typed | conservative | PointsTo | Resolved | Conservative | yes | 11 |
+| js-yaml | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 2 |
+| js-yaml | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 2 |
+| js-yaml | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 2 |
+| acorn | refined | none | PointsTo | Unresolved | Unknown | no | 2896 |
+| acorn | refined | conservative | PointsTo | Resolved | Conservative | yes | 1317 |
+| acorn | refined | exact | PointsTo | Resolved | Exact | yes | 200 |
+| acorn | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 197 |
+| acorn | refined | exact | DirectReference | Resolved | SetupAware | yes | 136 |
+| acorn | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 61 |
+| acorn | refined | apart | PointsTo | Resolved | Heuristic | yes | 6 |
+| acorn | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 3 |
+| acorn | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 3 |
+| acorn | typed | none | PointsTo | Unresolved | Unknown | no | 2896 |
+| acorn | typed | conservative | PointsTo | Resolved | Conservative | yes | 1317 |
+| acorn | typed | exact | PointsTo | Resolved | Exact | yes | 200 |
+| acorn | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 197 |
+| acorn | typed | none | TypeHierarchy | Unresolved | Unknown | no | 183 |
+| acorn | typed | exact | DirectReference | Resolved | SetupAware | yes | 136 |
+| acorn | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 61 |
+| acorn | typed | apart | PointsTo | Resolved | Heuristic | yes | 6 |
+| acorn | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 6 |
+| acorn | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 3 |
+| acorn | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 3 |
+| node-forge | refined | none | PointsTo | Unresolved | Unknown | no | 6185 |
+| node-forge | refined | conservative | PointsTo | Resolved | Conservative | yes | 2319 |
+| node-forge | refined | exact | PointsTo | Resolved | Exact | yes | 941 |
+| node-forge | refined | exact | SummaryAssisted | Resolved | SetupAware | yes | 664 |
+| node-forge | refined | exact | DirectReference | Resolved | SetupAware | yes | 610 |
+| node-forge | refined | apart | PointsTo | Resolved | Heuristic | yes | 389 |
+| node-forge | refined | exact | ConstructorBinding | Resolved | SetupAware | yes | 54 |
+| node-forge | refined | apart | SummaryAssisted | Resolved | Heuristic | yes | 9 |
+| node-forge | refined | apart | SyntaxOnly | Resolved | Heuristic | yes | 9 |
+| node-forge | typed | none | PointsTo | Unresolved | Unknown | no | 6185 |
+| node-forge | typed | conservative | PointsTo | Resolved | Conservative | yes | 2319 |
+| node-forge | typed | none | TypeHierarchy | Unresolved | Unknown | no | 1290 |
+| node-forge | typed | exact | PointsTo | Resolved | Exact | yes | 941 |
+| node-forge | typed | exact | SummaryAssisted | Resolved | SetupAware | yes | 664 |
+| node-forge | typed | exact | DirectReference | Resolved | SetupAware | yes | 610 |
+| node-forge | typed | apart | PointsTo | Resolved | Heuristic | yes | 389 |
+| node-forge | typed | exact | ConstructorBinding | Resolved | SetupAware | yes | 54 |
+| node-forge | typed | conservative | TypeHierarchy | Resolved | Conservative | yes | 28 |
+| node-forge | typed | apart | SummaryAssisted | Resolved | Heuristic | yes | 9 |
+| node-forge | typed | apart | SyntaxOnly | Resolved | Heuristic | yes | 9 |
+
+## Sites gained by the refined plan (held-out)
+
+Sites where a refined plan claims an exact or conservative target and the base plan claims none, by file.
+**test path** marks a file in a test or benchmark folder or named `*.test.*` / `*.spec.*`; **executed** counts
+the gained sites the run called a polint function from, the only ones recall can credit.
+
+| package | plan | sites gained | in test paths | executed | top files |
+|---|---|---|---|---|---|
+| co | refined | 0 | 0 | 0 | – |
+| co | typed | 0 | 0 | 0 | – |
+| pako | refined | 0 | 0 | 0 | – |
+| pako | typed | 0 | 0 | 0 | – |
+| nanostores | refined | 0 | 0 | 0 | – |
+| nanostores | typed | 0 | 0 | 0 | – |
+| express | refined | 0 | 0 | 0 | – |
+| express | typed | 15 | 0 | 15 | lib/application.js 13, lib/view.js 2 |
+| immer | refined | 0 | 0 | 0 | – |
+| immer | typed | 71 | 0 | 7 | src/plugins/mapset.ts 41, src/plugins/arrayMethods.ts 9, src/plugins/patches.ts 7 |
+| js-yaml | refined | 0 | 0 | 0 | – |
+| js-yaml | typed | 0 | 0 | 0 | – |
+| acorn | refined | 0 | 0 | 0 | – |
+| acorn | typed | 6 | 0 | 6 | dist/acorn.mjs 6 |
+| node-forge | refined | 0 | 0 | 0 | – |
+| node-forge | typed | 28 | 0 | 15 | lib/util.js 22, lib/jsbn.js 6 |
 
 ## Exports (against the loaded module's export keys)
 
 `Symbols` is the exported-symbol answer a rule can read; export facts are the module export rows.
-Both are compared with the export keys the loaded module actually has.
+Both are compared with the export keys the loaded module actually has. A file that fails to load
+on its own is left out of both and counted under `load errors`.
 
-| tree | files exact (Symbols) | name recall (Symbols) | name precision (Symbols) | files exact (export facts) | name recall (export facts) | name precision (export facts) | export fact rows by kind/status |
-|---|---|---|---|---|---|---|---|
-| package axios | 4/72 | 27/162 (17%) | 27/76 (36%) | 5/72 | 95/162 (59%) | 95/95 (100%) | Default/Resolved 67, Named/Resolved 28 |
-| package zod | 10/122 | 940/3935 (24%) | 940/1739 (54%) | 15/122 | 1280/3935 (33%) | 1280/2042 (63%) | Default/Resolved 73, Named/Resolved 2090, Namespace/Unresolved 226, StarReexport/Unresolved 46 |
-| package commander | 0/7 | 0/22 (0%) | – | 7/7 | 22/22 (100%) | 22/22 (100%) | CommonJsExportsProperty/Unsupported 22 |
-| package async | 0/4 | 0/116 (0%) | – | 4/129 | 116/116 (100%) | 116/241 (48%) | CommonJsExportsProperty/Unsupported 347, CommonJsModuleExports/Unsupported 125 |
-| package chalk | 1/5 | 4/29 (14%) | 4/7 (57%) | 1/5 | 16/29 (55%) | 16/16 (100%) | Default/Resolved 1, Named/Resolved 6, Namespace/Unresolved 9 |
-| package dayjs | 0/1 | 0/7 (0%) | – | 0/1 | 0/7 (0%) | – | – |
-| package underscore | 0/1 | 0/147 (0%) | – | 0/1 | 0/147 (0%) | – | – |
-| case cjs-exports-property/function-expressions | 0/1 | 0/2 (0%) | – | 1/1 | 2/2 (100%) | 2/2 (100%) | CommonJsExportsProperty/Unsupported 2 |
-| case cjs-exports-property/renamed-destructuring | 0/1 | 0/2 (0%) | – | 1/1 | 2/2 (100%) | 2/2 (100%) | CommonJsExportsProperty/Unsupported 2 |
-| case cjs-module-exports/function-with-property | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 |
-| case cjs-module-exports/object-literal | 0/1 | 0/2 (0%) | – | 0/1 | 0/2 (0%) | – | CommonJsModuleExports/Unsupported 1 |
-| case class-method/subclass-override | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
-| case dynamic-import/computed-specifier | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
-| case dynamic-import/literal-specifier | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
-| case esm-reexport/named-barrel | 2/3 | 2/4 (50%) | 2/2 (100%) | 3/3 | 4/4 (100%) | 4/4 (100%) | Named/Resolved 2, Namespace/Unresolved 2 |
-| case esm-reexport/star-and-alias | 2/3 | 2/4 (50%) | 2/2 (100%) | 2/3 | 3/4 (75%) | 3/3 (100%) | Named/Resolved 2, Namespace/Unresolved 1, StarReexport/Unresolved 1 |
-| case module-initializer/arrow-in-initializer | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
-| case module-initializer/chained-call | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
-| case module-initializer/class-expression | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
-| case module-initializer/exported-call | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
-| case module-initializer/object-literal-methods | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 |
+| tree | files exact (Symbols) | name recall (Symbols) | name precision (Symbols) | files exact (export facts) | name recall (export facts) | name precision (export facts) | export fact rows by kind/status | load errors |
+|---|---|---|---|---|---|---|---|---|
+| package axios | 4/72 | 27/162 (17%) | 27/76 (36%) | 5/72 | 95/162 (59%) | 95/95 (100%) | Default/Resolved 67, Named/Resolved 28 | 0 |
+| package zod | 10/122 | 940/3935 (24%) | 940/1739 (54%) | 15/122 | 1280/3935 (33%) | 1280/2042 (63%) | Default/Resolved 65, Named/Resolved 2068, Namespace/Unresolved 226, StarReexport/Unresolved 46 | 0 |
+| package commander | 0/7 | 0/22 (0%) | – | 7/7 | 22/22 (100%) | 22/22 (100%) | CommonJsExportsProperty/Unsupported 22 | 0 |
+| package async | 0/4 | 0/116 (0%) | – | 4/129 | 116/116 (100%) | 116/241 (48%) | CommonJsExportsProperty/Unsupported 347, CommonJsModuleExports/Unsupported 125 | 0 |
+| package chalk | 1/5 | 10/29 (34%) | 10/16 (62%) | 1/5 | 25/29 (86%) | 25/25 (100%) | Default/Resolved 4, Named/Resolved 12, Namespace/Unresolved 9 | 0 |
+| package dayjs | 0/1 | 0/7 (0%) | – | 0/1 | 0/7 (0%) | – | – | 0 |
+| package underscore | 0/1 | 0/147 (0%) | – | 0/1 | 0/147 (0%) | – | – | 0 |
+| held-out package co | 0/1 | 0/3 (0%) | – | 0/1 | 0/3 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| held-out package pako | 0/1 | 0/10 (0%) | – | 0/1 | 0/10 (0%) | – | – | 0 |
+| held-out package nanostores | 12/14 | 31/62 (50%) | 31/31 (100%) | 14/14 | 62/62 (100%) | 62/62 (100%) | Named/Resolved 31, Namespace/Unresolved 31 | 0 |
+| held-out package express | 0/6 | 0/122 (0%) | – | 2/6 | 19/122 (16%) | 19/19 (100%) | CommonJsExportsProperty/Unsupported 19, CommonJsModuleExports/Unsupported 6 | 0 |
+| held-out package immer | 7/16 | 77/151 (51%) | 77/109 (71%) | 7/16 | 88/151 (58%) | 88/129 (68%) | Named/Resolved 113, Namespace/Unresolved 20, StarReexport/Unresolved 11 | 0 |
+| held-out package js-yaml | 0/21 | 0/199 (0%) | – | 0/21 | 0/199 (0%) | – | CommonJsModuleExports/Unsupported 21 | 0 |
+| held-out package acorn | 0/1 | 19/22 (86%) | 19/22 (86%) | 1/1 | 22/22 (100%) | 22/22 (100%) | Named/Resolved 22 | 0 |
+| held-out package node-forge | 0/43 | 0/652 (0%) | – | 1/43 | 2/652 (0%) | 2/2 (100%) | CommonJsExportsProperty/Unsupported 2, CommonJsModuleExports/Unsupported 44 | 4 |
+| case block-function/catch-and-finally | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | – | 0 |
+| case block-function/try-and-if | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | – | 0 |
+| case cjs-exports-property/exports-of-factory-result | 0/1 | 0/1 (0%) | – | 1/1 | 1/1 (100%) | 1/1 (100%) | CommonJsExportsProperty/Unsupported 1 | 0 |
+| case cjs-exports-property/function-expressions | 0/1 | 0/2 (0%) | – | 1/1 | 2/2 (100%) | 2/2 (100%) | CommonJsExportsProperty/Unsupported 2 | 0 |
+| case cjs-exports-property/renamed-destructuring | 0/1 | 0/2 (0%) | – | 1/1 | 2/2 (100%) | 2/2 (100%) | CommonJsExportsProperty/Unsupported 2 | 0 |
+| case cjs-interop/compiled-default | 0/1 | 0/1 (0%) | – | 1/1 | 1/1 (100%) | 1/1 (100%) | CommonJsExportsProperty/Unsupported 1 | 0 |
+| case cjs-interop/define-property-export | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | – | 0 |
+| case cjs-module-exports/function-with-property | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case cjs-module-exports/object-literal | 0/1 | 0/2 (0%) | – | 0/1 | 0/2 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case class-method/subclass-override | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case computed-key-unknown/escaped-object | 0/1 | 0/2 (0%) | – | 0/1 | 0/2 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case dynamic-import/computed-specifier | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case dynamic-import/literal-specifier | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case esm-namespace/namespace-object | 1/1 | 2/2 (100%) | 2/2 (100%) | 1/1 | 2/2 (100%) | 2/2 (100%) | Named/Resolved 2 | 0 |
+| case esm-namespace/star-and-live-binding | 2/3 | 3/6 (50%) | 3/3 (100%) | 2/3 | 3/6 (50%) | 3/3 (100%) | Named/Resolved 3, StarReexport/Unresolved 2 | 0 |
+| case esm-reexport/named-barrel | 2/3 | 2/4 (50%) | 2/2 (100%) | 3/3 | 4/4 (100%) | 4/4 (100%) | Named/Resolved 2, Namespace/Unresolved 2 | 0 |
+| case esm-reexport/star-and-alias | 2/3 | 2/4 (50%) | 2/2 (100%) | 2/3 | 3/4 (75%) | 3/3 (100%) | Named/Resolved 2, Namespace/Unresolved 1, StarReexport/Unresolved 1 | 0 |
+| case exported-initializer/cjs-exports | 0/1 | 0/2 (0%) | – | 0/1 | 1/2 (50%) | 1/1 (100%) | CommonJsExportsProperty/Unsupported 1 | 0 |
+| case exported-initializer/esm-declarators | 0/1 | 2/4 (50%) | 2/2 (100%) | 0/1 | 3/4 (75%) | 3/3 (100%) | Default/Resolved 1, Named/Resolved 2 | 0 |
+| case function-object/factory-made-constructor | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case module-initializer/arrow-in-initializer | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case module-initializer/chained-call | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case module-initializer/class-expression | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case module-initializer/exported-call | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case module-initializer/object-literal-methods | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case package-vendor/cjs-require | 0/2 | 0/3 (0%) | – | 0/2 | 0/3 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case package-vendor/esm-import | 2/2 | 2/2 (100%) | 2/2 (100%) | 2/2 | 2/2 (100%) | 2/2 (100%) | Named/Resolved 2 | 0 |
+| case prototype-chain/escaped-subclass-instance | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case prototype/escaped-instance | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case same-name-member/cjs-static-method | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case same-name-member/wrapper-of-static-method | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case sequence-callee/compiled-interop | 0/3 | 0/3 (0%) | – | 3/3 | 3/3 (100%) | 3/3 (100%) | CommonJsExportsProperty/Unsupported 3 | 0 |
+| case sequence-callee/local-sequence | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
+| case typed-join/closure-field-assigned | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case typed-join/external-base-emit | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case typed-join/external-base-super-emit | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case typed-join/factory-constructor-function | 0/1 | 0/2 (0%) | – | 0/1 | 0/2 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case typed-join/reassigned-call-initializer | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case typed-join/reassigned-function-initializer | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case typed-join/union-parameter-jsdoc | 0/1 | 0/1 (0%) | – | 0/1 | 0/1 (0%) | – | CommonJsModuleExports/Unsupported 1 | 0 |
+| case unary-iife/umd-prologue | 0/1 | 0/2 (0%) | – | 0/1 | 0/2 (0%) | – | – | 0 |
+| case unary-iife/unary-operators | 1/1 | 1/1 (100%) | 1/1 (100%) | 1/1 | 1/1 (100%) | 1/1 (100%) | Named/Resolved 1 | 0 |
 
 ## Cost
 
-The only part of this report that changes between runs. Machine: Linux-6.8.0-147-generic-x86_64-with-glibc2.39, 32 CPUs, commit 956786ec189c.
+The only part of this report that changes between runs. Machine: macOS-26.6.2-arm64-arm-64bit-Mach-O, 16 CPUs, commit 904e89b6f3a8, load average 30.35 / 27.09 / 21.22 at the start and 33.82 / 34.70 / 27.25 at the end (1, 5, 15 minutes).
 
-`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 31 MB; the analysis column has no such floor.
+`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, `References`; median of 3 runs. `analysis` is the in-process cost record (`POLINT_GOLDEN_COST_PATH`), `process` is the whole CLI as `bench_matrix.measure` sees it. Cold has no `.polint/cache`; warm reruns over the cache the cold run left. Stored bytes are `.polint/cache` after a cold run, raw and gzip-compressed. Per MB means per 1,000,000 source bytes. Process peak RSS comes from `wait4`, which on Linux counts the launching Python process's resident size at fork, so no process figure here is below the launcher's peak of 39007 MB; the analysis column has no such floor.
 
 | tree | source KB | cold analysis ms (per MB) | cold process ms | warm analysis ms (per MB) | warm process ms | cold peak RSS MB (analysis / process) | warm peak RSS MB | stored bytes per MB (gzip) |
 |---|---|---|---|---|---|---|---|---|
-| constructs (all cases) | 13 | 95 (7428) | 208 | 50 (3909) | 163 | 73 / 73 | 74 / 74 | 112394214 (10946755) |
-| axios | 282 | 644 (2284) | 774 | 495 (1755) | 615 | 101 / 101 | 102 / 102 | 75833297 (5409094) |
-| zod | 3088 | 12256 (3969) | 12477 | 12458 (4035) | 12651 | 1062 / 1062 | 1042 / 1042 | 97353526 (6935648) |
-| commander | 127 | 268 (2117) | 412 | 193 (1525) | 345 | 72 / 72 | 74 / 74 | 44266928 (3200455) |
-| async | 321 | 487 (1519) | 651 | 359 (1120) | 515 | 78 / 78 | 79 / 79 | 44436456 (3480983) |
-| chalk | 10 | 69 (7247) | 205 | 25 (2626) | 145 | 73 / 73 | 73 / 73 | 87413717 (6979624) |
-| dayjs | 7 | 42 (5865) | 184 | 19 (2653) | 143 | 73 / 73 | 73 / 73 | 222145650 (12890518) |
-| underscore | 69 | 225 (3265) | 348 | 179 (2597) | 315 | 73 / 73 | 73 / 73 | 91434282 (5881609) |
+| constructs (all cases) | 41 | 392 (9630) | 1064 | 263 (6461) | 926 | 78 / 78 | 76 / 76 | 103678663 (9836396) |
+| axios | 282 | 949 (3365) | 1609 | 796 (2823) | 1433 | 258 / 258 | 245 / 245 | 75929664 (5420356) |
+| zod | 1354 | 4877 (3601) | 5536 | 4006 (2958) | 4664 | 1056 / 1056 | 1032 / 1032 | 127851987 (10468004) |
+| commander | 127 | 1050 (8294) | 1723 | 1044 (8247) | 1719 | 120 / 120 | 120 / 120 | 44318353 (3207106) |
+| async | 321 | 2740 (8548) | 3467 | 2442 (7618) | 3121 | 355 / 355 | 353 / 353 | 44513876 (3487606) |
+| chalk | 22 | 115 (5332) | 757 | 92 (4266) | 801 | 43 / 43 | 43 / 43 | 78789410 (5817600) |
+| dayjs | 7 | 129 (18014) | 800 | 104 (14523) | 756 | 42 / 42 | 40 / 40 | 228136294 (13651864) |
+| underscore | 69 | 310 (4498) | 981 | 332 (4817) | 987 | 83 / 83 | 81 / 81 | 91434297 (5881653) |
 
-Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is
-the only way to time the refined plan, because no public view asks for it.
+Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): the
+base plan is what a `CallGraph` rule pays; the refined plan adds the capabilities that read the raw rows.
 
 | tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |
 |---|---|---|---|---|---|
-| axios | 681 | 120 | 2117 | 288 | none |
-| zod | 13203 | 1345 | 48811 | 3837 | 180 |
-| commander | 290 | 60 | 1669 | 154 | none |
-| async | 474 | 92 | 1916 | 296 | none |
-| chalk | 57 | 31 | 101 | 41 | none |
-| dayjs | 50 | 32 | 101 | 35 | none |
-| underscore | 221 | 53 | 699 | 126 | none |
+| axios | 961 | 283 | 2039 | 450 | none |
+| zod | 4516 | 1089 | 8531 | 1591 | 180 |
+| commander | 1069 | 136 | 1535 | 231 | none |
+| async | 2902 | 996 | 7987 | 1909 | none |
+| chalk | 103 | 54 | 236 | 76 | none |
+| dayjs | 130 | 52 | 259 | 77 | none |
+| underscore | 305 | 106 | 736 | 196 | none |
+
+### Stage times
+
+Every fact dump runs with `RUST_LOG=polint::kernel::stage=info,polint::points_to=info`; each provider's `stage done` lines are summed. Stage times are as noisy as the dump times above. `semantic_graph share` is the `polint.semantic_graph` stage's part of the refined plan's summed stage time. Peak MB is the process peak when the stage ended.
+
+| tree | plan | stage total s | largest stages: s (peak MB) | semantic_graph share |
+|---|---|---|---|---|
+| axios | base | 0.9 | `semantic_graph` 0.2 (222), `symbol_graph` 0.2 (102), `semantic_mir` 0.1 (106) | n/a |
+| axios | refined | 1.9 | `evidence` 0.4 (387), `type_value_alias` 0.3 (298), `semantic_graph` 0.2 (326) | 13% |
+| axios | typed | 2.6 | `ts.types` 0.7 (162), `evidence` 0.4 (403), `type_value_alias` 0.3 (305) | n/a |
+| zod | base | 4.2 | `semantic_graph` 1.3 (838), `symbol_graph` 1.1 (566), `semantic_mir` 0.6 (566) | n/a |
+| zod | refined | 8.1 | `evidence` 1.5 (1366), `type_value_alias` 1.4 (974), `semantic_graph` 1.3 (1096) | 16% |
+| zod | typed | 9.8 | `ts.types` 1.7 (579), `evidence` 1.4 (1358), `semantic_graph` 1.4 (1079) | n/a |
+| commander | base | 1.0 | `semantic_graph` 0.8 (111), `semantic_mir` 0.1 (47), `cfg` 0.1 (56) | n/a |
+| commander | refined | 1.5 | `semantic_graph` 0.8 (189), `cfg` 0.1 (82), `evidence` 0.1 (206) | 53% |
+| commander | typed | 2.1 | `semantic_graph` 0.8 (190), `ts.types` 0.7 (89), `cfg` 0.1 (83) | n/a |
+| async | base | 2.2 | `solver` 1.0 (303), `semantic_graph` 0.5 (191), `refined_calls` 0.3 (354) | n/a |
+| async | refined | 7.1 | `evidence` 2.8 (1388), `data_flow` 1.5 (1388), `solver` 1.1 (488) | 8% |
+| async | typed | 7.7 | `evidence` 2.9 (1389), `data_flow` 1.5 (1389), `solver` 1.0 (491) | n/a |
+| chalk | base | 0.1 | `semantic_graph` 0.0 (46), `symbol_graph` 0.0 (25), `cfg` 0.0 (30) | n/a |
+| chalk | refined | 0.2 | `cfg` 0.0 (37), `evidence` 0.0 (69), `semantic_graph` 0.0 (64) | 13% |
+| chalk | typed | 0.6 | `ts.types` 0.4 (40), `cfg` 0.0 (38), `semantic_graph` 0.0 (65) | n/a |
+| dayjs | base | 0.1 | `semantic_graph` 0.0 (43), `symbol_graph` 0.0 (23), `semantic_mir` 0.0 (27) | n/a |
+| dayjs | refined | 0.2 | `semantic_graph` 0.1 (63), `cfg` 0.0 (37), `type_value_alias` 0.0 (58) | 22% |
+| dayjs | typed | 0.6 | `ts.types` 0.4 (39), `cfg` 0.0 (37), `type_value_alias` 0.0 (59) | n/a |
+| underscore | base | 0.3 | `symbol_graph` 0.1 (44), `semantic_graph` 0.1 (80), `semantic_mir` 0.1 (44) | n/a |
+| underscore | refined | 0.7 | `cfg` 0.1 (80), `evidence` 0.1 (172), `data_flow` 0.1 (172) | 9% |
+| underscore | typed | 1.3 | `ts.types` 0.4 (82), `type_value_alias` 0.2 (137), `evidence` 0.1 (172) | n/a |
+| co | base | 0.0 | `semantic_graph` 0.0 (28), `cfg` 0.0 (22), `symbol_graph` 0.0 (18) | n/a |
+| co | refined | 0.0 | `cfg` 0.0 (23), `semantic_graph` 0.0 (33), `type_value_alias` 0.0 (30) | 14% |
+| co | typed | 0.4 | `ts.types` 0.3 (25), `cfg` 0.0 (23), `semantic_graph` 0.0 (34) | n/a |
+| pako | base | 1.1 | `symbol_graph` 0.5 (66), `semantic_graph` 0.2 (119), `semantic_mir` 0.2 (69) | n/a |
+| pako | refined | 1.8 | `symbol_graph` 0.5 (67), `type_value_alias` 0.3 (266), `semantic_graph` 0.2 (266) | 13% |
+| pako | typed | 2.4 | `symbol_graph` 0.5 (65), `ts.types` 0.5 (90), `type_value_alias` 0.4 (268) | n/a |
+| nanostores | base | 0.1 | `semantic_graph` 0.0 (47), `symbol_graph` 0.0 (27), `cfg` 0.0 (32) | n/a |
+| nanostores | refined | 0.2 | `cfg` 0.0 (39), `semantic_graph` 0.0 (64), `type_value_alias` 0.0 (58) | 17% |
+| nanostores | typed | 0.6 | `ts.types` 0.4 (40), `cfg` 0.0 (38), `evidence` 0.0 (71) | n/a |
+| express | base | 0.2 | `semantic_graph` 0.1 (68), `symbol_graph` 0.0 (34), `semantic_mir` 0.0 (37) | n/a |
+| express | refined | 0.4 | `cfg` 0.1 (54), `type_value_alias` 0.1 (102), `evidence` 0.1 (119) | 11% |
+| express | typed | 0.8 | `ts.types` 0.4 (60), `cfg` 0.1 (57), `type_value_alias` 0.1 (105) | n/a |
+| immer | base | 0.3 | `semantic_graph` 0.1 (92), `symbol_graph` 0.1 (60), `semantic_mir` 0.0 (60) | n/a |
+| immer | refined | 0.6 | `evidence` 0.1 (159), `cfg` 0.1 (77), `symbol_graph` 0.1 (59) | 13% |
+| immer | typed | 1.1 | `ts.types` 0.5 (82), `evidence` 0.1 (161), `cfg` 0.1 (78) | n/a |
+| js-yaml | base | 0.4 | `semantic_graph` 0.1 (106), `symbol_graph` 0.1 (56), `semantic_mir` 0.1 (59) | n/a |
+| js-yaml | refined | 0.9 | `evidence` 0.1 (220), `type_value_alias` 0.1 (193), `abstract_domains` 0.1 (144) | 10% |
+| js-yaml | typed | 1.3 | `ts.types` 0.4 (86), `evidence` 0.2 (221), `type_value_alias` 0.1 (193) | n/a |
+| acorn | base | 0.8 | `semantic_graph` 0.2 (194), `semantic_mir` 0.2 (86), `symbol_graph` 0.1 (67) | n/a |
+| acorn | refined | 1.9 | `type_value_alias` 0.4 (308), `evidence` 0.3 (374), `semantic_graph` 0.2 (315) | 13% |
+| acorn | typed | 2.4 | `ts.types` 0.5 (140), `type_value_alias` 0.4 (311), `evidence` 0.3 (380) | n/a |
+| node-forge | base | 2.4 | `semantic_graph` 0.8 (553), `symbol_graph` 0.5 (236), `semantic_mir` 0.4 (253) | n/a |
+| node-forge | refined | 5.1 | `evidence` 1.0 (925), `type_value_alias` 1.0 (662), `semantic_graph` 0.8 (743) | 15% |
+| node-forge | typed | 6.2 | `evidence` 1.1 (938), `type_value_alias` 1.1 (670), `ts.types` 0.8 (349) | n/a |
+| zod, globs alone | base | 17.5 | `semantic_graph` 7.1 (2747), `solver` 2.4 (2747), `symbol_graph` 2.2 (1029) | n/a |
+| zod, globs alone | refined | 33.3 | `semantic_graph` 7.2 (3708), `evidence` 5.6 (4246), `type_value_alias` 5.1 (2929) | 21% |
+| zod, globs alone | typed | 36.5 | `semantic_graph` 6.9 (3770), `evidence` 6.2 (4262), `type_value_alias` 4.3 (3025) | n/a |
+
+## Solver
+
+Every fact dump logs one `points_to solve` line per solve under `polint::points_to`. `alias` solves the constraints alone for the type, value and alias facts; `call graph` solves them with the call rule. Constraints are the input count (by kind in report.json); variables include heap slots; pops are worklist pops; collapsed are variables merged into another on a copy cycle. Time is per step: reading the input, the worklist, and building the result. Memory is the resident growth across the solve and the process peak after it. Counts are the same in every run; time and memory are as noisy as the stage times above.
+
+| tree | plan | solve | constraints | calls | variables | objects | slots | copy edges | pops | collapsed | largest set | sets > 64 | sets > 1,024 | ms (input / worklist / result) | RSS growth MB | peak MB | budget |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| axios | base | call graph | 40,587 | 3,807 | 26,190 | 2,229 | 3,797 | 35,498 | 12,491 | 124 | 135 | 3 | 0 | 10 / 3 / 18 | 10 | 247 | WithinBudget |
+| axios | refined | alias | 7,402 | 0 | 7,136 | 2,735 | 227 | 1,211 | 2,728 | 0 | 5 | 0 | 0 | 2 / 0 / 3 | 0 | 233 | WithinBudget |
+| axios | refined | call graph | 40,587 | 3,807 | 26,190 | 2,229 | 3,797 | 35,498 | 12,491 | 124 | 135 | 3 | 0 | 10 / 3 / 8 | 9 | 350 | WithinBudget |
+| axios | typed | alias | 7,402 | 0 | 7,136 | 2,735 | 227 | 1,211 | 2,728 | 0 | 5 | 0 | 0 | 2 / 0 / 3 | 0 | 238 | WithinBudget |
+| axios | typed | call graph | 40,587 | 3,807 | 26,190 | 2,229 | 3,797 | 35,498 | 12,491 | 124 | 135 | 3 | 0 | 9 / 3 / 18 | 9 | 355 | WithinBudget |
+| zod | base | call graph | 163,430 | 11,282 | 126,977 | 10,123 | 41,007 | 358,874 | 80,649 | 2,862 | 940 | 6,090 | 0 | 57 / 74 / 119 | 50 | 973 | WithinBudget |
+| zod | refined | alias | 28,036 | 0 | 24,710 | 8,514 | 465 | 2,752 | 8,495 | 0 | 23 | 0 | 0 | 8 / 0 / 7 | 0 | 745 | WithinBudget |
+| zod | refined | call graph | 163,430 | 11,282 | 126,977 | 10,123 | 41,007 | 358,874 | 80,649 | 2,862 | 940 | 6,090 | 0 | 58 / 75 / 111 | 54 | 1207 | WithinBudget |
+| zod | typed | alias | 28,036 | 0 | 24,710 | 8,514 | 465 | 2,752 | 8,495 | 0 | 23 | 0 | 0 | 9 / 0 / 8 | 0 | 733 | WithinBudget |
+| zod | typed | call graph | 163,430 | 11,282 | 126,977 | 10,123 | 41,007 | 358,874 | 80,649 | 2,862 | 940 | 6,090 | 0 | 56 / 74 / 124 | 57 | 1196 | WithinBudget |
+| commander | base | call graph | 17,632 | 1,665 | 10,258 | 828 | 1,308 | 14,554 | 3,397 | 53 | 309 | 2 | 0 | 3 / 0 / 2 | 4 | 121 | WithinBudget |
+| commander | refined | alias | 3,755 | 0 | 3,321 | 1,073 | 100 | 500 | 1,062 | 0 | 3 | 0 | 0 | 1 / 0 / 1 | 0 | 135 | WithinBudget |
+| commander | refined | call graph | 17,632 | 1,665 | 10,258 | 828 | 1,308 | 14,554 | 3,397 | 53 | 309 | 2 | 0 | 3 / 0 / 2 | 2 | 198 | WithinBudget |
+| commander | typed | alias | 3,755 | 0 | 3,321 | 1,073 | 100 | 500 | 1,062 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 5 | 143 | WithinBudget |
+| commander | typed | call graph | 17,632 | 1,665 | 10,258 | 828 | 1,308 | 14,554 | 3,397 | 53 | 309 | 2 | 0 | 4 / 0 / 3 | 2 | 197 | WithinBudget |
+| async | base | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 57,100 | 1,460 | 253 | 5,090 | 0 | 7 / 169 / 160 | 19 | 220 | WithinBudget |
+| async | refined | alias | 5,996 | 0 | 6,559 | 1,857 | 33 | 1,442 | 1,863 | 0 | 3 | 0 | 0 | 2 / 0 / 1 | 1 | 292 | WithinBudget |
+| async | refined | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 57,100 | 1,460 | 253 | 5,090 | 0 | 5 / 163 / 131 | 17 | 410 | WithinBudget |
+| async | typed | alias | 5,996 | 0 | 6,559 | 1,857 | 33 | 1,442 | 1,863 | 0 | 3 | 0 | 0 | 1 / 0 / 2 | 1 | 297 | WithinBudget |
+| async | typed | call graph | 25,935 | 2,937 | 26,494 | 1,933 | 9,206 | 298,872 | 57,100 | 1,460 | 253 | 5,090 | 0 | 6 / 162 / 130 | 16 | 410 | WithinBudget |
+| chalk | base | call graph | 4,479 | 249 | 2,864 | 374 | 773 | 2,985 | 1,426 | 0 | 90 | 1 | 0 | 1 / 0 / 0 | 0 | 48 | WithinBudget |
+| chalk | refined | alias | 577 | 0 | 550 | 203 | 13 | 72 | 199 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 48 | WithinBudget |
+| chalk | refined | call graph | 4,479 | 249 | 2,864 | 374 | 773 | 2,985 | 1,426 | 0 | 90 | 1 | 0 | 0 / 0 / 0 | 0 | 65 | WithinBudget |
+| chalk | typed | alias | 577 | 0 | 550 | 203 | 13 | 72 | 199 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 50 | WithinBudget |
+| chalk | typed | call graph | 4,479 | 249 | 2,864 | 374 | 773 | 2,985 | 1,426 | 0 | 90 | 1 | 0 | 1 / 0 / 0 | 0 | 66 | WithinBudget |
+| dayjs | base | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 0 / 0 / 1 | 0 | 45 | WithinBudget |
+| dayjs | refined | alias | 852 | 0 | 778 | 257 | 31 | 138 | 263 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 49 | WithinBudget |
+| dayjs | refined | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 0 / 0 / 1 | 0 | 63 | WithinBudget |
+| dayjs | typed | alias | 852 | 0 | 778 | 257 | 31 | 138 | 263 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 50 | WithinBudget |
+| dayjs | typed | call graph | 3,569 | 327 | 2,256 | 184 | 390 | 3,099 | 924 | 23 | 82 | 1 | 0 | 0 / 0 / 1 | 0 | 64 | WithinBudget |
+| underscore | base | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,322 | 177 | 227 | 1 | 0 | 2 / 1 / 4 | 3 | 85 | WithinBudget |
+| underscore | refined | alias | 1,631 | 0 | 1,706 | 626 | 49 | 389 | 630 | 0 | 2 | 0 | 0 | 0 / 0 / 1 | 0 | 120 | WithinBudget |
+| underscore | refined | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,322 | 177 | 227 | 1 | 0 | 1 / 0 / 4 | 0 | 147 | WithinBudget |
+| underscore | typed | alias | 1,631 | 0 | 1,706 | 626 | 49 | 389 | 630 | 0 | 2 | 0 | 0 | 0 / 0 / 1 | 0 | 118 | WithinBudget |
+| underscore | typed | call graph | 9,178 | 689 | 5,750 | 419 | 836 | 10,262 | 3,322 | 177 | 227 | 1 | 0 | 2 / 0 / 3 | 0 | 146 | WithinBudget |
+| co | base | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 250 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 29 | WithinBudget |
+| co | refined | alias | 172 | 0 | 171 | 60 | 0 | 14 | 60 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 28 | WithinBudget |
+| co | refined | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 250 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 34 | WithinBudget |
+| co | typed | alias | 172 | 0 | 171 | 60 | 0 | 14 | 60 | 0 | 1 | 0 | 0 | 0 / 0 / 0 | 0 | 28 | WithinBudget |
+| co | typed | call graph | 1,099 | 100 | 634 | 50 | 54 | 954 | 250 | 0 | 24 | 0 | 0 | 0 / 0 / 0 | 0 | 35 | WithinBudget |
+| pako | base | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,950 | 5 | 136 | 1 | 0 | 3 / 0 / 2 | 3 | 124 | WithinBudget |
+| pako | refined | alias | 3,262 | 0 | 2,490 | 688 | 21 | 578 | 642 | 1 | 14 | 0 | 0 | 1 / 0 / 1 | 0 | 195 | WithinBudget |
+| pako | refined | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,950 | 5 | 136 | 1 | 0 | 3 / 0 / 2 | 0 | 266 | WithinBudget |
+| pako | typed | alias | 3,262 | 0 | 2,490 | 688 | 21 | 578 | 642 | 1 | 14 | 0 | 0 | 0 / 0 / 1 | 0 | 195 | WithinBudget |
+| pako | typed | call graph | 16,113 | 575 | 8,670 | 443 | 1,179 | 12,260 | 2,950 | 5 | 136 | 1 | 0 | 3 / 0 / 2 | 0 | 268 | WithinBudget |
+| nanostores | base | call graph | 3,945 | 312 | 2,589 | 325 | 247 | 3,158 | 1,361 | 12 | 31 | 0 | 0 | 0 / 0 / 1 | 0 | 48 | WithinBudget |
+| nanostores | refined | alias | 701 | 0 | 668 | 270 | 14 | 90 | 277 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 50 | WithinBudget |
+| nanostores | refined | call graph | 3,945 | 312 | 2,589 | 325 | 247 | 3,158 | 1,361 | 12 | 31 | 0 | 0 | 0 / 0 / 0 | 0 | 64 | WithinBudget |
+| nanostores | typed | alias | 701 | 0 | 668 | 270 | 14 | 90 | 277 | 0 | 2 | 0 | 0 | 0 / 0 / 0 | 0 | 50 | WithinBudget |
+| nanostores | typed | call graph | 3,945 | 312 | 2,589 | 325 | 247 | 3,158 | 1,361 | 12 | 31 | 0 | 0 | 0 / 0 / 0 | 0 | 65 | WithinBudget |
+| express | base | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 1 / 0 / 1 | 2 | 71 | WithinBudget |
+| express | refined | alias | 1,910 | 0 | 1,836 | 614 | 61 | 365 | 611 | 0 | 3 | 0 | 0 | 0 / 0 / 11 | 2 | 85 | WithinBudget |
+| express | refined | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 1 / 0 / 1 | 3 | 113 | WithinBudget |
+| express | typed | alias | 1,910 | 0 | 1,836 | 614 | 61 | 365 | 611 | 0 | 3 | 0 | 0 | 0 / 0 / 1 | 0 | 88 | WithinBudget |
+| express | typed | call graph | 8,042 | 931 | 4,789 | 390 | 344 | 6,027 | 1,312 | 1 | 72 | 1 | 0 | 1 / 0 / 1 | 0 | 112 | WithinBudget |
+| immer | base | call graph | 11,482 | 890 | 7,258 | 571 | 888 | 9,506 | 3,171 | 78 | 59 | 0 | 0 | 2 / 0 / 2 | 3 | 98 | WithinBudget |
+| immer | refined | alias | 2,041 | 0 | 1,893 | 727 | 61 | 282 | 721 | 0 | 3 | 0 | 0 | 0 / 0 / 0 | 0 | 110 | WithinBudget |
+| immer | refined | call graph | 11,482 | 890 | 7,258 | 571 | 888 | 9,506 | 3,171 | 78 | 59 | 0 | 0 | 2 / 0 / 2 | 2 | 144 | WithinBudget |
+| immer | typed | alias | 2,041 | 0 | 1,893 | 727 | 61 | 282 | 721 | 0 | 3 | 0 | 0 | 0 / 0 / 1 | 0 | 111 | WithinBudget |
+| immer | typed | call graph | 11,482 | 890 | 7,258 | 571 | 888 | 9,506 | 3,171 | 78 | 59 | 0 | 0 | 2 / 0 / 2 | 2 | 146 | WithinBudget |
+| js-yaml | base | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,264 | 39 | 41 | 0 | 0 | 3 / 0 / 2 | 4 | 113 | WithinBudget |
+| js-yaml | refined | alias | 2,956 | 0 | 2,685 | 933 | 92 | 604 | 914 | 0 | 16 | 0 | 0 | 0 / 0 / 1 | 0 | 156 | WithinBudget |
+| js-yaml | refined | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,264 | 39 | 41 | 0 | 0 | 3 / 0 / 2 | 3 | 201 | WithinBudget |
+| js-yaml | typed | alias | 2,956 | 0 | 2,685 | 933 | 92 | 604 | 914 | 0 | 16 | 0 | 0 | 1 / 0 / 1 | 0 | 157 | WithinBudget |
+| js-yaml | typed | call graph | 14,203 | 1,178 | 9,201 | 593 | 1,199 | 12,211 | 3,264 | 39 | 41 | 0 | 0 | 3 / 0 / 7 | 1 | 199 | WithinBudget |
+| acorn | base | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 9 / 4 / 15 | 9 | 217 | WithinBudget |
+| acorn | refined | alias | 9,798 | 0 | 7,742 | 2,263 | 111 | 1,085 | 2,264 | 2 | 3 | 0 | 0 | 3 / 0 / 2 | 0 | 221 | WithinBudget |
+| acorn | refined | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 11 / 4 / 14 | 7 | 335 | WithinBudget |
+| acorn | typed | alias | 9,798 | 0 | 7,742 | 2,263 | 111 | 1,085 | 2,264 | 2 | 3 | 0 | 0 | 2 / 0 / 2 | 0 | 226 | WithinBudget |
+| acorn | typed | call graph | 38,280 | 3,430 | 21,755 | 1,175 | 3,880 | 37,196 | 13,135 | 337 | 489 | 1 | 0 | 9 / 4 / 14 | 7 | 335 | WithinBudget |
+| node-forge | base | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 44,476 | 514 | 412 | 1,715 | 0 | 39 / 25 / 48 | 34 | 631 | WithinBudget |
+| node-forge | refined | alias | 28,067 | 0 | 23,831 | 7,229 | 1,371 | 5,248 | 7,194 | 4 | 16 | 0 | 0 | 8 / 0 / 8 | 1 | 473 | WithinBudget |
+| node-forge | refined | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 44,476 | 514 | 412 | 1,715 | 0 | 38 / 25 / 48 | 18 | 825 | WithinBudget |
+| node-forge | typed | alias | 28,067 | 0 | 23,831 | 7,229 | 1,371 | 5,248 | 7,194 | 4 | 16 | 0 | 0 | 8 / 0 / 9 | 4 | 483 | WithinBudget |
+| node-forge | typed | call graph | 121,348 | 9,159 | 81,081 | 5,385 | 20,326 | 169,797 | 44,476 | 514 | 412 | 1,715 | 0 | 39 / 25 / 49 | 22 | 832 | WithinBudget |
+| zod, globs alone | base | call graph | 694,226 | 96,165 | 469,827 | 43,112 | 96,136 | 1,066,401 | 235,980 | 3,699 | 1,416 | 14,089 | 2 | 375 / 387 / 469 | 0 | 2747 | WithinBudget |
+| zod, globs alone | refined | alias | 142,953 | 0 | 132,693 | 60,145 | 2,430 | 8,893 | 60,170 | 1 | 23 | 0 | 0 | 59 / 4 / 69 | 53 | 2097 | WithinBudget |
+| zod, globs alone | refined | call graph | 694,226 | 96,165 | 469,827 | 43,112 | 96,136 | 1,066,401 | 235,980 | 3,699 | 1,416 | 14,089 | 2 | 364 / 378 / 687 | 72 | 4001 | WithinBudget |
+| zod, globs alone | typed | alias | 142,953 | 0 | 132,693 | 60,145 | 2,430 | 8,893 | 60,170 | 1 | 23 | 0 | 0 | 57 / 4 / 63 | 50 | 2193 | WithinBudget |
+| zod, globs alone | typed | call graph | 694,226 | 96,165 | 469,827 | 43,112 | 96,136 | 1,066,401 | 235,980 | 3,699 | 1,416 | 14,089 | 2 | 334 / 376 / 506 | 269 | 4262 | WithinBudget |
 
 ## Decisions recorded by this run
 
@@ -413,8 +1522,8 @@ the only way to time the refined plan, because no public view asks for it.
 - Refined edges are counted when they carry a target function, whatever their status.
 - Polint models a class as one function spanning the class body and has no separate constructor function, so a `Class.constructor` label and an observed constructor callee map to the class function.
 - Observed implicit edges (accessors, coercions, iterator protocol) have a position but no call expression; they are reported by kind but left out of the headline package recall, which is over calls and callbacks.
-- Packages are analysed with polint's default discovery, so its default excludes (for example `**/vendor/**`) apply; observed edges touching such files count as 'site or callee in a file polint does not analyse'.
-- Missing call sites and functions are not worked around: functions under a unary operator, functions declared inside try, catch or if blocks, and calls in exported variable initializers are reported as misses.
+- A package is analysed as the package it is: its `analysed` globs are the include set (a construct case includes all its files), and of polint's default excludes only `**/node_modules/**` and `**/.git/**` apply, so a package's own `vendor/` is analysed; observed edges touching an excluded file count as 'site or callee in a file polint does not analyse'.
+- Missing call sites and functions are not worked around: a function or call polint does not extract counts as a miss.
 - An observed callee maps to the polint function with the same span before the innermost one ending at the same byte: a concise arrow returning an arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.
 - Every missed observed edge is attributed to one gap from a syntax census: Oxc's own function and call spans with their syntactic context, parsed again apart from the analysis. A site or callee polint does not extract is charged to the outermost function around it that polint does not extract, else to the outermost enclosing function or the call in a gap; edges polint maps go to constructors, callbacks to built-ins, computed keys and prototype or class methods, in that order. A computed-key miss is counted whether or not the key set is known, so that row is an upper bound for computed keys over a known set.
 - A census function counts as extracted when polint has a function in the same file ending at the same byte, or, for a class constructor, when polint has the class.

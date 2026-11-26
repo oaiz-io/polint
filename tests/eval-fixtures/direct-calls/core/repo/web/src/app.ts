@@ -47,8 +47,6 @@ export function handler(input: string, bag: DynamicBag): string {
   const viaCall = localTarget.call(null, computed);
   const viaApply = localTarget.apply(null, [viaCall]);
   const viaBind = localTarget.bind(null)(viaApply);
-  // POLINT-FEATURE direct-calls/ts/eval
-  eval("direct-call fixture");
   dynamicImport("./lazy");
   return viaBind;
 }

@@ -1,0 +1,3 @@
+construct = "exported-initializer"
+held_out = false
+description = "A CommonJS module assigns `exports.x` and `module.exports.y` from calls at module level, one call nested in another's argument."

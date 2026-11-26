@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js"
@@ -7,6 +7,24 @@
   "instrumented_functions": 4,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@116..192",
+      "name": "constructor"
+    },
+    {
+      "function": "main.js@18..77",
+      "name": "read"
+    },
+    {
+      "function": "main.js@196..278",
+      "name": "get"
+    },
+    {
+      "function": "main.js@282..385",
+      "name": "getTwice"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

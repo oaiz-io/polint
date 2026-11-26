@@ -267,7 +267,9 @@ The built-in models (request data a gin or net/http handler reads, Watermill
 message payloads, GORM and `database/sql` query text, commands run, standard
 and structured logging, Watermill publishing, `strconv` and `uuid` parsers as
 sanitizers, comparisons as opaque, JSON and XML decoding as propagators) apply
-alongside a repository's own tables in `.polint/models/*.toml`:
+alongside a repository's own tables in `.polint/models/*.toml` (a file larger
+than 1 MiB, or one that resolves outside the repository, is reported and not
+read):
 
 ```toml
 [[go_flow_source]]

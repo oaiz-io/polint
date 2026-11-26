@@ -1,0 +1,8 @@
+{
+  "name": "polint-js-bench-node-forge-tests",
+  "private": true,
+  "description": "The modules node-forge's own test suite needs at its release tag: runtime dependencies and the test tools the suite requires, at the tag's declared ranges.",
+  "dependencies": {
+    "mocha": "^5.2.0"
+  }
+}

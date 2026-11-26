@@ -5,11 +5,11 @@ use crate::analysis_api::{
     FunctionFact, ReferenceFact, ReferenceKind, SymbolFact, SymbolKind, SymbolPrecision,
     SymbolResolutionStatus,
 };
-use crate::analysis_api::{SemanticImportKind, SemanticStatus};
+use crate::analysis_api::{ResolutionStatus, SemanticImportKind, SemanticStatus};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{
     CallAlgorithm, CallCallee, CallEdgeKind, CallPrecision, CallProvenance, CallSiteFact,
-    CallSyntaxKind, CallTargetFact, CallTargetStatus,
+    CallSyntaxKind, CallTargetFact, CallTargetStatus, UnresolvedCallReason,
 };
 use crate::analysis_neutral::ids::CallTargetId;
 use crate::analysis_neutral::mir_op::UnsupportedDomain;
@@ -79,11 +79,30 @@ pub fn resolve_direct_call_targets(
         let Some(symbol) = index.symbols_by_id.get(&target_symbol).copied() else {
             continue;
         };
-        let target_function = match index.function_for_symbol(symbol) {
-            Some(function) => Some(function),
-            None if is_direct_callable_symbol(symbol) => None,
+        // A TS/JS binding without one function it holds (one written after
+        // its declaration, or in a file whose bindings `with` or `eval` can
+        // reach) still names the call's callee, but not which value it holds
+        // when the call runs: the edge to the binding may be taken, never
+        // exactly, and the site stays open. So may the edge of an import
+        // that is not followed to a declaration, unless the import loads a
+        // package outside the analysed files: one the resolver could not
+        // follow, or that names a different file for each way of loading
+        // it, may reach any of those files' functions.
+        let (target_function, open) = match index.function_for_symbol(symbol) {
+            Some(function) => (Some(function), None),
+            None if index.calls_bind_without_a_function(symbol) => {
+                let open = if index.binds_a_declared_value(symbol) {
+                    Some(UnresolvedCallReason::FunctionValue)
+                } else if index.import_is_unfollowed(symbol) {
+                    Some(UnresolvedCallReason::MissingImportResolution)
+                } else {
+                    None
+                };
+                (None, open)
+            }
             None => continue,
         };
+        let held = open.is_some();
         if symbol.kind == SymbolKind::Class
             && !matches!(site.kind, CallSyntaxKind::Constructor | CallSyntaxKind::New)
         {
@@ -110,18 +129,23 @@ pub fn resolve_direct_call_targets(
             synthetic_target: None,
             edge_kind: edge_kind_for_site(site.kind),
             algorithm,
-            status: CallTargetStatus::Resolved,
-            reason: None,
+            status: if held {
+                CallTargetStatus::Ambiguous
+            } else {
+                CallTargetStatus::Resolved
+            },
+            reason: open,
             provenance: CallProvenance::NativeDirect,
-            precision: CallPrecision::SetupAware,
+            precision: if held {
+                CallPrecision::Conservative
+            } else {
+                CallPrecision::SetupAware
+            },
             stable_key: target_stable_key(interner, site, algorithm, symbol),
         });
     }
 
-    rows.sort_by(|left, right| {
-        (interner.resolve(left.stable_key), left.site)
-            .cmp(&(interner.resolve(right.stable_key), right.site))
-    });
+    interner.sort_by_key_text(&mut rows, |row| row.stable_key, |row| row.site);
     rows.dedup_by(|left, right| left.stable_key == right.stable_key);
     for (index, row) in rows.iter_mut().enumerate() {
         row.id = CallTargetId(index as u64);
@@ -147,6 +171,9 @@ struct DirectIndex<'db, H: AnalysisHost + ?Sized> {
     /// `(file, local name)` of namespace imports, whose binding is the module
     /// object rather than any one export.
     namespace_imports: BTreeSet<(FileId, String)>,
+    /// `(file, local name)` of import bindings each import of which loads a
+    /// package outside the analysed files.
+    external_imports: BTreeSet<(FileId, String)>,
     /// Call span -> property span of an `ns.name(...)` callee, `ns` being a
     /// namespace import, as the frontend recorded it from the AST.
     namespace_member_call_properties: BTreeMap<SpanKey, SpanKey>,
@@ -177,6 +204,7 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             })
             .filter_map(|import| Some((import.file?, import.local_name.clone()?)))
             .collect::<BTreeSet<_>>();
+        let external_imports = external_imports(db);
         let namespace_member_call_properties = db
             .namespace_member_calls()
             .iter()
@@ -213,6 +241,7 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
             callees_by_binding: callees_by_binding(db.value_functions(), &functions_by_span),
             import_links: import_links(db.references()),
             namespace_imports,
+            external_imports,
             namespace_member_references: namespace_member_references(
                 db.references(),
                 &namespace_properties,
@@ -305,38 +334,99 @@ impl<'db, H: AnalysisHost + ?Sized> DirectIndex<'db, H> {
     /// The function a call through `symbol` reaches. Import bindings follow
     /// their module link (through re-exports) to the exported declaration;
     /// an import that cannot be followed to one function has no target.
-    fn function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
+    fn function_for_symbol(&self, symbol: &'db SymbolFact) -> Option<FunctionId> {
+        self.declared_symbol_for(symbol)
+            .and_then(|declared| self.declared_function_for_symbol(declared))
+    }
+
+    /// The declaration `symbol` names: itself unless it is an import binding,
+    /// else the declaration its module link (through re-exports) ends at.
+    /// `None` when the chain passes a namespace import, leaves the linked
+    /// files, cycles or runs past the hop limit.
+    fn declared_symbol_for(&self, symbol: &'db SymbolFact) -> Option<&'db SymbolFact> {
+        match self.import_chain_end(symbol) {
+            ImportChainEnd::Declared(declared) => Some(declared),
+            ImportChainEnd::Import(_) | ImportChainEnd::Lost => None,
+        }
+    }
+
+    /// Where the module links from `symbol` end: at a declaration, at an
+    /// import binding with no link to follow, or nowhere, where a link
+    /// leaves the symbol facts, the chain cycles or it runs past the hop
+    /// limit.
+    fn import_chain_end(&self, symbol: &'db SymbolFact) -> ImportChainEnd<'db> {
         let mut current = symbol;
         for _ in 0..MAX_IMPORT_HOPS {
             if current.kind != SymbolKind::Import {
-                return self.declared_function_for_symbol(current);
+                return ImportChainEnd::Declared(current);
             }
-            let file = current.file?;
+            let Some(file) = current.file else {
+                return ImportChainEnd::Lost;
+            };
             if self
                 .namespace_imports
                 .contains(&(file, current.name.clone()))
             {
-                return None;
+                return ImportChainEnd::Import(current);
             }
-            let target = self
-                .import_links
-                .get(&span_key(current.primary_span.as_ref()?))?;
-            current = self.symbols_by_id.get(target).copied()?;
+            let Some(span) = current.primary_span.as_ref() else {
+                return ImportChainEnd::Lost;
+            };
+            let Some(target) = self.import_links.get(&span_key(span)) else {
+                return ImportChainEnd::Import(current);
+            };
+            let Some(next) = self.symbols_by_id.get(target).copied() else {
+                return ImportChainEnd::Lost;
+            };
+            current = next;
         }
-        None
+        ImportChainEnd::Lost
+    }
+
+    /// Whether a call through `symbol` passes an import binding the module
+    /// links do not follow to a declaration, where the import does not load
+    /// a package outside the analysed files. Such an import may load files
+    /// of the analysed program, so the binding does not answer for the call.
+    fn import_is_unfollowed(&self, symbol: &'db SymbolFact) -> bool {
+        match self.import_chain_end(symbol) {
+            ImportChainEnd::Declared(_) => false,
+            ImportChainEnd::Import(import) => !import
+                .file
+                .is_some_and(|file| self.external_imports.contains(&(file, import.name.clone()))),
+            ImportChainEnd::Lost => true,
+        }
+    }
+
+    /// Whether a call through `symbol` that reaches no one function still
+    /// resolves to the binding. An import answers for its declaration: one
+    /// linked to a variable without a single function (a `let` reassigned
+    /// elsewhere) resolves no more than a call through that variable would.
+    fn calls_bind_without_a_function(&self, symbol: &'db SymbolFact) -> bool {
+        is_direct_callable_symbol(symbol)
+            && self
+                .declared_symbol_for(symbol)
+                .is_none_or(is_direct_callable_symbol)
+    }
+
+    /// Whether a call through `symbol` reads a TS/JS binding declared in the
+    /// analysed files, whose value the frontend's rows decide, rather than an
+    /// import that leaves them.
+    fn binds_a_declared_value(&self, symbol: &'db SymbolFact) -> bool {
+        self.declared_symbol_for(symbol).is_some_and(|declared| {
+            declared.language.is_ts_family()
+                && !matches!(declared.kind, SymbolKind::Import | SymbolKind::Method)
+        })
     }
 
     /// The function a call through a declared (non-import) symbol reaches.
     ///
     /// A TS/JS binding reaches only what the frontend's callee identity rows
-    /// for its own Oxc symbol name: whatever its kind (a function, a variable,
-    /// an interface merged with a function), a binding without a single row
-    /// target has none. Classes and methods, and every Go symbol, resolve to
+    /// for its own Oxc symbol name: whatever its kind (a function, a class, a
+    /// variable, an interface merged with a function), a binding without a
+    /// single row target has none. Methods, and every Go symbol, resolve to
     /// the innermost same-named function around the declared name.
     fn declared_function_for_symbol(&self, symbol: &SymbolFact) -> Option<FunctionId> {
-        if symbol.language.is_ts_family()
-            && !matches!(symbol.kind, SymbolKind::Class | SymbolKind::Method)
-        {
+        if symbol.language.is_ts_family() && symbol.kind != SymbolKind::Method {
             return self
                 .callees_by_binding
                 .get(&span_key(symbol.primary_span.as_ref()?))
@@ -540,6 +630,53 @@ fn namespace_member_references<'db>(
                 .contains(&span)
                 .then_some((span, reference))
         })
+        .collect()
+}
+
+/// Where a chain of module links from a symbol ends.
+enum ImportChainEnd<'db> {
+    Declared(&'db SymbolFact),
+    Import(&'db SymbolFact),
+    Lost,
+}
+
+/// `(file, local name)` of the import bindings every import of which loads a
+/// package outside the analysed files.
+fn external_imports(db: &(impl AnalysisHost + ?Sized)) -> BTreeSet<(FileId, String)> {
+    let resolutions = db
+        .resolved_imports()
+        .iter()
+        .map(|row| (row.import, row.status))
+        .collect::<BTreeMap<_, _>>();
+    let mut ts_external = BTreeMap::new();
+    for import in db
+        .imports()
+        .iter()
+        .filter(|import| import.language.is_ts_family())
+    {
+        let confirmed = resolutions.get(&import.id) == Some(&ResolutionStatus::External);
+        *ts_external
+            .entry((import.file, import.path.as_str()))
+            .or_insert(true) &= confirmed;
+    }
+    let mut external = BTreeMap::<(FileId, String), bool>::new();
+    for import in db.semantic_imports() {
+        let (Some(file), Some(name)) = (import.file, import.local_name.clone()) else {
+            continue;
+        };
+        let confirmed = if import.language.is_ts_family() {
+            ts_external
+                .get(&(file, import.import_path.as_str()))
+                .copied()
+                .unwrap_or(false)
+        } else {
+            import.status == SemanticStatus::External
+        };
+        *external.entry((file, name)).or_insert(true) &= confirmed;
+    }
+    external
+        .into_iter()
+        .filter_map(|(binding, external)| external.then_some(binding))
         .collect()
 }
 
@@ -1104,9 +1241,11 @@ mod tests {
                 SymbolPrecision::ExactSemantic,
             ));
             assert_eq!(function.0, id.0 + 1);
-            // The TS/JS frontend names a function declaration's implementation
-            // as the callee of its binding.
-            if self.language.is_ts_family() && kind == SymbolKind::Function {
+            // The TS/JS frontend names a function or class declaration's
+            // implementation as the callee of its binding.
+            if self.language.is_ts_family()
+                && matches!(kind, SymbolKind::Function | SymbolKind::Class)
+            {
                 self.value_functions.push(ValueFunctionFact {
                     binding: span(self.file, line),
                     function: span(self.file, line),
@@ -1462,6 +1601,34 @@ mod linked_bindings {
 
         assert_eq!(targets.len(), 1, "{targets:#?}");
         assert_eq!(targets[0].target_function, Some(literal));
+    }
+
+    /// An import linked to an exported variable that the frontend gives no
+    /// single function (one reassigned after its declaration) answers like the
+    /// variable itself would: no resolved row, so the call stays open.
+    #[test]
+    fn imported_variable_without_a_function_row_resolves_nothing() {
+        let mut graph = Graph::new(&["src/caller.ts", "src/index.ts", "src/state.ts"]);
+        let (caller_file, index_file, state_file) =
+            (graph.files[0], graph.files[1], graph.files[2]);
+        graph.function(state_file, "initial", 20, 40);
+        let binding = graph.symbol(state_file, "handler", SymbolKind::Variable, 11, 18);
+        let re_export = graph.symbol(index_file, "handler", SymbolKind::Import, 9, 16);
+        graph.reference(index_file, "handler", ReferenceKind::Import, 9, 16, binding);
+        let import = graph.symbol(caller_file, "handler", SymbolKind::Import, 9, 16);
+        graph.reference(
+            caller_file,
+            "handler",
+            ReferenceKind::Import,
+            9,
+            16,
+            re_export,
+        );
+        let call = graph.reference(caller_file, "handler", ReferenceKind::Call, 50, 57, import);
+
+        let targets = graph.resolve(caller_file, call, "handler", 50, 59);
+
+        assert!(targets.is_empty(), "{targets:#?}");
     }
 
     #[test]

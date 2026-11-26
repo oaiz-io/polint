@@ -37,14 +37,8 @@ pub struct TypeOutput {
 
 impl TypeOutput {
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
-        self.types.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
-        self.narrowed.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.types, |row| row.stable_key, |row| row.id);
+        interner.sort_by_key_text(&mut self.narrowed, |row| row.stable_key, |row| row.id);
         let mut type_set_remap = BTreeMap::new();
         for (index, row) in self.types.iter().enumerate() {
             type_set_remap

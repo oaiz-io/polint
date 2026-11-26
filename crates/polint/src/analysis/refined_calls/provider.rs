@@ -6,8 +6,8 @@ use crate::core::AnalysisDb;
 
 pub(crate) use crate::analysis_neutral::refined_calls::provider::RefinedCallsProviderOutput;
 use crate::analysis_neutral::refined_calls::provider::{
-    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDispatchKind, TsTypeFileDensityInput,
-    TsTypeSiteStatus,
+    TsTypeCalleeInput, TsTypeCallsiteInput, TsTypeDeclarationKind, TsTypeDispatchKind,
+    TsTypeFileDensityInput, TsTypeFunctionInput, TsTypeReceiverShape, TsTypeSiteStatus,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -46,7 +46,12 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
             },
         )
         .collect::<Vec<_>>();
-    let (ts_type_callsites, ts_type_callees, ts_type_file_densities) = ts_type_inputs(db);
+    let TsTypeInputs {
+        callsites: ts_type_callsites,
+        callees: ts_type_callees,
+        functions: ts_type_functions,
+        densities: ts_type_file_densities,
+    } = ts_type_inputs(db);
     crate::analysis_neutral::refined_calls::provider::derive_refined_calls_with_cache_stats(
         db,
         input_snapshot,
@@ -61,8 +66,16 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
         &go_semantic_callsites,
         &ts_type_callsites,
         &ts_type_callees,
+        &ts_type_functions,
         &ts_type_file_densities,
     )
+}
+
+struct TsTypeInputs {
+    callsites: Vec<TsTypeCallsiteInput>,
+    callees: Vec<TsTypeCalleeInput>,
+    functions: Vec<TsTypeFunctionInput>,
+    densities: Vec<TsTypeFileDensityInput>,
 }
 
 /// Projects the TS type-sidecar store into the neutral refinement's inputs.
@@ -71,19 +84,13 @@ pub(crate) fn derive_refined_calls_with_cache_stats(
 /// composition root flattens the two rows it needs to join — a callee and the
 /// callable it names — into one input carrying the declaration's name and name
 /// span.
-fn ts_type_inputs(
-    db: &AnalysisDb,
-) -> (
-    Vec<TsTypeCallsiteInput>,
-    Vec<TsTypeCalleeInput>,
-    Vec<TsTypeFileDensityInput>,
-) {
+fn ts_type_inputs(db: &AnalysisDb) -> TsTypeInputs {
     use crate::ts::types::facts::{TsTypeCallStatus, TsTypeDispatch};
 
-    let printed_by_site = db
+    let receivers_by_site = db
         .ts_type_receivers()
         .iter()
-        .map(|receiver| (receiver.callsite_stable_key, receiver.printed.as_str()))
+        .map(|receiver| (receiver.callsite_stable_key, receiver))
         .collect::<std::collections::BTreeMap<_, _>>();
 
     let callsites = db
@@ -93,11 +100,21 @@ fn ts_type_inputs(
             stable_key: callsite.stable_key,
             file: callsite.file,
             span: callsite.span.clone(),
-            receiver_printed: printed_by_site
+            receiver_printed: receivers_by_site
                 .get(&callsite.stable_key)
-                .copied()
+                .map(|receiver| receiver.printed.as_str())
                 .filter(|printed| !printed.is_empty())
                 .map(str::to_string),
+            signature_parameters: callsite.signature_parameters,
+            constructs: matches!(callsite.call_kind.as_str(), "new" | "super"),
+            // A site without a receiver row is judged by its status and its
+            // callee alone.
+            receiver_shape: match receivers_by_site.get(&callsite.stable_key) {
+                Some(receiver) if receiver.union_size > 1 => TsTypeReceiverShape::Union,
+                Some(receiver) if receiver.is_intersection => TsTypeReceiverShape::Intersection,
+                Some(receiver) if receiver.is_object_literal => TsTypeReceiverShape::ObjectLiteral,
+                _ => TsTypeReceiverShape::Named,
+            },
             status: match callsite.status {
                 TsTypeCallStatus::Resolved => TsTypeSiteStatus::Resolved,
                 TsTypeCallStatus::Union => TsTypeSiteStatus::Union,
@@ -130,6 +147,12 @@ fn ts_type_inputs(
                     TsTypeDispatch::DeclaredSignature => TsTypeDispatchKind::DeclaredSignature,
                     TsTypeDispatch::Implementation => TsTypeDispatchKind::Implementation,
                     TsTypeDispatch::UnionMember => TsTypeDispatchKind::UnionMember,
+                    TsTypeDispatch::Inferred => TsTypeDispatchKind::Inferred,
+                },
+                kind: match (callee.external.is_some(), declaration) {
+                    (true, _) => TsTypeDeclarationKind::External,
+                    (false, None) => TsTypeDeclarationKind::Unknown,
+                    (false, Some(callable)) => declaration_kind(callable.kind),
                 },
                 name: declaration
                     .map(|callable| callable.name.clone())
@@ -142,6 +165,17 @@ fn ts_type_inputs(
         })
         .collect::<Vec<_>>();
 
+    let functions = db
+        .ts_type_callables()
+        .iter()
+        .map(|callable| TsTypeFunctionInput {
+            kind: declaration_kind(callable.kind),
+            required_parameters: callable.required_parameters,
+            file: callable.file,
+            span: callable.span.clone(),
+        })
+        .collect::<Vec<_>>();
+
     let densities = db
         .ts_type_file_densities()
         .iter()
@@ -151,7 +185,24 @@ fn ts_type_inputs(
         })
         .collect::<Vec<_>>();
 
-    (callsites, callees, densities)
+    TsTypeInputs {
+        callsites,
+        callees,
+        functions,
+        densities,
+    }
+}
+
+fn declaration_kind(kind: crate::ts::types::facts::TsTypeCallableKind) -> TsTypeDeclarationKind {
+    use crate::ts::types::facts::TsTypeCallableKind;
+    match kind {
+        TsTypeCallableKind::Function => TsTypeDeclarationKind::Function,
+        TsTypeCallableKind::Arrow => TsTypeDeclarationKind::Arrow,
+        TsTypeCallableKind::Method => TsTypeDeclarationKind::Method,
+        TsTypeCallableKind::Constructor => TsTypeDeclarationKind::Constructor,
+        TsTypeCallableKind::Class => TsTypeDeclarationKind::Class,
+        TsTypeCallableKind::Getter | TsTypeCallableKind::Setter => TsTypeDeclarationKind::Accessor,
+    }
 }
 
 #[cfg(test)]
@@ -251,6 +302,8 @@ mod solver_projection_tests {
     use crate::analysis::solver::store::SolverOutput;
     use crate::analysis_kernel::AnalysisKernel;
     use crate::analysis_kernel::incremental::InputSnapshot;
+    use crate::analysis_neutral::calls::facts::UnresolvedCallReason;
+    use crate::analysis_neutral::points_to::tiers::{Assumption, EdgeClaim, Inflow};
     use crate::analysis_plan::AnalysisPlan;
     use crate::config::load_config;
     use crate::core::{FileId, FunctionFact, FunctionId, Language, Span};
@@ -276,7 +329,12 @@ mod solver_projection_tests {
         assert_eq!(edge.target_function, Some(FunctionId::from_raw(1)));
         assert_eq!(edge.tier, RefinedCallTier::PointsToAssisted);
         assert_eq!(edge.status, CallTargetStatus::Resolved);
-        assert_eq!(edge.precision, CallPrecision::SetupAware);
+        assert_eq!(
+            edge.precision,
+            CallPrecision::Conservative,
+            "a solver edge with no claimed tier may miss values, so it is conservative"
+        );
+        assert!(edge.assumptions.is_empty());
         assert_eq!(
             edge.validation,
             RefinedCallValidation::ReferentiallyValidated
@@ -286,6 +344,67 @@ mod solver_projection_tests {
             edge.input_stable_keys
                 .iter()
                 .any(|key| key == "call-site:callee")
+        );
+    }
+
+    #[test]
+    fn a_claimed_tier_decides_the_precision_of_a_solver_edge() {
+        let assumptions = vec![
+            Assumption::SealedBindings,
+            Assumption::WithinBudget,
+            Assumption::NoInwardFlow,
+        ];
+        let output = derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Exact(
+            assumptions.clone(),
+        )));
+        assert_eq!(output.edges.len(), 1);
+        assert_eq!(output.edges[0].precision, CallPrecision::Exact);
+        assert_eq!(output.edges[0].assumptions, assumptions);
+
+        let output =
+            derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Exact(Vec::new())));
+        assert_eq!(
+            output.edges[0].precision,
+            CallPrecision::Conservative,
+            "an exact claim without assumptions is not trusted"
+        );
+
+        let output = derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Complete));
+        assert_eq!(output.edges.len(), 1);
+        assert_eq!(output.edges[0].precision, CallPrecision::Conservative);
+        assert!(output.edges[0].assumptions.is_empty());
+    }
+
+    #[test]
+    fn an_open_site_says_how_outside_values_reach_it() {
+        let output = derive_solver_refinements(&db_with_claimed_solver_edge(EdgeClaim::Open(
+            Inflow::InwardParameter,
+        )));
+
+        assert_eq!(output.edges.len(), 2);
+        let resolved = output
+            .edges
+            .iter()
+            .find(|edge| edge.status == CallTargetStatus::Resolved)
+            .expect("the derived edge is kept");
+        assert_eq!(resolved.precision, CallPrecision::Conservative);
+        let open = output
+            .edges
+            .iter()
+            .find(|edge| edge.status == CallTargetStatus::Unresolved)
+            .expect("the site records that it is open");
+        assert_eq!(open.site, resolved.site);
+        assert_eq!(open.target_function, None);
+        assert_eq!(
+            open.reason,
+            Some(UnresolvedCallReason::Inflow(Inflow::InwardParameter))
+        );
+        assert_eq!(
+            open.evidence,
+            vec![
+                "solver_open".to_string(),
+                "inflow:inward_parameter".to_string()
+            ]
         );
     }
 
@@ -382,6 +501,10 @@ mod solver_projection_tests {
     }
 
     fn db_with_solver_edge() -> AnalysisDb {
+        db_with_claimed_solver_edge(EdgeClaim::Unassigned)
+    }
+
+    fn db_with_claimed_solver_edge(claim: EdgeClaim) -> AnalysisDb {
         let mut db = AnalysisDb::new();
         let interner = db.stable_key_interner();
         let file = db.add_file(
@@ -460,9 +583,7 @@ mod solver_projection_tests {
                     stable_key: interner.intern("constraint:call"),
                 },
             ],
-            &ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(99),
-            },
+            &ConstraintKind::call_at(SemanticNodeId(99)),
             1,
         );
         db.replace_solver_facts(SolverOutput {
@@ -474,6 +595,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:caller-callee"),
                 provenance,
+                claim,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -552,9 +674,7 @@ mod solver_projection_tests {
             edges: Vec::new(),
             constraints: vec![ConstraintFact {
                 id: SemanticConstraintId(0),
-                kind: ConstraintKind::CallConstraint {
-                    callsite: SemanticNodeId(2),
-                },
+                kind: ConstraintKind::call_at(SemanticNodeId(2)),
                 status: PointsToStatus::Present,
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: db
@@ -573,9 +693,7 @@ mod solver_projection_tests {
             vec![ContributingFact {
                 stable_key: interner.intern("constraint:go-semantic-callsite"),
             }],
-            &ConstraintKind::CallConstraint {
-                callsite: callsite_node,
-            },
+            &ConstraintKind::call_at(callsite_node),
             1,
         );
         db.replace_solver_facts(SolverOutput {
@@ -587,6 +705,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:go-caller-callee"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -650,9 +769,7 @@ mod solver_projection_tests {
             vec![ContributingFact {
                 stable_key: interner.intern("go-semantic-callsite:caller-callee"),
             }],
-            &ConstraintKind::CallConstraint {
-                callsite: callsite_node,
-            },
+            &ConstraintKind::call_at(callsite_node),
             1,
         );
         db.replace_solver_facts(SolverOutput {
@@ -664,6 +781,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:go-semantic-caller-callee"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -824,9 +942,7 @@ mod solver_projection_tests {
             vec![ContributingFact {
                 stable_key: interner.intern("go-semantic-callsite:method-dispatch"),
             }],
-            &ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(99),
-            },
+            &ConstraintKind::call_at(SemanticNodeId(99)),
             1,
         );
         db.replace_solver_facts(SolverOutput {
@@ -838,6 +954,7 @@ mod solver_projection_tests {
                 precision: PointsToPrecision::FlowInsensitive,
                 stable_key: interner.intern("solver-edge:method-dispatch"),
                 provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
             }],
             budget_status: BudgetStatus::WithinBudget,
             ..SolverOutput::default()
@@ -1099,6 +1216,7 @@ mod tests {
             evidence: Vec::new(),
             input_stable_keys: Vec::new(),
             stable_key: crate::core::stable_key_for_test(stable_key),
+            assumptions: Vec::new(),
         }
     }
 }

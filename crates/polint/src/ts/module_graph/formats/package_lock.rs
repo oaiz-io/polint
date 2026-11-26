@@ -1,4 +1,6 @@
 use crate::analysis_neutral::module_graph::topology::{TopologyPrecision, TopologyStatus};
+use crate::bounded_json;
+use crate::repo_fs::TOPOLOGY_LOCKFILE_MAX_BYTES;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -41,12 +43,18 @@ pub(crate) struct PackageLockUnsupported {
 pub(crate) fn parse_package_lock(relative_path: &str, contents: &str) -> PackageLockManifest {
     let source_label = package_lock_source_label(relative_path);
     let mut manifest = empty_manifest(relative_path, source_label);
-    let Ok(lock) = serde_json::from_str::<PackageLockWire>(contents) else {
-        manifest
-            .unsupported
-            .push(unsupported(relative_path, source_label, "malformed json"));
-        return manifest;
-    };
+    let lock =
+        match bounded_json::from_str::<PackageLockWire>(contents, TOPOLOGY_LOCKFILE_MAX_BYTES) {
+            Ok(lock) => lock,
+            Err(error) => {
+                manifest.unsupported.push(unsupported(
+                    relative_path,
+                    source_label,
+                    &error.reason(),
+                ));
+                return manifest;
+            }
+        };
 
     manifest.lockfile_version = lock.lockfile_version;
     manifest.schema_label = schema_label(lock.lockfile_version);

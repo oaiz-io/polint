@@ -10,10 +10,12 @@ Two plans are read:
 
   base     syntax, call_graph, symbols, references: what a rule that asks for
            `CallGraph`, `Symbols` and `References` gets. Its call edges are the
-           rows the public `CallGraph` view serves.
-  refined  adds calls, control_flow and dataflow, which turns on the refined
-           call-edge layer. Refined edges have no public view; they are read
-           through the same internal dump and shown in their own column.
+           rows the public `CallGraph` view serves: the refined call-edge rows
+           that claim a target, one per site and callee, at the tier the view
+           reports.
+  refined  adds calls, control_flow and dataflow. Its call edges are the raw
+           refined rows, every status included, read through the same internal
+           dump and shown in their own column.
 
 Everything except the `cost` section is a pure function of the committed
 inputs, the fetched packages and polint's analysis, so two runs on one commit
@@ -23,6 +25,7 @@ write the same scores.
 from __future__ import annotations
 
 import functools
+import gzip
 import json
 import os
 import platform
@@ -42,8 +45,8 @@ import bench
 sys.path.insert(0, str(bench.REPO_ROOT / "scripts" / "bench-runner"))
 import bench_matrix  # noqa: E402  (the existing cost machinery: measure, directory_bytes)
 
-REPORT_SCHEMA = "polint-js-analysis-bench-report-1"
-DUMP_SCHEMA = "polint-js-bench-facts-2"
+REPORT_SCHEMA = "polint-js-analysis-bench-report-2"
+DUMP_SCHEMA = "polint-js-bench-facts-3"
 DUMP_FILTER = "eval::js_bench::tests::dump_js_bench_facts"
 PLANS = {
     "base": "syntax,call_graph,symbols,references",
@@ -54,6 +57,8 @@ PLANS = {
 # to `PLANS` only when a TypeScript compiler is available (see `run`), so every
 # per-plan score and total covers it without a second code path.
 TYPED_PLAN = "typed"
+# Evidence a refined edge carries when the type checker changed it (`type_effect` in the dump).
+TYPE_EFFECTS = ("type_mismatch", "type_seed")
 TYPED_TSCONFIG = {
     "compilerOptions": {
         "allowJs": True,
@@ -68,7 +73,14 @@ TYPED_TSCONFIG = {
     "include": ["**/*"],
 }
 TYPED_SOURCE_SUFFIXES = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"}
+# Files the run records after their types are stripped.
+TYPESCRIPT_SUFFIXES = {".ts", ".mts", ".cts", ".tsx"}
 TYPED_CONFIG = "[languages.ts]\ntype_sidecar = true\n"
+# A staged tree is analysed as the package it is: its `analysed` globs are the
+# include set, and of the repository default excludes only those that never
+# hold a package's own code apply. A package that ships its dependencies under
+# `vendor/` (chalk) ships them as its own code.
+PACKAGE_EXCLUDE = ["**/node_modules/**", "**/.git/**"]
 TYPESCRIPT_ENV = "POLINT_TS_TYPESCRIPT"
 # The syntax census rides on the cheapest plan in its own run, so it never
 # adds to the timed base and refined dumps.
@@ -78,6 +90,22 @@ CENSUS_CAPS = "syntax"
 EXAMPLES_PER_OUTCOME = 5
 EXAMPLES_PER_GAP = 3
 FALSE_COMPLETE = "other targets, no unresolved marker"
+# A held-out package whose recording entered fewer of its functions than this
+# is reported and flagged, and left out of the held-out averages.
+COVERAGE_FLOOR = 0.40
+# The held-out gate: recall per tier within this many points of the tune set.
+HELD_OUT_MARGIN_POINTS = 5
+# The recall targets of `research/package-graphs/ITERATION-1-CLASSICAL.md`:
+# (measure, plan, tier view, target) over the pooled tune set. The report shows
+# each one met or not; a target never fails a run.
+RECALL_TARGETS = (
+    ("recall, no types", "refined", "exact_conservative", 0.80),
+    ("recall, no types, floor", "refined", "exact_conservative", 0.75),
+    ("recall, exact tier alone, no types", "refined", "exact", 0.60),
+    ("recall with types", TYPED_PLAN, "exact_conservative", 0.85),
+)
+# The per-package recall target: (plan, tier view, target) for every tune package.
+PACKAGE_RECALL_TARGET = ("refined", "exact_conservative", 0.65)
 RULES_TARGET_SUBDIR = "js-analysis-bench-rules"
 MB = 1_000_000
 OBSERVED_KINDS = ("call", "callback", "implicit")
@@ -124,11 +152,15 @@ def line_of(starts: list[int], offset: int) -> int:
 
 
 def parse_key(key: str) -> tuple[str, int, int]:
-    """`path@start..end[#name]` -> (path, start, end)."""
+    """`path@start..end[#name]` -> (path, start, end).
+
+    A recorded implicit call (an accessor, a coercion) has a position and no
+    call expression; its key is `path@offset` and reads as an empty span.
+    """
     path, _, span = key.rpartition("@")
     span = span.split("#", 1)[0]
     start, _, end = span.partition("..")
-    return path, int(start), int(end)
+    return path, int(start), int(end or start)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +210,11 @@ def cargo_executable(argv: list[str], wanted, what: str) -> Path:
     return executable
 
 
+def package_config(include: list[str]) -> str:
+    """The `.polint.toml` workspace section of a staged package tree."""
+    return f"[workspace]\ninclude = {json.dumps(include)}\nexclude = {json.dumps(PACKAGE_EXCLUDE)}\n"
+
+
 def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
     """Copy every analysed tree outside git; return {case id: tree}, {package: tree}.
 
@@ -192,6 +229,7 @@ def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
     for case in cases:
         dest = scratch / "constructs" / case["id"]
         shutil.copytree(case["root"], dest)
+        (dest / ".polint.toml").write_text(package_config(["**/*"]))
         case_trees[case["id"]] = dest
     package_trees = {}
     for package in inputs["package"]:
@@ -201,18 +239,39 @@ def stage(scratch: Path, inputs: dict, cases: list[dict]) -> tuple[dict, dict]:
         for rel in [*analysed, "package.json"]:
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(root / rel, dest / rel)
+        (dest / ".polint.toml").write_text(package_config(package["analysed"]))
         package_trees[package["name"]] = dest
     return case_trees, package_trees
+
+
+def stage_previous_sets(scratch: Path, inputs: dict) -> dict:
+    """Stage each `compare_previous_set` package with its globs alone; return {package: tree}.
+
+    Reports written before the shipped-source rule analysed these files; the
+    comparison keeps one report readable against them."""
+    trees = {}
+    for package in inputs["package"]:
+        if not package.get("compare_previous_set"):
+            continue
+        root = bench.require_fetched(package)
+        analysed, _ = bench.package_files(package, shipped_only=False)
+        dest = scratch / "previous-set" / package["name"]
+        for rel in [*analysed, "package.json"]:
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(root / rel, dest / rel)
+        (dest / ".polint.toml").write_text(package_config(package["analysed"]))
+        trees[package["name"]] = dest
+    return trees
 
 
 def stage_typed(scratch: Path, trees: dict) -> dict:
     """Copy each tree for the typed plan; return {key: typed tree}.
 
     The copy gets a tsconfig (unless the tree brings its own) so the sidecar
-    has a project to load, and a `.polint.toml` that names the tier, so a
+    has a project to load, and its `.polint.toml` also names the tier, so a
     sidecar that cannot start is a reported setup failure, not a silent skip.
     The plain trees stay untouched: the base and refined plans and the cost
-    runs must not see either file."""
+    runs must not see the tsconfig or the tier."""
     typed = {}
     for key, tree in trees.items():
         dest = scratch / "typed" / tree.relative_to(scratch)
@@ -227,7 +286,8 @@ def stage_typed(scratch: Path, trees: dict) -> dict:
             )
             config = {**TYPED_TSCONFIG, "files": sources}
             (dest / "tsconfig.json").write_text(json.dumps(config, indent=2) + "\n")
-        (dest / ".polint.toml").write_text(TYPED_CONFIG)
+        config = dest / ".polint.toml"
+        config.write_text((config.read_text() if config.exists() else "") + TYPED_CONFIG)
         typed[key] = dest
     return typed
 
@@ -246,14 +306,28 @@ def find_typescript(args) -> Path | None:
 
 
 def run_dump(
-    test_binary: Path, tree: Path, plan: str, out: Path, timeout: int, typescript: Path | None = None
+    test_binary: Path,
+    tree: Path,
+    plan: str,
+    out: Path,
+    timeout: int,
+    typescript: Path | None = None,
+    package_graph: bool = False,
+    recording: tuple[Path, str] | None = None,
 ) -> dict:
     """Dump one tree's facts; return where the dump is, its wall clock and peak RSS.
 
-    `plan` is a key of `PLANS`, or `census` for the syntax census run. The dump
-    is not loaded here: see `load_dump` and `run` for why."""
+    `plan` is a key of `PLANS`, or `census` for the syntax census run. With
+    `package_graph` the run also writes the tree's package graph beside the dump.
+    With `recording`, the recorded calls of the tree's package and the driver
+    that ran them, the run applies them to the package graph as corrections and
+    writes the outcome beside the dump.
+    The dump is not loaded here: see `load_dump` and `run` for why."""
     manifest = out.with_suffix(".manifest")
-    manifest.write_text(f"{tree}\t{out}\n")
+    if recording:
+        manifest.write_text(f"{tree}\t{out}\t{recording[0]}\t{recording[1]}\n")
+    else:
+        manifest.write_text(f"{tree}\t{out}\n")
     env = dict(os.environ)
     env["POLINT_JS_BENCH_MANIFEST"] = str(manifest)
     if plan == "census":
@@ -267,18 +341,496 @@ def run_dump(
     else:
         # A compiler in the caller's environment must not reach the other plans.
         env.pop(TYPESCRIPT_ENV, None)
+    if package_graph:
+        env[PACKAGE_GRAPH_ENV] = "1"
+    else:
+        env.pop(PACKAGE_GRAPH_ENV, None)
+    if recording:
+        env[CORRECTIONS_ENV] = "1"
+    else:
+        env.pop(CORRECTIONS_ENV, None)
+    env["RUST_LOG"] = STAGE_LOG
+    env["NO_COLOR"] = "1"
     result = bench_matrix.measure(
         [str(test_binary), DUMP_FILTER, "--exact", "--ignored", "--test-threads", "1"],
         bench.REPO_ROOT,
         env,
         timeout,
     )
-    cost = {"wall_ms": round(result.wall_ms), "peak_rss_bytes": result.peak_rss_bytes}
+    cost = {
+        "wall_ms": round(result.wall_ms),
+        "peak_rss_bytes": result.peak_rss_bytes,
+        "stages": stage_times(result.stderr),
+        "solver": solver_solves(result.stderr),
+    }
     if result.timed_out:
         return {"dump": None, "cost": cost, "error": f"timed out after {timeout} s"}
     if result.exit_code != 0 or not out.exists():
-        return {"dump": None, "cost": cost, "error": f"dump failed: {result.stderr_tail}"}
-    return {"dump": out, "cost": cost, "error": None}
+        tail = [
+            line
+            for line in result.stderr.splitlines()
+            if "stage done" not in line and SOLVE_EVENT not in line and TYPE_JOIN_EVENT not in line
+        ][-8:]
+        return {"dump": None, "cost": cost, "error": f"dump failed: {chr(10).join(tail)}"}
+    run_entry = {"dump": out, "cost": cost, "error": None, "ts_type_join": ts_type_join(result.stderr)}
+    if recording:
+        run_entry["corrections"] = out.with_suffix(".corrections.json")
+    return run_entry
+
+
+# With this set to 1, the refined dump of each tune-set package also writes its
+# package graph; the report stores it compressed beside the report and states
+# its size per MB of source.
+PACKAGE_GRAPH_ENV = "POLINT_JS_BENCH_PACKAGE_GRAPH"
+PACKAGE_GRAPH_PLAN = "refined"
+# The ceiling on a stored package graph, gzip bytes per MB of source.
+PACKAGE_GRAPH_CEILING_PER_MB = 2 * MB
+
+
+def package_graph_sizes(dumps: dict, names: list[str]) -> dict:
+    """Each written package graph, compressed, with its sizes.
+
+    The compressed bytes carry no timestamp, so they are the same on every run."""
+    graphs = {}
+    for name in names:
+        run_entry = dumps.get(("package", name, PACKAGE_GRAPH_PLAN))
+        if not run_entry or run_entry["dump"] is None:
+            continue
+        path = run_entry["dump"].with_suffix(".package-graph.json")
+        if not path.exists():
+            continue
+        raw = path.read_bytes()
+        graphs[name] = {"bytes": len(raw), "gzip": gzip.compress(raw, mtime=0)}
+    return graphs
+
+
+# With this set to 1, the refined dump of each tune-set package also loads the
+# package's own recorded calls as corrections to its package graph and applies
+# them. The report shows what became of them apart from every accuracy number.
+CORRECTIONS_ENV = "POLINT_JS_BENCH_CORRECTIONS"
+CORRECTIONS_SCHEMA = "polint-js-bench-corrections-1"
+# The recorded edges the correction layer anchors to a call site.
+CORRECTION_KINDS = ("call", "callback")
+
+
+def score_corrections(dumps: dict, names: list[str]) -> dict:
+    """What became of each tune package's recorded calls as corrections.
+
+    Recall with the corrections is checked through the bench's own matching
+    rule: each recorded call or callback edge the refined facts can place is
+    looked up among the pairs the layer applied or found derived. It is 100%
+    by construction, since the corrections come from the same recording; a
+    lower value means the layer and the bench place an edge differently."""
+    scored = {}
+    for name in names:
+        run_entry = dumps.get(("package", name, PACKAGE_GRAPH_PLAN))
+        if not run_entry or run_entry["dump"] is None or "corrections" not in run_entry:
+            continue
+        path = run_entry["corrections"]
+        if not path.exists():
+            scored[name] = {"error": "no corrections written"}
+            continue
+        document = json.loads(path.read_text())
+        if document.get("schema") != CORRECTIONS_SCHEMA:
+            raise SystemExit(f"unexpected corrections schema in {path}")
+        observed_calls = json.loads((bench.OBSERVED / "packages" / f"{name}.calls.json").read_text())
+        spans = Spans(run_entry["dump"]["call_sites"], run_entry["dump"]["functions"])
+        corrected = {(row["site"], row["target"]) for row in document["applied"] + document["derived"]}
+        edges = placed = covered = 0
+        for edge in observed_calls["edges"]:
+            if edge["kind"] not in CORRECTION_KINDS:
+                continue
+            edges += 1
+            site = spans.site_for(edge["site"])
+            callee = spans.function_for(edge["callee"], edge["callee_name"])
+            if site is None or callee is None:
+                continue
+            placed += 1
+            # A function's dump key carries its name; a correction names the span alone.
+            covered += (site["key"], f"{callee['file']}@{callee['start']}..{callee['end']}") in corrected
+        unanchored = Counter(row["reason"] for row in document["unanchored"])
+        scored[name] = {
+            "corrections": document["corrections"],
+            "applied": len(document["applied"]),
+            "derived": len(document["derived"]),
+            "stale": len(document["stale"]),
+            "not_applied": document["not_applied"],
+            "other_package": document["other_package"],
+            "unanchored": dict(sorted(unanchored.items())),
+            "recall": {"edges": edges, "placed": placed, "covered": covered},
+        }
+    return scored
+
+
+def render_corrections(report: dict, add) -> None:
+    corrections = report.get("corrections")
+    if not corrections:
+        return
+    add("## Corrections")
+    add("")
+    add(
+        "Each tune-set package's recorded calls loaded as corrections to its package graph under the refined plan "
+        "and applied beside it. Applied: the layer adds the edge, tier conservative. Derived: the engine's answer "
+        "already claims it, so the correction can be retired. Stale: its function, call site or target is not in "
+        "the graph with the same text. Unanchored: a recorded edge with no call expression, call site or function "
+        "to anchor to, by reason."
+    )
+    add("")
+    add(
+        "Recall with corrections counts the recorded call and callback edges the bench places that the layer "
+        "applied or found derived. It is 100% by construction, since the corrections come from the same "
+        "recording, and is not an accuracy number: it proves the layer, nothing else."
+    )
+    add("")
+    add("| package | corrections | applied | derived | stale | unanchored | recall with corrections |")
+    add("|---|---|---|---|---|---|---|")
+    for name, row in sorted(corrections.items()):
+        if "error" in row:
+            add(f"| {name} | error: {row['error']} | | | | | |")
+            continue
+        unanchored = ", ".join(f"{reason} {count}" for reason, count in row["unanchored"].items()) or "–"
+        recall = row["recall"]
+        add(
+            f"| {name} | {row['corrections']} | {row['applied']} | {row['derived']} | {row['stale']} | {unanchored} "
+            f"| {frac(recall['covered'], recall['placed'])} |"
+        )
+    add("")
+
+
+def render_package_graphs(report: dict, add) -> None:
+    graphs = report.get("package_graphs")
+    if not graphs:
+        return
+    add("## Package graphs")
+    add("")
+    add(
+        "The package graph of each tune-set package under the refined plan, the package taken as the tree: "
+        f"JSON and gzip bytes, and gzip bytes per MB of source against the ceiling of "
+        f"{PACKAGE_GRAPH_CEILING_PER_MB / MB:.0f} MB per MB."
+    )
+    add("")
+    add("| package | source KB | graph KB | gzip KB | gzip KB per MB | within the ceiling |")
+    add("|---|---|---|---|---|---|")
+    for name, row in sorted(graphs.items()):
+        add(
+            f"| {name} | {row['source_bytes'] / 1000:.0f} | {row['bytes'] / 1000:.0f} | {row['gzip_bytes'] / 1000:.0f} "
+            f"| {row['gzip_bytes_per_mb'] / 1000:.0f} | {'yes' if row['gzip_bytes_per_mb'] <= PACKAGE_GRAPH_CEILING_PER_MB else 'no'} |"
+        )
+    add("")
+
+
+# Each `[[tree]]` of the inputs is analysed whole and as stitched package
+# graphs by this ignored lib test, when the package graphs are written.
+STITCH_FILTER = "ts::package_graph_composition_tests::stitch_js_bench_trees"
+STITCH_ENV = "POLINT_JS_BENCH_TREE_MANIFEST"
+# The ceiling on stitch time, as a share of the time to analyse the tree whole.
+STITCH_TIME_CEILING = 0.20
+# A module of a tree keeps its shipped JavaScript; its type declarations are not analysed.
+MODULE_SOURCE_SUFFIXES = (".js", ".cjs", ".mjs")
+STITCH_EXAMPLES = 3
+
+
+def copy_files(source: Path, dest: Path, rels: list[str]) -> None:
+    for rel in rels:
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(source / rel, dest / rel)
+
+
+def stage_stitch_trees(scratch: Path, inputs: dict) -> dict:
+    """Lay out each stitched tree the way npm installs it; return {tree: {root, held_out}}.
+
+    A benchmark package keeps its analysed files at the root of its tree and
+    each module its shipped JavaScript and `package.json` at its npm path. A
+    fixture tree is copied whole."""
+    packages = {package["name"]: package for package in inputs["package"]}
+    trees = {}
+    for tree in inputs.get("tree", []):
+        dest = scratch / "trees" / tree["name"]
+        if "fixture" in tree:
+            shutil.copytree(bench.BENCH_DIR / tree["fixture"], dest)
+            trees[tree["name"]] = {"root": dest, "held_out": False}
+            continue
+        package = packages[tree["root_package"]]
+        analysed, _ = bench.package_files(package)
+        copy_files(bench.require_fetched(package), dest, [*analysed, "package.json"])
+        for module in tree.get("module", []):
+            module_root = bench.require_module_fetched(module)
+            shipped = sorted(
+                rel
+                for path in module_root.rglob("*")
+                if path.is_file()
+                and path.suffix in MODULE_SOURCE_SUFFIXES
+                and "node_modules/" not in (rel := path.relative_to(module_root).as_posix())
+                and not bench.is_not_shipped(rel)
+            )
+            copy_files(module_root, dest / module["path"], [*shipped, "package.json"])
+        trees[tree["name"]] = {"root": dest, "held_out": bool(package.get("held_out"))}
+    return trees
+
+
+def run_stitch(test_binary: Path, tree: Path, out: Path, timeout: int) -> dict:
+    """Analyse one tree whole and stitched; return where the answers are and the run's cost."""
+    out.mkdir(parents=True)
+    manifest = out.with_suffix(".manifest")
+    manifest.write_text(f"{tree}\t{out}\n")
+    env = dict(os.environ)
+    env[STITCH_ENV] = str(manifest)
+    env.pop(TYPESCRIPT_ENV, None)
+    env["NO_COLOR"] = "1"
+    load_at_start = os.getloadavg()
+    result = bench_matrix.measure(
+        [str(test_binary), STITCH_FILTER, "--exact", "--ignored", "--test-threads", "1"],
+        bench.REPO_ROOT,
+        env,
+        timeout,
+    )
+    cost = {
+        "wall_ms": round(result.wall_ms),
+        "peak_rss_bytes": result.peak_rss_bytes,
+        "load_average_start": [round(value, 2) for value in load_at_start],
+        "load_average_end": [round(value, 2) for value in os.getloadavg()],
+    }
+    if result.timed_out:
+        return {"out": None, "cost": cost, "error": f"timed out after {timeout} s"}
+    if result.exit_code != 0 or not (out / "answers.json").exists():
+        tail = result.stderr.splitlines()[-8:]
+        return {"out": None, "cost": cost, "error": f"stitch failed: {chr(10).join(tail)}"}
+    return {"out": out, "cost": cost, "error": None}
+
+
+def package_source_bytes(root: Path) -> int:
+    """The bytes of the source files of the package at `root`, without the packages nested in it."""
+    return sum(
+        path.stat().st_size
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.name.endswith(bench.SOURCE_SUFFIXES)
+        and "node_modules" not in path.relative_to(root).parts
+    )
+
+
+def answer_sets(answers: dict) -> dict:
+    """The edges of each tier, the open sites and the claim of each site, as comparable sets.
+
+    An edge is exact when its site's claim is exact or complete, and
+    conservative otherwise. A site is open when its claim is open or its
+    solve did not answer it."""
+    sets = {"exact": set(), "conservative": set(), "open_sites": set(), "claims": set()}
+    for site, answer in answers.items():
+        status, _, claim = answer["claim"].partition(" ")
+        tier = "exact" if claim.startswith(("Exact", "Complete")) else "conservative"
+        sets[tier].update(f"{site} -> {target}" for target in answer["targets"])
+        if status != "Present" or claim.startswith("Open"):
+            sets["open_sites"].add(f"{site}: {answer['claim']}")
+        sets["claims"].add(f"{site}: {answer['claim']}")
+    return sets
+
+
+def score_stitched_trees(runs: dict) -> tuple[dict, dict]:
+    """Compare the whole and stitched answers of each tree; return (comparisons, costs).
+
+    The differing sites of a held-out tree are counted and never listed."""
+    scored, costs = {}, {}
+    for name, run_entry in sorted(runs.items()):
+        if run_entry["out"] is None:
+            scored[name] = {"held_out": run_entry["held_out"], "error": run_entry["error"]}
+            continue
+        out = run_entry["out"]
+        answers = json.loads((out / "answers.json").read_text())
+        whole, stitched = answer_sets(answers["whole"]), answer_sets(answers["stitched"])
+        compare = {}
+        for view in whole:
+            only_whole, only_stitched = whole[view] - stitched[view], stitched[view] - whole[view]
+            compare[view] = {
+                "whole": len(whole[view]),
+                "stitched": len(stitched[view]),
+                "only_whole": len(only_whole),
+                "only_stitched": len(only_stitched),
+            }
+            if not run_entry["held_out"]:
+                compare[view]["examples_only_whole"] = sorted(only_whole)[:STITCH_EXAMPLES]
+                compare[view]["examples_only_stitched"] = sorted(only_stitched)[:STITCH_EXAMPLES]
+        packages = []
+        for package in answers["packages"]:
+            raw = (out / "graphs" / package["graph"]).read_bytes()
+            source = package_source_bytes(run_entry["root"] / package["root"])
+            gzip_size = len(gzip.compress(raw, mtime=0))
+            packages.append(
+                {
+                    "name": package["name"],
+                    "source_bytes": source,
+                    "bytes": len(raw),
+                    "gzip_bytes": gzip_size,
+                    "gzip_bytes_per_mb": round(gzip_size / max(source / MB, 1e-9)),
+                }
+            )
+        source = sum(row["source_bytes"] for row in packages)
+        gzip_size = sum(row["gzip_bytes"] for row in packages)
+        scored[name] = {
+            "held_out": run_entry["held_out"],
+            "error": None,
+            "sites": len(answers["whole"]),
+            "compare": compare,
+            "differs": any(row["only_whole"] or row["only_stitched"] for row in compare.values()),
+            "open_imports": dict(sorted(Counter(row["reason"] for row in answers["open_imports"]).items())),
+            "packages": packages,
+            "source_bytes": source,
+            "bytes": sum(row["bytes"] for row in packages),
+            "gzip_bytes": gzip_size,
+            "gzip_bytes_per_mb": round(gzip_size / max(source / MB, 1e-9)),
+        }
+        costs[name] = {
+            **run_entry["cost"],
+            "whole_ms": answers["whole_ms"],
+            "package_graphs_ms": sum(package["build_ms"] for package in answers["packages"]),
+            "stitch_ms": answers["stitch_ms"],
+        }
+    return scored, costs
+
+
+def render_stitched_trees(report: dict, add) -> None:
+    trees = report.get("stitched_trees")
+    if not trees:
+        return
+    add("## Stitched trees")
+    add("")
+    add(
+        "Each tree analysed as one program, and as one package graph per package, each stored, read back and "
+        "stitched. Every column compares the answers at the call sites of the two: whole / stitched / in one "
+        "and not the other. The difference must be empty. A held-out tree is compared only; its differing "
+        "sites are counted, never listed."
+    )
+    add("")
+    add("| tree | packages | sites | exact edges | conservative edges | open sites | site claims | unlinked imports |")
+    add("|---|---|---|---|---|---|---|---|")
+    for name, row in trees.items():
+        label = f"{name} (held out)" if row["held_out"] else name
+        if row["error"]:
+            add(f"| {label} | failed: {cell(row['error'].splitlines()[0])} | | | | | | |")
+            continue
+        views = " | ".join(
+            f"{c['whole']} / {c['stitched']} / {c['only_whole'] + c['only_stitched']}"
+            for c in (row["compare"][view] for view in ("exact", "conservative", "open_sites", "claims"))
+        )
+        unlinked = sum(row["open_imports"].values())
+        add(f"| {label} | {len(row['packages'])} | {row['sites']} | {views} | {unlinked} |")
+    add("")
+    for name, row in trees.items():
+        for view, compare in (row.get("compare") or {}).items():
+            for side in ("only_whole", "only_stitched"):
+                for example in compare.get(f"examples_{side}", []):
+                    add(f"- {name}, {view}, {side.replace('_', ' ')}: `{example}`")
+    add("")
+    add(
+        "Stored size: every package graph of the tree as JSON and gzip, against the source it describes, and "
+        f"the package with the most gzip bytes. The ceiling is {PACKAGE_GRAPH_CEILING_PER_MB / MB:.0f} MB per MB."
+    )
+    add("")
+    add("| tree | source KB | graph KB | gzip KB | gzip KB per MB | within the ceiling | largest package: gzip KB, per MB |")
+    add("|---|---|---|---|---|---|---|")
+    for name, row in trees.items():
+        if row["error"]:
+            continue
+        largest = max(row["packages"], key=lambda package: (package["gzip_bytes"], package["name"]))
+        add(
+            f"| {name} | {row['source_bytes'] / 1000:.0f} | {row['bytes'] / 1000:.0f} | {row['gzip_bytes'] / 1000:.0f} "
+            f"| {row['gzip_bytes_per_mb'] / 1000:.0f} | {'yes' if row['gzip_bytes_per_mb'] <= PACKAGE_GRAPH_CEILING_PER_MB else 'no'} "
+            f"| {largest['name']}: {largest['gzip_bytes'] / 1000:.0f}, {largest['gzip_bytes_per_mb'] / 1000:.0f} |"
+        )
+    add("")
+    costs = report.get("stitch_cost") or {}
+    if not costs:
+        return
+    add(
+        "Time, one run each: analysing the tree whole, building every package graph, and reading the stored "
+        f"graphs back and stitching them, against the ceiling of {STITCH_TIME_CEILING:.0%} of the whole. "
+        "Load average 1 / 5 / 15 min at the start and end of the run."
+    )
+    add("")
+    add("| tree | whole ms | package graphs ms | stitch ms | stitch / whole | within the ceiling | load at start | load at end |")
+    add("|---|---|---|---|---|---|---|---|")
+    for name, cost in costs.items():
+        share = cost["stitch_ms"] / max(cost["whole_ms"], 1)
+        add(
+            f"| {name} | {cost['whole_ms']} | {cost['package_graphs_ms']} | {cost['stitch_ms']} | {share:.0%} "
+            f"| {'yes' if share <= STITCH_TIME_CEILING else 'no'} | {load_line(cost['load_average_start'])} "
+            f"| {load_line(cost['load_average_end'])} |"
+        )
+    add("")
+
+
+# The kernel's per-provider stage log: one `stage done` line per provider run,
+# and one `points_to solve` line per points-to solve.
+STAGE_LOG = "polint::kernel::stage=info,polint::points_to=info"
+SOLVE_EVENT = "points_to solve"
+SOLVE_FIELD = re.compile(r'\b([a-z_0-9]+)=("[^"]*"|\S+)')
+SOLVE_COUNTS = (
+    "calls", "variables", "objects", "slots", "copy_edges", "pops", "collapsed", "largest_set", "sets_over_64",
+    "sets_over_1024", "initialize_ms", "run_ms", "result_ms", "rss_delta_mb", "peak_rss_mb",
+)
+TYPE_JOIN_EVENT = "ts type tier join"
+TYPE_JOIN_COUNTS = (
+    "matched_callsites", "unmatched_callsites", "matched_callees", "unmatched_callees", "deferred_callsites",
+)
+STAGE_FIELD = re.compile(r'\b(provider|elapsed_ms|peak_rss_mb)=("[^"]*"|\S+)')
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def stage_times(stderr: str) -> dict:
+    """Each provider's summed stage wall time and the process peak RSS when it ended.
+
+    A provider that runs more than once in a dump has its times added; the
+    peak is the largest seen at the end of any of its runs."""
+    stages: dict = {}
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if "stage done" not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in STAGE_FIELD.findall(line)}
+        if "provider" not in fields or "elapsed_ms" not in fields:
+            continue
+        row = stages.setdefault(fields["provider"], {"elapsed_ms": 0, "peak_rss_mb": 0})
+        row["elapsed_ms"] += int(fields["elapsed_ms"])
+        row["peak_rss_mb"] = max(row["peak_rss_mb"], int(fields.get("peak_rss_mb", 0)))
+    return stages
+
+
+def solver_solves(stderr: str) -> list:
+    """One row per `points_to solve` line, in the order the solves ran.
+
+    `pass` names the solve: `type_value_alias` solves the constraints alone,
+    `call_graph` solves them with the call rule."""
+    solves = []
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if SOLVE_EVENT not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in SOLVE_FIELD.findall(line)}
+        if "pass" not in fields:
+            continue
+        row = {"pass": fields["pass"], "budget": fields.get("budget", "")}
+        row.update({key: int(fields.get(key, 0)) for key in SOLVE_COUNTS})
+        row["constraints"] = {
+            kind: int(count)
+            for kind, _, count in (part.partition(":") for part in fields.get("constraints", "").split(","))
+            if kind
+        }
+        solves.append(row)
+    return solves
+
+
+def ts_type_join(stderr: str) -> dict | None:
+    """How the type tier's rows joined the syntax facts, from its one log line.
+
+    None when the tier logged nothing: it did not run, or every count was zero.
+    The counts are deterministic, unlike the stage times beside them."""
+    for line in stderr.splitlines():
+        line = ANSI_ESCAPE.sub("", line)
+        if TYPE_JOIN_EVENT not in line:
+            continue
+        fields = {key: value.strip('"') for key, value in SOLVE_FIELD.findall(line)}
+        return {key: int(fields.get(key, 0)) for key in TYPE_JOIN_COUNTS}
+    return None
 
 
 def load_dump(run: dict) -> None:
@@ -303,62 +855,133 @@ def load_dump(run: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# tiers: what an edge claims
+
+
+# Every `CallPrecision` and the tier it claims (research/package-graphs/TIERS.md
+# (a)). The list is closed: a precision missing here stops the report, and the
+# dump's own `claim_tier`, written by the engine, must agree with it.
+PRECISION_TIERS = {
+    "Exact": "exact",
+    "SetupAware": "exact",
+    "Conservative": "conservative",
+    "Ambiguous": "conservative",
+    "Heuristic": "apart",
+    "Unknown": "none",
+    "Unsupported": "none",
+}
+CLAIM_TIERS = ("exact", "conservative", "apart")
+# Typed edges that name a candidate rather than the checker's answer: an
+# implementation of a declared member, one constituent of a union receiver,
+# or a declared target whose binding may hold another value. The engine
+# tiers them conservative; one that claims exact is an engine defect the
+# report stops on rather than scores.
+TYPED_CANDIDATE_DISPATCH = {"implementation", "union_member", "inferred"}
+# A refined row claims its target only with one of these statuses; an
+# `Ambiguous` row names one of several candidates, so it claims no more than
+# conservative.
+CLAIMING_STATUS = {"Resolved": None, "Ambiguous": "conservative"}
+
+
+TIER_RANK = {"none": 0, "apart": 1, "conservative": 2, "exact": 3}
+
+
+def tier_rank(tier: str) -> int:
+    return TIER_RANK[tier]
+
+
+def tier_of(precision: str) -> str:
+    """The tier a precision claims; an unknown precision is an error."""
+    try:
+        return PRECISION_TIERS[precision]
+    except KeyError:
+        raise SystemExit(f"precision {precision!r} has no tier; add it to PRECISION_TIERS") from None
+
+
+def edge_tier(edge: dict) -> str:
+    """The tier the bench counts an edge in: its precision's tier, checked
+    against the engine's, never exact for a typed candidate, and exact for a
+    points-to edge exactly when it names the assumptions it rests on. A
+    `CallGraph` row may report a weaker precision than the row it serves
+    (`row_precision`); the assumptions follow the row's own claim."""
+    tier = tier_of(edge["precision"])
+    if edge.get("claim_tier") != tier:
+        raise SystemExit(
+            f"edge at {edge['site']}: the engine says {edge.get('claim_tier')!r} for {edge['precision']}, "
+            f"the bench says {tier!r}"
+        )
+    row_tier = tier_of(edge.get("row_precision", edge["precision"]))
+    if tier_rank(tier) > tier_rank(row_tier):
+        raise SystemExit(
+            f"edge at {edge['site']}: the view reports {edge['precision']}, stronger than its row's "
+            f"{edge.get('row_precision')}"
+        )
+    points_to_exact = row_tier == "exact" and edge["algorithm"] == "PointsTo"
+    if points_to_exact != bool(edge.get("assumptions")):
+        raise SystemExit(
+            f"edge at {edge['site']}: a {edge['algorithm']} edge claiming {edge['precision']} records "
+            f"assumptions {edge.get('assumptions', [])}; only an exact points-to edge records them, and it must"
+        )
+    if tier == "exact" and edge["algorithm"] == "TypeHierarchy" and edge.get("dispatch") in TYPED_CANDIDATE_DISPATCH:
+        raise SystemExit(
+            f"edge at {edge['site']}: a typed {edge.get('dispatch')} candidate claims {edge['precision']}"
+        )
+    return tier
+
+
+def claimed_tier(edge: dict, refined: bool) -> str:
+    """The tier an edge row claims for its target, `none` when it claims none."""
+    tier = edge_tier(edge)
+    if not refined:
+        # A `CallGraph` row serves a refined row that claims its target, at no
+        # more than the claim its status allows.
+        if "status" in edge:
+            if edge["status"] not in CLAIMING_STATUS:
+                raise SystemExit(f"edge at {edge['site']}: CallGraph serves a {edge['status']} row")
+            cap = CLAIMING_STATUS[edge["status"]]
+            if cap is not None and tier_rank(tier) > tier_rank(cap):
+                raise SystemExit(
+                    f"edge at {edge['site']}: CallGraph reports {edge['precision']} for a {edge['status']} row"
+                )
+        return tier
+    if tier == "none":
+        return tier
+    if edge["status"] not in CLAIMING_STATUS:
+        return "none"
+    cap = CLAIMING_STATUS[edge["status"]]
+    return cap if cap is not None and tier == "exact" else tier
+
+
+def is_test_path(path: str) -> bool:
+    return bench.is_not_shipped(path)
+
+
+# ---------------------------------------------------------------------------
 # facts: one plan's dump turned into lookups
 
 
-class Facts:
-    def __init__(self, dump: dict, plan: str):
-        self.plan = plan
-        self.dump = dump
-        self.files = {row["path"] for row in dump["files"]}
-        self.sites = {site["key"]: site for site in dump["call_sites"]}
-        self.sites_by_end = defaultdict(list)
-        for site in dump["call_sites"]:
-            self.sites_by_end[(site["file"], site["end"])].append(site)
-        self.functions = {function["key"]: function for function in dump["functions"]}
-        self.functions_by_end = defaultdict(list)
-        for function in dump["functions"]:
-            self.functions_by_end[(function["file"], function["end"])].append(function)
-        self.unresolved_sites = {row["site"] for row in dump["unresolved_calls"]}
+class Spans:
+    """Call sites and functions by span, and the bench's two matching rules.
 
-        # Edges this plan's answer gives: site -> {target function key}.
-        self.targets: dict[str, set[str]] = defaultdict(set)
-        # The subset of `targets` the answer claims: resolved and not heuristic.
-        self.claimed_targets: dict[str, set[str]] = defaultdict(set)
-        # Sites whose answer stops at an import binding (base edges only).
-        self.import_stops: set[str] = set()
-        # Sites this plan's answer itself marks as unresolved.
-        self.marked_unresolved: set[str] = set()
-        for edge in dump["base_edges"]:
-            if edge["function"] is None and (edge["symbol"] or {}).get("kind") == "Import":
-                self.import_stops.add(edge["site"])
-        if plan == "base":
-            for edge in dump["base_edges"]:
-                if edge["function"] is not None:
-                    self.targets[edge["site"]].add(edge["function"])
-                    if edge["precision"] != "Heuristic":
-                        self.claimed_targets[edge["site"]].add(edge["function"])
-            self.marked_unresolved = set(self.unresolved_sites)
-        else:
-            resolved_sites = set()
-            for edge in dump["refined_edges"]:
-                if edge["site"] is None:
-                    continue
-                if edge["function"] is not None:
-                    self.targets[edge["site"]].add(edge["function"])
-                    if edge["status"] == "Resolved" and edge["precision"] != "Heuristic":
-                        self.claimed_targets[edge["site"]].add(edge["function"])
-                if edge["status"] == "Resolved":
-                    resolved_sites.add(edge["site"])
-                else:
-                    self.marked_unresolved.add(edge["site"])
-            # The refined layer answers for every site it has a row for; sites it
-            # has no row for keep the base layer's unresolved marker.
-            refined_sites = {edge["site"] for edge in dump["refined_edges"]}
-            self.marked_unresolved |= self.unresolved_sites - refined_sites
+    Every scorer of the bench matches an observed edge to a call graph through
+    `site_for` and `function_for`: polint's facts and the outside tools' graphs
+    alike, so their recall counts the same edges. A site row has `key`, `file`,
+    `start` and `end` (UTF-8 bytes); a function row also has `module`.
+    """
+
+    def __init__(self, sites: list[dict], functions: list[dict]):
+        self.sites = {site["key"]: site for site in sites}
+        self.sites_by_end = defaultdict(list)
+        for site in sites:
+            self.sites_by_end[(site["file"], site["end"])].append(site)
+        self.function_rows = functions
+        self.functions = {function["key"]: function for function in functions}
+        self.functions_by_end = defaultdict(list)
+        for function in functions:
+            self.functions_by_end[(function["file"], function["end"])].append(function)
 
     def site_for(self, key: str) -> dict | None:
-        """Exact span first, then the polint site in the same file ending at the same byte."""
+        """Exact span first, then the site in the same file ending at the same byte."""
         if key in self.sites:
             return self.sites[key]
         path, _, end = parse_key(key)
@@ -366,8 +989,8 @@ class Facts:
         return min(candidates, key=lambda site: site["end"] - site["start"]) if candidates else None
 
     def function_for(self, key: str, name: str) -> dict | None:
-        """The polint function with the same span, else the innermost one in the
-        same file ending at the same byte.
+        """The function with the same span, else the innermost one in the same
+        file ending at the same byte.
 
         The exact span comes first because a concise arrow returning another
         arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.
@@ -377,7 +1000,13 @@ class Facts:
         parameters, and the innermost function ending at the same byte is then
         the arrow it returns, not the one that was called.
         Polint represents a class constructor by the class, so an observed
-        `constructor` maps to the innermost polint function enclosing it.
+        `constructor` maps to the innermost function enclosing it.
+        The run records TypeScript after its types are stripped, so a concise
+        arrow whose body ends in a type assertion, `(a) => a.b as any`, is
+        observed ending before ` as any` while polint's span includes it. With
+        no function ending at the observed byte, a function in a TypeScript
+        file that starts at the observed start and ends nearest after the
+        observed end is the one that was called.
         """
         path, start, end = parse_key(key)
         candidates = [f for f in self.functions_by_end.get((path, end), []) if not f["module"]]
@@ -387,13 +1016,116 @@ class Facts:
         enclosing = [f for f in candidates if f["start"] <= start]
         if enclosing:
             return max(enclosing, key=lambda f: f["start"])
+        if not candidates and Path(path).suffix in TYPESCRIPT_SUFFIXES:
+            stripped = [
+                f
+                for f in self.function_rows
+                if f["file"] == path and not f["module"] and f["start"] == start and f["end"] > end
+            ]
+            if stripped:
+                return min(stripped, key=lambda f: f["end"])
         if not candidates and name == "constructor":
             candidates = [
                 f
-                for f in self.dump["functions"]
+                for f in self.function_rows
                 if f["file"] == path and not f["module"] and f["start"] <= start and end <= f["end"]
             ]
         return min(candidates, key=lambda f: f["end"] - f["start"]) if candidates else None
+
+
+def unobserved_targets(observed: dict, observed_at: dict, claimed: dict, spans: Spans):
+    """Yield `(site, target, shape)` for each claimed target at a site the run
+    executed that the run never called from there.
+
+    `observed_at` maps a site to the functions the run was seen calling from it,
+    `claimed` a site to the targets a call graph claims there. A target counts
+    when it is in an instrumented file, so the run would have recorded a call to
+    it. `shape` is `single_target` when the answer at the site names one target
+    and `multi_target` otherwise.
+    """
+    instrumented = set(observed["instrumented_files"])
+    for site_key, called in sorted(observed_at.items()):
+        targets = claimed.get(site_key, set())
+        for target in sorted(targets - called):
+            function = spans.functions.get(target)
+            if function is None or function["module"] or function["file"] not in instrumented:
+                continue
+            yield site_key, target, "single_target" if len(targets) == 1 else "multi_target"
+
+
+class Facts(Spans):
+    def __init__(self, dump: dict, plan: str):
+        super().__init__(dump["call_sites"], dump["functions"])
+        self.plan = plan
+        self.dump = dump
+        self.files = {row["path"] for row in dump["files"]}
+
+        # Edges this plan's answer gives: site -> {target function key}.
+        self.targets: dict[str, set[str]] = defaultdict(set)
+        # The subset of `targets` the answer claims: resolved and not heuristic.
+        self.claimed_targets: dict[str, set[str]] = defaultdict(set)
+        # Sites whose answer stops at an import binding (base edges only).
+        self.import_stops: set[str] = set()
+        # Sites this plan's answer itself marks as unresolved.
+        self.marked_unresolved: set[str] = set()
+        # Per site and tier, the targets the answer claims in that tier.
+        self.tier_targets: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+        # Per site, the reasons its answer gives for being open.
+        self.open_reasons: dict[str, set[str]] = defaultdict(set)
+        for edge in dump["base_edges"]:
+            if edge["function"] is None and (edge["symbol"] or {}).get("kind") == "Import":
+                self.import_stops.add(edge["site"])
+        if plan == "base":
+            for edge in dump["base_edges"]:
+                tier = claimed_tier(edge, refined=False)
+                if edge["function"] is not None and tier != "none":
+                    self.tier_targets[edge["site"]][tier].add(edge["function"])
+        else:
+            for edge in dump["refined_edges"]:
+                if edge["site"] is None:
+                    continue
+                tier = claimed_tier(edge, refined=True)
+                if edge["function"] is not None and tier != "none":
+                    self.tier_targets[edge["site"]][tier].add(edge["function"])
+        # Both plans read open sites the way `polint unknowns` reports them: the
+        # refined rows that are not resolved, and the unresolved calls the refined
+        # layer has no row for.
+        refined_sites = {edge["site"] for edge in dump["refined_edges"] if edge["site"] is not None}
+        for edge in dump["refined_edges"]:
+            if edge["site"] is not None and edge["status"] != "Resolved":
+                self.open_reasons[edge["site"]].add(edge["reason"] or f"status {edge['status']}")
+                self.marked_unresolved.add(edge["site"])
+        for row in dump["unresolved_calls"]:
+            if row["site"] not in refined_sites:
+                self.open_reasons[row["site"]].add(row["reason"])
+                self.marked_unresolved.add(row["site"])
+        if plan == "base":
+            for edge in dump["base_edges"]:
+                if edge["function"] is not None:
+                    self.targets[edge["site"]].add(edge["function"])
+                    if edge["precision"] != "Heuristic":
+                        self.claimed_targets[edge["site"]].add(edge["function"])
+        else:
+            for edge in dump["refined_edges"]:
+                if edge["site"] is None:
+                    continue
+                if edge["function"] is not None:
+                    self.targets[edge["site"]].add(edge["function"])
+                    if edge["status"] == "Resolved" and edge["precision"] != "Heuristic":
+                        self.claimed_targets[edge["site"]].add(edge["function"])
+        # A site is complete when it claims at least one exact or conservative
+        # target and its answer has no unresolved row; every other site is open.
+        self.complete_sites = {
+            key
+            for key in self.sites
+            if self.claims(key, "exact") | self.claims(key, "conservative")
+            and key not in self.marked_unresolved
+        }
+
+    def claims(self, site: str, tier: str) -> set[str]:
+        """The targets the answer claims at `site` in `tier`."""
+        tiers = self.tier_targets.get(site)
+        return tiers.get(tier, set()) if tiers else set()
 
     def unresolved_call_share(self) -> dict:
         total = len(self.sites)
@@ -439,8 +1171,13 @@ def export_answers(dump: dict) -> dict:
 def score_exports(observed: dict, dump: dict, files: list[str] | None = None) -> dict:
     answers = export_answers(dump)
     result = {"export_fact_rows": answers["fact_status"]}
-    observed_files = observed["files"]
-    candidates = files if files is not None else observed_files
+    candidates = files if files is not None else observed["files"]
+    # A file that fails to load on its own has no observed names to compare
+    # with; it is left out and counted, never scored as exporting nothing.
+    failed = {path for path, entry in observed["files"].items() if "error" in entry}
+    result["load_errors"] = len(failed & set(candidates))
+    candidates = [path for path in candidates if path not in failed]
+    observed_files = {path: entry for path, entry in observed["files"].items() if path not in failed}
     for source in ("symbols", "facts"):
         # Files where neither side has a name say nothing about accuracy.
         names = sorted(
@@ -986,6 +1723,8 @@ MODULE_BINDING_RES = (
     r"import\s*\{{[^}}]*\b{name}\b[^}}]*\}}",
     r"\b{name}\s*=\s*(?:__importStar\(|__importDefault\(|_interopRequire\w*\()?require\(",
     r"\b{name}\s*=\s*__webpack_require__\(",
+    # Babel's two-step form: `var _m = require(...); var _m2 = _interopRequireDefault(_m);`.
+    r"\b{name}\s*=\s*(?:__importStar|__importDefault|_interopRequire\w*)\(\s*[A-Za-z_$][\w$]*\s*\)",
 )
 KEYWORD_RECEIVERS = {"this", "super", "new", "typeof", "await", "void", "return"}
 
@@ -1033,8 +1772,33 @@ def parameter_names(text: str) -> set[str]:
     return names
 
 
+def sequence_last_operand(compact: str) -> str:
+    """The last operand of a parenthesised comma sequence, unwrapped while the
+    result is itself one: `(0,(0,f))` reads as `f`. Other text is returned as is."""
+    while compact.startswith("(") and compact.endswith(")"):
+        depth, last_comma = 0, None
+        for index, char in enumerate(compact):
+            if char in "([{":
+                depth += 1
+            elif char in ")]}":
+                depth -= 1
+                if depth == 0 and index != len(compact) - 1:
+                    return compact
+            elif char == "," and depth == 1:
+                last_comma = index
+        if last_comma is None:
+            return compact
+        compact = compact[last_comma + 1 : -1]
+    return compact
+
+
 def classify_cause(
-    edge: dict, outcome: str, import_stop: bool, sources: Sources, census: "Census | None"
+    edge: dict,
+    outcome: str,
+    import_stop: bool,
+    sources: Sources,
+    census: "Census | None",
+    site_kind: str | None = None,
 ) -> str:
     if outcome == "site or callee in a file polint does not analyse":
         return "not_analysed"
@@ -1058,7 +1822,12 @@ def classify_cause(
     if compact.startswith(("function", "(function", "!function", "(()=>", "(async", "async(", "(()")):
         return "iife"
     if compact.startswith("(0,"):
-        return "sequence_interop"
+        # A sequence callee polint reads through (its site has a callee kind)
+        # is the gap of its last operand; only a site polint could not read is
+        # a sequence gap.
+        if site_kind in (None, "Unknown"):
+            return "sequence_interop"
+        compact = sequence_last_operand(compact)
     if compact.startswith("this."):
         return "this_member"
     if compact.startswith("super."):
@@ -1156,28 +1925,155 @@ def unobserved_claimed_targets(observed: dict, observed_at: dict, facts: Facts, 
     elsewhere. On a multi-target answer it is only an upper bound, because the
     run may not have taken the path that reaches the other targets.
     """
-    instrumented = set(observed["instrumented_files"])
     counts = Counter({"single_target": 0, "multi_target": 0})
     examples = []
-    for site_key, called in sorted(observed_at.items()):
-        claimed = facts.claimed_targets.get(site_key, set())
-        for target in sorted(claimed - called):
-            function = facts.functions.get(target)
-            if function is None or function["module"] or function["file"] not in instrumented:
-                continue
-            shape = "single_target" if len(claimed) == 1 else "multi_target"
-            counts[shape] += 1
-            if shape == "single_target" or len(examples) < EXAMPLES_PER_OUTCOME:
-                examples.append(
-                    {
-                        "answer": shape,
-                        "site": sources.at(site_key),
-                        "site_text": sources.excerpt(site_key),
-                        "target": describe_function(facts, target, sources),
-                        "observed_callees": [describe_function(facts, key, sources) for key in sorted(called)],
-                    }
-                )
+    for site_key, target, shape in unobserved_targets(observed, observed_at, facts.claimed_targets, facts):
+        counts[shape] += 1
+        if shape == "single_target" or len(examples) < EXAMPLES_PER_OUTCOME:
+            examples.append(
+                {
+                    "answer": shape,
+                    "site": sources.at(site_key),
+                    "site_text": sources.excerpt(site_key),
+                    "target": describe_function(facts, target, sources),
+                    "observed_callees": [describe_function(facts, key, sources) for key in sorted(observed_at[site_key])],
+                }
+            )
     return {**dict(sorted(counts.items())), "examples": examples}
+
+
+def tier_hits(facts: Facts, site: dict, callee: dict) -> list[str]:
+    """The recall views an observed edge counts in, from the tier of its target."""
+    key, target = site["key"], callee["key"]
+    exact = target in facts.claims(key, "exact")
+    either = exact or target in facts.claims(key, "conservative")
+    hits = []
+    if exact and key in facts.complete_sites:
+        hits.append("exact_complete")
+    if exact:
+        hits.append("exact")
+    if either:
+        hits.append("exact_conservative")
+    if not either and target in facts.claims(key, "apart"):
+        hits.append("apart_only")
+    return hits
+
+
+def tier_precision(observed: dict, observed_at: dict, facts: Facts, sources: Sources) -> dict:
+    """Per tier, the claimed targets at executed sites the run did and did not call there.
+
+    The same rule as `unobserved_claimed_targets`, per tier: a target counts when
+    it is a function in an instrumented file, at a site the run was seen calling
+    a polint function from. `precision` is observed over claimed, a lower bound,
+    because the run may not have taken the path that reaches a target it did not
+    call. A target the run never called on a single-target answer in the exact
+    tier is a wrong exact claim; every one is kept as an example."""
+    instrumented = set(observed["instrumented_files"])
+    result = {}
+    for tier in CLAIM_TIERS:
+        counts = Counter({"sites": 0, "claimed": 0, "observed": 0, "single_target": 0, "multi_target": 0})
+        examples = []
+        for site_key, called in sorted(observed_at.items()):
+            claimed = facts.claims(site_key, tier)
+            countable = sorted(
+                target
+                for target in claimed
+                if (function := facts.functions.get(target)) is not None
+                and not function["module"]
+                and function["file"] in instrumented
+            )
+            if not countable:
+                continue
+            counts["sites"] += 1
+            counts["claimed"] += len(countable)
+            counts["observed"] += sum(target in called for target in countable)
+            shape = "single_target" if len(claimed) == 1 else "multi_target"
+            for target in countable:
+                if target in called:
+                    continue
+                counts[shape] += 1
+                if (tier == "exact" and shape == "single_target") or len(examples) < EXAMPLES_PER_OUTCOME:
+                    examples.append(
+                        {
+                            "answer": shape,
+                            "site": sources.at(site_key),
+                            "site_text": sources.excerpt(site_key),
+                            "target": describe_function(facts, target, sources),
+                            "observed_callees": [describe_function(facts, key, sources) for key in sorted(called)],
+                        }
+                    )
+        result[tier] = {
+            **dict(sorted(counts.items())),
+            "precision": ratio(counts["observed"], counts["claimed"]),
+            "examples": examples,
+        }
+    return result
+
+
+def nearest_rank(values: list[int], percent: int) -> int | None:
+    """The nearest-rank percentile: the smallest value at or above `percent`% of them."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, -(-len(ordered) * percent // 100) - 1)]
+
+
+def targets_per_site(facts: Facts) -> dict:
+    """Targets per site that claims any, per tier: the width of each tier's answers."""
+    result = {}
+    views = {tier: (tier,) for tier in CLAIM_TIERS}
+    views["exact_conservative"] = ("exact", "conservative")
+    for view, tiers in views.items():
+        widths = [
+            len(set().union(*(facts.claims(key, tier) for tier in tiers)))
+            for key in facts.sites
+        ]
+        widths = [width for width in widths if width]
+        result[view] = {
+            "sites": len(widths),
+            "mean": round(sum(widths) / len(widths), 2) if widths else None,
+            "p95": nearest_rank(widths, 95),
+            "max": max(widths) if widths else None,
+        }
+    return result
+
+
+def site_status(facts: Facts) -> dict:
+    """Complete and open sites, and the open ones by the reason their answer gives.
+
+    A site with several reasons counts under each; a site whose answer gives
+    none is counted as `none recorded`."""
+    open_sites = [key for key in facts.sites if key not in facts.complete_sites]
+    reasons = Counter()
+    for key in open_sites:
+        given = facts.open_reasons.get(key) or {"none recorded"}
+        reasons.update(given)
+    return {
+        "call_sites": len(facts.sites),
+        "complete": len(facts.complete_sites),
+        "open": len(open_sites),
+        "open_with_a_claimed_target": sum(
+            1 for key in open_sites if facts.claims(key, "exact") or facts.claims(key, "conservative")
+        ),
+        "open_by_reason": dict(sorted(reasons.items(), key=lambda item: (-item[1], item[0]))),
+    }
+
+
+def refined_edge_census(dump: dict) -> list[dict]:
+    """Refined rows by (tier, algorithm, status, precision, has a function target)."""
+    counts = Counter(
+        (claimed_tier(edge, refined=True), edge["algorithm"], edge["status"], edge["precision"], edge["function"] is not None)
+        for edge in dump["refined_edges"]
+    )
+    return [
+        {"tier": tier, "algorithm": algorithm, "status": status, "precision": precision, "has_function": has_function, "rows": rows}
+        for (tier, algorithm, status, precision, has_function), rows in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def apart_edges(dump: dict, plan: str) -> int:
+    rows = dump["base_edges"] if plan == "base" else dump["refined_edges"]
+    return sum(1 for edge in rows if edge["site"] is not None and edge_tier(edge) == "apart")
 
 
 def score_package_calls(observed: dict, facts: Facts, census: Census | None, sources: Sources) -> dict:
@@ -1192,6 +2088,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
     gap_examples = defaultdict(list)
     inherited = 0
     other_shapes = Counter()
+    tier_found = Counter({view: 0 for view in ("exact_complete", "exact", "exact_conservative", "apart_only")})
     # Polint site -> the polint functions the run was seen calling from it.
     observed_at: dict[str, set[str]] = defaultdict(set)
     for edge in observed["edges"]:
@@ -1226,6 +2123,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             outcome = "no target, no unresolved marker"
         if site is not None and callee is not None:
             observed_at[site["key"]].add(callee["key"])
+            tier_found.update(tier_hits(facts, site, callee))
         outcomes[outcome] += 1
         for bucket in (by_kind[kind], by_syntax[syntax]):
             bucket["observed"] += 1
@@ -1234,7 +2132,7 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
             examples[outcome].append(describe_edge(edge, outcome, facts, sources))
         if outcome != "found":
             import_stop = site is not None and site["key"] in facts.import_stops
-            cause = classify_cause(edge, outcome, import_stop, sources, census)
+            cause = classify_cause(edge, outcome, import_stop, sources, census, site and site.get("kind"))
             causes[cause] += 1
             if len(cause_examples[cause]) < EXAMPLES_PER_GAP:
                 cause_examples[cause].append(describe_edge(edge, outcome, facts, sources))
@@ -1255,6 +2153,15 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
         "observed_implicit_edges": by_kind.get("implicit", Counter())["observed"],
         "found": found,
         "recall": ratio(found, total),
+        "tiers": {
+            "found": dict(sorted(tier_found.items())),
+            "recall": {view: ratio(count, total) for view, count in sorted(tier_found.items())},
+            "precision": tier_precision(observed, observed_at, facts, sources),
+            "targets_per_site": targets_per_site(facts),
+            "sites": site_status(facts),
+            "apart_edges": apart_edges(facts.dump, facts.plan),
+        },
+        "executed_sites": sorted(observed_at),
         "outcomes": dict(sorted(outcomes.items())),
         "wrong_targets": wrong,
         "outcome_examples": dict(sorted(examples.items())),
@@ -1273,10 +2180,56 @@ def score_package_calls(observed: dict, facts: Facts, census: Census | None, sou
     return result
 
 
+def driver_coverage(observed: dict, census_dump: dict | None) -> dict:
+    """The functions a recording entered, over the functions in the analysed files.
+
+    The denominator is the syntax census's functions other than classes and
+    static blocks, which no call enters. An entered function counts once, as the
+    innermost census function ending at the same byte, the rule
+    `Census.function_at` and `Spans.function_for` match callees by."""
+    row = {
+        "entered_functions": len(observed["entered_functions"]),
+        "instrumented_functions": observed["instrumented_functions"],
+        "census_functions": None,
+        "entered_census_functions": None,
+        "coverage": None,
+        "flagged": False,
+    }
+    if census_dump is None:
+        return row
+    by_end = defaultdict(list)
+    total = 0
+    for path, rows in census_dump["syntax_census"].items():
+        for function in rows["functions"]:
+            if function["kind"] in ("class", "static_block"):
+                continue
+            total += 1
+            by_end[(path, function["end"])].append(function)
+    entered = set()
+    for function in observed["entered_functions"]:
+        path, _, end = parse_key(function["function"])
+        candidates = by_end.get((path, end), [])
+        if candidates:
+            innermost = min(candidates, key=lambda f: f["end"] - f["start"])
+            entered.add((path, innermost["start"], innermost["end"]))
+    row["census_functions"] = total
+    row["entered_census_functions"] = len(entered)
+    row["coverage"] = ratio(len(entered), total)
+    row["flagged"] = row["coverage"] is not None and row["coverage"] < COVERAGE_FLOOR
+    return row
+
+
 def score_packages(inputs: dict, dumps: dict) -> dict:
+    """Every package scored against its recording, the held-out ones included.
+
+    A held-out package gets the same measures with no miss attribution: no gap,
+    no cause and no example of a missed edge, so nothing in the report ranks
+    work on it. Its wrong exact targets and false-complete answers keep their
+    examples, because either is a defect to fix wherever it shows."""
     results = {}
     for package in inputs["package"]:
         name = package["name"]
+        held_out = bool(package.get("held_out"))
         observed_calls = json.loads((bench.OBSERVED / "packages" / f"{name}.calls.json").read_text())
         observed_exports = json.loads((bench.OBSERVED / "packages" / f"{name}.exports.json").read_text())
         analysed, exported = bench.package_files(package)
@@ -1305,24 +2258,271 @@ def score_packages(inputs: dict, dumps: dict) -> dict:
         census_run = dumps.get(("package", name, "census"), {"dump": None, "error": "not run"})
         if census_run["dump"] is None:
             entry["census_error"] = census_run["error"]
+        entry["held_out"] = held_out
+        entry["coverage"] = driver_coverage(observed_calls, census_run["dump"])
+        plan_facts = {}
+        executed = {}
         for plan in PLANS:
             run = dumps[("package", name, plan)]
             if run["dump"] is None:
                 entry[plan] = {"error": run["error"]}
                 continue
             facts = Facts(run["dump"], plan)
-            census = Census(census_run["dump"], facts) if census_run["dump"] is not None else None
+            census = Census(census_run["dump"], facts) if census_run["dump"] is not None and not held_out else None
             entry[plan] = {
                 **score_package_calls(observed_calls, facts, census, sources),
                 "unresolved_calls": facts.unresolved_call_share(),
                 "references": facts.reference_share(),
+                "solver_budget": run["dump"]["solver_budget"],
             }
+            if held_out:
+                withhold_miss_attribution(entry[plan])
+            executed[plan] = set(entry[plan].pop("executed_sites"))
+            plan_facts[plan] = facts
+            if plan != "base":
+                entry[plan]["refined_edge_census"] = refined_edge_census(run["dump"])
             if plan == TYPED_PLAN:
                 entry[plan]["ts_types"] = {
-                    key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")
+                    **{key: run["dump"]["ts_types"][key] for key in ("callsites", "callees")},
+                    "join": run.get("ts_type_join"),
+                    "effects": type_effects(run["dump"]),
                 }
+        if "base" in plan_facts:
+            for plan, facts in plan_facts.items():
+                if plan != "base":
+                    entry[plan]["sites_gained"] = sites_gained(plan_facts["base"], facts, executed[plan])
         results[name] = entry
     return results
+
+
+def type_effects(dump: dict) -> dict:
+    """Refined rows the type checker changed: exact edges moved to conservative, candidates listed at open sites."""
+    counts = Counter(edge.get("type_effect") for edge in dump["refined_edges"])
+    return {effect: counts[effect] for effect in TYPE_EFFECTS}
+
+
+# Tier views in which the typed plan must find every observed edge the refined plan finds.
+TYPES_NEVER_LOSE_VIEWS = ("exact_complete", "exact", "exact_conservative")
+
+
+def types_never_lose(packages: dict, held_out: dict) -> list[str]:
+    """Every package, tune and held-out, where the typed plan finds fewer observed edges than the refined plan in a tier view.
+
+    Types only move an exact claim the checker contradicts to the conservative tier and add conservative
+    candidates, so a loss in the exact views is a type answer that contradicted a call the run made, and a loss
+    in exact + conservative is an edge the type step deleted."""
+    losses = []
+    for name, entry in {**packages, **held_out}.items():
+        refined, typed = entry.get("refined", {}), entry.get(TYPED_PLAN, {})
+        if "tiers" not in refined or "tiers" not in typed:
+            continue
+        for view in TYPES_NEVER_LOSE_VIEWS:
+            before, after = refined["tiers"]["found"].get(view, 0), typed["tiers"]["found"].get(view, 0)
+            if after < before:
+                losses.append(f"{name} {view}: refined {before}, {TYPED_PLAN} {after}")
+    return losses
+
+
+def withhold_miss_attribution(scored: dict) -> None:
+    """Drop what ranks missed edges from a held-out package's score: causes and examples.
+
+    The outcome counts stay, and so do the false-complete examples."""
+    scored.pop("causes", None)
+    scored["outcome_examples"] = {
+        outcome: examples for outcome, examples in scored["outcome_examples"].items() if outcome == FALSE_COMPLETE
+    }
+
+
+def pooled_tier_recall(packages: dict, plan: str) -> dict:
+    """Recall per tier view over every observed edge of `packages`, pooled as the Tiers totals are."""
+    observed = 0
+    found = Counter()
+    for entry in packages.values():
+        scored = entry.get(plan, {})
+        if "tiers" not in scored:
+            continue
+        observed += scored["observed_edges"]
+        found.update(scored["tiers"]["found"])
+    return {
+        "observed_edges": observed,
+        **{view: ratio(found[view], observed) for view, _ in TIER_VIEWS},
+    }
+
+
+def held_out_gate(packages: dict, held_out: dict, plans: list[str]) -> dict:
+    """The held-out gate per plan: recall per tier against the tune set, and the wrong answers.
+
+    Flagged packages are left out of the recall comparison and kept in the wrong
+    answers: a wrong exact target or a false-complete answer counts wherever it is."""
+    counted = {name: entry for name, entry in held_out.items() if not entry["coverage"]["flagged"]}
+    result = {
+        "counted": sorted(counted),
+        "flagged": sorted(name for name in held_out if name not in counted),
+        "margin_points": HELD_OUT_MARGIN_POINTS,
+        "plans": {},
+    }
+    for plan in plans:
+        tune, held = pooled_tier_recall(packages, plan), pooled_tier_recall(counted, plan)
+        views = {}
+        for view, _ in TIER_VIEWS:
+            if view == "apart_only":
+                continue
+            gap = None if tune[view] is None or held[view] is None else round((tune[view] - held[view]) * 100, 1)
+            views[view] = {
+                "tune": tune[view],
+                "held_out": held[view],
+                "points_below_tune": gap,
+                "within": gap is not None and gap <= HELD_OUT_MARGIN_POINTS,
+            }
+        scored = [entry[plan] for entry in held_out.values() if "tiers" in entry.get(plan, {})]
+        result["plans"][plan] = {
+            "observed_edges": {"tune": tune["observed_edges"], "held_out": held["observed_edges"]},
+            "tiers": views,
+            "wrong_exact_targets": sum(s["tiers"]["precision"]["exact"]["single_target"] for s in scored),
+            "false_complete": sum(s["outcomes"].get(FALSE_COMPLETE, 0) for s in scored),
+        }
+    return result
+
+
+def recall_targets(packages: dict, plans: list[str]) -> dict:
+    """Tune-set recall against `RECALL_TARGETS` and `PACKAGE_RECALL_TARGET`, for the plans that ran.
+
+    Reported only: a target not met is a row of the report, never a failed run."""
+    overall = []
+    for measure, plan, view, target in RECALL_TARGETS:
+        if plan not in plans:
+            continue
+        recall = pooled_tier_recall(packages, plan)[view]
+        overall.append({
+            "measure": measure,
+            "plan": plan,
+            "tier": view,
+            "target": target,
+            "recall": recall,
+            "met": recall is not None and recall >= target,
+        })
+    plan, view, target = PACKAGE_RECALL_TARGET
+    per_package = {}
+    if plan in plans:
+        for name, entry in packages.items():
+            scored = entry.get(plan, {})
+            if "tiers" not in scored:
+                continue
+            recall = ratio(scored["tiers"]["found"].get(view, 0), scored["observed_edges"])
+            per_package[name] = {"recall": recall, "met": recall is not None and recall >= target}
+    return {
+        "overall": overall,
+        "per_package": {"plan": plan, "tier": view, "target": target, "packages": per_package},
+    }
+
+
+def render_recall_targets(report: dict, add) -> None:
+    targets = report.get("recall_targets")
+    if not targets:
+        return
+    labels = dict(TIER_VIEWS)
+    add("## Recall targets")
+    add("")
+    add("The iteration's recall targets (`research/package-graphs/ITERATION-1-CLASSICAL.md`) over the pooled tune")
+    add("set. They are reported, not enforced: a target not met does not fail the run.")
+    add("")
+    add("| measure | plan | tier | recall | target | met |")
+    add("|---|---|---|---|---|---|")
+    for row in targets["overall"]:
+        add(f"| {row['measure']} | {row['plan']} | {labels[row['tier']]} | {pct1(row['recall'])} "
+            f"| {pct(row['target'])} | {'yes' if row['met'] else 'no'} |")
+    per_package = targets["per_package"]
+    if per_package["packages"]:
+        add("")
+        add(f"Per package, {per_package['plan']}, {labels[per_package['tier']]}, target {pct(per_package['target'])}:")
+        add("")
+        add("| package | recall | met |")
+        add("|---|---|---|")
+        for name, row in per_package["packages"].items():
+            add(f"| {name} | {pct1(row['recall'])} | {'yes' if row['met'] else 'no'} |")
+    add("")
+
+
+PREVIOUS_SET = "previous_set"
+
+
+def previous_set_cost_key(name: str) -> str:
+    """The `dump_cost` key of a package's dumps on its globs alone.
+
+    Costs stay under `dump_cost`, so every other key of the report is the same
+    from one run to the next."""
+    return f"{name}, globs alone"
+
+
+def set_summary(scored: dict) -> dict:
+    """The rows of one plan's score the analysed-set comparison shows."""
+    if "error" in scored:
+        return {"error": scored["error"]}
+    tiers = scored["tiers"]
+    return {
+        "observed_edges": scored["observed_edges"],
+        "found": scored["found"],
+        "recall": scored["recall"],
+        "tiers_found": tiers["found"],
+        "wrong_targets": {key: scored["wrong_targets"][key] for key in ("single_target", "multi_target")},
+        "wrong_exact_targets": tiers["precision"]["exact"]["single_target"],
+        "call_sites": tiers["sites"]["call_sites"],
+    }
+
+
+def score_previous_sets(inputs: dict, dumps: dict, packages: dict) -> dict:
+    """Each `compare_previous_set` package scored on its previous and its shipped set.
+
+    Kept apart from `packages`, so totals, the gap ranking and the cost runs
+    see the shipped set only."""
+    comparisons = {}
+    for package in inputs["package"]:
+        name = package["name"]
+        if not package.get("compare_previous_set"):
+            continue
+        observed_calls = json.loads((bench.OBSERVED / "packages" / f"{name}.calls.json").read_text())
+        sources = Sources(bench.require_fetched(package))
+        sets = {}
+        for label, kind in ((PREVIOUS_SET, PREVIOUS_SET), ("shipped", "package")):
+            base_dump = dumps[(kind, name, "base")]["dump"]
+            row = {
+                "files": len(base_dump["files"]) if base_dump else None,
+                "source_bytes": sum(file["bytes"] for file in base_dump["files"]) if base_dump else None,
+            }
+            for plan in PLANS:
+                run_entry = dumps[(kind, name, plan)]
+                if kind == "package":
+                    scored = packages[name][plan]
+                elif run_entry["dump"] is None:
+                    scored = {"error": run_entry["error"]}
+                else:
+                    scored = score_package_calls(observed_calls, Facts(run_entry["dump"], plan), None, sources)
+                row[plan] = set_summary(scored)
+            sets[label] = row
+        comparisons[name] = sets
+    return comparisons
+
+
+def sites_gained(base: Facts, refined: Facts, executed: set[str]) -> list[dict]:
+    """Sites the refined plan claims a target at and the base plan does not, by file.
+
+    `test_path` marks files under a test or benchmark folder, or named
+    `*.test.*` / `*.spec.*`: a gain there is analysis of code the package does
+    not ship. `executed` counts the gained sites the run was seen calling a
+    polint function from, the only ones recall can credit."""
+    def claims_any(facts: Facts, key: str) -> bool:
+        return bool(facts.claims(key, "exact") or facts.claims(key, "conservative"))
+
+    by_file = defaultdict(lambda: {"sites": 0, "executed": 0})
+    for key, site in refined.sites.items():
+        if claims_any(refined, key) and not claims_any(base, key):
+            row = by_file[site["file"]]
+            row["sites"] += 1
+            row["executed"] += key in executed
+    return [
+        {"file": path, "test_path": is_test_path(path), **row}
+        for path, row in sorted(by_file.items(), key=lambda item: (-item[1]["sites"], item[0]))
+    ]
 
 
 def rank_gaps(packages: dict) -> dict:
@@ -1434,8 +2634,20 @@ def check_env(cost_path: Path) -> dict:
     return env
 
 
-def write_rule_config(tree: Path) -> None:
-    (tree / ".polint.toml").write_text(f'[rules]\npaths = ["{bench.RULE_PACK}"]\n')
+def write_rule_config(tree: Path) -> str:
+    """Add the census rule pack to the tree's config; return the config to restore."""
+    config = tree / ".polint.toml"
+    original = config.read_text() if config.exists() else ""
+    config.write_text(original + f'[rules]\npaths = ["{bench.RULE_PACK}"]\n')
+    return original
+
+
+def restore_config(tree: Path, original: str) -> None:
+    config = tree / ".polint.toml"
+    if original:
+        config.write_text(original)
+    else:
+        config.unlink()
 
 
 CHECK_ARGS = ["check", "--format", "json", "--fail-on", "none", "--color", "never"]
@@ -1460,13 +2672,14 @@ def measure_cost(polint: Path, trees: dict, scratch: Path, runs: int, timeout: i
     """Cold and warm `polint check` with the census rule pack, median of `runs`."""
     # Builds the rule host once, unmeasured.
     first = next(iter(trees.values()))
-    write_rule_config(first)
+    original = write_rule_config(first)
     one_check(polint, first, scratch, timeout)
     shutil.rmtree(first / ".polint", ignore_errors=True)
+    restore_config(first, original)
 
     results = {}
     for name, tree in trees.items():
-        write_rule_config(tree)
+        original = write_rule_config(tree)
         samples = {"cold": [], "warm": []}
         stored = stored_gzip = 0
         for _ in range(runs):
@@ -1476,7 +2689,7 @@ def measure_cost(polint: Path, trees: dict, scratch: Path, runs: int, timeout: i
             stored_gzip = gzip_bytes(tree / ".polint" / "cache")
             samples["warm"].append(one_check(polint, tree, scratch, timeout))
         shutil.rmtree(tree / ".polint", ignore_errors=True)
-        (tree / ".polint.toml").unlink()
+        restore_config(tree, original)
         row = {"stored_bytes": stored, "stored_gzip_bytes": stored_gzip}
         for tier, values in samples.items():
             medians = {key: statistics.median(v[key] for v in values) for key in values[0]}
@@ -1500,7 +2713,7 @@ def add_per_mb(row: dict, source_bytes: int) -> None:
         row[tier]["analysis_wall_ms_per_mb"] = round(row[tier]["analysis_wall_ms"] / megabytes)
 
 
-def machine(launcher_peak_rss_bytes: int) -> dict:
+def machine(launcher_peak_rss_bytes: int, load_at_start: tuple[float, float, float]) -> dict:
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=bench.REPO_ROOT, capture_output=True, text=True
     ).stdout.strip()
@@ -1510,6 +2723,9 @@ def machine(launcher_peak_rss_bytes: int) -> dict:
         "python": platform.python_version(),
         "git_head": head,
         "launcher_peak_rss_bytes": launcher_peak_rss_bytes,
+        # One-, five- and fifteen-minute load averages when measuring started and ended.
+        "load_average_start": [round(value, 2) for value in load_at_start],
+        "load_average_end": [round(value, 2) for value in os.getloadavg()],
     }
 
 
@@ -1683,12 +2899,356 @@ def render_types(report: dict, add) -> None:
             f"| {cost('refined', 'peak_rss_bytes', MB)} / {cost(TYPED_PLAN, 'peak_rss_bytes', MB)} |"
         )
     add("")
+    add("How the type rows joined the syntax facts. A callsite row joins a call site by span and adds nothing when "
+        "it does not. A deferred callsite joined but sits in a file dense with `any` and is not resolved, so it "
+        "adds nothing either. A callee row joins a function by span, then by name for the kinds a call runs (an "
+        "accessor joins by span only); a callee outside the tree counts as matched. An unmatched callee is a "
+        "declaration in the tree that names no function polint extracted, and adds no edge.")
+    add("")
+    add("| package | callsites matched / unmatched / deferred | callees matched / unmatched |")
+    add("|---|---|---|")
+    for name, entry in report["packages"].items():
+        join = entry.get(TYPED_PLAN, {}).get("ts_types", {}).get("join")
+        if not join:
+            add(f"| {name} | n/a | n/a |")
+            continue
+        add(
+            f"| {name} | {join['matched_callsites']:,} / {join['unmatched_callsites']:,} / {join['deferred_callsites']:,} "
+            f"| {join['matched_callees']:,} / {join['unmatched_callees']:,} |"
+        )
+    add("")
+    add("What the type step changed in the refined plan's answer: `type_mismatch` is an exact edge to a function "
+        "whose declared kind or arity the checker says the call cannot run, moved to the conservative tier and "
+        "kept; `type_seed` is a method of the receiver's declared class listed as a conservative candidate at an "
+        "open site.")
+    add("")
+    add("| package | type_mismatch | type_seed |")
+    add("|---|---|---|")
+    for name, entry in report["packages"].items():
+        effects = entry.get(TYPED_PLAN, {}).get("ts_types", {}).get("effects")
+        if effects is None:
+            add(f"| {name} | n/a | n/a |")
+            continue
+        add(f"| {name} | {effects['type_mismatch']:,} | {effects['type_seed']:,} |")
+    add("")
+    lost = report.get("types_never_lose")
+    if lost is not None:
+        add(
+            f"Typed against refined, every package and the held-out set, in {', '.join(TYPES_NEVER_LOSE_VIEWS)}: "
+            + ("no package loses an observed edge." if not lost else "losses: " + "; ".join(lost) + ".")
+        )
+        add("")
     fc = report["constructs"]["false_complete"]
     add(
         f"Constructs, typed: false-complete hidden paths {fc.get(TYPED_PLAN, 0)}, "
         f"false-complete call lines {fc.get('call_lines_' + TYPED_PLAN, 0)}."
     )
     add("")
+
+
+TIER_VIEWS = (
+    ("exact_complete", "exact-complete"),
+    ("exact", "exact"),
+    ("exact_conservative", "exact + conservative"),
+    ("apart_only", "apart only"),
+)
+
+
+def scored_plans(packages: dict, plans: list[str]):
+    """(name, plan, scored entry) for every package and plan that has a dump."""
+    for name, entry in packages.items():
+        for plan in plans:
+            scored = entry.get(plan, {})
+            if "tiers" in scored:
+                yield name, plan, scored
+
+
+def render_tiers(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Tiers{title}")
+    add("")
+    add("Recall over the same observed edges as above, split by the tier of the edge that found the callee")
+    add("(`research/package-graphs/TIERS.md`): `Exact` and `SetupAware` are exact, except typed-hierarchy edges")
+    add("that dispatch to an `implementation` or `union_member`, which are candidates and count as conservative;")
+    add("`Conservative` and `Ambiguous` are conservative; `Heuristic` is apart and never counts in the first three")
+    add("columns. **exact-complete** also needs the site to be complete: at least one exact or conservative target and")
+    add("no unresolved row.")
+    add("")
+    add("| package | plan | observed edges | " + " | ".join(label for _, label in TIER_VIEWS) + " | apart edges |")
+    add("|---|---|---|" + "---|" * len(TIER_VIEWS) + "---|")
+    totals = defaultdict(Counter)
+    for name, plan, scored in scored_plans(packages, plans):
+        tiers = scored["tiers"]
+        totals[plan]["observed"] += scored["observed_edges"]
+        totals[plan].update(tiers["found"])
+        totals[plan]["apart_edges"] += tiers["apart_edges"]
+        add(
+            f"| {name} | {plan} | {scored['observed_edges']} | "
+            + " | ".join(frac(tiers["found"][view], scored["observed_edges"]) for view, _ in TIER_VIEWS)
+            + f" | {tiers['apart_edges']} |"
+        )
+    for plan in plans:
+        if plan in totals:
+            row = totals[plan]
+            add(
+                f"| **total** | {plan} | {row['observed']} | "
+                + " | ".join(frac(row[view], row["observed"]) for view, _ in TIER_VIEWS)
+                + f" | {row['apart_edges']} |"
+            )
+    add("")
+    add("Targets per site that claims any in the tier: mean / p95 (nearest rank) / max.")
+    add("")
+    widths = ("exact", "conservative", "exact_conservative", "apart")
+    add("| package | plan | " + " | ".join(view.replace("_", " + ") for view in widths) + " |")
+    add("|---|---|" + "---|" * len(widths))
+    for name, plan, scored in scored_plans(packages, plans):
+        cells = []
+        for view in widths:
+            row = scored["tiers"]["targets_per_site"][view]
+            cells.append("–" if not row["sites"] else f"{row['mean']} / {row['p95']} / {row['max']} ({row['sites']} sites)")
+        add(f"| {name} | {plan} | " + " | ".join(cells) + " |")
+    add("")
+
+
+def render_tier_precision(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Precision by tier{title}")
+    add("")
+    add("At executed sites only: a site counts once the run was seen calling a polint function from it, and a")
+    add("claimed target counts when it is a function in an instrumented file. **precision** is the share of those")
+    add("targets the run called there; it is a lower bound, since a run takes only some paths. A target the run never")
+    add("called on a single-target answer in the exact tier is a **wrong exact target**; the gate is 0.")
+    add("")
+    add("| package | plan | " + " | ".join(f"{tier}: precision, single / multi not called" for tier in CLAIM_TIERS) + " |")
+    add("|---|---|" + "---|" * len(CLAIM_TIERS))
+    totals = defaultdict(Counter)
+    for name, plan, scored in scored_plans(packages, plans):
+        cells = []
+        for tier in CLAIM_TIERS:
+            row = scored["tiers"]["precision"][tier]
+            totals[(plan, tier)].update({key: row[key] for key in ("claimed", "observed", "single_target", "multi_target")})
+            cells.append(
+                "–" if not row["claimed"]
+                else f"{frac(row['observed'], row['claimed'])}, {row['single_target']} / {row['multi_target']}"
+            )
+        add(f"| {name} | {plan} | " + " | ".join(cells) + " |")
+    for plan in plans:
+        cells = []
+        for tier in CLAIM_TIERS:
+            row = totals.get((plan, tier))
+            if row is None:
+                break
+            cells.append(
+                "–" if not row["claimed"]
+                else f"**{frac(row['observed'], row['claimed'])}, {row['single_target']} / {row['multi_target']}**"
+            )
+        if len(cells) == len(CLAIM_TIERS):
+            add(f"| **total** | {plan} | " + " | ".join(cells) + " |")
+    add("")
+    add("| package | plan | wrong exact target at | site text | target | the run called |")
+    add("|---|---|---|---|---|---|")
+    any_case = False
+    for name, plan, scored in scored_plans(packages, plans):
+        for example in scored["tiers"]["precision"]["exact"]["examples"]:
+            if example["answer"] != "single_target":
+                continue
+            any_case = True
+            add(
+                f"| {name} | {plan} | {example['site']} | `{cell(example['site_text'])}` "
+                f"| {cell(example['target'])} | {cell(', '.join(example['observed_callees']))} |"
+            )
+    if not any_case:
+        add("| none | | | | | |")
+    add("")
+
+
+def render_open_sites(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Open sites{title}")
+    add("")
+    add("A site is open when it has no exact or conservative target, or the answer marks it unresolved. Each open")
+    add("site counts under every reason its answer gives; `none recorded` is an open site whose answer gives none,")
+    add("which the engine must not produce.")
+    add("")
+    add("| package | plan | call sites | complete | open | open with a claimed target | open by reason |")
+    add("|---|---|---|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, plans):
+        row = scored["tiers"]["sites"]
+        reasons = ", ".join(f"{cell(reason)} {count}" for reason, count in row["open_by_reason"].items()) or "–"
+        add(
+            f"| {name} | {plan} | {row['call_sites']} | {frac(row['complete'], row['call_sites'])} | {row['open']} "
+            f"| {row['open_with_a_claimed_target']} | {reasons} |"
+        )
+    add("")
+
+
+def render_budget_events(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Budget events{title}")
+    add("")
+    add("The solver's budget status for each dump and every budget it reported as reached. The target is none on")
+    add("the tune set, and a budget event must never discard an edge already derived.")
+    add("")
+    add("| package | plan | status | reasons |")
+    add("|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, plans):
+        budget = scored["solver_budget"]
+        add(f"| {name} | {plan} | {budget['status']} | {', '.join(budget['reasons']) or '–'} |")
+    add("")
+
+
+def render_refined_edges(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Refined edges{title}")
+    add("")
+    add("Every refined row by the tier the bench gives it, its algorithm, status and precision, and whether it")
+    add("names a function. Rows with a status other than `Resolved` or `Ambiguous` claim nothing.")
+    add("")
+    add("| package | plan | tier | algorithm | status | precision | names a function | rows |")
+    add("|---|---|---|---|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, [plan for plan in plans if plan != "base"]):
+        for row in scored["refined_edge_census"]:
+            add(
+                f"| {name} | {plan} | {row['tier']} | {row['algorithm']} | {row['status']} | {row['precision']} "
+                f"| {'yes' if row['has_function'] else 'no'} | {row['rows']} |"
+            )
+    add("")
+
+
+def render_sites_gained(packages: dict, plans: list[str], add, title: str = "") -> None:
+    add(f"## Sites gained by the refined plan{title}")
+    add("")
+    add("Sites where a refined plan claims an exact or conservative target and the base plan claims none, by file.")
+    add("**test path** marks a file in a test or benchmark folder or named `*.test.*` / `*.spec.*`; **executed** counts")
+    add("the gained sites the run called a polint function from, the only ones recall can credit.")
+    add("")
+    add("| package | plan | sites gained | in test paths | executed | top files |")
+    add("|---|---|---|---|---|---|")
+    for name, plan, scored in scored_plans(packages, [plan for plan in plans if plan != "base"]):
+        rows = scored.get("sites_gained")
+        if rows is None:
+            continue
+        top = ", ".join(f"{row['file']} {row['sites']}" for row in rows[:3]) or "–"
+        add(
+            f"| {name} | {plan} | {sum(row['sites'] for row in rows)} "
+            f"| {sum(row['sites'] for row in rows if row['test_path'])} | {sum(row['executed'] for row in rows)} "
+            f"| {cell(top)} |"
+        )
+    add("")
+
+
+def render_analysed_set_comparisons(report: dict, add) -> None:
+    comparisons = report.get("analysed_set_comparisons") or {}
+    if not comparisons:
+        return
+    add("## Analysed set: globs alone against shipped source")
+    add("")
+    add("The analysed set of every package is its shipped source: the `analysed` globs without test and benchmark")
+    add("paths. Reports written before this rule analysed what the globs alone select; each package listed here is")
+    add("scored both ways once, so this report reads against them. Every other table uses the shipped set.")
+    add("")
+    add("| package | set | files | source KB | plan | recall | exact / exact + conservative | wrong targets single / multi | wrong exact targets | call sites | dump s | dump peak MB |")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    for name, sets in comparisons.items():
+        for label, row in sets.items():
+            cost_key = previous_set_cost_key(name) if label == PREVIOUS_SET else name
+            for plan in report["plans"]:
+                scored = row.get(plan, {})
+                cost = report["dump_cost"].get(cost_key, {}).get(plan) or {}
+                prefix = (
+                    f"| {name} | {'globs alone' if label == PREVIOUS_SET else 'shipped'} | {row['files']} "
+                    f"| {(row['source_bytes'] or 0) / 1000:.0f} | {plan} "
+                )
+                if "error" in scored:
+                    add(prefix + f"| {scored['error']} | | | | | | |")
+                    continue
+                tiers = scored["tiers_found"]
+                add(
+                    prefix
+                    + f"| {frac(scored['found'], scored['observed_edges'])} "
+                    f"| {tiers['exact']} / {tiers['exact_conservative']} "
+                    f"| {scored['wrong_targets']['single_target']} / {scored['wrong_targets']['multi_target']} "
+                    f"| {scored['wrong_exact_targets']} | {scored['call_sites']} "
+                    f"| {cost.get('wall_ms', 0) / 1000:.1f} | {cost.get('peak_rss_bytes', 0) / MB:.0f} |"
+                )
+    add("")
+
+
+def render_tier_sections(packages: dict, plans: list[str], add, title: str = "") -> None:
+    """The per-tier measures, in the order the README describes them."""
+    render_tiers(packages, plans, add, title)
+    render_tier_precision(packages, plans, add, title)
+    render_open_sites(packages, plans, add, title)
+    render_budget_events(packages, plans, add, title)
+    render_refined_edges(packages, plans, add, title)
+    render_sites_gained(packages, plans, add, title)
+
+
+def outside_tools():
+    """The outside-tool scorer, which imports this module for its matching."""
+    sys.path.insert(0, str(bench.BENCH_DIR / "outside"))
+    import score_outside
+
+    return score_outside
+
+
+def coverage_cell(entry: dict) -> str:
+    coverage = entry.get("coverage") or {}
+    if coverage.get("coverage") is None:
+        return "n/a"
+    cell = f"{frac(coverage['entered_census_functions'], coverage['census_functions'])}"
+    return f"{cell} (flagged)" if coverage["flagged"] else cell
+
+
+def render_held_out(report: dict, add) -> None:
+    """The held-out packages: the tune set's measures, apart, with no miss attribution."""
+    held_out = report["held_out"]
+    plans = list(report["plans"])
+    gate = report["held_out_gate"]
+    add("## Held-out packages")
+    add("")
+    add("Packages no analysis change may be tuned on (`research/package-graphs/HELD-OUT.md`). They get the tune")
+    add("set's measures with no gap ranking, no cause and no example of a missed edge. Wrong exact targets and")
+    add("answers with other targets and no unresolved marker keep their examples: either is a defect to fix.")
+    add(f"A package whose recording entered under {COVERAGE_FLOOR:.0%} of its functions is flagged and left out")
+    add("of the held-out recall.")
+    add("")
+    add("| package | format | files analysed / selected | source KB | census functions | entered | coverage | observed edges | " + " | ".join(f"recall {plan}" for plan in plans) + " |")
+    add("|---|---|---|---|---|---|---|---|" + "---|" * len(plans))
+    for name, entry in held_out.items():
+        coverage = entry["coverage"]
+        recalls = []
+        for plan in plans:
+            scored = entry.get(plan, {})
+            recalls.append(scored["error"] if "error" in scored else frac(scored["found"], scored["observed_edges"]))
+        add(
+            f"| {name} {entry['version']} | {entry['format']} | {entry.get('files', 'n/a')} / {entry['files_selected']} "
+            f"| {entry.get('source_bytes', 0) / 1000:.0f} | {coverage['census_functions'] if coverage['census_functions'] is not None else 'n/a'} "
+            f"| {coverage['entered_census_functions'] if coverage['entered_census_functions'] is not None else 'n/a'} "
+            f"| {coverage_cell(entry)} | {entry.get('base', {}).get('observed_edges', 'n/a')} | " + " | ".join(recalls) + " |"
+        )
+    add("")
+    add("### Held-out gate")
+    add("")
+    add(f"Recall per tier pooled over the tune set and over the unflagged held-out packages "
+        f"({', '.join(gate['counted']) or 'none'}; flagged: {', '.join(gate['flagged']) or 'none'}). "
+        f"The gate holds when held-out recall is at most {gate['margin_points']} points below the tune set's in every tier,")
+    add("and no held-out package, flagged or not, has a wrong exact target or an answer with other targets and no")
+    add("unresolved marker.")
+    add("")
+    add("| plan | tier | tune | held-out | points below tune | within |")
+    add("|---|---|---|---|---|---|")
+    labels = dict(TIER_VIEWS)
+    for plan in plans:
+        for view, row in gate["plans"][plan]["tiers"].items():
+            gap = "n/a" if row["points_below_tune"] is None else f"{row['points_below_tune']:.1f}"
+            add(f"| {plan} | {labels[view]} | {pct1(row['tune'])} | {pct1(row['held_out'])} | {gap} | {'yes' if row['within'] else 'no'} |")
+    add("")
+    add("| plan | wrong exact targets | other targets, no unresolved marker |")
+    add("|---|---|---|")
+    for plan in plans:
+        row = gate["plans"][plan]
+        add(f"| {plan} | {row['wrong_exact_targets']} | {row['false_complete']} |")
+    add("")
+    held_report = {**report, "packages": held_out}
+    render_wrong_targets(held_report, add)
+    render_false_complete(held_report, add)
+    render_tier_sections(held_out, plans, add, " (held-out)")
 
 
 def render_markdown(report: dict) -> str:
@@ -1701,8 +3261,9 @@ def render_markdown(report: dict) -> str:
     add("There is no overall accuracy number on purpose: read the rows.")
     add("")
     add("- **base** is what a rule gets from `CallGraph` (capabilities `syntax, call_graph, symbols, references`).")
-    add("- **refined** is the refined call-edge layer (adds `calls, control_flow, dataflow`). It has no public view;")
-    add("  it is read through the internal benchmark dump only.")
+    add("- **refined** is the raw refined call-edge rows, every status included (adds `calls, control_flow,")
+    add("  dataflow`). `CallGraph` serves the rows of this layer that claim a target, so the two columns differ only")
+    add("  where a row's status withholds or weakens its claim.")
     add("- Precision is measured against hand labels only. **Observed calls give recall, never precision**:")
     add("  a run sees the paths it exercised, so an edge polint reports that the run did not take is not wrong.")
     add("")
@@ -1795,8 +3356,11 @@ def render_markdown(report: dict) -> str:
     add("Recall is over observed edges at call expressions (`call` and `callback`); `implicit` calls (getters,")
     add("coercions, iterator and thenable protocol) have no call expression and are listed by kind only.")
     add("")
-    add("| package | format | files analysed / selected | source KB | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |")
-    add("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    add("Coverage is the share of the analysed files' functions (syntax census, classes and static blocks left out)")
+    add("that the recording entered.")
+    add("")
+    add("| package | format | files analysed / selected | source KB | coverage | observed edges | recall base | recall refined | stops at import binding (base) | not mappable to a polint site or function | unresolved call share base | call sites without target base / refined | unresolved reference share |")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for name, entry in report["packages"].items():
         base, refined = entry.get("base", {}), entry.get("refined", {})
 
@@ -1821,13 +3385,14 @@ def render_markdown(report: dict) -> str:
         )
         add(
             f"| {name} {entry['version']} | {entry['format']} | {entry.get('files', 'n/a')} / {entry['files_selected']} "
-            f"| {entry.get('source_bytes', 0) / 1000:.0f} | {base.get('observed_edges', 'n/a')} "
+            f"| {entry.get('source_bytes', 0) / 1000:.0f} | {coverage_cell(entry)} | {base.get('observed_edges', 'n/a')} "
             f"| {recall(base)} | {recall(refined)} "
             f"| {base.get('outcomes', {}).get('stops at import binding', 0)} | {unmappable} "
             f"| {pct(base.get('unresolved_calls', {}).get('marked_unresolved_share'))} | {without} "
             f"| {pct(base.get('references', {}).get('not_resolved_share'))} |"
         )
     add("")
+    render_recall_targets(report, add)
     render_wrong_targets(report, add)
     if TYPED_PLAN in report["plans"]:
         render_types(report, add)
@@ -1870,15 +3435,24 @@ def render_markdown(report: dict) -> str:
     render_gaps(report, add)
     render_false_complete(report, add)
     render_outcome_examples(report, add)
+    render_tier_sections(report["packages"], list(report["plans"]), add)
+    render_analysed_set_comparisons(report, add)
+    if report.get("outside") is not None:
+        outside_tools().render(report["outside"], report["packages"], list(report["plans"]), add)
+
+    if report.get("held_out"):
+        render_held_out(report, add)
 
     add("## Exports (against the loaded module's export keys)")
     add("")
     add("`Symbols` is the exported-symbol answer a rule can read; export facts are the module export rows.")
-    add("Both are compared with the export keys the loaded module actually has.")
+    add("Both are compared with the export keys the loaded module actually has. A file that fails to load")
+    add("on its own is left out of both and counted under `load errors`.")
     add("")
-    add("| tree | files exact (Symbols) | name recall (Symbols) | name precision (Symbols) | files exact (export facts) | name recall (export facts) | name precision (export facts) | export fact rows by kind/status |")
-    add("|---|---|---|---|---|---|---|---|")
+    add("| tree | files exact (Symbols) | name recall (Symbols) | name precision (Symbols) | files exact (export facts) | name recall (export facts) | name precision (export facts) | export fact rows by kind/status | load errors |")
+    add("|---|---|---|---|---|---|---|---|---|")
     rows = [(f"package {n}", e.get("exports")) for n, e in report["packages"].items()]
+    rows += [(f"held-out package {n}", e.get("exports")) for n, e in report.get("held_out", {}).items()]
     rows += [(f"case {n}", e.get("exports")) for n, e in sorted(report["constructs"]["cases"].items())]
     for name, exports in rows:
         if not exports or not exports["symbols"]["files"] + exports["facts"]["files"]:
@@ -1888,9 +3462,14 @@ def render_markdown(report: dict) -> str:
         add(
             f"| {name} | {s['files_exact']}/{s['files']} | {frac(s['matched_names'], s['observed_names'])} "
             f"| {frac(s['matched_names'], s['predicted_names'])} | {f['files_exact']}/{f['files']} "
-            f"| {frac(f['matched_names'], f['observed_names'])} | {frac(f['matched_names'], f['predicted_names'])} | {statuses} |"
+            f"| {frac(f['matched_names'], f['observed_names'])} | {frac(f['matched_names'], f['predicted_names'])} | {statuses} "
+            f"| {exports.get('load_errors', 0)} |"
         )
     add("")
+
+    render_package_graphs(report, add)
+    render_corrections(report, add)
+    render_stitched_trees(report, add)
 
     add("## Cost")
     add("")
@@ -1899,7 +3478,9 @@ def render_markdown(report: dict) -> str:
         add("Not measured in this run (`--no-cost`).")
     else:
         add("The only part of this report that changes between runs. Machine: "
-            f"{cost['machine']['platform']}, {cost['machine']['cpus']} CPUs, commit {cost['machine']['git_head'][:12]}.")
+            f"{cost['machine']['platform']}, {cost['machine']['cpus']} CPUs, commit {cost['machine']['git_head'][:12]}, "
+            f"load average {load_line(cost['machine'].get('load_average_start'))} at the start and "
+            f"{load_line(cost['machine'].get('load_average_end'))} at the end (1, 5, 15 minutes).")
         add("")
         add(f"`polint check` (release) with the census rule pack, which asks for `Functions`, `CallGraph`, `Symbols`, "
             f"`References`; median of {cost['runs']} runs. `analysis` is the in-process cost record "
@@ -1923,8 +3504,8 @@ def render_markdown(report: dict) -> str:
                 f"| {row['stored_bytes_per_mb']} ({row['stored_gzip_bytes_per_mb']}) |"
             )
         add("")
-        add("Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): this is")
-        add("the only way to time the refined plan, because no public view asks for it.")
+        add("Fact dump (no cache, one tree per process; peak RSS is the process figure, with the same floor): the")
+        add("base plan is what a `CallGraph` rule pays; the refined plan adds the capabilities that read the raw rows.")
         add("")
         add("| tree | base ms | base peak RSS MB | refined ms | refined peak RSS MB | budget s |")
         add("|---|---|---|---|---|---|")
@@ -1935,12 +3516,78 @@ def render_markdown(report: dict) -> str:
                 f"| {row['refined']['peak_rss_bytes'] / MB:.0f} | {report['dump_budgets_s'].get(name, 'none')} |"
             )
     add("")
+    render_stage_times(report, add)
+    render_solver(report, add)
     add("## Decisions recorded by this run")
     add("")
     for decision in report["decisions"]:
         add(f"- {decision}")
     add("")
     return "\n".join(out)
+
+
+def load_line(load: list[float] | None) -> str:
+    return "not recorded" if not load else " / ".join(f"{value:.2f}" for value in load)
+
+
+SEMANTIC_GRAPH_STAGE = "polint.semantic_graph"
+
+
+def render_stage_times(report: dict, add) -> None:
+    """The three largest provider stages of every fact dump, from the kernel's stage log."""
+    add("### Stage times")
+    add("")
+    add(f"Every fact dump runs with `RUST_LOG={STAGE_LOG}`; each provider's `stage done` lines are summed. "
+        "Stage times are as noisy as the dump times above. `semantic_graph share` is the "
+        f"`{SEMANTIC_GRAPH_STAGE}` stage's part of the refined plan's summed stage time. Peak MB is the process "
+        "peak when the stage ended.")
+    add("")
+    add("| tree | plan | stage total s | largest stages: s (peak MB) | semantic_graph share |")
+    add("|---|---|---|---|---|")
+    for name, plans in report["dump_cost"].items():
+        for plan, row in plans.items():
+            stages = row.get("stages") or {}
+            total = sum(stage["elapsed_ms"] for stage in stages.values())
+            largest = sorted(stages.items(), key=lambda item: (-item[1]["elapsed_ms"], item[0]))[:3]
+            listed = ", ".join(
+                f"`{provider.removeprefix('polint.')}` {stage['elapsed_ms'] / 1000:.1f} ({stage['peak_rss_mb']})"
+                for provider, stage in largest
+            ) or "no stage log"
+            share = "n/a"
+            if plan == "refined" and total:
+                share = pct(stages.get(SEMANTIC_GRAPH_STAGE, {}).get("elapsed_ms", 0) / total)
+            add(f"| {name} | {plan} | {total / 1000:.1f} | {listed} | {share} |")
+    add("")
+
+
+def render_solver(report: dict, add) -> None:
+    """Every points-to solve of every package's fact dump, from the solver's log."""
+    add("## Solver")
+    add("")
+    add("Every fact dump logs one `points_to solve` line per solve under `polint::points_to`. `alias` solves the "
+        "constraints alone for the type, value and alias facts; `call graph` solves them with the call rule. "
+        "Constraints are the input count (by kind in report.json); variables include heap slots; pops are worklist "
+        "pops; collapsed are variables merged into another on a copy cycle. Time is per step: reading the input, the worklist, and building the result. Memory is the resident "
+        "growth across the solve and the process peak after it. Counts are the same in every run; time and memory "
+        "are as noisy as the stage times above.")
+    add("")
+    add("| tree | plan | solve | constraints | calls | variables | objects | slots | copy edges | pops "
+        "| collapsed | largest set | sets > 64 | sets > 1,024 | ms (input / worklist / result) | RSS growth MB | peak MB "
+        "| budget |")
+    add("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    labels = {"type_value_alias": "alias", "call_graph": "call graph"}
+    for name, plans in report["dump_cost"].items():
+        for plan, row in plans.items():
+            for solve in row.get("solver") or []:
+                add(
+                    f"| {name} | {plan} | {labels.get(solve['pass'], solve['pass'])} "
+                    f"| {sum(solve['constraints'].values()):,} | {solve['calls']:,} | {solve['variables']:,} "
+                    f"| {solve['objects']:,} | {solve['slots']:,} | {solve['copy_edges']:,} | {solve['pops']:,} "
+                    f"| {solve['collapsed']:,} | {solve['largest_set']:,} | {solve['sets_over_64']:,} | {solve['sets_over_1024']:,} "
+                    f"| {solve['initialize_ms']} / {solve['run_ms']} / {solve['result_ms']} "
+                    f"| {solve['rss_delta_mb']} | {solve['peak_rss_mb']} | {solve['budget']} |"
+                )
+    add("")
 
 
 DECISIONS = [
@@ -1970,10 +3617,12 @@ DECISIONS = [
     "a `Class.constructor` label and an observed constructor callee map to the class function.",
     "Observed implicit edges (accessors, coercions, iterator protocol) have a position but no call expression; "
     "they are reported by kind but left out of the headline package recall, which is over calls and callbacks.",
-    "Packages are analysed with polint's default discovery, so its default excludes (for example `**/vendor/**`) "
-    "apply; observed edges touching such files count as 'site or callee in a file polint does not analyse'.",
-    "Missing call sites and functions are not worked around: functions under a unary operator, functions declared "
-    "inside try, catch or if blocks, and calls in exported variable initializers are reported as misses.",
+    "A package is analysed as the package it is: its `analysed` globs are the include set (a construct case "
+    "includes all its files), and of polint's default excludes only `**/node_modules/**` and `**/.git/**` apply, "
+    "so a package's own `vendor/` is analysed; observed edges touching an excluded file count as 'site or callee "
+    "in a file polint does not analyse'.",
+    "Missing call sites and functions are not worked around: a function or call polint does not extract counts "
+    "as a miss.",
     "An observed callee maps to the polint function with the same span before the innermost one ending at the same "
     "byte: a concise arrow returning an arrow, `(a) => (b) => ...`, ends at the same byte as the arrow it returns.",
     "Every missed observed edge is attributed to one gap from a syntax census: Oxc's own function and call spans with "
@@ -2007,6 +3656,8 @@ def run(args) -> int:
     if typescript is not None:
         PLANS[TYPED_PLAN] = PLANS["refined"]
     polint, test_binary = build(args)
+    # The machine's load once the build is done, before anything is measured.
+    load_at_start = os.getloadavg()
     version = subprocess.run([str(polint), "--version"], capture_output=True, text=True, check=True).stdout.split()[-1]
 
     budgets = {package["name"]: package["dump_budget_s"] for package in inputs["package"] if "dump_budget_s" in package}
@@ -2014,6 +3665,7 @@ def run(args) -> int:
     with tempfile.TemporaryDirectory(prefix="polint-js-bench-report-") as scratch_name:
         scratch = Path(scratch_name)
         case_trees, package_trees = stage(scratch, inputs, cases)
+        previous_trees = stage_previous_sets(scratch, inputs)
         typed_trees = {}
         if typescript is not None:
             typed_trees = stage_typed(
@@ -2021,12 +3673,18 @@ def run(args) -> int:
                 {
                     **{("case", case_id): tree for case_id, tree in case_trees.items()},
                     **{("package", name): tree for name, tree in package_trees.items()},
+                    **{(PREVIOUS_SET, name): tree for name, tree in previous_trees.items()},
                 },
             )
         (scratch / "dumps").mkdir()
         dumps = {}
         trees = [("case", case_id, tree) for case_id, tree in case_trees.items()]
         trees += [("package", name, tree) for name, tree in package_trees.items()]
+        trees += [(PREVIOUS_SET, name, tree) for name, tree in previous_trees.items()]
+        held_out_names = {package["name"] for package in inputs["package"] if package.get("held_out")}
+        with_package_graph = os.environ.get(PACKAGE_GRAPH_ENV) == "1"
+        with_corrections = os.environ.get(CORRECTIONS_ENV) == "1"
+        drivers = {package["name"]: package["driver"] for package in inputs["package"]}
         for kind, name, tree in trees:
             for plan in PLANS:
                 out = scratch / "dumps" / f"{kind}-{name.replace('/', '__')}-{plan}.json"
@@ -2036,7 +3694,21 @@ def run(args) -> int:
                         "typed": True,
                     }
                 else:
-                    dumps[(kind, name, plan)] = run_dump(test_binary, tree, plan, out, args.dump_timeout)
+                    tune_graph = kind == "package" and plan == PACKAGE_GRAPH_PLAN and name not in held_out_names
+                    recording = (
+                        (bench.OBSERVED / "packages" / f"{name}.calls.json", drivers[name])
+                        if with_corrections and tune_graph
+                        else None
+                    )
+                    dumps[(kind, name, plan)] = run_dump(
+                        test_binary,
+                        tree,
+                        plan,
+                        out,
+                        args.dump_timeout,
+                        package_graph=with_package_graph and tune_graph,
+                        recording=recording,
+                    )
                 if dumps[(kind, name, plan)]["error"]:
                     print(f"{kind} {name} {plan}: {dumps[(kind, name, plan)]['error']}", file=sys.stderr)
             if kind == "package":
@@ -2045,6 +3717,15 @@ def run(args) -> int:
                 if dumps[(kind, name, "census")]["error"]:
                     print(f"{kind} {name} census: {dumps[(kind, name, 'census')]['error']}", file=sys.stderr)
                 print(f"dumped {name}", file=sys.stderr)
+
+        stitch_runs = {}
+        if with_package_graph:
+            for name, tree in stage_stitch_trees(scratch, inputs).items():
+                out = scratch / "stitched" / name
+                stitch_runs[name] = {**run_stitch(test_binary, tree["root"], out, args.dump_timeout), **tree}
+                if stitch_runs[name]["error"]:
+                    print(f"tree {name}: {stitch_runs[name]['error']}", file=sys.stderr)
+                print(f"stitched {name}", file=sys.stderr)
 
         over_budget = [
             f"{name} {plan}: {run_entry['cost']['wall_ms'] / 1000:.1f} s, budget {budgets[name]} s"
@@ -2057,14 +3738,18 @@ def run(args) -> int:
         # Every measured process is started before any dump is loaded. A child's
         # peak RSS from wait4 starts at this process's own resident size when it
         # forks, so this process must stay small while it measures.
+        tune_names = [package["name"] for package in inputs["package"] if not package.get("held_out")]
         check_cost = None
         if not args.no_cost:
             constructs_tree = scratch / "cost-constructs"
             for case_id, tree in case_trees.items():
                 shutil.copytree(tree, constructs_tree / case_id)
-            cost_trees = {"constructs (all cases)": constructs_tree, **package_trees}
+            # The cost runs measure the tune set, the set the cost targets are stated on.
+            cost_trees = {"constructs (all cases)": constructs_tree, **{name: package_trees[name] for name in tune_names}}
             check_cost = measure_cost(polint, cost_trees, scratch, args.cost_runs, args.dump_timeout)
         launcher_peak_rss_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+        package_graphs = package_graph_sizes(dumps, tune_names)
+        stitched_trees, stitch_cost = score_stitched_trees(stitch_runs)
         if args.keep_dumps:
             shutil.copytree(scratch / "dumps", Path(args.keep_dumps), dirs_exist_ok=True)
         for run_entry in dumps.values():
@@ -2072,7 +3757,10 @@ def run(args) -> int:
 
         case_results = score_constructs(cases, dumps)
         hidden_lines = sum(len(e["base"].get("unknown_lines", [])) for e in case_results.values())
-        packages = score_packages(inputs, dumps)
+        scored_packages = score_packages(inputs, dumps)
+        packages = {name: entry for name, entry in scored_packages.items() if not entry["held_out"]}
+        held_out = {name: entry for name, entry in scored_packages.items() if entry["held_out"]}
+        comparisons = score_previous_sets(inputs, dumps, packages)
         report = {
             "schema": REPORT_SCHEMA,
             "polint_version": version,
@@ -2102,15 +3790,46 @@ def run(args) -> int:
                 "cases": case_results,
             },
             "packages": packages,
+            "held_out": held_out,
+            "held_out_gate": held_out_gate(packages, held_out, list(PLANS)),
+            "recall_targets": recall_targets(packages, list(PLANS)),
+            "types_never_lose": types_never_lose(packages, held_out),
             "dump_budgets_s": budgets,
             # One fact dump per package and plan, kept even without the cost runs.
             "dump_cost": {
-                name: {plan: dumps[("package", name, plan)]["cost"] for plan in PLANS} for name in package_trees
+                **{name: {plan: dumps[("package", name, plan)]["cost"] for plan in PLANS} for name in package_trees},
+                **{
+                    previous_set_cost_key(name): {plan: dumps[(PREVIOUS_SET, name, plan)]["cost"] for plan in PLANS}
+                    for name in previous_trees
+                },
             },
             "gap_ranking": rank_gaps(packages),
+            "analysed_set_comparisons": comparisons,
+            "outside": outside_tools().score_all(inputs),
             "decisions": DECISIONS,
             "cost": None,
         }
+        if package_graphs:
+            report["package_graphs"] = {
+                name: {
+                    "bytes": graph["bytes"],
+                    "gzip_bytes": len(graph["gzip"]),
+                    "source_bytes": report["packages"][name].get("source_bytes", 0),
+                    "gzip_bytes_per_mb": round(
+                        len(graph["gzip"]) / max(report["packages"][name].get("source_bytes", 0) / MB, 1e-9)
+                    ),
+                }
+                for name, graph in package_graphs.items()
+            }
+
+        corrections = score_corrections(dumps, tune_names)
+        if corrections:
+            report["corrections"] = corrections
+
+        if stitched_trees:
+            report["stitched_trees"] = stitched_trees
+            # Times stay under their own key, so every other key is the same on every run.
+            report["stitch_cost"] = stitch_cost
 
         if check_cost is not None:
             add_per_mb(
@@ -2121,20 +3840,22 @@ def run(args) -> int:
                     if dumps[("case", case_id, "base")]["dump"] is not None
                 ),
             )
-            for name in package_trees:
+            for name in tune_names:
                 add_per_mb(check_cost[name], report["packages"][name].get("source_bytes", 0))
             report["cost"] = {
-                "machine": machine(launcher_peak_rss_bytes),
+                "machine": machine(launcher_peak_rss_bytes, load_at_start),
                 "runs": args.cost_runs,
                 "check": check_cost,
                 "dump": {
                     name: {plan: {**dumps[("package", name, plan)]["cost"], "error": dumps[("package", name, plan)]["error"]} for plan in PLANS}
-                    for name in package_trees
+                    for name in tune_names
                 },
             }
 
     out_dir = Path(args.out) if args.out else bench.BASELINE
     out_dir.mkdir(parents=True, exist_ok=True)
+    for name, graph in package_graphs.items():
+        (out_dir / f"{name.replace('/', '__')}.package-graph.json.gz").write_bytes(graph["gzip"])
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     (out_dir / "report.md").write_text(render_markdown(report))
     print(f"wrote {out_dir / 'report.json'} and {out_dir / 'report.md'}", file=sys.stderr)
@@ -2143,8 +3864,15 @@ def run(args) -> int:
         for (kind, name, plan), run_entry in sorted(dumps.items())
         if run_entry["error"]
     ]
+    failed += [f"tree {name}: {row['error']}" for name, row in report.get("stitched_trees", {}).items() if row["error"]]
+    differs = [name for name, row in report.get("stitched_trees", {}).items() if row.get("differs")]
+    if differs:
+        print("stitched trees whose answers differ from the whole program:\n" + "\n".join(differs), file=sys.stderr)
     if failed:
         print("fact dumps that failed:\n" + "\n".join(failed), file=sys.stderr)
     if over_budget:
         print("fact dumps over their time budget:\n" + "\n".join(over_budget), file=sys.stderr)
-    return 1 if failed or over_budget else 0
+    lost = report.get("types_never_lose", [])
+    if lost:
+        print(f"the {TYPED_PLAN} plan found fewer observed edges than refined:\n" + "\n".join(lost), file=sys.stderr)
+    return 1 if failed or over_budget or lost or differs else 0

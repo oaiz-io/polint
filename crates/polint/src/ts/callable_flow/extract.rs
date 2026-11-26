@@ -1,8 +1,9 @@
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::BuildHasher as _;
 use std::rc::Rc;
 
+use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrayExpressionElement, AssignmentOperator, AssignmentTarget, BinaryOperator,
     BindingPattern, CallExpression, Class, ClassElement, Declaration, ExportDefaultDeclarationKind,
@@ -12,11 +13,14 @@ use oxc_ast::ast::{
     VariableDeclarator,
 };
 use oxc_span::GetSpan;
+use rayon::prelude::*;
 
 use crate::analysis_api::{FunctionFact, ResolutionStatus, SourceFile, TS_JS_MODULE_FUNCTION_NAME};
 use crate::analysis_neutral::AnalysisHost;
 use crate::analysis_neutral::calls::facts::{CallCallee, CallSiteFact};
+use crate::analysis_neutral::package_graph::install_of;
 use crate::internal_core::{FileId, FunctionId};
+use crate::ts::parse::parse_ts_file;
 
 use super::{TsCallableFlow, TsCallableFlowKind};
 
@@ -270,7 +274,7 @@ impl Drop for WalkFrame {
 }
 
 pub(in crate::ts) fn collect_callable_flows<'ast>(
-    db: &impl AnalysisHost,
+    db: &(impl AnalysisHost + Sync),
     programs: &BTreeMap<FileId, &'ast Program<'ast>>,
 ) -> Vec<TsCallableFlow> {
     let mut rows = Vec::new();
@@ -282,7 +286,7 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
         compute_module_export_summaries(db, programs, &functions_by_file_start, &resolution_map);
     let function_returns = compute_function_return_summaries(
         db,
-        programs,
+        &programs.keys().copied().collect(),
         &functions_by_file_start,
         &resolution_map,
         &module_summaries,
@@ -324,6 +328,7 @@ pub(in crate::ts) fn collect_callable_flows<'ast>(
             invocations: HashMap::new(),
             invocation_walks: 0,
             tree_walks: 0,
+            invoking: Vec::new(),
             iterator_next_ordinals: BTreeMap::new(),
             iterator_next_starts: BTreeMap::new(),
             rows: Vec::new(),
@@ -397,7 +402,8 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     /// every walk at one level computes the same answer. With it an input is
     /// walked at most twice while the tables do not change, and an input that
     /// comes only once costs no copy of its env. A call tree keys its walks
-    /// only after `INVOCATION_KEYING_AFTER_WALKS` of them. Emptied when the
+    /// only after `INVOCATION_KEYING_AFTER_WALKS` of them, or from its first
+    /// recursive call (see `invoking`). Emptied when the
     /// outermost walk returns, so it holds one call tree at a time. Only looked
     /// up, never iterated, so it cannot affect row order.
     invocations: HashMap<u64, Option<Box<InvocationRecord>>>,
@@ -408,6 +414,13 @@ struct TsCallableFlowCollector<'db, 'ast, 'env> {
     /// than wraps: it is only compared with `keying_after_walks()`, and a
     /// wrapped count would turn keying off again partway through a tree.
     tree_walks: usize,
+    /// The functions whose bodies the callee-body walks in flight are walking,
+    /// outermost first. A walk of a function already on it is a recursive
+    /// call, which is keyed in `invocations` at once: each level of a function
+    /// that calls itself `k` times multiplies the walks below it by `k`, so a
+    /// recursive call tree reaches `INVOCATION_KEYING_AFTER_WALKS` within a few
+    /// levels and every walk it makes before then is a repeat.
+    invoking: Vec<FunctionId>,
     /// Program-global positional index of every `receiver.next()` call: maps the
     /// `.next()` call's `span.start` to its 0-based ordinal among `.next()` calls
     /// on the same receiver name (in source order). Used to sequence generator
@@ -468,8 +481,14 @@ enum ParamPattern {
 }
 
 /// Join import specifiers to files through the canonical module graph. Unresolved
-/// or external targets cannot seed a local callable summary.
+/// or external targets cannot seed a local callable summary, and neither can a
+/// file of another package: each package is summarised as its own graph would
+/// summarise it, so the program answers as the stitch of its packages.
 fn module_resolution_map(db: &impl AnalysisHost) -> BTreeMap<(FileId, String), FileId> {
+    let package = |file: FileId| {
+        db.file(file)
+            .map(|file| install_of(&file.relative_path).0.to_string())
+    };
     let imports = db
         .imports()
         .iter()
@@ -488,7 +507,8 @@ fn module_resolution_map(db: &impl AnalysisHost) -> BTreeMap<(FileId, String), F
             }
             let import = imports.get(&resolution.import)?;
             let target = *files_by_node.get(&resolution.target_node?)?;
-            (target != import.file).then(|| ((import.file, import.path.clone()), target))
+            (target != import.file && package(target) == package(import.file))
+                .then(|| ((import.file, import.path.clone()), target))
         })
         .collect()
 }
@@ -546,6 +566,7 @@ fn compute_module_export_summaries<'ast>(
                 invocations: HashMap::new(),
                 invocation_walks: 0,
                 tree_walks: 0,
+                invoking: Vec::new(),
                 iterator_next_ordinals: BTreeMap::new(),
                 iterator_next_starts: BTreeMap::new(),
                 rows: Vec::new(),
@@ -571,53 +592,70 @@ fn compute_module_export_summaries<'ast>(
 /// computing). Runs for every file: a returned object or callable is just as
 /// reachable within one module (`const z = make(); z.q()`) as across a
 /// `require` boundary.
-fn compute_function_return_summaries<'ast>(
-    db: &impl AnalysisHost,
-    programs: &BTreeMap<FileId, &'ast Program<'ast>>,
+/// Each file's return summaries depend only on the module summaries, never on
+/// another file's return summaries, so the files are summarised in parallel.
+/// An Oxc `Program` cannot cross threads, so each worker parses its own file
+/// again; `parsed_files` names the files that parsed in full. The per-file
+/// results are merged in file order, as the serial pass inserted them.
+fn compute_function_return_summaries(
+    db: &(impl AnalysisHost + Sync),
+    parsed_files: &BTreeSet<FileId>,
     functions_by_file_start: &BTreeMap<(FileId, u32), Vec<&FunctionFact>>,
     resolution_map: &BTreeMap<(FileId, String), FileId>,
     module_summaries: &BTreeMap<FileId, ModuleExportSummary>,
 ) -> BTreeMap<FunctionId, ModuleExportSummary> {
-    let mut returns: BTreeMap<FunctionId, ModuleExportSummary> = BTreeMap::new();
-    let empty_returns = BTreeMap::new();
-    for file in db
+    let files = db
         .files()
         .iter()
-        .filter(|file| file.language.is_ts_family())
-    {
-        let Some(module) = module_function(db, file) else {
-            continue;
-        };
-        let Some(&program) = programs.get(&file.id) else {
-            continue;
-        };
-        let mut collector = TsCallableFlowCollector {
-            file,
-            module,
-            sites: &[],
-            functions_by_start: functions_by_file_start,
-            resolution_map,
-            module_summaries,
-            function_returns: &empty_returns,
-            function_declarations: BTreeMap::new(),
-            function_flows_by_id: BTreeMap::new(),
-            classes: BTreeMap::new(),
-            class_expressions: Vec::new(),
-            exports: ModuleExportSummary::default(),
-            export_aliases: std::collections::BTreeSet::new(),
-            this_method_walk: false,
-            current_super: None,
-            invocation_depth: 0,
-            walk_guard: Rc::default(),
-            table_generation: 0,
-            invocations: HashMap::new(),
-            invocation_walks: 0,
-            tree_walks: 0,
-            iterator_next_ordinals: BTreeMap::new(),
-            iterator_next_starts: BTreeMap::new(),
-            rows: Vec::new(),
-        };
-        collector.collect_return_summaries(program, &mut returns);
+        .filter(|file| file.language.is_ts_family() && parsed_files.contains(&file.id))
+        .collect::<Vec<_>>();
+    let per_file = files
+        .par_iter()
+        .map(|file| {
+            let mut returns = BTreeMap::new();
+            let Some(module) = module_function(db, file) else {
+                return returns;
+            };
+            let allocator = Allocator::default();
+            let parsed = parse_ts_file(&allocator, file);
+            if !parsed.fully_parsed {
+                return returns;
+            }
+            let empty_returns = BTreeMap::new();
+            let mut collector = TsCallableFlowCollector {
+                file,
+                module,
+                sites: &[],
+                functions_by_start: functions_by_file_start,
+                resolution_map,
+                module_summaries,
+                function_returns: &empty_returns,
+                function_declarations: BTreeMap::new(),
+                function_flows_by_id: BTreeMap::new(),
+                classes: BTreeMap::new(),
+                class_expressions: Vec::new(),
+                exports: ModuleExportSummary::default(),
+                export_aliases: std::collections::BTreeSet::new(),
+                this_method_walk: false,
+                current_super: None,
+                invocation_depth: 0,
+                walk_guard: Rc::default(),
+                table_generation: 0,
+                invocations: HashMap::new(),
+                invocation_walks: 0,
+                tree_walks: 0,
+                invoking: Vec::new(),
+                iterator_next_ordinals: BTreeMap::new(),
+                iterator_next_starts: BTreeMap::new(),
+                rows: Vec::new(),
+            };
+            collector.collect_return_summaries(parsed.program(), &mut returns);
+            returns
+        })
+        .collect::<Vec<_>>();
+    let mut returns = BTreeMap::new();
+    for file_returns in per_file {
+        returns.extend(file_returns);
     }
     returns
 }
@@ -4568,11 +4606,13 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         // invocations run one level deeper, so a walk never meets its own input
         // while in flight. The outermost walk has nothing to reuse and nothing
         // to share, so it is not keyed, and neither are the first walks of its
-        // call tree.
+        // call tree unless they walk a function already being walked.
         let outermost = self.invocation_walks == 0;
         // A finished call tree leaves nothing for the next one to replay.
         debug_assert!(!outermost || (self.invocations.is_empty() && self.tree_walks == 0));
-        let keyed = !outermost && self.tree_walks >= keying_after_walks();
+        let keyed = !outermost
+            && (self.tree_walks >= keying_after_walks()
+                || self.invoking.contains(&flow.function.id));
         let key = keyed.then(|| {
             let input = InvocationInput {
                 function: flow.function.id,
@@ -4624,6 +4664,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         let walks_before = self.tree_walks;
         self.invocation_depth += 1;
         self.invocation_walks += 1;
+        self.invoking.push(flow.function.id);
         self.tree_walks = self.tree_walks.saturating_add(1);
         // Calls in the invoked body belong to `flow.function`, which is the
         // owner every model row emitted from it names.
@@ -4633,6 +4674,7 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
         } else {
             self.collect_invocation_statements(&flow.body.statements, flow.function, env)
         };
+        self.invoking.pop();
         self.invocation_walks -= 1;
         self.invocation_depth -= 1;
         match (key, env_before) {

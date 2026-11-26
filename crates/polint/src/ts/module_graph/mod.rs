@@ -1,6 +1,12 @@
+#[cfg(feature = "lang-typescript")]
+mod bounded_fs;
+#[cfg(feature = "lang-typescript")]
+mod conditions;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod conditions_differential_tests;
 mod formats;
 use crate::analysis_api::{
-    FactDatabase, ModuleEdgeKind, ResolutionPrecision, ResolutionStatus, SourceFile,
+    FactDatabase, ImportSyntax, ModuleEdgeKind, ResolutionPrecision, ResolutionStatus, SourceFile,
     UnresolvedReason,
 };
 use crate::analysis_neutral::module_graph::model::{
@@ -13,6 +19,8 @@ use crate::analysis_neutral::module_graph::topology::{
     TopologyOutput, TopologyPackageFact, TopologyPackageId, TopologyPackageKind, TopologyPrecision,
     TopologyStatus, WorkspaceRootFact, WorkspaceRootId, WorkspaceRootKind,
 };
+#[cfg(feature = "lang-typescript")]
+use crate::bounded_json;
 use crate::internal_core::{FileId, Language, ModuleNodeId, StableKeyInterner};
 #[cfg(feature = "lang-typescript")]
 use crate::ts::DYNAMIC_IMPORT_SPECIFIER;
@@ -22,6 +30,12 @@ use crate::ts::repo_fs::{
     read_repo_file_to_string_with_limit, repo_dir_path, repo_file_exists, repo_file_path,
     repo_relative_existing_path,
 };
+use crate::ts::tsconfig_chain::{
+    TsconfigExtendsWire, extended_configs, parse_tsconfig_json, read_tsconfig_json,
+    resolve_tsconfig_file_candidate, walk_tsconfig_chain,
+};
+#[cfg(feature = "lang-typescript")]
+use bounded_fs::{BoundedFs, RefusedInput};
 use formats::js_lockfile::{
     JsLockfileKind, JsLockfileManifest, JsLockfilePackage, JsPackageManager, parse_js_lockfile,
     unsupported_js_lockfile,
@@ -29,11 +43,17 @@ use formats::js_lockfile::{
 use formats::package_json::{PackageJsonManifest, parse_package_json, unsupported_package_json};
 pub use formats::pnpm_workspace::parse_pnpm_workspace_packages;
 #[cfg(feature = "lang-typescript")]
-use oxc_resolver::{ResolveError, ResolveOptions, Resolver, TsconfigDiscovery};
+use oxc_resolver::{
+    FileSystem as _, ResolveError, ResolveOptions, ResolverGeneric, TsconfigDiscovery,
+};
+#[cfg(feature = "lang-typescript")]
+type Resolver = ResolverGeneric<BoundedFs>;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "lang-typescript")]
+use std::sync::{Arc, Mutex, PoisonError};
 
 #[cfg(test)]
 use std::cell::Cell;
@@ -92,7 +112,7 @@ pub fn resolve_ts_import(
 
 #[cfg(feature = "lang-typescript")]
 pub struct TsResolverContext {
-    resolver: Resolver,
+    resolver: ModeResolvers,
     root: PathBuf,
     file_by_absolute_normalized_path: BTreeMap<PathBuf, FileId>,
     path_aliases_by_config_dir: BTreeMap<PathBuf, Vec<String>>,
@@ -120,7 +140,7 @@ impl TsResolverContext {
             .collect();
 
         Self {
-            resolver: Resolver::new(resolve_options()),
+            resolver: ModeResolvers::new(),
             path_aliases_by_config_dir: collect_ts_path_aliases(&root, db),
             root,
             file_by_absolute_normalized_path,
@@ -145,6 +165,8 @@ pub fn resolve_ts_import(
             precision: ResolutionPrecision::None,
             reason: Some(UnresolvedReason::DynamicExpression),
             edge_kind: None,
+            alternatives: Vec::new(),
+            resolution_issue: None,
         };
     }
 
@@ -164,10 +186,54 @@ pub fn resolve_ts_import(
         return ResolvedImportDraft::unresolved(UnresolvedReason::NotFound);
     };
 
-    match context
-        .resolver
-        .resolve_file(&importer_path, input.import.path.as_str())
-    {
+    let (resolution, refusal) = context.resolver.resolve(
+        &importer_path,
+        input.import.path.as_str(),
+        input.import.syntax,
+    );
+    let open = |paths: Vec<PathBuf>, reason, resolution_issue| ResolvedImportDraft {
+        alternatives: paths
+            .iter()
+            .filter_map(|path| {
+                let file = context
+                    .file_by_absolute_normalized_path
+                    .get(&normalize_path(path)?)
+                    .copied()?;
+                Some(ModuleNodeDraft::file(
+                    file,
+                    input.db.path_for(file),
+                    input.import.language,
+                ))
+            })
+            .collect(),
+        resolution_issue,
+        ..ResolvedImportDraft::unresolved(reason)
+    };
+    if let Some(refusal) = refusal {
+        let file = refusal
+            .path
+            .strip_prefix(&context.root)
+            .unwrap_or(&refusal.path);
+        let details = Some(format!("{}: {}", file.display(), refusal.reason));
+        if refusal.malformed_config {
+            return ResolvedImportDraft {
+                resolution_issue: details,
+                ..ResolvedImportDraft::setup_missing()
+            };
+        }
+        return open(
+            resolution.into_paths(),
+            UnresolvedReason::ResolverError,
+            details,
+        );
+    }
+    let resolution = match resolution {
+        ModeResolution::One(resolution) => resolution,
+        // No one file is the target; each analysed file a way of loading
+        // the import names is a candidate.
+        ModeResolution::Split(paths) => return open(paths, UnresolvedReason::ModeDependent, None),
+    };
+    match resolution {
         Ok(resolution) => resolved_path_draft(context, input, resolution.path()),
         Err(ResolveError::Builtin { resolved, .. }) => {
             external_draft(resolved, input.import.language)
@@ -191,13 +257,7 @@ pub fn resolve_ts_import(
             | ResolveError::Json(_)
             | ResolveError::IOError(_),
         ) => ResolvedImportDraft::setup_missing(),
-        Err(_) => {
-            if is_external_package_specifier(&input.import.path) {
-                external_draft(input.import.path.clone(), input.import.language)
-            } else {
-                ResolvedImportDraft::unresolved(UnresolvedReason::ResolverError)
-            }
-        }
+        Err(_) => ResolvedImportDraft::unresolved(UnresolvedReason::ResolverError),
     }
 }
 
@@ -225,6 +285,8 @@ fn resolved_path_draft(
             precision: ResolutionPrecision::ExactFile,
             reason: None,
             edge_kind: Some(ModuleEdgeKind::Imports),
+            alternatives: Vec::new(),
+            resolution_issue: None,
         };
     }
 
@@ -244,6 +306,8 @@ fn external_draft(label: String, language: Language) -> ResolvedImportDraft {
         precision: ResolutionPrecision::ExternalPackage,
         reason: None,
         edge_kind: Some(ModuleEdgeKind::DependsOn),
+        alternatives: Vec::new(),
+        resolution_issue: None,
     }
 }
 
@@ -303,7 +367,9 @@ fn package_json_name(root: &Path, module_root: &Path) -> Option<String> {
     let source =
         read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
             .ok()?;
-    let value = serde_json::from_str::<serde_json::Value>(&source).ok()?;
+    let value =
+        crate::bounded_json::from_str::<serde_json::Value>(&source, TOPOLOGY_MANIFEST_MAX_BYTES)
+            .ok()?;
     value
         .get("name")
         .and_then(serde_json::Value::as_str)
@@ -1453,15 +1519,9 @@ fn read_json_with_comments(
     root: &Path,
     relative_path: &str,
 ) -> Result<Option<serde_json::Value>, RepoFileReadError> {
-    let mut source =
+    let source =
         read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)?;
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return Ok(None);
-    }
-    Ok(serde_json::from_str(&source).ok())
+    Ok(crate::bounded_json::from_jsonc_str(&source, TOPOLOGY_MANIFEST_MAX_BYTES).ok())
 }
 
 fn classify_ts_source_set(file: &SourceFile) -> SourceSetKind {
@@ -1619,133 +1679,83 @@ pub(crate) fn nearest_tsconfig_path(root: &Path, file_path: &Path) -> Option<Pat
 /// A named config that does not exist contributes its absence, so creating it
 /// later is also a change.
 pub(crate) fn tsconfig_chain_digest(root: &Path, relative_config: &str) -> String {
-    let mut visited = BTreeSet::new();
     let mut parts = Vec::new();
-    collect_tsconfig_chain_digest(root, relative_config, &mut visited, &mut parts);
+    collect_tsconfig_chain_digest(root, relative_config, &mut parts);
     parts.sort();
     parts.dedup();
     crate::ts::hash::stable_hash(&parts.iter().map(String::as_str).collect::<Vec<_>>())
 }
 
-fn collect_tsconfig_chain_digest(
-    root: &Path,
-    relative_config: &str,
-    visited: &mut BTreeSet<String>,
-    parts: &mut Vec<String>,
-) {
-    let Some(relative_path) = normalize_repo_relative(relative_config) else {
+fn collect_tsconfig_chain_digest(root: &Path, relative_config: &str, parts: &mut Vec<String>) {
+    let Some(start) = normalize_repo_relative(relative_config) else {
         return;
     };
-    if !visited.insert(relative_path.clone()) {
-        return;
-    }
-    let Ok(source) =
-        read_repo_file_to_string_with_limit(root, &relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
-    else {
-        parts.push(format!("{relative_path}=absent"));
-        return;
-    };
-    parts.push(format!(
-        "{relative_path}={}",
-        crate::ts::hash::stable_hash(&[source.as_str()])
-    ));
-
-    let Some(config) = parse_tsconfig_chain_wire(&source) else {
-        return;
-    };
-    let config_dir = Path::new(&relative_path).parent().unwrap_or(Path::new(""));
-    let extended = config
-        .extends
-        .into_iter()
-        .flat_map(TsconfigExtendsWire::into_specifiers)
-        .filter_map(|specifier| resolve_tsconfig_extends_path(root, config_dir, &specifier));
-    // A referenced project is a config whose own options decide the types of
-    // the files the referencing config delegates to it, so the chain follows
-    // references exactly as it follows `extends`.
-    let referenced = config
-        .references
-        .into_iter()
-        .flatten()
-        .filter_map(|reference| reference.path)
-        .filter_map(|path| {
-            resolve_tsconfig_file_candidate(root, &config_dir.join(Path::new(&path)))
-        });
-    for next in extended.chain(referenced) {
-        collect_tsconfig_chain_digest(root, &next, visited, parts);
+    let chain = walk_tsconfig_chain(start, |relative_path| {
+        let Ok(source) =
+            read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
+        else {
+            parts.push(format!("{relative_path}=absent"));
+            return Vec::new();
+        };
+        parts.push(format!(
+            "{relative_path}={}",
+            crate::ts::hash::stable_hash(&[source.as_str()])
+        ));
+        let Some(config) = parse_tsconfig_json::<TsconfigChainWire>(&source) else {
+            return Vec::new();
+        };
+        let config_dir = Path::new(relative_path).parent().unwrap_or(Path::new(""));
+        // A referenced project is a config whose own options decide the types
+        // of the files the referencing config delegates to it, so the chain
+        // follows references exactly as it follows `extends`.
+        let referenced = config
+            .references
+            .into_iter()
+            .flatten()
+            .filter_map(|reference| reference.path)
+            .filter_map(|path| {
+                resolve_tsconfig_file_candidate(root, &config_dir.join(Path::new(&path)))
+            });
+        let mut next = extended_configs(root, relative_path, config.extends);
+        next.extend(referenced);
+        next
+    });
+    if chain.exceeded {
+        parts.push(format!("{relative_config}=exceeds-config-bound"));
     }
 }
 
-fn parse_tsconfig_chain_wire(source: &str) -> Option<TsconfigChainWire> {
-    let mut source = source.to_string();
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return None;
-    }
-    serde_json::from_str::<TsconfigChainWire>(&source).ok()
-}
-
+/// The `paths` aliases the config at `path` declares or inherits.
+///
+/// A config that reaches more configs than the walk follows gives the aliases
+/// of the configs it read: import resolution loads no such config, so its
+/// imports are unknown whatever the aliases.
 fn read_tsconfig_path_aliases(root: &Path, path: &Path) -> Vec<String> {
-    let mut visited = BTreeSet::new();
-    let Some(relative_path) = repo_relative_existing_path(root, path) else {
+    let Some(start) = repo_relative_existing_path(root, path) else {
         return Vec::new();
     };
-    read_tsconfig_path_aliases_inner(root, &relative_path, &mut visited)
-}
-
-fn read_tsconfig_path_aliases_inner(
-    root: &Path,
-    relative_path: &str,
-    visited: &mut BTreeSet<String>,
-) -> Vec<String> {
-    let Ok(path) = repo_file_path(root, relative_path) else {
-        return Vec::new();
-    };
-    let Some(relative_path) = repo_relative_existing_path(root, &path) else {
-        return Vec::new();
-    };
-    if !visited.insert(relative_path.clone()) {
-        return Vec::new();
-    }
-    let Some(config) = read_tsconfig_alias_wire(root, &relative_path) else {
-        return Vec::new();
-    };
-
-    if let Some(paths) = config
-        .compiler_options
-        .as_ref()
-        .and_then(|options| options.paths.as_ref())
-    {
-        return sorted_ts_path_aliases(paths.keys().cloned());
-    }
-
-    let config_dir = Path::new(&relative_path).parent().unwrap_or(Path::new(""));
-    let mut aliases = config
-        .extends
-        .into_iter()
-        .flat_map(TsconfigExtendsWire::into_specifiers)
-        .filter_map(|specifier| resolve_tsconfig_extends_path(root, config_dir, &specifier))
-        .flat_map(|extended_path| read_tsconfig_path_aliases_inner(root, &extended_path, visited))
-        .collect::<Vec<_>>();
-    aliases.sort();
-    aliases.dedup();
-    aliases
-}
-
-fn read_tsconfig_alias_wire(root: &Path, relative_path: &str) -> Option<TsconfigAliasWire> {
-    let Ok(mut source) =
-        read_repo_file_to_string_with_limit(root, relative_path, TOPOLOGY_MANIFEST_MAX_BYTES)
-    else {
-        return None;
-    };
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    if json_strip_comments::strip(&mut source).is_err() {
-        return None;
-    }
-    serde_json::from_str::<TsconfigAliasWire>(&source).ok()
+    let mut aliases = Vec::new();
+    walk_tsconfig_chain(start, |relative_path| {
+        let Some(config) = read_tsconfig_json::<TsconfigAliasWire>(root, relative_path) else {
+            return Vec::new();
+        };
+        if let Some(paths) = config
+            .compiler_options
+            .as_ref()
+            .and_then(|options| options.paths.as_ref())
+        {
+            aliases.extend(paths.keys().cloned());
+            return Vec::new();
+        }
+        extended_configs(root, relative_path, config.extends)
+            .into_iter()
+            .filter_map(|extended| {
+                let path = repo_file_path(root, &extended).ok()?;
+                repo_relative_existing_path(root, &path)
+            })
+            .collect()
+    });
+    sorted_ts_path_aliases(aliases.into_iter())
 }
 
 fn sorted_ts_path_aliases(paths: impl Iterator<Item = String>) -> Vec<String> {
@@ -1753,85 +1763,6 @@ fn sorted_ts_path_aliases(paths: impl Iterator<Item = String>) -> Vec<String> {
     aliases.sort();
     aliases.dedup();
     aliases
-}
-
-fn resolve_tsconfig_extends_path(
-    root: &Path,
-    config_dir: &Path,
-    specifier: &str,
-) -> Option<String> {
-    let specifier_path = Path::new(specifier);
-    if specifier_path.is_absolute() {
-        return None;
-    }
-    if specifier.starts_with('.') {
-        return resolve_tsconfig_file_candidate(root, &config_dir.join(specifier_path));
-    }
-    resolve_package_tsconfig_extends_path(root, config_dir, specifier)
-}
-
-fn resolve_package_tsconfig_extends_path(
-    root: &Path,
-    config_dir: &Path,
-    specifier: &str,
-) -> Option<String> {
-    let mut current = normalize_repo_relative_input(config_dir)?;
-    loop {
-        let candidate = if current.as_os_str().is_empty() {
-            PathBuf::from("node_modules").join(specifier)
-        } else {
-            current.join("node_modules").join(specifier)
-        };
-        if let Some(resolved) = resolve_tsconfig_file_candidate(root, &candidate) {
-            return Some(resolved);
-        }
-        if current.as_os_str().is_empty() {
-            return None;
-        }
-        current.pop();
-    }
-}
-
-fn resolve_tsconfig_file_candidate(root: &Path, base: &Path) -> Option<String> {
-    let mut candidates = vec![base.to_path_buf()];
-    if base.extension().and_then(|extension| extension.to_str()) != Some("json") {
-        let mut with_json = base.as_os_str().to_owned();
-        with_json.push(".json");
-        candidates.push(PathBuf::from(with_json));
-    }
-    candidates.push(base.join("tsconfig.json"));
-
-    candidates
-        .into_iter()
-        .filter_map(|candidate| normalized_existing_repo_file(root, &candidate))
-        .next()
-}
-
-fn normalized_existing_repo_file(root: &Path, candidate: &Path) -> Option<String> {
-    repo_file_path(root, candidate).ok()?;
-    let normalized = normalize_repo_relative_input(candidate)?;
-    let relative = normalized.to_string_lossy();
-    if relative.is_empty() {
-        None
-    } else {
-        normalize_repo_relative(relative)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum TsconfigExtendsWire {
-    Single(String),
-    Multiple(Vec<String>),
-}
-
-impl TsconfigExtendsWire {
-    fn into_specifiers(self) -> Vec<String> {
-        match self {
-            Self::Single(specifier) => vec![specifier],
-            Self::Multiple(specifiers) => specifiers,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1861,8 +1792,564 @@ struct TsconfigCompilerOptionsWire {
     paths: Option<BTreeMap<String, Vec<String>>>,
 }
 
+/// The `exports` conditions import resolution matches: the condition of the
+/// mode an import loads in, then the rest in this order.
+pub(crate) const EXPORT_CONDITIONS: &[&str] = &["import", "require", "node", "default"];
+
+/// The package fields a bundler for Node reads, in its order, where a package
+/// has no `exports`.
 #[cfg(feature = "lang-typescript")]
-fn resolve_options() -> ResolveOptions {
+const BUNDLER_MAIN_FIELDS: &[&str] = &["module", "main"];
+
+/// The package fields a bundler for the browser reads, in its order, where a
+/// package has no `exports`.
+#[cfg(feature = "lang-typescript")]
+const BROWSER_MAIN_FIELDS: &[&str] = &["browser", "module", "main"];
+
+/// The most importer and specifier pairs one resolution follows through the
+/// targets of condition maps.
+#[cfg(feature = "lang-typescript")]
+const MAX_FOLLOWED_ALTERNATIVES: usize = 64;
+
+/// The `exports` conditions of one mode: its own condition and the shared
+/// ones, so an `exports` map that names both modes gives each its file.
+#[cfg(feature = "lang-typescript")]
+fn mode_conditions(own: &str) -> Vec<String> {
+    EXPORT_CONDITIONS
+        .iter()
+        .filter(|name| **name == own || !matches!(**name, "import" | "require"))
+        .map(|name| (*name).to_string())
+        .collect()
+}
+
+/// The two modes a file loads a specifier in.
+#[cfg(feature = "lang-typescript")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LoadMode {
+    Import,
+    Require,
+}
+
+#[cfg(feature = "lang-typescript")]
+impl LoadMode {
+    fn condition(self) -> &'static str {
+        match self {
+            Self::Import => "import",
+            Self::Require => "require",
+        }
+    }
+}
+
+/// The resolvers of one mode: Node's, and those of a bundler for Node and
+/// for the browser, which read a package's `module` and `browser` fields
+/// before its `main`.
+#[cfg(feature = "lang-typescript")]
+struct LoaderResolvers {
+    node: Resolver,
+    bundled: Resolver,
+    browser: Resolver,
+}
+
+/// The resolvers of the two modes a file loads in, under Node and under a
+/// bundler, sharing one cache.
+#[cfg(feature = "lang-typescript")]
+pub(crate) struct ModeResolvers {
+    import: LoaderResolvers,
+    require: LoaderResolvers,
+    /// Reads the module format of an importing file.
+    format: Resolver,
+    /// The `package.json` files read for their `exports` and `imports` maps,
+    /// by path. An absent manifest and a refused manifest are distinct.
+    manifests: Mutex<BTreeMap<PathBuf, ManifestRead>>,
+    configs: BoundedFs,
+    config_issues: Mutex<BTreeMap<PathBuf, Option<RefusedInput>>>,
+}
+
+#[cfg(feature = "lang-typescript")]
+type ManifestRead = Result<Option<Arc<serde_json::Value>>, RefusedInput>;
+
+/// What resolving an import gives: the answer of every mode the import may
+/// load in, or `Split`, with the files any of them names, where those modes
+/// give different answers.
+#[cfg(feature = "lang-typescript")]
+pub(crate) enum ModeResolution {
+    One(Result<oxc_resolver::Resolution, ResolveError>),
+    Split(Vec<PathBuf>),
+}
+
+#[cfg(feature = "lang-typescript")]
+impl ModeResolution {
+    fn into_paths(self) -> Vec<PathBuf> {
+        match self {
+            Self::One(Ok(resolution)) => vec![resolution.into_path_buf()],
+            Self::Split(paths) => paths,
+            Self::One(Err(_)) => Vec::new(),
+        }
+    }
+}
+
+/// The answer two ways of loading an import agree on, or `Split`.
+#[cfg(feature = "lang-typescript")]
+fn agree(
+    left: Result<oxc_resolver::Resolution, ResolveError>,
+    right: Result<oxc_resolver::Resolution, ResolveError>,
+) -> ModeResolution {
+    match (&left, &right) {
+        (Ok(one), Ok(other)) if one.path() == other.path() => ModeResolution::One(left),
+        (Err(_), Err(_)) => ModeResolution::One(left),
+        _ => ModeResolution::Split(
+            [left, right]
+                .into_iter()
+                .flatten()
+                .map(|resolution| resolution.into_path_buf())
+                .collect(),
+        ),
+    }
+}
+
+/// The answers of two modes joined: `One` where both are `One` and agree.
+#[cfg(feature = "lang-typescript")]
+fn join(left: ModeResolution, right: ModeResolution) -> ModeResolution {
+    match (left, right) {
+        (ModeResolution::One(left), ModeResolution::One(right)) => agree(left, right),
+        (ModeResolution::Split(mut paths), ModeResolution::Split(more)) => {
+            paths.extend(more);
+            ModeResolution::Split(paths)
+        }
+        (ModeResolution::Split(mut paths), ModeResolution::One(one))
+        | (ModeResolution::One(one), ModeResolution::Split(mut paths)) => {
+            paths.extend(one.map(|resolution| resolution.into_path_buf()));
+            ModeResolution::Split(paths)
+        }
+    }
+}
+
+/// The package a bare specifier names, and the subpath of its `exports` it
+/// asks for: `@scope/name/sub` is `@scope/name` and `./sub`.
+#[cfg(feature = "lang-typescript")]
+fn package_and_subpath(specifier: &str) -> Option<(&str, String)> {
+    let segments = if specifier.starts_with('@') { 2 } else { 1 };
+    let end = specifier
+        .match_indices('/')
+        .nth(segments - 1)
+        .map_or(specifier.len(), |(index, _)| index);
+    let (name, rest) = specifier.split_at(end);
+    (!name.is_empty() && !name.ends_with('/')).then(|| (name, format!(".{rest}")))
+}
+
+/// The files the ways of loading one specifier name, gathered: the first
+/// file found, every file, and whether the list may be incomplete.
+#[cfg(feature = "lang-typescript")]
+#[derive(Default)]
+struct Found {
+    first: Option<oxc_resolver::Resolution>,
+    paths: Vec<PathBuf>,
+    error: Option<ResolveError>,
+    open: bool,
+}
+
+#[cfg(feature = "lang-typescript")]
+impl Found {
+    fn add(&mut self, resolution: oxc_resolver::Resolution) {
+        self.paths.push(resolution.path().to_path_buf());
+        self.first.get_or_insert(resolution);
+    }
+
+    /// The one file found where every way names it and the list is
+    /// complete, the error of a loader where none names a file, and `Split`
+    /// otherwise.
+    fn answer(self) -> ModeResolution {
+        match self.first {
+            Some(first) if !self.open && self.paths.iter().all(|path| path == first.path()) => {
+                ModeResolution::One(Ok(first))
+            }
+            None if !self.open && self.paths.is_empty() => ModeResolution::One(Err(self
+                .error
+                .unwrap_or(ResolveError::NotFound(String::new())))),
+            _ => ModeResolution::Split(self.paths),
+        }
+    }
+}
+
+#[cfg(feature = "lang-typescript")]
+impl ModeResolvers {
+    pub(crate) fn new() -> Self {
+        let node = Resolver::new_with_file_system(
+            BoundedFs::new(),
+            resolve_options(mode_conditions("import")),
+        );
+        let loaders = |mode: LoadMode| {
+            let conditions = || mode_conditions(mode.condition());
+            let fields =
+                |fields: &[&str]| fields.iter().map(|field| (*field).to_string()).collect();
+            LoaderResolvers {
+                node: node.clone_with_options(resolve_options(conditions())),
+                bundled: node.clone_with_options(ResolveOptions {
+                    main_fields: fields(BUNDLER_MAIN_FIELDS),
+                    ..resolve_options(conditions())
+                }),
+                browser: node.clone_with_options(ResolveOptions {
+                    main_fields: fields(BROWSER_MAIN_FIELDS),
+                    // The object form of the field replaces files of the package.
+                    alias_fields: vec![vec!["browser".into()]],
+                    ..resolve_options(conditions())
+                }),
+            }
+        };
+        let format = node.clone_with_options(ResolveOptions {
+            module_type: true,
+            ..resolve_options(mode_conditions("import"))
+        });
+        Self {
+            import: loaders(LoadMode::Import),
+            require: loaders(LoadMode::Require),
+            format,
+            manifests: Mutex::new(BTreeMap::new()),
+            configs: BoundedFs::new(),
+            config_issues: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    /// Resolves `specifier`, written with `syntax` in the file `importer`. A
+    /// `require` loads in require mode. Import syntax loads in import mode
+    /// where the importer runs as an ES module (`.mjs`, `.mts`, or a `.js`
+    /// or `.ts` file of a `"type": "module"` package); elsewhere a compiler
+    /// may turn it into a `require`, so both modes must give one answer.
+    /// Node and a bundler must give one answer too: Node loads a package's
+    /// `main` where it has no `exports`, a bundler its `module` or `browser`,
+    /// and every condition of an `exports` or `imports` map a loader may
+    /// select must name one file.
+    fn resolve(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        syntax: ImportSyntax,
+    ) -> (ModeResolution, Option<RefusedInput>) {
+        RefusedInput::capture(|| {
+            if let Some(refusal) = self.config_issue(importer) {
+                refusal.record();
+            }
+            self.resolve_modes(importer, specifier, syntax)
+        })
+    }
+
+    fn resolve_modes(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        syntax: ImportSyntax,
+    ) -> ModeResolution {
+        if syntax == ImportSyntax::Require {
+            return self.resolve_in(importer, specifier, LoadMode::Require);
+        }
+        let import = self.resolve_in(importer, specifier, LoadMode::Import);
+        if self.runs_as_module(importer) {
+            return import;
+        }
+        join(
+            import,
+            self.resolve_in(importer, specifier, LoadMode::Require),
+        )
+    }
+
+    fn config_issue(&self, importer: &Path) -> Option<RefusedInput> {
+        let directory = importer.parent()?;
+        let mut issues = self
+            .config_issues
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        issues
+            .entry(directory.to_path_buf())
+            .or_insert_with(|| {
+                for directory in directory.ancestors() {
+                    for name in ["tsconfig.json", "jsconfig.json"] {
+                        let config = directory.join(name);
+                        match fs::symlink_metadata(&config) {
+                            Ok(_) => return self.configs.check_config(&config).err(),
+                            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                            Err(error) => return Some(RefusedInput::new(&config, error)),
+                        }
+                    }
+                }
+                None
+            })
+            .clone()
+    }
+
+    /// The answer every loader gives `specifier` in `mode`, or `Split`.
+    fn resolve_in(&self, importer: &Path, specifier: &str, mode: LoadMode) -> ModeResolution {
+        self.resolve_alternatives(importer, specifier, mode, &mut BTreeSet::new())
+    }
+
+    /// [`Self::resolve_in`], where `seen` holds the importers and specifiers
+    /// already followed. Where an `exports` or `imports` map governs the
+    /// specifier, its answer is every file a target of the map may give
+    /// under any conditions, with the files the loaders named; a loader that
+    /// rejects the map, where Node goes on past what it rejects, does not
+    /// hide them. A target may name another specifier, even the one it came
+    /// from; each pair is followed once, as its files are already among the
+    /// answers where it was first followed. Past [`MAX_FOLLOWED_ALTERNATIVES`]
+    /// pairs the answer is `Split`, an open answer, so a crafted manifest
+    /// cannot make the walk deep or long.
+    fn resolve_alternatives(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        mode: LoadMode,
+        seen: &mut BTreeSet<(PathBuf, String)>,
+    ) -> ModeResolution {
+        seen.insert((importer.to_path_buf(), specifier.to_string()));
+        let loaders = match mode {
+            LoadMode::Import => &self.import,
+            LoadMode::Require => &self.require,
+        };
+        let resolve = |resolver: &Resolver| {
+            let outcome = resolver.resolve_file(importer, specifier);
+            if let Err(error) = &outcome {
+                match error {
+                    ResolveError::Json(error) => {
+                        RefusedInput::new(&error.path, &error.message).record()
+                    }
+                    ResolveError::TsconfigNotFound(path)
+                    | ResolveError::TsconfigSelfReference(path) => {
+                        RefusedInput::new(path, error).record()
+                    }
+                    ResolveError::TsconfigCircularExtend(_) | ResolveError::Recursion => {
+                        RefusedInput::new(importer, error).record()
+                    }
+                    _ => {}
+                }
+            }
+            outcome
+        };
+        let answer = join(
+            agree(resolve(&loaders.node), resolve(&loaders.bundled)),
+            ModeResolution::One(resolve(&loaders.browser)),
+        );
+        let resolved = match &answer {
+            ModeResolution::One(Ok(resolution)) => Some(resolution.path().to_path_buf()),
+            _ => None,
+        };
+        let Some((root, reachable)) =
+            self.conditional_targets(importer, specifier, resolved.as_deref(), mode)
+        else {
+            return answer;
+        };
+        let mut found = Found {
+            open: reachable.may_miss,
+            ..Found::default()
+        };
+        match answer {
+            ModeResolution::One(Ok(resolution)) => found.add(resolution),
+            ModeResolution::One(Err(error)) => {
+                found.open = true;
+                found.error = Some(error);
+            }
+            ModeResolution::Split(paths) => {
+                found.open = true;
+                found.paths.extend(paths);
+            }
+        }
+        for target in reachable.targets {
+            let (conditions::Reach::File(target) | conditions::Reach::Package(target)) = target;
+            let importer = root.join("package.json");
+            if seen.contains(&(importer.clone(), target.clone())) {
+                continue;
+            }
+            if seen.len() >= MAX_FOLLOWED_ALTERNATIVES {
+                RefusedInput::new(&importer, "condition target limit exceeded").record();
+                found.open = true;
+                break;
+            }
+            match self.resolve_alternatives(&importer, &target, mode, seen) {
+                ModeResolution::One(Ok(resolution)) => found.add(resolution),
+                ModeResolution::One(Err(_)) => found.open = true,
+                ModeResolution::Split(paths) => {
+                    found.open = true;
+                    found.paths.extend(paths);
+                }
+            }
+        }
+        found.answer()
+    }
+
+    /// The targets, each with the package directory it is written in, that
+    /// the `exports` map of the package `specifier` names (or, for a `#`
+    /// specifier, the `imports` map of the importer's package) may give it in
+    /// `mode` under any conditions. `None` where no such map applies;
+    /// `resolved` is the file a loader names, if one does.
+    fn conditional_targets(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        resolved: Option<&Path>,
+        mode: LoadMode,
+    ) -> Option<(PathBuf, conditions::Reachable)> {
+        let (root, manifest, key, exports) = if specifier.starts_with('#') {
+            let (root, manifest) = importer
+                .ancestors()
+                .skip(1)
+                .find_map(|directory| Some((directory.to_path_buf(), self.manifest(directory)?)))?;
+            (root, manifest, specifier.to_string(), false)
+        } else if is_external_package_specifier(specifier) {
+            let (name, subpath) = package_and_subpath(specifier)?;
+            let (root, manifest) = resolved
+                .and_then(|resolved| self.package_of_file(resolved, name))
+                .or_else(|| self.package_of_importer(importer, name))?;
+            (root, manifest, subpath, true)
+        } else {
+            return None;
+        };
+        let map = manifest
+            .get(if exports { "exports" } else { "imports" })
+            .filter(|map| !map.is_null())?;
+        Some((
+            root,
+            conditions::reachable_targets(map, &key, exports, mode.condition()),
+        ))
+    }
+
+    /// The package named `name` that holds the file `resolved`.
+    fn package_of_file(
+        &self,
+        resolved: &Path,
+        name: &str,
+    ) -> Option<(PathBuf, Arc<serde_json::Value>)> {
+        resolved.ancestors().skip(1).find_map(|directory| {
+            let manifest = self.manifest(directory)?;
+            let named = directory.ends_with(Path::new("node_modules").join(name))
+                || manifest.get("name").and_then(serde_json::Value::as_str) == Some(name);
+            named.then(|| (directory.to_path_buf(), manifest))
+        })
+    }
+
+    /// The package named `name` that Node loads for a file `importer`: the
+    /// importer's own package where it has that name and an `exports` map,
+    /// and otherwise the first `node_modules/name` directory of its
+    /// ancestors.
+    fn package_of_importer(
+        &self,
+        importer: &Path,
+        name: &str,
+    ) -> Option<(PathBuf, Arc<serde_json::Value>)> {
+        let own = importer
+            .ancestors()
+            .skip(1)
+            .find_map(|directory| Some((directory.to_path_buf(), self.manifest(directory)?)));
+        if let Some((root, manifest)) = own
+            && manifest.get("name").and_then(serde_json::Value::as_str) == Some(name)
+            && manifest
+                .get("exports")
+                .is_some_and(|exports| !exports.is_null())
+        {
+            return Some((root, manifest));
+        }
+        let directory = importer
+            .ancestors()
+            .skip(1)
+            .map(|directory| directory.join("node_modules").join(name))
+            .find(|directory| directory.is_dir())?;
+        let manifest = self.manifest(&directory)?;
+        Some((directory, manifest))
+    }
+
+    /// The `package.json` of `directory`, read once. `None` where it is
+    /// missing, or larger or deeper than the resolvers load.
+    fn manifest(&self, directory: &Path) -> Option<Arc<serde_json::Value>> {
+        let path = directory.join("package.json");
+        let mut manifests = self
+            .manifests
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        match manifests
+            .entry(path)
+            .or_insert_with_key(|path| {
+                let Some(bytes) = BoundedFs::read_limited(path, TOPOLOGY_MANIFEST_MAX_BYTES)?
+                else {
+                    return Ok(None);
+                };
+                bounded_json::from_slice(&bytes, TOPOLOGY_MANIFEST_MAX_BYTES)
+                    .map(|manifest| Some(Arc::new(manifest)))
+                    .map_err(|error| RefusedInput::new(path, error.reason()))
+            })
+            .clone()
+        {
+            Ok(manifest) => manifest,
+            Err(refusal) => {
+                refusal.record();
+                None
+            }
+        }
+    }
+
+    fn runs_as_module(&self, importer: &Path) -> bool {
+        let (Some(directory), Some(name)) = (importer.parent(), importer.file_name()) else {
+            return false;
+        };
+        self.format
+            .resolve(directory, &format!("./{}", name.to_string_lossy()))
+            .is_ok_and(|resolution| {
+                resolution.module_type() == Some(oxc_resolver::ModuleType::Module)
+            })
+    }
+}
+
+/// Resolves import specifiers against the files on disk with the options of
+/// import resolution, for callers that hold no fact database.
+#[cfg(feature = "lang-typescript")]
+pub(crate) struct DiskResolver(ModeResolvers);
+
+#[cfg(feature = "lang-typescript")]
+impl DiskResolver {
+    pub(crate) fn new() -> Self {
+        Self(ModeResolvers::new())
+    }
+
+    /// The files `specifier` may name when the file `importer` imports it
+    /// with `syntax`: the one file every way of loading it names, or each
+    /// file one of them names. `None` where it names no file.
+    pub(crate) fn resolve(
+        &self,
+        importer: &Path,
+        specifier: &str,
+        syntax: ImportSyntax,
+    ) -> Option<DiskTarget> {
+        let (resolution, refusal) = self.0.resolve(importer, specifier, syntax);
+        let resolution = if refusal.is_some() {
+            ModeResolution::Split(resolution.into_paths())
+        } else {
+            resolution
+        };
+        match resolution {
+            ModeResolution::One(Ok(resolution)) => {
+                normalize_path(resolution.path()).map(DiskTarget::File)
+            }
+            ModeResolution::One(Err(_)) => None,
+            ModeResolution::Split(paths) => Some(DiskTarget::Alternatives(
+                paths
+                    .iter()
+                    .filter_map(|path| normalize_path(path))
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+            )),
+        }
+    }
+}
+
+/// Where an import resolved on disk leads.
+#[cfg(feature = "lang-typescript")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DiskTarget {
+    /// The one file every way of loading the import names.
+    File(PathBuf),
+    /// The files the ways of loading the import name, where they differ.
+    /// The list may be incomplete.
+    Alternatives(Vec<PathBuf>),
+}
+
+#[cfg(feature = "lang-typescript")]
+fn resolve_options(condition_names: Vec<String>) -> ResolveOptions {
     ResolveOptions {
         tsconfig: Some(TsconfigDiscovery::Auto),
         extensions: vec![
@@ -1882,13 +2369,8 @@ fn resolve_options() -> ResolveOptions {
             (".mjs".into(), vec![".mjs".into(), ".mts".into()]),
             (".cjs".into(), vec![".cjs".into(), ".cts".into()]),
         ],
-        condition_names: vec![
-            "import".into(),
-            "require".into(),
-            "node".into(),
-            "default".into(),
-        ],
-        main_fields: vec!["module".into(), "browser".into(), "main".into()],
+        condition_names,
+        main_fields: vec!["main".into()],
         exports_fields: vec![vec!["exports".into()]],
         imports_fields: vec![vec!["imports".into()]],
         builtin_modules: true,

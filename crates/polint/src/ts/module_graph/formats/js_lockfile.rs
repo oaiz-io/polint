@@ -538,13 +538,8 @@ fn json_scalar_string(value: &JsonValue) -> Option<String> {
     }
 }
 
-fn parse_jsonc(contents: &str) -> Result<JsonValue, serde_json::Error> {
-    let mut source = contents.to_string();
-    if let Some(stripped) = source.strip_prefix('\u{feff}') {
-        source = stripped.to_string();
-    }
-    let _ = json_strip_comments::strip(&mut source);
-    serde_json::from_str(&source)
+fn parse_jsonc(contents: &str) -> Result<JsonValue, crate::bounded_json::BoundedJsonError> {
+    crate::bounded_json::from_jsonc_str(contents, crate::repo_fs::TOPOLOGY_LOCKFILE_MAX_BYTES)
 }
 
 fn package_name_version_from_key(key: &str) -> Option<(String, String)> {

@@ -1,0 +1,3 @@
+construct = "exported-initializer"
+held_out = true
+description = "An ES module exports several declarators of one `export const` and an `export default` expression, each initialised by a call."

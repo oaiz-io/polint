@@ -1,0 +1,101 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 6,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@12..83",
+      "name": "defaultHandler"
+    },
+    {
+      "function": "main.js@129..196",
+      "name": "constructor"
+    },
+    {
+      "function": "main.js@200..255",
+      "name": "describe"
+    },
+    {
+      "function": "main.js@259..364",
+      "name": "create"
+    },
+    {
+      "function": "main.js@399..485",
+      "name": "constructor"
+    },
+    {
+      "function": "main.js@489..593",
+      "name": "describe"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@302..312",
+      "syntax": "new",
+      "callee": "main.js@129..196",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@302..312",
+      "syntax": "new",
+      "callee": "main.js@399..485",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@446..453",
+      "syntax": "super",
+      "callee": "main.js@129..196",
+      "callee_name": "constructor"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@547..563",
+      "syntax": "super-member",
+      "callee": "main.js@200..255",
+      "callee_name": "describe"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@610..626",
+      "syntax": "member",
+      "callee": "main.js@259..364",
+      "callee_name": "create"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@645..660",
+      "syntax": "member",
+      "callee": "main.js@489..593",
+      "callee_name": "describe"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@688..702",
+      "syntax": "member",
+      "callee": "main.js@12..83",
+      "callee_name": "defaultHandler"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@729..742",
+      "syntax": "member",
+      "callee": "main.js@259..364",
+      "callee_name": "create"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@729..753",
+      "syntax": "member",
+      "callee": "main.js@200..255",
+      "callee_name": "describe"
+    }
+  ]
+}

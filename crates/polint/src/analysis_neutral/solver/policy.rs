@@ -34,6 +34,8 @@ pub struct SolverPolicyOutcome {
     pub budget_reasons: BTreeSet<String>,
     /// Number of internal work steps reported by this policy.
     pub steps: u64,
+    /// Call sites this policy left incomplete because its budget ran out.
+    pub incomplete_sites: u64,
 }
 
 impl SolverPolicyOutcome {
@@ -45,6 +47,7 @@ impl SolverPolicyOutcome {
             budget_status: BudgetStatus::WithinBudget,
             budget_reasons: BTreeSet::new(),
             steps: 0,
+            incomplete_sites: 0,
         }
     }
 }
@@ -60,9 +63,9 @@ pub trait SolverPolicy {
 
 /// The language-neutral points-to policy.
 ///
-/// It composes the existing Andersen fixpoint without rewriting it. Its derived
-/// edges continue through the unified engine's CopyEdge closure; the folded
-/// points-to result is retained only for budget/status accounting.
+/// It composes the existing Andersen fixpoint without rewriting it. It derives no
+/// edges of its own; the folded points-to result is retained only for
+/// budget/status accounting.
 pub struct PointsToPolicy {
     constraints: Vec<PointsToConstraintFact>,
 }
@@ -88,6 +91,7 @@ impl SolverPolicy for PointsToPolicy {
             budget_status,
             budget_reasons,
             steps: 0,
+            incomplete_sites: 0,
         }
     }
 }

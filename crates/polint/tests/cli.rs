@@ -5780,6 +5780,145 @@ export function handleList(): string[] {
     );
 }
 
+fn write_ts_refined_call_graph_rule_repo(root: &Path) {
+    write_file(
+        &root.join(".polint.toml"),
+        r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+    );
+    write_phase41_rule_pack(
+        root,
+        r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::handlers_reach_gates(), rule::handlers_reach_gates_exactly()])
+}
+"#,
+        r#"use polint::sdk::prelude::*;
+
+fn precision_name(precision: CallEdgePrecision) -> &'static str {
+    match precision {
+        CallEdgePrecision::Exact => "exact",
+        CallEdgePrecision::SetupAware => "setup_aware",
+        CallEdgePrecision::Conservative => "conservative",
+        _ => "heuristic",
+    }
+}
+
+fn report_gates(
+    ctx: &mut RuleCtx<'_>,
+    functions: &Functions<'_>,
+    graph: CallGraph<'_>,
+    walk: CallGraphWalk,
+) {
+    let gates = functions
+        .iter()
+        .filter(|function| function.name.starts_with("require"))
+        .collect::<Vec<_>>();
+    for handler in functions.iter().filter(|function| function.name.starts_with("handle")) {
+        let reach = graph.reachable(handler.id, walk);
+        for gate in &gates {
+            let Some(path) = reach.path_to(gate.id) else {
+                continue;
+            };
+            let weakest = path
+                .iter()
+                .map(|edge| edge.precision)
+                .max()
+                .map_or("none", precision_name);
+            ctx.report(
+                Diagnostic::warning(
+                    ctx.rule_id(),
+                    ctx.file_path(handler.file),
+                    handler.span.diagnostic_range(),
+                    format!("{} reaches {}", handler.name, gate.name),
+                )
+                .with_evidence("weakest", weakest),
+            );
+        }
+    }
+}
+
+#[polint::rule(id = "local/handlers-reach-gates", description = "Handlers reach the gates", severity = "warn")]
+pub(crate) fn handlers_reach_gates(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    graph: CallGraph<'_>,
+) -> RuleResult {
+    report_gates(ctx, &functions, graph, CallGraphWalk::new(4));
+    Ok(())
+}
+
+#[polint::rule(id = "local/handlers-reach-gates-exactly", description = "Handlers reach the gates exactly", severity = "warn")]
+pub(crate) fn handlers_reach_gates_exactly(
+    ctx: &mut RuleCtx<'_>,
+    functions: Functions<'_>,
+    graph: CallGraph<'_>,
+) -> RuleResult {
+    let walk = CallGraphWalk::new(4).with_min_precision(CallEdgePrecision::Exact);
+    report_gates(ctx, &functions, graph, walk);
+    Ok(())
+}
+"#,
+    );
+    write_file(
+        &root.join("src/gate.ts"),
+        r#"export function requireAdmin(id: string): void {
+  console.log(id);
+}
+
+export function requireOwner(id: string): void {
+  console.log(id);
+}
+"#,
+    );
+    write_file(
+        &root.join("src/policy.ts"),
+        r#"import { requireAdmin } from "./gate";
+
+export const policy = { check: requireAdmin };
+"#,
+    );
+    write_file(
+        &root.join("src/handlers.ts"),
+        r#"import { requireAdmin, requireOwner } from "./gate";
+import { policy } from "./policy";
+
+function withId(id: string, next: (value: string) => void): void {
+  next(id);
+}
+
+function runCheck(check: (value: string) => void, id: string): void {
+  check(id);
+}
+
+export function handleCallback(id: string): void {
+  withId(id, (value) => requireAdmin(value));
+}
+
+export function handleParameter(id: string): void {
+  runCheck(requireOwner, id);
+}
+
+export function handleImport(id: string): void {
+  policy.check(id);
+}
+
+export function handleEither(id: string, admin: boolean): void {
+  const check = admin ? requireAdmin : requireOwner;
+  check(id);
+}
+"#,
+    );
+}
+
 fn write_symbol_capability_rule_repo(root: &Path) {
     let polint_path = repo_root()
         .join("crates/polint")
@@ -6850,7 +6989,11 @@ use polint::sdk::prelude::*;
     description = "Report imports that did not resolve.",
     severity = "warn"
 )]
-fn unresolved_import(ctx: &mut RuleCtx<'_>, resolved: ResolvedImports<'_>) -> RuleResult {
+fn unresolved_import(
+    ctx: &mut RuleCtx<'_>,
+    resolved: ResolvedImports<'_>,
+    graph: ModuleGraphFacts<'_>,
+) -> RuleResult {
     let rule_id = ctx.rule_id().to_string();
     for import in resolved.iter() {
         if matches!(
@@ -6864,6 +7007,14 @@ fn unresolved_import(ctx: &mut RuleCtx<'_>, resolved: ResolvedImports<'_>) -> Ru
             .reason
             .map(|reason| format!("{reason:?}"))
             .unwrap_or_else(|| "None".to_string());
+        let mut alternatives = graph
+            .nodes()
+            .iter()
+            .filter(|node| import.alternatives.contains(&node.id))
+            .map(|node| node.label.clone())
+            .collect::<Vec<_>>();
+        alternatives.sort();
+        let alternatives = alternatives.join(",");
         ctx.report(
             Diagnostic::warning(
                 rule_id.clone(),
@@ -6872,7 +7023,8 @@ fn unresolved_import(ctx: &mut RuleCtx<'_>, resolved: ResolvedImports<'_>) -> Ru
                 "Import did not resolve.",
             )
             .with_evidence("status", format!("{:?}", import.status))
-            .with_evidence("reason", reason),
+            .with_evidence("reason", reason)
+            .with_evidence("alternatives", alternatives),
         );
     }
     Ok(())
@@ -10614,6 +10766,101 @@ mod capability_planning {
     }
 
     #[test]
+    fn a_file_nested_past_the_parser_limit_is_reported_and_the_rest_is_analysed() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".polint.toml"),
+            r#"
+[workspace]
+include = ["src/**"]
+exclude = []
+
+[rules]
+paths = [".polint/rules"]
+"#,
+        );
+        write_phase41_rule_pack(
+            temp.path(),
+            r#"use std::process::ExitCode;
+use polint::runner;
+mod rule;
+fn main() -> ExitCode {
+    runner::run_cli(vec![rule::list_functions()])
+}
+"#,
+            r#"use polint::sdk::prelude::*;
+
+#[polint::rule(id = "local/list-functions", description = "Lists exported functions", severity = "warning")]
+pub(crate) fn list_functions(ctx: &mut RuleCtx<'_>, functions: Functions<'_>) -> RuleResult {
+    for function in functions.iter().filter(|function| function.is_exported) {
+        ctx.report(Diagnostic::warning(
+            ctx.rule_id(),
+            ctx.file_path(function.file),
+            function.span.diagnostic_range(),
+            format!("function {}", function.name),
+        ));
+    }
+    Ok(())
+}
+"#,
+        );
+        let levels = 100_000;
+        write_file(
+            &temp.path().join("src/deep.js"),
+            &format!(
+                "export function inDeepJs() {{}}\nx = {}a{};\n",
+                "(".repeat(levels),
+                ")".repeat(levels)
+            ),
+        );
+        write_file(
+            &temp.path().join("src/deep.go"),
+            &format!(
+                "package p\n\nfunc InDeepGo() {{}}\n\nvar X = {}1{}\n",
+                "(".repeat(levels),
+                ")".repeat(levels)
+            ),
+        );
+        write_file(
+            &temp.path().join("src/ok.ts"),
+            "export function shallow(): void {}\n",
+        );
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        for (rule_id, file) in [("parser/ts", "src/deep.js"), ("parser/go", "src/deep.go")] {
+            assert!(
+                diagnostics(&json).iter().any(|diagnostic| {
+                    diagnostic["rule_id"] == rule_id
+                        && diagnostic["file"]
+                            .as_str()
+                            .is_some_and(|path| path_str_ends_with(path, file))
+                        && diagnostic["message"]
+                            .as_str()
+                            .is_some_and(|message| message.contains("deeper than"))
+                }),
+                "{file} should be reported as nested past the limit: {json:#?}"
+            );
+        }
+        let messages = diagnostics_for_rule(&json, "local/list-functions")
+            .iter()
+            .map(|diagnostic| {
+                diagnostic["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(messages, ["function shallow"], "{json:#?}");
+    }
+
+    #[test]
     fn call_graph_follows_ts_imports_and_const_function_literals_for_an_outside_rule() {
         let temp = tempfile::tempdir().unwrap();
         write_ts_call_graph_rule_repo(temp.path());
@@ -10642,6 +10889,65 @@ mod capability_planning {
                 "handleAudit reaches requireAdmin",
                 "handleList does not reach requireAdmin",
                 "handleSave reaches requireAdmin",
+            ],
+            "{json:#?}"
+        );
+    }
+
+    #[test]
+    fn call_graph_gives_an_outside_rule_the_refined_edges_with_their_tiers() {
+        let temp = tempfile::tempdir().unwrap();
+        write_ts_refined_call_graph_rule_repo(temp.path());
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+        let reached = |rule: &str| {
+            let mut reached = diagnostics_for_rule(&json, rule)
+                .iter()
+                .map(|diagnostic| {
+                    let weakest = diagnostic["evidence"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find(|evidence| evidence["label"] == "weakest")
+                        .and_then(|evidence| evidence["value"].as_str())
+                        .unwrap_or_default();
+                    format!(
+                        "{} ({weakest})",
+                        diagnostic["message"].as_str().unwrap_or_default()
+                    )
+                })
+                .collect::<Vec<_>>();
+            reached.sort();
+            reached
+        };
+
+        // A callback, a function passed as a parameter and a function stored on
+        // an imported object all reach their gate exactly. The variable bound to
+        // one of two functions reaches both, conservatively.
+        assert_eq!(
+            reached("local/handlers-reach-gates"),
+            [
+                "handleCallback reaches requireAdmin (exact)",
+                "handleEither reaches requireAdmin (conservative)",
+                "handleEither reaches requireOwner (conservative)",
+                "handleImport reaches requireAdmin (exact)",
+                "handleParameter reaches requireOwner (exact)",
+            ],
+            "{json:#?}"
+        );
+        // A rule that asks for exact edges never walks a conservative one.
+        assert_eq!(
+            reached("local/handlers-reach-gates-exactly"),
+            [
+                "handleCallback reaches requireAdmin (exact)",
+                "handleImport reaches requireAdmin (exact)",
+                "handleParameter reaches requireOwner (exact)",
             ],
             "{json:#?}"
         );
@@ -11850,6 +12156,66 @@ go 1.24
                 .iter()
                 .all(|diagnostic| diagnostic["rule_id"] != "polint/capability"),
             "relationship fact views should be available through the public SDK: {json:#?}"
+        );
+    }
+
+    #[test]
+    fn an_import_node_and_a_bundler_load_from_different_files_names_no_one_file() {
+        let temp = tempfile::tempdir().unwrap();
+        write_module_relationship_rule_repo(temp.path());
+        let fields =
+            r#"{"name":"fields","version":"1.0.0","main":"./main.js","module":"./module.js"}"#;
+        for (path, text) in [
+            ("node_modules/fields/package.json", fields),
+            ("node_modules/fields/main.js", "export const run = 1;\n"),
+            ("node_modules/fields/module.js", "export const run = 2;\n"),
+            ("src/vendored/package.json", fields),
+            ("src/vendored/main.js", "export const run = 1;\n"),
+            ("src/vendored/module.js", "export const run = 2;\n"),
+            (
+                "src/ui/package.ts",
+                "import { run } from \"fields\";\nexport const packaged = run;\n",
+            ),
+            (
+                "src/ui/vendored.ts",
+                "import { run } from \"../vendored\";\nexport const vendored = run;\n",
+            ),
+        ] {
+            write_file(&temp.path().join(path), text);
+        }
+
+        let json = stdout_json(
+            polint_cmd()
+                .current_dir(temp.path())
+                .args(["check", "--format", "json", "--fail-on", "none"])
+                .assert()
+                .success(),
+        );
+
+        let unresolved = diagnostics_for_rule(&json, "local/unresolved-import");
+        let from = |file: &str| {
+            unresolved
+                .iter()
+                .filter(|diagnostic| diagnostic["file"] == file)
+                .collect::<Vec<_>>()
+        };
+        let packaged = from("src/ui/package.ts");
+        assert!(
+            packaged.len() == 1 && diagnostic_has_evidence(packaged[0], "reason", "ModeDependent"),
+            "distinct loader targets stay open even when outside the analysed files: {json:#?}"
+        );
+        let vendored = from("src/ui/vendored.ts");
+        assert!(
+            vendored.len() == 1 && diagnostic_has_evidence(vendored[0], "reason", "ModeDependent"),
+            "an analysed package whose fields name two files resolves to neither: {json:#?}"
+        );
+        assert!(
+            diagnostic_has_evidence(
+                vendored[0],
+                "alternatives",
+                "src/vendored/main.js,src/vendored/module.js"
+            ),
+            "the import lists both files a loader may run: {json:#?}"
         );
     }
 

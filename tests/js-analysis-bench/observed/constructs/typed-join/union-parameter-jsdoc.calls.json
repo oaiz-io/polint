@@ -1,0 +1,76 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 5,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@120..137",
+      "name": "Dog"
+    },
+    {
+      "function": "main.js@171..219",
+      "name": "sound"
+    },
+    {
+      "function": "main.js@18..35",
+      "name": "Cat"
+    },
+    {
+      "function": "main.js@252..338",
+      "name": "speak"
+    },
+    {
+      "function": "main.js@69..117",
+      "name": "sound"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@296..307",
+      "syntax": "member",
+      "callee": "main.js@171..219",
+      "callee_name": "sound"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@296..307",
+      "syntax": "member",
+      "callee": "main.js@69..117",
+      "callee_name": "sound"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@376..392",
+      "syntax": "identifier",
+      "callee": "main.js@252..338",
+      "callee_name": "speak"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@382..391",
+      "syntax": "new",
+      "callee": "main.js@18..35",
+      "callee_name": "Cat"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@414..430",
+      "syntax": "identifier",
+      "callee": "main.js@252..338",
+      "callee_name": "speak"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@420..429",
+      "syntax": "new",
+      "callee": "main.js@120..137",
+      "callee_name": "Dog"
+    }
+  ]
+}

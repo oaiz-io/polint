@@ -25,10 +25,7 @@ impl EntrypointOutput {
 
     pub fn normalized(mut self, interner: &StableKeyInterner) -> Self {
         // Sort entrypoints by (stable_key, id)
-        self.entrypoints.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.entrypoints, |row| row.stable_key, |row| row.id);
         // Reassign sequential IDs after sorting
         for (index, entrypoint) in self.entrypoints.iter_mut().enumerate() {
             entrypoint.id = EntrypointId(index as u64);
@@ -69,10 +66,7 @@ impl EntrypointOutput {
         }
 
         // Sort unresolved by (stable_key, id)
-        self.unresolved.sort_by(|left, right| {
-            (interner.resolve(left.stable_key), left.id)
-                .cmp(&(interner.resolve(right.stable_key), right.id))
-        });
+        interner.sort_by_key_text(&mut self.unresolved, |row| row.stable_key, |row| row.id);
         for (index, fact) in self.unresolved.iter_mut().enumerate() {
             fact.id = UnresolvedFrameworkId(index as u64);
         }

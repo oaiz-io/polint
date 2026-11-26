@@ -80,6 +80,10 @@ pub(crate) struct TsTypesRawFrame {
     #[serde(default)]
     pub(crate) name_span: Option<TsTypesSpan>,
     #[serde(default)]
+    pub(crate) required_parameters: Option<u32>,
+    #[serde(default)]
+    pub(crate) signature_parameters: Option<u32>,
+    #[serde(default)]
     pub(crate) callsite: String,
     #[serde(default)]
     pub(crate) enclosing: String,
@@ -103,6 +107,10 @@ pub(crate) struct TsTypesRawFrame {
     pub(crate) is_unknown: bool,
     #[serde(default)]
     pub(crate) union_size: u64,
+    #[serde(default)]
+    pub(crate) is_intersection: bool,
+    #[serde(default)]
+    pub(crate) is_object_literal: bool,
     #[serde(default)]
     pub(crate) callsites: u64,
     #[serde(default)]

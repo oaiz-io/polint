@@ -1,0 +1,32 @@
+{
+  "schema": "polint-js-bench-observed-exports-1",
+  "node": "v24.22.3",
+  "transformed_not_instrumented": [],
+  "files": {
+    "barrel.mjs": {
+      "system": "esm",
+      "names": [
+        "current",
+        "deep",
+        "swap"
+      ]
+    },
+    "impl.mjs": {
+      "system": "esm",
+      "names": [
+        "current",
+        "swap"
+      ]
+    },
+    "inner.mjs": {
+      "system": "esm",
+      "names": [
+        "deep"
+      ]
+    },
+    "main.mjs": {
+      "system": "esm",
+      "names": []
+    }
+  }
+}

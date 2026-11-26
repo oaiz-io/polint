@@ -34,6 +34,17 @@
 //! say which kind of missing extraction an unmatched observed edge falls into.
 //! The census parses each file again on its own; it reads no analysis store and
 //! feeds nothing back into one.
+//!
+//! With `POLINT_JS_BENCH_PACKAGE_GRAPH=1` each tree's package graph is written
+//! beside its dump as `<output>.package-graph.json`: the tree is taken as one
+//! package, rooted at the tree. The report compresses it and records its size.
+//!
+//! With `POLINT_JS_BENCH_CORRECTIONS=1` a manifest line may name a recording
+//! of the tree's package and the driver that ran it, as
+//! `<tree>\t<output.json>\t<recording>\t<driver>`. The recorded edges are
+//! loaded as corrections to the tree's package graph and applied after the
+//! export; what became of each is written as `<output>.corrections.json`. The
+//! dump itself and the package graph are unchanged by it.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -53,10 +64,38 @@ use crate::internal_core::{FileId, FunctionId, Language, Span, SymbolId};
 const MANIFEST_ENV: &str = "POLINT_JS_BENCH_MANIFEST";
 const CAPS_ENV: &str = "POLINT_JS_BENCH_CAPS";
 const CENSUS_ENV: &str = "POLINT_JS_BENCH_CENSUS";
-const SCHEMA: &str = "polint-js-bench-facts-2";
+const SOLVER_INPUT_ENV: &str = "POLINT_JS_BENCH_SOLVER_INPUT";
+const PACKAGE_GRAPH_ENV: &str = "POLINT_JS_BENCH_PACKAGE_GRAPH";
+const CORRECTIONS_ENV: &str = "POLINT_JS_BENCH_CORRECTIONS";
+const SCHEMA: &str = "polint-js-bench-facts-3";
+const CORRECTIONS_SCHEMA: &str = "polint-js-bench-corrections-1";
+
+/// One manifest line: a tree, where its dump goes, and optionally a recording
+/// of the tree's package with the driver that ran it.
+#[derive(Debug, PartialEq, Eq)]
+struct ManifestEntry {
+    tree: PathBuf,
+    out: PathBuf,
+    recording: Option<(PathBuf, String)>,
+}
+
+/// A recording whose edges are applied to the tree's package graph, and
+/// where the outcome is written.
+struct Recording<'a> {
+    calls: &'a Path,
+    driver: &'a str,
+    out: &'a Path,
+}
 
 /// Analyses `tree` with the named capabilities and returns its normalized dump.
-fn dump_tree(tree: &Path, capabilities: &[&str], with_census: bool) -> anyhow::Result<Value> {
+fn dump_tree(
+    tree: &Path,
+    capabilities: &[&str],
+    with_census: bool,
+    solver_input: Option<&Path>,
+    package_graph: Option<&Path>,
+    recording: Option<&Recording<'_>>,
+) -> anyhow::Result<Value> {
     let loaded = crate::cli::load_config_for_check(tree, &[])?;
     let config_digest = crate::cache::keys::config_hash(&loaded);
     let rule_digest = crate::cache::keys::rule_hash(&[], None, &BTreeMap::new());
@@ -88,7 +127,88 @@ fn dump_tree(tree: &Path, capabilities: &[&str], with_census: bool) -> anyhow::R
     if with_census {
         document["syntax_census"] = syntax_census(&output.db);
     }
+    if let Some(path) = solver_input {
+        crate::ts::points_to::write_solver_input(
+            path,
+            &output.db.stable_key_interner(),
+            &crate::ts::points_to::TsPointsToInputs::from_db(&output.db),
+        )?;
+    }
+    if package_graph.is_some() || recording.is_some() {
+        let graph = crate::ts::points_to::package_graph::export(&output.db, tree, None)?;
+        if let Some(path) = package_graph {
+            let mut text = serde_json::to_string(&graph)?;
+            text.push('\n');
+            std::fs::write(path, text)?;
+        }
+        if let Some(recording) = recording {
+            let mut text = serde_json::to_string_pretty(&corrections_document(&graph, recording)?)?;
+            text.push('\n');
+            std::fs::write(recording.out, text)?;
+        }
+    }
     Ok(document)
+}
+
+/// The recorded edges of `recording` applied to `graph` as corrections.
+///
+/// Each correction is named by the bench's span keys: its call site as
+/// `path@start..end` in the file, its target by the function's span. The
+/// added edges are listed with the graph's node numbers as `apply` returns
+/// them.
+fn corrections_document(
+    graph: &crate::analysis_neutral::package_graph::PackageGraph,
+    recording: &Recording<'_>,
+) -> anyhow::Result<Value> {
+    use crate::analysis_neutral::package_graph::corrections::{
+        Anchor, Op, RECORDING_MAX_BYTES, apply, observed_corrections, recording_id,
+    };
+    let calls =
+        crate::repo_fs::read_file_to_string_with_limit(recording.calls, RECORDING_MAX_BYTES)?;
+    let run = recording_id(recording.calls)?;
+    let loaded = observed_corrections(graph, &calls, &run, recording.driver)?;
+    let (corrected, report) = apply(graph, &loaded.corrections);
+    let pairs = |indices: &[usize]| -> Vec<Value> {
+        let mut rows: Vec<Value> = indices
+            .iter()
+            .filter_map(|&index| {
+                let correction = &loaded.corrections[index];
+                let (Anchor::CallSite { function, site }, Op::AddEdge { target }) =
+                    (&correction.anchor, &correction.op)
+                else {
+                    return None;
+                };
+                Some(json!({
+                    "site": format!(
+                        "{}@{}..{}",
+                        function.path,
+                        function.start + site.start,
+                        function.start + site.end
+                    ),
+                    "target": format!("{}@{}..{}", target.path, target.start, target.end),
+                }))
+            })
+            .collect();
+        rows.sort_by_key(Value::to_string);
+        rows
+    };
+    let unanchored =
+        sorted(loaded.unanchored.iter().map(
+            |(site, callee, reason)| json!({"site": site, "callee": callee, "reason": reason}),
+        ));
+    Ok(json!({
+        "schema": CORRECTIONS_SCHEMA,
+        "run": run,
+        "driver": recording.driver,
+        "corrections": loaded.corrections.len(),
+        "applied": pairs(&report.applied),
+        "derived": pairs(&report.derived),
+        "stale": pairs(&report.stale),
+        "not_applied": report.not_applied,
+        "other_package": report.other_package,
+        "unanchored": unanchored,
+        "edges": corrected.corrections,
+    }))
 }
 
 /// Per analysed JS/TS file: the function-like nodes and call expressions Oxc
@@ -408,8 +528,9 @@ impl<'a> Dump<'a> {
         }));
 
         let index = db.call_graph_index();
-        let base_edges = sorted((0..index.edges.len()).map(|edge| {
-            let edge = index.edge(db, u32::try_from(edge).expect("edge index fits u32"));
+        let base_edges = sorted((0..index.edges.len()).map(|position| {
+            let row = &db.refined_call_edges()[index.edges[position]];
+            let edge = index.edge(db, u32::try_from(position).expect("edge index fits u32"));
             json!({
                 "site": self.span_key(edge.span),
                 "caller": self.function_key(edge.caller),
@@ -417,7 +538,11 @@ impl<'a> Dump<'a> {
                 "symbol": edge.symbol.map_or(Value::Null, |id| self.symbol(id)),
                 "label": edge.label,
                 "precision": debug(&edge.precision),
+                "claim_tier": edge.precision.tier().as_str(),
                 "algorithm": debug(&edge.algorithm),
+                "row_precision": debug(&row.precision),
+                "status": debug(&row.status),
+                "assumptions": row.assumptions.iter().map(|a| a.id()).collect::<Vec<_>>(),
             })
         }));
 
@@ -442,7 +567,12 @@ impl<'a> Dump<'a> {
                 "has_base": edge.base_target.is_some(),
                 "tier": debug(&edge.tier),
                 "status": debug(&edge.status),
+                "reason": edge.reason.as_ref().map(debug),
                 "precision": debug(&edge.precision),
+                "claim_tier": edge.precision.tier().as_str(),
+                "assumptions": edge.assumptions.iter().map(|a| a.id()).collect::<Vec<_>>(),
+                "dispatch": dispatch_evidence(&edge.evidence),
+                "type_effect": type_effect(&edge.evidence),
                 "validation": debug(&edge.validation),
                 "confidence": debug(&edge.confidence),
                 "algorithm": debug(&edge.algorithm),
@@ -487,10 +617,21 @@ impl<'a> Dump<'a> {
                 .or_default() += 1;
         }
 
+        // A `BTreeSet`, so the reasons are already in a fixed order.
+        let budget_reasons: Vec<&str> = db
+            .solver_budget_reasons()
+            .iter()
+            .map(String::as_str)
+            .collect();
+
         json!({
             "schema": SCHEMA,
             "capabilities": capabilities,
             "capability_available": available,
+            "solver_budget": {
+                "status": debug(&db.solver_budget_status()),
+                "reasons": budget_reasons,
+            },
             "files": files,
             "functions": functions,
             "call_sites": call_sites,
@@ -505,6 +646,23 @@ impl<'a> Dump<'a> {
     }
 }
 
+/// The dispatch kind a type-directed edge records in its evidence, such as
+/// `implementation` or `union_member`; `None` for edges that record none.
+fn dispatch_evidence(evidence: &[String]) -> Option<&str> {
+    evidence
+        .iter()
+        .find_map(|entry| entry.strip_prefix("dispatch="))
+}
+
+/// What the type checker did to an edge another tier produced: moved it to
+/// the conservative tier, or listed it as a candidate at an open site.
+fn type_effect(evidence: &[String]) -> Option<&str> {
+    evidence
+        .iter()
+        .map(String::as_str)
+        .find(|entry| matches!(*entry, "type_mismatch" | "type_seed"))
+}
+
 fn debug<T: std::fmt::Debug>(value: &T) -> String {
     format!("{value:?}")
 }
@@ -517,16 +675,27 @@ fn sorted(rows: impl Iterator<Item = Value>) -> Vec<Value> {
     keyed.into_iter().map(|(_, row)| row).collect()
 }
 
-fn manifest_entries(manifest: &str) -> Vec<(PathBuf, PathBuf)> {
+fn manifest_entries(manifest: &str) -> Vec<ManifestEntry> {
     manifest
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            let (tree, out) = line
-                .split_once('\t')
-                .unwrap_or_else(|| panic!("manifest line `{line}` is not `<tree>\\t<output>`"));
-            (PathBuf::from(tree), PathBuf::from(out))
-        })
+        .map(
+            |line| match line.split('\t').collect::<Vec<_>>().as_slice() {
+                [tree, out] => ManifestEntry {
+                    tree: PathBuf::from(tree),
+                    out: PathBuf::from(out),
+                    recording: None,
+                },
+                [tree, out, calls, driver] => ManifestEntry {
+                    tree: PathBuf::from(tree),
+                    out: PathBuf::from(out),
+                    recording: Some((PathBuf::from(calls), (*driver).to_string())),
+                },
+                _ => panic!(
+                    "manifest line `{line}` is not `<tree>\\t<output>[\\t<recording>\\t<driver>]`"
+                ),
+            },
+        )
         .collect()
 }
 
@@ -555,10 +724,43 @@ mod tests {
             .filter(|name| !name.is_empty())
             .collect();
         let with_census = std::env::var_os(CENSUS_ENV).is_some_and(|value| value == "1");
+        // With `POLINT_JS_BENCH_SOLVER_INPUT=1` each tree's points-to solver
+        // input is written beside its dump as `<output>.solver.json`, for
+        // `stored::tests::solve_stored_inputs`.
+        let with_solver_input =
+            std::env::var_os(SOLVER_INPUT_ENV).is_some_and(|value| value == "1");
+        let with_package_graph =
+            std::env::var_os(PACKAGE_GRAPH_ENV).is_some_and(|value| value == "1");
+        let with_corrections = std::env::var_os(CORRECTIONS_ENV).is_some_and(|value| value == "1");
         let manifest = std::fs::read_to_string(&manifest).expect("read manifest");
-        for (tree, out) in manifest_entries(&manifest) {
-            let document = dump_tree(&tree, &capabilities, with_census)
-                .unwrap_or_else(|error| panic!("analyse {}: {error:#}", tree.display()));
+        for ManifestEntry {
+            tree,
+            out,
+            recording,
+        } in manifest_entries(&manifest)
+        {
+            let solver_input = with_solver_input.then(|| out.with_extension("solver.json"));
+            let package_graph =
+                with_package_graph.then(|| out.with_extension("package-graph.json"));
+            let corrections_out = out.with_extension("corrections.json");
+            let recording =
+                recording
+                    .as_ref()
+                    .filter(|_| with_corrections)
+                    .map(|(calls, driver)| Recording {
+                        calls,
+                        driver,
+                        out: &corrections_out,
+                    });
+            let document = dump_tree(
+                &tree,
+                &capabilities,
+                with_census,
+                solver_input.as_deref(),
+                package_graph.as_deref(),
+                recording.as_ref(),
+            )
+            .unwrap_or_else(|error| panic!("analyse {}: {error:#}", tree.display()));
             let mut text = serde_json::to_string_pretty(&document).expect("serialize dump");
             text.push('\n');
             std::fs::write(&out, text)
@@ -567,13 +769,22 @@ mod tests {
     }
 
     #[test]
-    fn manifest_lines_split_on_the_first_tab_and_skip_blank_lines() {
-        let entries = manifest_entries("/a\t/a.json\n\n/b c\t/b.json\n");
+    fn manifest_lines_split_on_tabs_and_skip_blank_lines() {
+        let entries =
+            manifest_entries("/a\t/a.json\n\n/b c\t/b.json\t/b.calls.json\tdrivers/b.mjs\n");
         assert_eq!(
             entries,
             vec![
-                (PathBuf::from("/a"), PathBuf::from("/a.json")),
-                (PathBuf::from("/b c"), PathBuf::from("/b.json")),
+                ManifestEntry {
+                    tree: PathBuf::from("/a"),
+                    out: PathBuf::from("/a.json"),
+                    recording: None,
+                },
+                ManifestEntry {
+                    tree: PathBuf::from("/b c"),
+                    out: PathBuf::from("/b.json"),
+                    recording: Some((PathBuf::from("/b.calls.json"), "drivers/b.mjs".to_string())),
+                },
             ]
         );
     }
@@ -623,6 +834,100 @@ mod tests {
         assert_eq!(constructor["class"][0], class_start);
         assert_eq!(at("calls", "this.run()")["this_receiver"], true);
         assert_eq!(at("calls", "g()")["this_receiver"], false);
+    }
+
+    const FUNCTION_KEYS_UPDATE_ENV: &str = "POLINT_UPDATE_JS_BENCH_FUNCTION_KEYS";
+
+    fn bench_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/js-analysis-bench")
+            .canonicalize()
+            .expect("benchmark directory")
+    }
+
+    fn copy_case(source: &Path, destination: &Path) {
+        std::fs::create_dir_all(destination).expect("create case copy");
+        for entry in std::fs::read_dir(source).expect("read case directory") {
+            let entry = entry.expect("case entry");
+            let target = destination.join(entry.file_name());
+            if entry.file_type().expect("entry type").is_dir() {
+                copy_case(&entry.path(), &target);
+            } else {
+                std::fs::copy(entry.path(), &target).expect("copy case file");
+            }
+        }
+    }
+
+    /// `<family>/<case>\t<function key>` for every function polint extracts
+    /// from every construct case, analysed as the benchmark stages it: a copy
+    /// outside the checkout, with an `.ignore` that hides nothing.
+    fn construct_function_keys() -> Vec<String> {
+        let constructs = bench_root().join("constructs");
+        let scratch = tempfile::tempdir().expect("scratch directory");
+        std::fs::write(scratch.path().join(".ignore"), "!*\n").expect("write .ignore");
+        let mut keys = Vec::new();
+        let mut families: Vec<_> = std::fs::read_dir(&constructs)
+            .expect("read constructs")
+            .map(|entry| entry.expect("family entry").path())
+            .filter(|path| path.is_dir())
+            .collect();
+        families.sort();
+        for family in families {
+            let mut cases: Vec<_> = std::fs::read_dir(&family)
+                .expect("read family")
+                .map(|entry| entry.expect("case entry").path())
+                .filter(|path| path.join("case.toml").is_file())
+                .collect();
+            cases.sort();
+            for case in cases {
+                let id = case
+                    .strip_prefix(&constructs)
+                    .expect("case under constructs")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let tree = scratch.path().join(&id);
+                copy_case(&case, &tree);
+                let document = dump_tree(&tree, &["syntax"], false, None, None, None)
+                    .unwrap_or_else(|error| panic!("analyse {id}: {error:#}"));
+                for function in document["functions"].as_array().expect("functions") {
+                    let key = function["key"].as_str().expect("function key");
+                    keys.push(format!("{id}\t{key}"));
+                }
+            }
+        }
+        keys.sort();
+        keys
+    }
+
+    /// A function's key is its path, span and name, the same parts as its
+    /// stable key, so a key that disappears from a construct case is a
+    /// renamed or lost function: identities that recorded edges, stored
+    /// graphs and corrections hold would no longer match. Extraction may
+    /// add functions; it may not change the ones it already reports. With
+    /// `POLINT_UPDATE_JS_BENCH_FUNCTION_KEYS=1` the committed list is
+    /// rewritten from this run instead.
+    #[test]
+    fn construct_function_keys_keep_every_committed_key() {
+        let committed_path = bench_root().join("function-keys.txt");
+        let current = construct_function_keys();
+        if std::env::var_os(FUNCTION_KEYS_UPDATE_ENV).is_some_and(|value| value == "1") {
+            let mut text = current.join("\n");
+            text.push('\n');
+            std::fs::write(&committed_path, text).expect("write function keys");
+            return;
+        }
+        let committed = std::fs::read_to_string(&committed_path).expect("read function keys");
+        let current: std::collections::BTreeSet<&str> =
+            current.iter().map(String::as_str).collect();
+        let missing: Vec<&str> = committed
+            .lines()
+            .filter(|line| !line.is_empty() && !current.contains(line))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "construct functions lost or renamed (set {FUNCTION_KEYS_UPDATE_ENV}=1 only when the change is intended):\n{}",
+            missing.join("\n")
+        );
     }
 
     #[test]

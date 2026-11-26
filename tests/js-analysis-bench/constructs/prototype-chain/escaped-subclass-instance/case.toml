@@ -1,0 +1,3 @@
+construct = "prototype-chain"
+held_out = true
+description = "An exported instance of a subclass calls a method found two links up its prototype chain, through `this` and from outside."

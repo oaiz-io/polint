@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "main.js"
@@ -7,6 +7,16 @@
   "instrumented_functions": 2,
   "transformed_not_instrumented": [],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@28..72",
+      "name": "add"
+    },
+    {
+      "function": "main.js@76..120",
+      "name": "sub"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

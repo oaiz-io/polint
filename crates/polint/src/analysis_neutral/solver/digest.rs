@@ -1,6 +1,8 @@
 //! Stable output digesting for the unified solver.
 
-use crate::analysis_api::{Digest, DigestKind, ProviderManifest};
+use std::fmt::Write as _;
+
+use crate::analysis_api::{Digest, DigestKind, DigestParts, ProviderManifest};
 use crate::internal_core::StableKeyInterner;
 
 use super::budget::SolverBudget;
@@ -17,7 +19,8 @@ pub fn solver_output_digest(
     go_semantic_output_digest: &Digest,
     output: &SolverOutput,
 ) -> Digest {
-    let mut parts = vec![
+    let mut parts = DigestParts::default();
+    parts.extend([
         format!("provider_id={}", manifest.id),
         format!("provider_version={}", manifest.provider_version()),
         format!("schema={}", manifest.primary_schema_label()),
@@ -26,19 +29,21 @@ pub fn solver_output_digest(
         format!("type_value_alias_output={type_value_alias_output_digest}"),
         format!("go_semantic_output={go_semantic_output_digest}"),
         format!("budget_status={}", output.budget_status.as_str()),
-    ];
+        format!("incomplete_sites={}", output.incomplete_sites),
+    ]);
     parts.extend(solver_budget_digest_parts(budget));
-    parts.extend(output.derived_edges.iter().map(|edge| {
-        format!(
+    parts.extend_in_order(&output.derived_edges, |text, edge| {
+        let _ = write!(
+            text,
             "edge={}|status={:?}|prec={:?}|prov={}",
             interner.resolve(edge.stable_key),
             edge.status,
             edge.precision,
             edge.provenance.stable_key_fragment(interner),
-        )
-    }));
+        );
+    });
     if output.derived_edges.is_empty() {
-        parts.push("solver_output=empty".to_string());
+        parts.push("solver_output=empty");
     }
     parts.extend(
         output
@@ -46,7 +51,5 @@ pub fn solver_output_digest(
             .iter()
             .map(|reason| format!("budget_exceeded_reason={reason}")),
     );
-    parts.sort();
-    let refs = parts.iter().map(String::as_str).collect::<Vec<_>>();
-    Digest::from_parts(DigestKind::ProviderOutput, "solver_output", &refs)
+    parts.digest(DigestKind::ProviderOutput, "solver_output")
 }

@@ -552,20 +552,22 @@ fn ts_types_output_digest(
     }));
     parts.extend(output.callables.iter().map(|callable| {
         format!(
-            "callable={} name={} kind={:?} file={} span={}",
+            "callable={} name={} kind={:?} required={:?} file={} span={}",
             interner.resolve(callable.stable_key),
             callable.name,
             callable.kind,
+            callable.required_parameters,
             callable.relative_file.as_deref().unwrap_or(""),
             option_span_part(callable.span.as_ref())
         )
     }));
     parts.extend(output.callsites.iter().map(|callsite| {
         format!(
-            "callsite={} status={:?} kind={} enclosing={} file={} span={}",
+            "callsite={} status={:?} kind={} parameters={:?} enclosing={} file={} span={}",
             interner.resolve(callsite.stable_key),
             callsite.status,
             callsite.call_kind,
+            callsite.signature_parameters,
             callsite.enclosing.as_deref().unwrap_or(""),
             callsite.relative_file.as_deref().unwrap_or(""),
             option_span_part(callsite.span.as_ref())
@@ -584,13 +586,15 @@ fn ts_types_output_digest(
     }));
     parts.extend(output.receivers.iter().map(|receiver| {
         format!(
-            "receiver={} site={} printed={} any={} unknown={} union={}",
+            "receiver={} site={} printed={} any={} unknown={} union={} intersection={} object_literal={}",
             interner.resolve(receiver.stable_key),
             interner.resolve(receiver.callsite_stable_key),
             receiver.printed,
             receiver.is_any,
             receiver.is_unknown,
-            receiver.union_size
+            receiver.union_size,
+            receiver.is_intersection,
+            receiver.is_object_literal
         )
     }));
     // The density counts gate which typed edges survive, so a file whose `any`

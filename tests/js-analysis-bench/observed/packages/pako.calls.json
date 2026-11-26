@@ -1,0 +1,2196 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "dist/pako.min.js"
+  ],
+  "instrumented_functions": 99,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "dist/pako.min.js@10362..12559",
+      "name": "St"
+    },
+    {
+      "function": "dist/pako.min.js@1053..1081",
+      "name": "v"
+    },
+    {
+      "function": "dist/pako.min.js@1084..1162",
+      "name": "y"
+    },
+    {
+      "function": "dist/pako.min.js@1165..1326",
+      "name": "x"
+    },
+    {
+      "function": "dist/pako.min.js@12563..13580",
+      "name": "Dt"
+    },
+    {
+      "function": "dist/pako.min.js@1329..1360",
+      "name": "z"
+    },
+    {
+      "function": "dist/pako.min.js@13584..14935",
+      "name": "Tt"
+    },
+    {
+      "function": "dist/pako.min.js@1363..1428",
+      "name": "A"
+    },
+    {
+      "function": "dist/pako.min.js@1431..1575",
+      "name": "E"
+    },
+    {
+      "function": "dist/pako.min.js@14936..15042",
+      "name": "Ot"
+    },
+    {
+      "function": "dist/pako.min.js@15277..16458",
+      "name": "Ft"
+    },
+    {
+      "function": "dist/pako.min.js@1578..1759",
+      "name": "R"
+    },
+    {
+      "function": "dist/pako.min.js@16467..16648",
+      "name": "Lt"
+    },
+    {
+      "function": "dist/pako.min.js@16652..16882",
+      "name": "Nt"
+    },
+    {
+      "function": "dist/pako.min.js@16886..17243",
+      "name": "Bt"
+    },
+    {
+      "function": "dist/pako.min.js@17247..17967",
+      "name": "Ct"
+    },
+    {
+      "function": "dist/pako.min.js@1762..1869",
+      "name": "Z"
+    },
+    {
+      "function": "dist/pako.min.js@18083..18138",
+      "name": "deflateSetHeader"
+    },
+    {
+      "function": "dist/pako.min.js@18147..23100",
+      "name": "deflate"
+    },
+    {
+      "function": "dist/pako.min.js@1872..1944",
+      "name": "U"
+    },
+    {
+      "function": "dist/pako.min.js@1947..2131",
+      "name": "S"
+    },
+    {
+      "function": "dist/pako.min.js@2134..2442",
+      "name": "D"
+    },
+    {
+      "function": "dist/pako.min.js@21370..21690",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@21714..22495",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@23112..23197",
+      "name": "deflateEnd"
+    },
+    {
+      "function": "dist/pako.min.js@23219..24006",
+      "name": "deflateSetDictionary"
+    },
+    {
+      "function": "dist/pako.min.js@24066..24114",
+      "name": "Ht"
+    },
+    {
+      "function": "dist/pako.min.js@24122..24336",
+      "name": "jt"
+    },
+    {
+      "function": "dist/pako.min.js@24340..24503",
+      "name": "Kt"
+    },
+    {
+      "function": "dist/pako.min.js@2445..3828",
+      "name": "T"
+    },
+    {
+      "function": "dist/pako.min.js@24712..25380",
+      "name": "Gt"
+    },
+    {
+      "function": "dist/pako.min.js@25384..25992",
+      "name": "Xt"
+    },
+    {
+      "function": "dist/pako.min.js@25996..26122",
+      "name": "Wt"
+    },
+    {
+      "function": "dist/pako.min.js@26130..26329",
+      "name": "qt"
+    },
+    {
+      "function": "dist/pako.min.js@26512..27261",
+      "name": "re"
+    },
+    {
+      "function": "dist/pako.min.js@27261..27356",
+      "name": "oe"
+    },
+    {
+      "function": "dist/pako.min.js@27374..28130",
+      "name": "push"
+    },
+    {
+      "function": "dist/pako.min.js@28151..28183",
+      "name": "onData"
+    },
+    {
+      "function": "dist/pako.min.js@28203..28302",
+      "name": "onEnd"
+    },
+    {
+      "function": "dist/pako.min.js@28344..28389",
+      "name": "deflateRaw"
+    },
+    {
+      "function": "dist/pako.min.js@28395..28441",
+      "name": "gzip"
+    },
+    {
+      "function": "dist/pako.min.js@284..46855",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@28477..30254",
+      "name": "de"
+    },
+    {
+      "function": "dist/pako.min.js@30755..31891",
+      "name": "me"
+    },
+    {
+      "function": "dist/pako.min.js@309..358",
+      "name": "e"
+    },
+    {
+      "function": "dist/pako.min.js@3122..3803",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@32136..32194",
+      "name": "Ne"
+    },
+    {
+      "function": "dist/pako.min.js@32195..32743",
+      "name": "Be"
+    },
+    {
+      "function": "dist/pako.min.js@32752..32837",
+      "name": "Ce"
+    },
+    {
+      "function": "dist/pako.min.js@32841..33144",
+      "name": "Me"
+    },
+    {
+      "function": "dist/pako.min.js@33148..33230",
+      "name": "He"
+    },
+    {
+      "function": "dist/pako.min.js@33234..33423",
+      "name": "je"
+    },
+    {
+      "function": "dist/pako.min.js@33427..33557",
+      "name": "Ke"
+    },
+    {
+      "function": "dist/pako.min.js@33583..33916",
+      "name": "Xe"
+    },
+    {
+      "function": "dist/pako.min.js@33920..34351",
+      "name": "We"
+    },
+    {
+      "function": "dist/pako.min.js@34461..43268",
+      "name": "inflate"
+    },
+    {
+      "function": "dist/pako.min.js@3831..4123",
+      "name": "O"
+    },
+    {
+      "function": "dist/pako.min.js@4126..4478",
+      "name": "I"
+    },
+    {
+      "function": "dist/pako.min.js@43280..43366",
+      "name": "inflateEnd"
+    },
+    {
+      "function": "dist/pako.min.js@43384..43475",
+      "name": "inflateGetHeader"
+    },
+    {
+      "function": "dist/pako.min.js@43497..43688",
+      "name": "inflateSetDictionary"
+    },
+    {
+      "function": "dist/pako.min.js@43746..43892",
+      "name": "Je"
+    },
+    {
+      "function": "dist/pako.min.js@44046..44888",
+      "name": "ra"
+    },
+    {
+      "function": "dist/pako.min.js@44888..44980",
+      "name": "oa"
+    },
+    {
+      "function": "dist/pako.min.js@4496..4615",
+      "name": "L"
+    },
+    {
+      "function": "dist/pako.min.js@44998..46059",
+      "name": "push"
+    },
+    {
+      "function": "dist/pako.min.js@46080..46112",
+      "name": "onData"
+    },
+    {
+      "function": "dist/pako.min.js@46132..46291",
+      "name": "onEnd"
+    },
+    {
+      "function": "dist/pako.min.js@4622..5521",
+      "name": "N"
+    },
+    {
+      "function": "dist/pako.min.js@46333..46378",
+      "name": "inflateRaw"
+    },
+    {
+      "function": "dist/pako.min.js@4698..4917",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@4954..5127",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@5291..5429",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@5534..6194",
+      "name": "_tr_init"
+    },
+    {
+      "function": "dist/pako.min.js@5543..6066",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@6242..6491",
+      "name": "_tr_tally"
+    },
+    {
+      "function": "dist/pako.min.js@6684..6835",
+      "name": "C"
+    },
+    {
+      "function": "dist/pako.min.js@6861..6969",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@6980..7069",
+      "name": "H"
+    },
+    {
+      "function": "dist/pako.min.js@74..277",
+      "name": ""
+    },
+    {
+      "function": "dist/pako.min.js@8034..8055",
+      "name": "gt"
+    },
+    {
+      "function": "dist/pako.min.js@8059..8075",
+      "name": "pt"
+    },
+    {
+      "function": "dist/pako.min.js@8079..8118",
+      "name": "kt"
+    },
+    {
+      "function": "dist/pako.min.js@8122..8271",
+      "name": "vt"
+    },
+    {
+      "function": "dist/pako.min.js@8279..8319",
+      "name": "yt"
+    },
+    {
+      "function": "dist/pako.min.js@830..965",
+      "name": "m"
+    },
+    {
+      "function": "dist/pako.min.js@8329..8591",
+      "name": "xt"
+    },
+    {
+      "function": "dist/pako.min.js@8595..8705",
+      "name": "zt"
+    },
+    {
+      "function": "dist/pako.min.js@8709..8746",
+      "name": "At"
+    },
+    {
+      "function": "dist/pako.min.js@8750..8828",
+      "name": "Et"
+    },
+    {
+      "function": "dist/pako.min.js@8832..9068",
+      "name": "Rt"
+    },
+    {
+      "function": "dist/pako.min.js@9072..9722",
+      "name": "Zt"
+    },
+    {
+      "function": "dist/pako.min.js@9726..10358",
+      "name": "Ut"
+    },
+    {
+      "function": "dist/pako.min.js@975..1040",
+      "name": "k"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@10002..10046",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8832..9068",
+      "callee_name": "Rt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@10140..10167",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@10187..10216",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@1040..1044",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@309..358",
+      "callee_name": "e"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@10718..10728",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@4496..4615",
+      "callee_name": "L"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@10853..10863",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8329..8591",
+      "callee_name": "xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@11049..11091",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8832..9068",
+      "callee_name": "Rt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@1222..1235",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1084..1162",
+      "callee_name": "y"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@12609..12614",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9726..10358",
+      "callee_name": "Ut"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@12703..12741",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@12866..12873",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9072..9722",
+      "callee_name": "Zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@12898..12944",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6242..6491",
+      "callee_name": "_tr_tally"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@13064..13102",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@13302..13338",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@13346..13373",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6242..6491",
+      "callee_name": "_tr_tally"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@1339..1359",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@13497..13505",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8595..8705",
+      "callee_name": "zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@13632..13637",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9726..10358",
+      "callee_name": "Ut"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@13726..13764",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@13994..14001",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9072..9722",
+      "callee_name": "Zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@141..151",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@284..46855",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@14189..14235",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6242..6491",
+      "callee_name": "_tr_tally"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@14311..14349",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@14579..14608",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6242..6491",
+      "callee_name": "_tr_tally"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@14612..14620",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8595..8705",
+      "callee_name": "zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@14759..14788",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6242..6491",
+      "callee_name": "_tr_tally"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@14852..14860",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8595..8705",
+      "callee_name": "zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@14900..14908",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8595..8705",
+      "callee_name": "zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15052..15070",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15071..15089",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15090..15109",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15110..15130",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15131..15151",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15152..15173",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15174..15197",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15198..15221",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15222..15248",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@15249..15275",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@14936..15042",
+      "callee_name": "Ot"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@1561..1572",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1363..1428",
+      "callee_name": "A"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16036..16054",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8079..8118",
+      "callee_name": "kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16055..16073",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8079..8118",
+      "callee_name": "kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16074..16090",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8079..8118",
+      "callee_name": "kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16208..16221",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8079..8118",
+      "callee_name": "kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16286..16300",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8079..8118",
+      "callee_name": "kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16659..16664",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@16467..16648",
+      "callee_name": "Lt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16874..16878",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@5534..6194",
+      "callee_name": "_tr_init"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16898..16903",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@16652..16882",
+      "callee_name": "Nt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@16961..16971",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8079..8118",
+      "callee_name": "kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@17437..17443",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@15277..16458",
+      "callee_name": "Ft"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@1779..1792",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1084..1162",
+      "callee_name": "y"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@17961..17966",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@16886..17243",
+      "callee_name": "Bt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18090..18095",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@16467..16648",
+      "callee_name": "Lt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18158..18163",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@16467..16648",
+      "callee_name": "Lt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18436..18441",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8059..8075",
+      "callee_name": "pt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18443..18448",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8059..8075",
+      "callee_name": "pt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18463..18471",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8034..8055",
+      "callee_name": "gt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18717..18724",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8750..8828",
+      "callee_name": "Et"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18742..18760",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8750..8828",
+      "callee_name": "Et"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18761..18780",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8750..8828",
+      "callee_name": "Et"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18804..18809",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8329..8591",
+      "callee_name": "xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18880..18888",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18889..18898",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18899..18906",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@18916..19026",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19027..19050",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19051..19077",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19078..19105",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19106..19133",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19134..19183",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19184..19205",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19246..19277",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19278..19312",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19338..19374",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19408..19415",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19416..19423",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19424..19431",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19432..19439",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19440..19447",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19448..19497",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19498..19505",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@19518..19523",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8329..8591",
+      "callee_name": "xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@20135..20173",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2021..2055",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1872..1944",
+      "callee_name": "U"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@20498..20505",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@20556..20594",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2062..2086",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1872..1944",
+      "callee_name": "U"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@20928..20935",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@20986..21024",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21159..21176",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21177..21197",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21223..21228",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8329..8591",
+      "callee_name": "xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21345..21352",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@10362..12559",
+      "callee_name": "St"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21369..21696",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@21370..21690",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21413..21418",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9726..10358",
+      "callee_name": "Ut"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21483..21510",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6242..6491",
+      "callee_name": "_tr_tally"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21607..21615",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8595..8705",
+      "callee_name": "zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21713..22501",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@21714..22495",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@21782..21787",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9726..10358",
+      "callee_name": "Ut"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22287..22314",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6242..6491",
+      "callee_name": "_tr_tally"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22412..22420",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8595..8705",
+      "callee_name": "zt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22502..22523",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@12563..13580",
+      "callee_name": "Dt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22502..22523",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@13584..14935",
+      "callee_name": "Tt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22643..22654",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@4496..4615",
+      "callee_name": "L"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22735..22740",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8329..8591",
+      "callee_name": "xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22826..22843",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22844..22864",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22865..22886",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22887..22908",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22909..22929",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22930..22953",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2294..2302",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22954..22978",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@22979..23003",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8709..8746",
+      "callee_name": "At"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23006..23024",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8750..8828",
+      "callee_name": "Et"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23025..23044",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8750..8828",
+      "callee_name": "Et"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23046..23051",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8329..8591",
+      "callee_name": "xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2311..2323",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23119..23124",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@16467..16648",
+      "callee_name": "Lt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23245..23250",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@16467..16648",
+      "callee_name": "Lt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23359..23375",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6684..6835",
+      "callee_name": "C"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2347..2355",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23619..23624",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9726..10358",
+      "callee_name": "Ut"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2363..2367",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1053..1081",
+      "callee_name": "v"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2368..2376",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23686..23715",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8279..8319",
+      "callee_name": "yt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@23811..23816",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@9726..10358",
+      "callee_name": "Ut"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2400..2408",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@24305..24312",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@24066..24114",
+      "callee_name": "Ht"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2431..2441",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@26540..26623",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@24122..24336",
+      "callee_name": "jt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@26814..26820",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@26130..26329",
+      "callee_name": "qt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@26849..26927",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@17247..17967",
+      "callee_name": "Ct"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@26973..27012",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@18083..18138",
+      "callee_name": "deflateSetHeader"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27176..27212",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@23219..24006",
+      "callee_name": "deflateSetDictionary"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27286..27295",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@26512..27261",
+      "callee_name": "re"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27299..27311",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@27374..28130",
+      "callee_name": "push"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27518..27523",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@24712..25380",
+      "callee_name": "Gt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27814..27829",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@18147..23100",
+      "callee_name": "deflate"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27858..27902",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@28151..28183",
+      "callee_name": "onData"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27905..27929",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@23112..23197",
+      "callee_name": "deflateEnd"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@27930..27943",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@28203..28302",
+      "callee_name": "onEnd"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@28006..28050",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@28151..28183",
+      "callee_name": "onData"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2819..2827",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1947..2131",
+      "callee_name": "S"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@28236..28251",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@24340..24503",
+      "callee_name": "Kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@28381..28388",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@27261..27356",
+      "callee_name": "oe"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@28433..28440",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@27261..27356",
+      "callee_name": "oe"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@2878..2886",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1947..2131",
+      "callee_name": "S"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@3060..3068",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1947..2131",
+      "callee_name": "S"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@3121..3809",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@3122..3803",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@32848..32853",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32752..32837",
+      "callee_name": "Ce"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33155..33160",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32752..32837",
+      "callee_name": "Ce"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33224..33229",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32841..33144",
+      "callee_name": "Me"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33251..33256",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32752..32837",
+      "callee_name": "Ce"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33416..33421",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@33148..33230",
+      "callee_name": "He"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33459..33465",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@32195..32743",
+      "callee_name": "Be"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33517..33524",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@33234..33423",
+      "callee_name": "je"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33755..33794",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@30755..31891",
+      "callee_name": "me"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@33819..33857",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@30755..31891",
+      "callee_name": "me"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@34631..34636",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32752..32837",
+      "callee_name": "Ce"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@35031..35047",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@35750..35766",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@35965..35981",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@36169..36185",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@36385..36401",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@36682..36698",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@36942..36958",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@37216..37232",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@37628..37633",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32136..32194",
+      "callee_name": "Ne"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@37992..37997",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@33583..33916",
+      "callee_name": "Xe"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@3810..3827",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1431..1575",
+      "callee_name": "E"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@38983..39021",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@30755..31891",
+      "callee_name": "me"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@39955..39997",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@30755..31891",
+      "callee_name": "me"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@40129..40178",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@30755..31891",
+      "callee_name": "me"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@40387..40394",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@28477..30254",
+      "callee_name": "de"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@42379..42397",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@42398..42416",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6684..6835",
+      "callee_name": "C"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@42443..42448",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32136..32194",
+      "callee_name": "Ne"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4253..4269",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@42937..42976",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@33920..34351",
+      "callee_name": "We"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4304..4320",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@43112..43139",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6684..6835",
+      "callee_name": "C"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4326..4343",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@43287..43292",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32752..32837",
+      "callee_name": "Ce"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@43395..43400",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32752..32837",
+      "callee_name": "Ce"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4344..4354",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@43539..43544",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@32752..32837",
+      "callee_name": "Ce"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@43606..43616",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6684..6835",
+      "callee_name": "C"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4363..4380",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@43636..43647",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@33920..34351",
+      "callee_name": "We"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4381..4391",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4394..4411",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1329..1360",
+      "callee_name": "z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@44074..44121",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@24122..24336",
+      "callee_name": "jt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4412..4423",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@44460..44466",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@26130..26329",
+      "callee_name": "qt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@44495..44534",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@33427..33557",
+      "callee_name": "Ke"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@44582..44588",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@43746..43892",
+      "callee_name": "Je"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@44589..44631",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@43384..43475",
+      "callee_name": "inflateGetHeader"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@44913..44922",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@44046..44888",
+      "callee_name": "ra"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@44926..44935",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@44998..46059",
+      "callee_name": "push"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4508..4524",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4525..4529",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1762..1869",
+      "callee_name": "Z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4530..4536",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1084..1162",
+      "callee_name": "y"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45335..45350",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@34461..43268",
+      "callee_name": "inflate"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45365..45393",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@43497..43688",
+      "callee_name": "inflateSetDictionary"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4537..4544",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1084..1162",
+      "callee_name": "y"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45403..45418",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@34461..43268",
+      "callee_name": "inflate"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45577..45590",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@46132..46291",
+      "callee_name": "onEnd"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45700..45723",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@25996..26122",
+      "callee_name": "Wt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45741..45755",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@25384..25992",
+      "callee_name": "Xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45829..45843",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@46080..46112",
+      "callee_name": "onData"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45849..45931",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@46080..46112",
+      "callee_name": "onData"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45969..45993",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@43280..43366",
+      "callee_name": "inflateEnd"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@45994..46007",
+      "syntax": "member",
+      "callee": "dist/pako.min.js@46132..46291",
+      "callee_name": "onEnd"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@46225..46240",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@24340..24503",
+      "callee_name": "Kt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@46370..46377",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@44888..44980",
+      "callee_name": "oa"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4697..4921",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@4698..4917",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4923..4936",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@2445..3828",
+      "callee_name": "T"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4937..4950",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@2445..3828",
+      "callee_name": "T"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4953..5131",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@4954..5127",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@4968..5002",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@3831..4123",
+      "callee_name": "O"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5003..5037",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@3831..4123",
+      "callee_name": "O"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5038..5052",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@2445..3828",
+      "callee_name": "T"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5245..5261",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5262..5270",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@2134..2442",
+      "callee_name": "D"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5273..5289",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5290..5477",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@5291..5429",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5313..5325",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5326..5336",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5337..5347",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5360..5386",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1165..1326",
+      "callee_name": "x"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5387..5407",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@4126..4478",
+      "callee_name": "I"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5408..5428",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@4126..4478",
+      "callee_name": "I"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5478..5506",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@2134..2442",
+      "callee_name": "D"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5508..5512",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1578..1759",
+      "callee_name": "R"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5516..5520",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1762..1869",
+      "callee_name": "Z"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5542..6069",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@5543..6066",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5947..5957",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1431..1575",
+      "callee_name": "E"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5988..5994",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1363..1428",
+      "callee_name": "A"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@5997..6015",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@830..965",
+      "callee_name": "m"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6018..6034",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@830..965",
+      "callee_name": "m"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6037..6065",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@830..965",
+      "callee_name": "m"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6085..6105",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@975..1040",
+      "callee_name": "k"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6115..6135",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@975..1040",
+      "callee_name": "k"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6146..6164",
+      "syntax": "new",
+      "callee": "dist/pako.min.js@975..1040",
+      "callee_name": "k"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6189..6193",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1578..1759",
+      "callee_name": "R"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6459..6463",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@1053..1081",
+      "callee_name": "v"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@6860..6972",
+      "syntax": "expression",
+      "callee": "dist/pako.min.js@6861..6969",
+      "callee_name": ""
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@694..698",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@309..358",
+      "callee_name": "e"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@721..725",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@309..358",
+      "callee_name": "e"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@749..753",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@309..358",
+      "callee_name": "e"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@777..781",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@309..358",
+      "callee_name": "e"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@804..808",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@309..358",
+      "callee_name": "e"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@8603..8668",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@4622..5521",
+      "callee_name": "N"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@8694..8704",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8329..8591",
+      "callee_name": "xt"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@8976..8992",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6684..6835",
+      "callee_name": "C"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@9020..9036",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@6980..7069",
+      "callee_name": "H"
+    },
+    {
+      "kind": "call",
+      "site": "dist/pako.min.js@9959..9964",
+      "syntax": "identifier",
+      "callee": "dist/pako.min.js@8122..8271",
+      "callee_name": "vt"
+    },
+    {
+      "kind": "implicit",
+      "site": "dist/pako.min.js@277",
+      "syntax": "implicit",
+      "callee": "dist/pako.min.js@74..277",
+      "callee_name": ""
+    }
+  ]
+}

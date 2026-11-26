@@ -1066,17 +1066,16 @@ fn language_cache_label(language: Language) -> &'static str {
 }
 
 fn sort_symbol_facts(interner: &crate::core::StableKeyInterner, symbols: &mut [SymbolFact]) {
+    let keys = interner.read_view();
     symbols.sort_by(|left, right| {
-        let left_stable_key = interner.resolve(left.stable_key);
-        let right_stable_key = interner.resolve(right.stable_key);
         fact_order_key(
-            &left_stable_key,
+            keys.text(left.stable_key),
             left.file,
             left.primary_span.as_ref(),
             &left.name,
         )
         .cmp(&fact_order_key(
-            &right_stable_key,
+            keys.text(right.stable_key),
             right.file,
             right.primary_span.as_ref(),
             &right.name,
@@ -1088,17 +1087,16 @@ fn sort_definition_facts(
     interner: &crate::core::StableKeyInterner,
     definitions: &mut [DefinitionFact],
 ) {
+    let keys = interner.read_view();
     definitions.sort_by(|left, right| {
-        let left_stable_key = interner.resolve(left.stable_key);
-        let right_stable_key = interner.resolve(right.stable_key);
         fact_order_key(
-            &left_stable_key,
+            keys.text(left.stable_key),
             left.file,
             left.primary_span.as_ref(),
             &left.name,
         )
         .cmp(&fact_order_key(
-            &right_stable_key,
+            keys.text(right.stable_key),
             right.file,
             right.primary_span.as_ref(),
             &right.name,
@@ -1110,17 +1108,16 @@ fn sort_reference_facts(
     interner: &crate::core::StableKeyInterner,
     references: &mut [ReferenceFact],
 ) {
+    let keys = interner.read_view();
     references.sort_by(|left, right| {
-        let left_stable_key = interner.resolve(left.stable_key);
-        let right_stable_key = interner.resolve(right.stable_key);
         fact_order_key(
-            &left_stable_key,
+            keys.text(left.stable_key),
             left.file,
             left.primary_span.as_ref(),
             &left.name,
         )
         .cmp(&fact_order_key(
-            &right_stable_key,
+            keys.text(right.stable_key),
             right.file,
             right.primary_span.as_ref(),
             &right.name,
@@ -1128,8 +1125,11 @@ fn sort_reference_facts(
     });
 }
 
+/// Sorts `rows` by `key`, keeping the order of rows with equal keys. Each key
+/// is built once per row rather than twice per comparison: the keys own their
+/// stable-key text.
 fn sorted_semantic_rows<T, K: Ord>(mut rows: Vec<T>, key: impl Fn(&T) -> K) -> Vec<T> {
-    rows.sort_by_key(key);
+    rows.sort_by_cached_key(key);
     rows
 }
 

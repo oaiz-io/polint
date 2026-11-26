@@ -130,9 +130,7 @@ pub(crate) fn resolve_callsite(
         let provenance = DerivedEdgeProvenance::new(
             interner,
             contributing,
-            &ConstraintKind::CallConstraint {
-                callsite: callsite.callsite_node,
-            },
+            &ConstraintKind::call_at(callsite.callsite_node),
             solver_step,
         );
         let stable_key = stable_key_from_parts(
@@ -152,6 +150,7 @@ pub(crate) fn resolve_callsite(
             precision,
             stable_key,
             provenance,
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         });
     }
 

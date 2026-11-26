@@ -1,0 +1,36 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@121..189",
+      "name": "now"
+    },
+    {
+      "function": "main.js@194..280",
+      "name": "stamp"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@254..259",
+      "syntax": "identifier",
+      "callee": "main.js@121..189",
+      "callee_name": "now"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@318..332",
+      "syntax": "identifier",
+      "callee": "main.js@194..280",
+      "callee_name": "stamp"
+    }
+  ]
+}

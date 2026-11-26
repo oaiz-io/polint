@@ -41,7 +41,8 @@ use crate::analysis_neutral::refined_calls::store::RefinedCallOutput;
 use crate::core::AnalysisDb;
 use crate::internal_core::{Language, StableKeyId};
 
-const CALL_CACHE_SCHEMA: &str = "polint-call-resolution-cache-1";
+const CALL_CACHE_SCHEMA: &str = "polint-call-resolution-cache-3";
+const CALL_CACHE_MAX_BYTES: u64 = 256 * 1_048_576;
 
 /// Entries kept on disk; older ones are removed when a new one is written.
 const ENTRIES_KEPT: usize = 2;
@@ -247,16 +248,30 @@ pub(crate) fn restore(
     key: &str,
 ) -> Option<Vec<CachedProvider>> {
     let path = entry_path(directory, key);
-    let file = std::fs::File::open(&path).ok()?;
-    let parsed: Result<Entry, _> = serde_json::from_reader(std::io::BufReader::new(file));
-    let restored = parsed
+    let restored = crate::repo_fs::read_file_with_limit(&path, CALL_CACHE_MAX_BYTES)
         .ok()
+        .and_then(|bytes| {
+            crate::bounded_json::from_slice::<Entry>(&bytes, CALL_CACHE_MAX_BYTES).ok()
+        })
         .filter(|entry| entry.schema == CALL_CACHE_SCHEMA && entry.key == key)
         .and_then(|entry| store_entry(db, entry));
     if restored.is_none() {
         let _ = std::fs::remove_file(&path);
     }
     restored
+}
+
+#[cfg(test)]
+#[test]
+fn an_oversized_call_cache_entry_is_a_miss_and_is_evicted() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = entry_path(directory.path(), "key");
+    let file = std::fs::File::create(&path).unwrap();
+    file.set_len(CALL_CACHE_MAX_BYTES + 1).unwrap();
+    drop(file);
+
+    assert!(restore(&mut AnalysisDb::new(), directory.path(), "key").is_none());
+    assert!(!path.exists());
 }
 
 fn store_entry(db: &mut AnalysisDb, mut entry: Entry) -> Option<Vec<CachedProvider>> {

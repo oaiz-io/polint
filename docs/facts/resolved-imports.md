@@ -6,6 +6,12 @@ these views as typed parameters in a `#[polint::rule]` function, and polint
 derives the `resolved_imports` and `module_graph` capabilities from those
 parameters.
 
+A site is exact or complete only when polint has checked every applicable way
+the specifier can resolve. A limit, a refused input, or a selectable condition
+whose outcome is not shared by all profiles leaves the site open, with an
+unknown marker explaining why. A known candidate does not close the site, and
+an unchecked input is not evidence that there is no target.
+
 Start rules with:
 
 ```rust
@@ -44,6 +50,8 @@ Query methods:
 | `status` | `ResolutionStatus` for the import. |
 | `precision` | `ResolutionPrecision` for the result. |
 | `reason` | Optional `UnresolvedReason` for uncertain results. |
+| `resolution_issue` | The path and reason when a resolver input could not be checked. |
+| `alternatives` | For an import with no single target (`ModeDependent`), the module graph nodes of the analysed files that one way of loading it may name: its mode, its conditions, Node or a bundler. Each is a conservative candidate, and the list may be incomplete. Empty when `target_node` names the one target. |
 
 ## Example: Report Unresolved Imports
 
@@ -195,7 +203,39 @@ fn no_ui_to_domain(
 
 `UnresolvedReason` currently includes `NotFound`, `SetupMissing`,
 `DynamicExpression`, `UnsupportedLanguage`, `UnsupportedImport`, `ResolverError`,
-and `OutsideWorkspace`.
+`OutsideWorkspace`, and `ModeDependent`.
+
+TS/JS imports resolve in the mode their file loads in, so an `exports` map
+with `import` and `require` conditions gives each its own file. A `require`
+resolves in require mode. Import syntax resolves in import mode when the
+importing file runs as an ES module: `.mjs`, `.mts`, or a `.js` or `.ts` file
+of a package with `"type": "module"`. Elsewhere a compiler may turn the import
+into a `require`, so the import resolves only when both modes name the same
+file; otherwise it is `Unresolved` with reason `ModeDependent`.
+
+A package without `exports` loads its `main` under Node, but its `module` or
+`browser` field first under a bundler, so an import resolves only when Node
+and a bundler name the same file as well. A package specifier whose files are
+not analysed stays `External` either way, since its label is the specifier.
+
+An `exports` or `imports` map is read for every condition set at once. A
+condition the runtime always selects (`default`, and `import` or `require` for
+the file's mode) ends the search for its map; every other condition may or may
+not be set, so each file it reaches is a candidate. Arrays go on past `null`,
+an invalid target and an entry that selects nothing, as Node's do; a map with
+a numeric key, or an `exports` map that mixes subpaths and conditions, names
+nothing. A target that is another specifier, such as a package name or a
+self reference, is followed in turn, up to a fixed number of follows. An
+import resolves to one file only when every candidate is that file; a
+declaration file is not a candidate. Where a condition repeats under nested
+maps the candidates may include a file no runtime loads, so the list is
+conservative. The candidates are checked against Node on a generated corpus
+of maps (`tests/js-analysis-bench/conditions/`).
+
+A `ModeDependent` import lists in `alternatives` each analysed file one way of
+loading it names. The call graph follows each of them as a conservative
+target, so a call through the import may reach every candidate and none of
+its answers is exact or complete.
 
 ## Setup-Sensitive Behavior
 

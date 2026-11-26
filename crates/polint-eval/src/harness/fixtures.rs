@@ -626,6 +626,10 @@ pub(crate) fn run_abstract_domains_core_fixture_for_test(
             crate::analysis_neutral::domains::solver::SolverBudget {
                 max_iterations: 10_000,
                 widening_fuel: 0,
+                max_carried_facts:
+                    crate::analysis_neutral::domains::solver::SolverPolicy::deterministic()
+                        .budget
+                        .max_carried_facts,
             },
         ),
     )?);
@@ -636,6 +640,10 @@ pub(crate) fn run_abstract_domains_core_fixture_for_test(
             crate::analysis_neutral::domains::solver::SolverBudget {
                 max_iterations: 0,
                 widening_fuel: 8,
+                max_carried_facts:
+                    crate::analysis_neutral::domains::solver::SolverPolicy::deterministic()
+                        .budget
+                        .max_carried_facts,
             },
         ),
     )?);
@@ -3381,7 +3389,8 @@ mod direct_calls_core {
 
     #[test]
     fn eval_direct_calls_core_source_documents_supported_language_features() {
-        let markers = fixture_feature_markers(&["service.go", "web/src/app.ts"]);
+        let markers =
+            fixture_feature_markers(&["service.go", "web/src/app.ts", "web/src/evaluated.ts"]);
         let expected = SUPPORTED_DIRECT_CALL_FEATURES
             .iter()
             .map(|feature| feature.marker.to_string())

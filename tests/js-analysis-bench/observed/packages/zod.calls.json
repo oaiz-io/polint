@@ -1,5 +1,5 @@
 {
-  "schema": "polint-js-bench-observed-calls-1",
+  "schema": "polint-js-bench-observed-calls-2",
   "node": "v24.22.3",
   "instrumented_files": [
     "src/index.ts",
@@ -121,6 +121,2308 @@
     "src/v4/classic/compat.ts"
   ],
   "failures": [],
+  "entered_functions": [
+    {
+      "function": "src/v3/ZodError.ts@5193..5531",
+      "name": "constructor"
+    },
+    {
+      "function": "src/v3/ZodError.ts@5639..7790",
+      "name": "format"
+    },
+    {
+      "function": "src/v3/ZodError.ts@5731..5797",
+      "name": ""
+    },
+    {
+      "function": "src/v3/ZodError.ts@5894..7736",
+      "name": "processError"
+    },
+    {
+      "function": "src/v3/ZodError.ts@8578..9088",
+      "name": "flatten"
+    },
+    {
+      "function": "src/v3/ZodError.ts@8631..8665",
+      "name": ""
+    },
+    {
+      "function": "src/v3/errors.ts@251..304",
+      "name": "getErrorMap"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@1692..2268",
+      "name": "addIssueToContext"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@2215..2225",
+      "name": ""
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@238..980",
+      "name": "makeIssue"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@2447..2520",
+      "name": "dirty"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@2604..2964",
+      "name": "mergeArray"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@3414..4141",
+      "name": "mergeObjectSync"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@4556..4605",
+      "name": "OK"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@5068..5136",
+      "name": "isValid"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@5164..5277",
+      "name": "isAsync"
+    },
+    {
+      "function": "src/v3/helpers/parseUtil.ts@743..753",
+      "name": ""
+    },
+    {
+      "function": "src/v3/locales/en.ts@154..5106",
+      "name": "errorMap"
+    },
+    {
+      "function": "src/v4/classic/coerce.ts@1340..1502",
+      "name": "date"
+    },
+    {
+      "function": "src/v4/classic/coerce.ts@470..644",
+      "name": "number"
+    },
+    {
+      "function": "src/v4/classic/errors.ts@1757..2249",
+      "name": "_lazyMethod"
+    },
+    {
+      "function": "src/v4/classic/errors.ts@1938..2104",
+      "name": "get"
+    },
+    {
+      "function": "src/v4/classic/errors.ts@2271..3218",
+      "name": "initializer"
+    },
+    {
+      "function": "src/v4/classic/errors.ts@2539..2596",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/errors.ts@2549..2596",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/from-json-schema.ts@12501..29824",
+      "name": "convertBaseSchema"
+    },
+    {
+      "function": "src/v4/classic/from-json-schema.ts@2141..2680",
+      "name": "detectVersion"
+    },
+    {
+      "function": "src/v4/classic/from-json-schema.ts@29826..34482",
+      "name": "convertSchema"
+    },
+    {
+      "function": "src/v4/classic/from-json-schema.ts@34630..35756",
+      "name": "fromJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/iso.ts@225..360",
+      "name": "datetime"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@10051..10180",
+      "name": "describe"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@101573..101713",
+      "name": "stringbool"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@10186..10612",
+      "name": "meta"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@102153..102408",
+      "name": "json"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@102256..102382",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@102432..102739",
+      "name": "preprocess"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@11007..11332",
+      "name": "~standard"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@11445..11548",
+      "name": "_parse"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@11566..11696",
+      "name": "_parseAsync"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@11702..11783",
+      "name": "safeParse"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@11789..11886",
+      "name": "safeParseAsync"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@1187..1309",
+      "name": "_ensureDefaultMemoizer"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@12455..12561",
+      "name": "_decode"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@15088..15285",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@15206..15280",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@15983..16068",
+      "name": "min"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@16076..16161",
+      "name": "max"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@16539..16597",
+      "name": "trim"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@20652..20741",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@23152..23265",
+      "name": "string"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@23538..23633",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@24186..24285",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@26323..26448",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@26459..26567",
+      "name": "email"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@27205..27329",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@27340..27443",
+      "name": "uuid"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@28018..28141",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@28152..28250",
+      "name": "url"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@41771..41995",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@41890..41964",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@43222..43304",
+      "name": "max"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@43312..43373",
+      "name": "int"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@43534..43613",
+      "name": "nonnegative"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@44055..44168",
+      "name": "number"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@44469..44563",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@44644..44775",
+      "name": "int"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@46006..46196",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@46207..46325",
+      "name": "boolean"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@47610..47806",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@48651..48734",
+      "name": "positive"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@49142..49255",
+      "name": "bigint"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@51362..51546",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@51550..51654",
+      "name": "_null"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@52291..52481",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@52403..52478",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@52492..52562",
+      "name": "unknown"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@52744..52930",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@52941..53049",
+      "name": "never"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@54143..54482",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@54348..54404",
+      "name": "min"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@54868..54971",
+      "name": "date"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@55626..55883",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@55772..55845",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@56059..56135",
+      "name": "max"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@56283..56454",
+      "name": "array"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@60206..60515",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@60356..60430",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@60525..60594",
+      "name": "keyof"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@60835..60937",
+      "name": "passthrough"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@61045..61140",
+      "name": "strict"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@61248..61314",
+      "name": "extend"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@61464..61518",
+      "name": "pick"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@61524..61578",
+      "name": "omit"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@61584..61663",
+      "name": "partial"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@61780..61864",
+      "name": "required"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@61881..62230",
+      "name": "object"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@63189..63405",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@63299..63372",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@63416..63688",
+      "name": "union"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@65280..65379",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@65391..65880",
+      "name": "discriminatedUnion"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@66281..66489",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@66501..66776",
+      "name": "intersection"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@67340..67564",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@68595..69046",
+      "name": "tuple"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@69469..69750",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@69608..69682",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@69761..70469",
+      "name": "record"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@71953..72479",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@72490..72845",
+      "name": "map"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@73428..73891",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@73651..73698",
+      "name": "min"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@73902..74163",
+      "name": "set"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@74847..76081",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@74956..75028",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@76335..76613",
+      "name": "_enum"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@76481..76494",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@77496..77963",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@77608..77683",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@78253..78440",
+      "name": "literal"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@78937..79371",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@79382..79492",
+      "name": "file"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@79816..81061",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@80068..81056",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@81073..81285",
+      "name": "transform"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@81626..81876",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@81745..81821",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@8176..8324",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@81888..82076",
+      "name": "optional"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@83263..83513",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@8334..8710",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@83382..83458",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@83525..83713",
+      "name": "nullable"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@84258..84532",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@84370..84445",
+      "name": "processJSONSchema"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@84543..84971",
+      "name": "_default"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@84815..84955",
+      "name": "defaultValue"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@8513..8630",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@86328..86584",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@8777..8847",
+      "name": "clone"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@88028..88296",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@88300..88719",
+      "name": "_catch"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@8853..8887",
+      "name": "brand"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@88980..89162",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@89173..89271",
+      "name": "nan"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@89630..89857",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@8972..9049",
+      "name": "refine"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@90091..90318",
+      "name": "pipe"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9055..9152",
+      "name": "superRefine"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@90710..90789",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@90800..91395",
+      "name": "codec"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@92176..92266",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9232..9279",
+      "name": "optional"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@92610..92860",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@92872..93060",
+      "name": "readonly"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@93442..93656",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9348..9395",
+      "name": "nullable"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@93668..94000",
+      "name": "templateLiteral"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@94308..94539",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@94550..94702",
+      "name": "lazy"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@95031..95269",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@95280..95464",
+      "name": "promise"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@958..1056",
+      "name": "_ensureDefaultLocale"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9697..9758",
+      "name": "transform"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9764..9814",
+      "name": "default"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@98297..98485",
+      "name": ""
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9877..9933",
+      "name": "catch"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@98941..99132",
+      "name": "refine"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@99156..99356",
+      "name": "superRefine"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9939..9992",
+      "name": "pipe"
+    },
+    {
+      "function": "src/v4/classic/schemas.ts@9998..10045",
+      "name": "readonly"
+    },
+    {
+      "function": "src/v4/core/api.ts@17661..18022",
+      "name": "_isoDateTime"
+    },
+    {
+      "function": "src/v4/core/api.ts@20011..20244",
+      "name": "_number"
+    },
+    {
+      "function": "src/v4/core/api.ts@20277..20539",
+      "name": "_coercedNumber"
+    },
+    {
+      "function": "src/v4/core/api.ts@20572..20862",
+      "name": "_int"
+    },
+    {
+      "function": "src/v4/core/api.ts@22288..22499",
+      "name": "_boolean"
+    },
+    {
+      "function": "src/v4/core/api.ts@23086..23293",
+      "name": "_bigint"
+    },
+    {
+      "function": "src/v4/core/api.ts@24941..25134",
+      "name": "_null"
+    },
+    {
+      "function": "src/v4/core/api.ts@25459..25590",
+      "name": "_unknown"
+    },
+    {
+      "function": "src/v4/core/api.ts@25693..25890",
+      "name": "_never"
+    },
+    {
+      "function": "src/v4/core/api.ts@26293..26486",
+      "name": "_date"
+    },
+    {
+      "function": "src/v4/core/api.ts@26518..26742",
+      "name": "_coercedDate"
+    },
+    {
+      "function": "src/v4/core/api.ts@26839..27028",
+      "name": "_nan"
+    },
+    {
+      "function": "src/v4/core/api.ts@2745..2956",
+      "name": "snapshotChecks"
+    },
+    {
+      "function": "src/v4/core/api.ts@27552..27819",
+      "name": "_lte"
+    },
+    {
+      "function": "src/v4/core/api.ts@28062..28321",
+      "name": "_gt"
+    },
+    {
+      "function": "src/v4/core/api.ts@28354..28612",
+      "name": "_gte"
+    },
+    {
+      "function": "src/v4/core/api.ts@2988..3209",
+      "name": "_string"
+    },
+    {
+      "function": "src/v4/core/api.ts@30223..30466",
+      "name": "_minSize"
+    },
+    {
+      "function": "src/v4/core/api.ts@30975..31247",
+      "name": "_maxLength"
+    },
+    {
+      "function": "src/v4/core/api.ts@31379..31634",
+      "name": "_minLength"
+    },
+    {
+      "function": "src/v4/core/api.ts@35677..35865",
+      "name": "_overwrite"
+    },
+    {
+      "function": "src/v4/core/api.ts@36120..36221",
+      "name": "_trim"
+    },
+    {
+      "function": "src/v4/core/api.ts@36194..36217",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/api.ts@36845..37174",
+      "name": "_array"
+    },
+    {
+      "function": "src/v4/core/api.ts@3931..4225",
+      "name": "_email"
+    },
+    {
+      "function": "src/v4/core/api.ts@45764..45959",
+      "name": "_file"
+    },
+    {
+      "function": "src/v4/core/api.ts@4964..5253",
+      "name": "_uuid"
+    },
+    {
+      "function": "src/v4/core/api.ts@51560..51911",
+      "name": "_refine"
+    },
+    {
+      "function": "src/v4/core/api.ts@52920..53810",
+      "name": "_superRefine"
+    },
+    {
+      "function": "src/v4/core/api.ts@53095..53785",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/api.ts@53153..53719",
+      "name": "addIssue"
+    },
+    {
+      "function": "src/v4/core/api.ts@53843..54092",
+      "name": "_check"
+    },
+    {
+      "function": "src/v4/core/api.ts@55308..57534",
+      "name": "_stringbool"
+    },
+    {
+      "function": "src/v4/core/api.ts@55856..55908",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/api.ts@55943..55995",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/api.ts@56536..57103",
+      "name": "transform"
+    },
+    {
+      "function": "src/v4/core/api.ts@7084..7368",
+      "name": "_url"
+    },
+    {
+      "function": "src/v4/core/checks.ts@1208..1313",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@1430..1570",
+      "name": "_whenHasSize"
+    },
+    {
+      "function": "src/v4/core/checks.ts@14823..15292",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@14936..15287",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/checks.ts@1691..1833",
+      "name": "_whenHasLength"
+    },
+    {
+      "function": "src/v4/core/checks.ts@17285..18095",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@17400..18090",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/checks.ts@18781..19628",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@18896..19623",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/checks.ts@22532..23069",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@22628..23025",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/checks.ts@2634..3281",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@2794..3276",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/checks.ts@36935..37076",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@37006..37071",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/checks.ts@4011..4660",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@4171..4655",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/checks.ts@8879..11385",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/checks.ts@9175..11380",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/core.ts@1590..2006",
+      "name": "newError"
+    },
+    {
+      "function": "src/v4/core/core.ts@2040..6219",
+      "name": "$constructor"
+    },
+    {
+      "function": "src/v4/core/core.ts@2829..2942",
+      "name": "Internals"
+    },
+    {
+      "function": "src/v4/core/core.ts@3200..4850",
+      "name": "init"
+    },
+    {
+      "function": "src/v4/core/core.ts@5058..5885",
+      "name": "_"
+    },
+    {
+      "function": "src/v4/core/core.ts@6000..6138",
+      "name": "value"
+    },
+    {
+      "function": "src/v4/core/core.ts@9586..9730",
+      "name": "config"
+    },
+    {
+      "function": "src/v4/core/doc.ts@1015..1053",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/doc.ts@1088..1113",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/doc.ts@1119..1157",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/doc.ts@1239..1532",
+      "name": "compile"
+    },
+    {
+      "function": "src/v4/core/doc.ts@256..380",
+      "name": "constructor"
+    },
+    {
+      "function": "src/v4/core/doc.ts@691..1235",
+      "name": "write"
+    },
+    {
+      "function": "src/v4/core/doc.ts@960..968",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/errors.ts@10311..10644",
+      "name": "node"
+    },
+    {
+      "function": "src/v4/core/errors.ts@10841..11262",
+      "name": "flattenError"
+    },
+    {
+      "function": "src/v4/core/errors.ts@10899..10934",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/errors.ts@11135..11143",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/errors.ts@11878..14293",
+      "name": "formatError"
+    },
+    {
+      "function": "src/v4/core/errors.ts@11935..11970",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/errors.ts@12071..14245",
+      "name": "processError"
+    },
+    {
+      "function": "src/v4/core/errors.ts@14941..17153",
+      "name": "treeifyError"
+    },
+    {
+      "function": "src/v4/core/errors.ts@14999..15034",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/errors.ts@15127..17110",
+      "name": "processError"
+    },
+    {
+      "function": "src/v4/core/errors.ts@17796..18378",
+      "name": "toDotPath"
+    },
+    {
+      "function": "src/v4/core/errors.ts@17971..18026",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/errors.ts@18387..18856",
+      "name": "prettifyError"
+    },
+    {
+      "function": "src/v4/core/errors.ts@18554..18609",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/errors.ts@8346..9515",
+      "name": "initializer"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@11624..11697",
+      "name": "unknownProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@11950..12428",
+      "name": "enumProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@12280..12308",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@12352..12380",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@12495..14025",
+      "name": "literalProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@16685..17137",
+      "name": "arrayProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@1724..1877",
+      "name": "narrowMin"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@18058..19720",
+      "name": "objectProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@1897..2050",
+      "name": "narrowMax"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@19783..20347",
+      "name": "unionProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@20118..20252",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@2375..2485",
+      "name": "addPattern"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@24226..26614",
+      "name": "stringifyKeyNames"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@26807..28267",
+      "name": "rewriteKeyNames"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@2784..2905",
+      "name": "setFormat"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@28331..30634",
+      "name": "recordProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@29679..29705",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@3004..3056",
+      "name": "minContributor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@30703..31052",
+      "name": "nullableProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@3094..3146",
+      "name": "maxContributor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@31676..32228",
+      "name": "serializeDefaultValue"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@3176..3418",
+      "name": "formatContributor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@31920..32027",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@32294..32673",
+      "name": "defaultProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@3235..3418",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@34739..34950",
+      "name": "optionalProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@3489..3576",
+      "name": "greater_than"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@36844..38354",
+      "name": "toJSONSchema"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@4102..4366",
+      "name": "string_format"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@4436..5898",
+      "name": "aggregateChecks"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@6484..6532",
+      "name": "exactPattern"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@6597..7906",
+      "name": "stringProcessor"
+    },
+    {
+      "function": "src/v4/core/json-schema-processors.ts@7971..10103",
+      "name": "numberProcessor"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@1017..1122",
+      "name": "isRef"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@11744..11796",
+      "name": "memoizer"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@11885..12078",
+      "name": "isBackEdge"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@1770..6039",
+      "name": "isRecursive"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@2109..2281",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@2405..3098",
+      "name": "shape"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@3117..3184",
+      "name": "merge"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@6148..6290",
+      "name": "settle"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@6832..7051",
+      "name": "bucketFor"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@7491..7754",
+      "name": "alloc"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@7759..8392",
+      "name": "guard"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@7832..8386",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@7898..8287",
+      "name": "wrapped"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@8397..11584",
+      "name": "attach"
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@8969..11578",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/memoizer.ts@9036..11478",
+      "name": "wrapped"
+    },
+    {
+      "function": "src/v4/core/parse.ts@10206..10425",
+      "name": "_decodeAsync"
+    },
+    {
+      "function": "src/v4/core/parse.ts@10772..10974",
+      "name": "_safeEncode"
+    },
+    {
+      "function": "src/v4/core/parse.ts@11318..11404",
+      "name": "_safeDecode"
+    },
+    {
+      "function": "src/v4/core/parse.ts@11772..11985",
+      "name": "_safeEncodeAsync"
+    },
+    {
+      "function": "src/v4/core/parse.ts@12368..12465",
+      "name": "_safeDecodeAsync"
+    },
+    {
+      "function": "src/v4/core/parse.ts@1815..2409",
+      "name": "_parseAsync"
+    },
+    {
+      "function": "src/v4/core/parse.ts@1853..2393",
+      "name": "fn"
+    },
+    {
+      "function": "src/v4/core/parse.ts@2744..3134",
+      "name": "_safeParse"
+    },
+    {
+      "function": "src/v4/core/parse.ts@2754..3134",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/parse.ts@3589..4395",
+      "name": "failure"
+    },
+    {
+      "function": "src/v4/core/parse.ts@3778..4165",
+      "name": "error"
+    },
+    {
+      "function": "src/v4/core/parse.ts@3847..3899",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/parse.ts@422..584",
+      "name": "finalizeParams"
+    },
+    {
+      "function": "src/v4/core/parse.ts@4663..5035",
+      "name": "_safeParseAsync"
+    },
+    {
+      "function": "src/v4/core/parse.ts@4673..5035",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/parse.ts@8340..8645",
+      "name": "_encode"
+    },
+    {
+      "function": "src/v4/core/parse.ts@865..1479",
+      "name": "_parse"
+    },
+    {
+      "function": "src/v4/core/parse.ts@8969..9156",
+      "name": "_decode"
+    },
+    {
+      "function": "src/v4/core/parse.ts@898..1463",
+      "name": "fn"
+    },
+    {
+      "function": "src/v4/core/parse.ts@9033..9140",
+      "name": "fn"
+    },
+    {
+      "function": "src/v4/core/parse.ts@9504..9843",
+      "name": "_encodeAsync"
+    },
+    {
+      "function": "src/v4/core/regexes.ts@11051..11194",
+      "name": "fixedBase64"
+    },
+    {
+      "function": "src/v4/core/regexes.ts@11272..11374",
+      "name": "fixedBase64url"
+    },
+    {
+      "function": "src/v4/core/regexes.ts@1775..2147",
+      "name": "uuid"
+    },
+    {
+      "function": "src/v4/core/regexes.ts@8412..8491",
+      "name": "anchor"
+    },
+    {
+      "function": "src/v4/core/regexes.ts@8556..9041",
+      "name": "timeSource"
+    },
+    {
+      "function": "src/v4/core/regexes.ts@9243..9898",
+      "name": "datetime"
+    },
+    {
+      "function": "src/v4/core/registries.ts@1109..1441",
+      "name": "add"
+    },
+    {
+      "function": "src/v4/core/registries.ts@1777..2222",
+      "name": "get"
+    },
+    {
+      "function": "src/v4/core/registries.ts@2564..2712",
+      "name": "registry"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@102270..102678",
+      "name": "getTupleOptStart"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@102680..102913",
+      "name": "handleTupleResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@102915..104558",
+      "name": "handleTupleResults"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@10344..11227",
+      "name": "run"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@108148..114861",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@108279..114858",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@115991..117472",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@116122..117443",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@117476..118588",
+      "name": "handleMapResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@119453..120577",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@119584..120548",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@120581..120770",
+      "name": "handleSetResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@121999..122872",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@122629..122869",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@12282..12819",
+      "name": "standardProps"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@123731..124665",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@124387..124660",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@127178..127501",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@127244..127498",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@128384..129096",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@128533..129091",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@129979..130374",
+      "name": "handleOptionalResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@130490..132071",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@130688..130774",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@131273..132066",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@134704..135522",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@134794..134831",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@134878..134916",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@135327..135517",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@136596..137959",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@136818..137954",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@137964..138137",
+      "name": "handleDefaultResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@140758..141283",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@141016..141278",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@14114..14694",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@141288..141588",
+      "name": "handleNonOptionalResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@14360..14691",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@145519..146452",
+      "name": "handleCatchResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@146339..146391",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@146554..147365",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@146917..147362",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@148056..148411",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@148122..148408",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@149779..150664",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@150156..150661",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@150668..151220",
+      "name": "handlePipeResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@152467..153413",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@152844..153410",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@153417..154265",
+      "name": "handleCodecAResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@15376..15528",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@154267..154563",
+      "name": "handleCodecTxResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@155623..155673",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@156694..157446",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@157114..157441",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@157451..157736",
+      "name": "handleReadonlyResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@160798..162025",
+      "name": "leafPattern"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@162279..163075",
+      "name": "partPattern"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@163212..164601",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@163969..164596",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@16510..16952",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@171729..171949",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@172952..173907",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@173250..173420",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@17366..17465",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@173801..173904",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@174951..175379",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@175117..175376",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@175253..175303",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@175383..175924",
+      "name": "handleRefineResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@18078..18307",
+      "name": "canParseURL"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@18316..18660",
+      "name": "validateURL"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@19905..20006",
+      "name": "stripTabAndNewline"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@20431..22284",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@20504..22281",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@27443..27550",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@43286..44052",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@43390..44049",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@44907..45029",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@45860..46349",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@45971..46344",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@47304..47744",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@47408..47741",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@51687..52059",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@51827..52056",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@53469..53564",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@53539..53559",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@54252..54492",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@56306..56910",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@56372..56907",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@57796..58704",
+      "name": "capSize"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@57982..57993",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@58050..58701",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@58724..58794",
+      "name": "arraySize"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@58969..59207",
+      "name": "handleArrayResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@59309..60702",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@59441..60671",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@63365..64743",
+      "name": "handlePropertyResult"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@66314..67186",
+      "name": "normalizeDef"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@67188..69264",
+      "name": "handleCatchall"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@69369..72470",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@69933..70081",
+      "name": "get"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@70190..70213",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@70263..70932",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@71130..72467",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@7162..11238",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@72588..77976",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@72781..72804",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@72883..76926",
+      "name": "generateFastpass"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@73181..73259",
+      "name": "parseStr"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@73460..73920",
+      "name": "prefixStr"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@77278..77971",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@7915..7971",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@8011..9695",
+      "name": "runChecks"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@80384..82243",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@81469..82240",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@86840..87630",
+      "name": "discriminatorMap"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@87989..90992",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@89299..89558",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@89591..89618",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@89644..90987",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@8978..9266",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@90841..90882",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@92273..92866",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@92343..92861",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@92878..94556",
+      "name": "mergeValues"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@93365..93399",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@94558..96695",
+      "name": "handleIntersectionResults"
+    },
+    {
+      "function": "src/v4/core/schemas.ts@9604..9651",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@99189..102266",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/schemas.ts@99347..102263",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@11801..16611",
+      "name": "extractDefs"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@13091..14528",
+      "name": "makeURI"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@14631..15229",
+      "name": "extractToDef"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@17257..18385",
+      "name": "compactTypeUnion"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@24263..31705",
+      "name": "finalize"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@24580..27267",
+      "name": "flattenRef"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@34620..35017",
+      "name": "createStandardJSONSchemaMethod"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@351..671",
+      "name": "assignProps"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@7182..8118",
+      "name": "initializeContext"
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@7796..7804",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/to-json-schema.ts@9100..11374",
+      "name": "processSchema"
+    },
+    {
+      "function": "src/v4/core/util.ts@10426..10710",
+      "name": "getEnumValues"
+    },
+    {
+      "function": "src/v4/core/util.ts@10537..10565",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@10621..10665",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@10676..10689",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@10719..10870",
+      "name": "joinValues"
+    },
+    {
+      "function": "src/v4/core/util.ts@10818..10850",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@11275..11365",
+      "name": "constructor"
+    },
+    {
+      "function": "src/v4/core/util.ts@11369..11551",
+      "name": "value"
+    },
+    {
+      "function": "src/v4/core/util.ts@11562..11644",
+      "name": "cached"
+    },
+    {
+      "function": "src/v4/core/util.ts@11653..11742",
+      "name": "nullish"
+    },
+    {
+      "function": "src/v4/core/util.ts@11751..11953",
+      "name": "cleanRegex"
+    },
+    {
+      "function": "src/v4/core/util.ts@12604..13260",
+      "name": "defineLazy"
+    },
+    {
+      "function": "src/v4/core/util.ts@12799..13079",
+      "name": "get"
+    },
+    {
+      "function": "src/v4/core/util.ts@13406..13666",
+      "name": "assignProp"
+    },
+    {
+      "function": "src/v4/core/util.ts@14302..14499",
+      "name": "rawShape"
+    },
+    {
+      "function": "src/v4/core/util.ts@14694..14842",
+      "name": "sourceShape"
+    },
+    {
+      "function": "src/v4/core/util.ts@15554..15711",
+      "name": "putProp"
+    },
+    {
+      "function": "src/v4/core/util.ts@16112..16686",
+      "name": "mirrorShape"
+    },
+    {
+      "function": "src/v4/core/util.ts@16754..17096",
+      "name": "mirrorProps"
+    },
+    {
+      "function": "src/v4/core/util.ts@17105..17437",
+      "name": "mergeDefs"
+    },
+    {
+      "function": "src/v4/core/util.ts@18382..18449",
+      "name": "esc"
+    },
+    {
+      "function": "src/v4/core/util.ts@18834..18980",
+      "name": "isObject"
+    },
+    {
+      "function": "src/v4/core/util.ts@19050..19492",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@19503..20025",
+      "name": "isPlainObject"
+    },
+    {
+      "function": "src/v4/core/util.ts@20034..20250",
+      "name": "shallowClone"
+    },
+    {
+      "function": "src/v4/core/util.ts@21929..22027",
+      "name": "escapeRegex"
+    },
+    {
+      "function": "src/v4/core/util.ts@22058..22300",
+      "name": "clone"
+    },
+    {
+      "function": "src/v4/core/util.ts@22804..23321",
+      "name": "normalizeParams"
+    },
+    {
+      "function": "src/v4/core/util.ts@24346..24536",
+      "name": "stringifyPrimitive"
+    },
+    {
+      "function": "src/v4/core/util.ts@24545..24743",
+      "name": "optionalKeys"
+    },
+    {
+      "function": "src/v4/core/util.ts@24640..24739",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@25437..25684",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@25980..26488",
+      "name": "pick"
+    },
+    {
+      "function": "src/v4/core/util.ts@26586..27052",
+      "name": "maskedKeys"
+    },
+    {
+      "function": "src/v4/core/util.ts@27061..27661",
+      "name": "omit"
+    },
+    {
+      "function": "src/v4/core/util.ts@27549..27575",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@27670..28513",
+      "name": "extend"
+    },
+    {
+      "function": "src/v4/core/util.ts@28571..28840",
+      "name": "extended"
+    },
+    {
+      "function": "src/v4/core/util.ts@29896..30721",
+      "name": "partial"
+    },
+    {
+      "function": "src/v4/core/util.ts@30512..30620",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@30730..31294",
+      "name": "required"
+    },
+    {
+      "function": "src/v4/core/util.ts@31058..31206",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@31551..31802",
+      "name": "aborted"
+    },
+    {
+      "function": "src/v4/core/util.ts@32005..32267",
+      "name": "explicitlyAborted"
+    },
+    {
+      "function": "src/v4/core/util.ts@32276..32494",
+      "name": "prefixIssues"
+    },
+    {
+      "function": "src/v4/core/util.ts@32393..32490",
+      "name": ""
+    },
+    {
+      "function": "src/v4/core/util.ts@32503..32674",
+      "name": "unwrapMessage"
+    },
+    {
+      "function": "src/v4/core/util.ts@33101..33546",
+      "name": "sizeCaps"
+    },
+    {
+      "function": "src/v4/core/util.ts@33555..33748",
+      "name": "attachSchema"
+    },
+    {
+      "function": "src/v4/core/util.ts@33757..35569",
+      "name": "finalizeIssue"
+    },
+    {
+      "function": "src/v4/core/util.ts@36114..36448",
+      "name": "codePointLength"
+    },
+    {
+      "function": "src/v4/core/util.ts@36457..36647",
+      "name": "getLengthableOrigin"
+    },
+    {
+      "function": "src/v4/core/util.ts@36656..37224",
+      "name": "parsedType"
+    },
+    {
+      "function": "src/v4/core/util.ts@37422..37695",
+      "name": "issue"
+    },
+    {
+      "function": "src/v4/core/util.ts@40265..40871",
+      "name": "members"
+    },
+    {
+      "function": "src/v4/core/util.ts@40986..41180",
+      "name": "own"
+    },
+    {
+      "function": "src/v4/core/util.ts@41301..41405",
+      "name": "hide"
+    },
+    {
+      "function": "src/v4/core/util.ts@41617..42207",
+      "name": "derived"
+    },
+    {
+      "function": "src/v4/core/util.ts@42209..42648",
+      "name": "defineBound"
+    },
+    {
+      "function": "src/v4/core/util.ts@42350..42566",
+      "name": "get"
+    },
+    {
+      "function": "src/v4/core/util.ts@42751..43048",
+      "name": "claim"
+    },
+    {
+      "function": "src/v4/core/util.ts@44235..45837",
+      "name": "defineLazyInternal"
+    },
+    {
+      "function": "src/v4/core/util.ts@44749..45697",
+      "name": "get"
+    },
+    {
+      "function": "src/v4/core/util.ts@46153..47330",
+      "name": "installLazyProp"
+    },
+    {
+      "function": "src/v4/core/util.ts@47982..48134",
+      "name": "constantCatch"
+    },
+    {
+      "function": "src/v4/core/util.ts@48042..48053",
+      "name": "fn"
+    },
+    {
+      "function": "src/v4/locales/de.ts@193..4455",
+      "name": "error"
+    },
+    {
+      "function": "src/v4/locales/de.ts@4473..4568",
+      "name": ""
+    },
+    {
+      "function": "src/v4/locales/en.ts@1856..2105",
+      "name": "getTypeName"
+    },
+    {
+      "function": "src/v4/locales/en.ts@193..4977",
+      "name": "error"
+    },
+    {
+      "function": "src/v4/locales/en.ts@2116..4974",
+      "name": ""
+    },
+    {
+      "function": "src/v4/locales/en.ts@4995..5090",
+      "name": ""
+    },
+    {
+      "function": "src/v4/locales/en.ts@515..630",
+      "name": "getSizing"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@19635..19725",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@19761..19897",
+      "name": "number"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@20261..20359",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@20473..20616",
+      "name": "int"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@2066..2246",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@21988..22079",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@22115..22257",
+      "name": "boolean"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@2495..2592",
+      "name": "parse"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@28128..28217",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@28365..28589",
+      "name": "array"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@2900..3277",
+      "name": "check"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@29250..29419",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@29454..29797",
+      "name": "object"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@3081..3198",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@3283..3355",
+      "name": "clone"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@33121..33693",
+      "name": "partial"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@36150..36239",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@36275..36550",
+      "name": "union"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@4072..4162",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@4198..4334",
+      "name": "string"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@47406..47499",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@47535..47753",
+      "name": "transform"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@48092..48184",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@48220..48411",
+      "name": "optional"
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@54652..54740",
+      "name": ""
+    },
+    {
+      "function": "src/v4/mini/schemas.ts@54776..55126",
+      "name": "pipe"
+    }
+  ],
   "edges": [
     {
       "kind": "call",

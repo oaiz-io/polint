@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
-    Argument, AssignmentTarget, BinaryOperator, BindingPattern, Class, Expression, FunctionType,
-    MethodDefinition, MethodDefinitionKind, ObjectPropertyKind, Program, PropertyKey,
+    Argument, AssignmentTarget, BinaryOperator, BindingPattern, Class, Expression, Function,
+    FunctionType, MethodDefinition, MethodDefinitionKind, ObjectPropertyKind, Program, PropertyKey,
     VariableDeclarator,
 };
 use oxc_semantic::{AstNodes, NodeId, Scoping, SemanticBuilder, SymbolId as OxcSymbolId};
@@ -177,11 +177,7 @@ impl<'a> ObjectModelExtractor<'a> {
                     self.record_new_expression(node_id, expression, &mut output);
                 }
                 AstKind::Function(function)
-                    if !matches!(function.r#type, FunctionType::FunctionDeclaration)
-                        && !matches!(
-                            self.nodes.parent_kind(node_id),
-                            AstKind::MethodDefinition(_)
-                        ) =>
+                    if allocates_function_object(self.nodes, node_id, function) =>
                 {
                     output.allocations.push(
                         self.allocation_row(
@@ -1110,6 +1106,20 @@ fn insert_unique<K: Ord, V: PartialEq>(map: &mut BTreeMap<K, Option<V>>, key: K,
     }
 }
 
+/// Whether `function` is a function expression this model allocates an object
+/// for. Declarations and methods get theirs elsewhere, and a function without a
+/// body (an overload signature, an ambient `declare function` or an abstract
+/// member) is a type, not a value: no call reaches it.
+fn allocates_function_object(
+    nodes: &AstNodes<'_>,
+    node_id: NodeId,
+    function: &Function<'_>,
+) -> bool {
+    function.body.is_some()
+        && !matches!(function.r#type, FunctionType::FunctionDeclaration)
+        && !matches!(nodes.parent_kind(node_id), AstKind::MethodDefinition(_))
+}
+
 fn allocation_kind_for_node(
     nodes: &AstNodes<'_>,
     node_id: NodeId,
@@ -1118,10 +1128,7 @@ fn allocation_kind_for_node(
     match kind {
         AstKind::ObjectExpression(_) => Some(TsObjectAllocationKind::ObjectLiteral),
         AstKind::ArrayExpression(_) => Some(TsObjectAllocationKind::ArrayLiteral),
-        AstKind::Function(function)
-            if !matches!(function.r#type, FunctionType::FunctionDeclaration)
-                && !matches!(nodes.parent_kind(node_id), AstKind::MethodDefinition(_)) =>
-        {
+        AstKind::Function(function) if allocates_function_object(nodes, node_id, function) => {
             Some(TsObjectAllocationKind::FunctionObject)
         }
         AstKind::ArrowFunctionExpression(_) => Some(TsObjectAllocationKind::FunctionObject),
@@ -1415,6 +1422,25 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn functions_without_a_body_allocate_no_function_object() {
+        let output = extract(
+            r#"
+function pick(x: string): string;
+function pick(x: any) { return x; }
+declare function ambient(x: string): void;
+const run = function () {};
+"#,
+        );
+
+        let function_objects = output
+            .allocations
+            .iter()
+            .filter(|allocation| allocation.kind == TsObjectAllocationKind::FunctionObject)
+            .count();
+        assert_eq!(function_objects, 1, "{:#?}", output.allocations);
+    }
 
     #[test]
     fn object_literal_shorthand_yields_allocation_and_static_property_write() {

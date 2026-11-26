@@ -25,7 +25,7 @@ use crate::analysis_neutral::mir_body::{
 use crate::analysis_neutral::mir_op::{
     AssignMode, BranchNilTest, ConservativeAction, MirAggregateField, MirAggregateKind,
     MirOperation, MirOperationKind, MirValue, UnsupportedDomain, UnsupportedPrecision,
-    UnsupportedSemanticFact,
+    UnsupportedSemanticFact, source_evidence_excerpt,
 };
 use crate::analysis_neutral::places::{
     PlaceInsert, PlaceProjection, PlaceRoot, PlaceStableContext, PlaceStatus, PlaceTableBuilder,
@@ -59,7 +59,7 @@ pub fn lower_ts_mir(db: &impl AnalysisHost) -> MirOutput {
         lowering.lower_file(interner, db, &index, file);
     }
 
-    let (places, place_types) = lowering.places.clone().finish_with_types(interner);
+    let (places, place_types) = std::mem::take(&mut lowering.places).finish_with_types(interner);
     let place_ids = places
         .iter()
         .map(|place| (interner.resolve(place.stable_key).to_string(), place.id))
@@ -659,6 +659,15 @@ impl TsMirLowering {
                 closure_capture_names.clone(),
             );
             function_lowering.lower_parameters(&function.parameters, &mut self.places);
+            if let Some(formals) = function.formals {
+                function_lowering.lower_parameter_expressions(
+                    interner,
+                    formals,
+                    &mut self.places,
+                    &mut self.operations,
+                    &mut self.unsupported,
+                );
+            }
             match function.body {
                 CandidateBody::Statements(statements) => function_lowering.lower_statements(
                     interner,
@@ -760,6 +769,8 @@ struct TsFunctionCandidate<'ast> {
     name: String,
     span: oxc_span::Span,
     parameters: Vec<String>,
+    /// The parameter list, whose defaults and destructuring keys run on entry.
+    formals: Option<&'ast FormalParameters<'ast>>,
     body: CandidateBody<'ast>,
 }
 
@@ -877,15 +888,17 @@ fn collect_statement_functions<'ast>(
             }
         }
         Statement::ExportDefaultDeclaration(export) => match &export.declaration {
+            // An anonymous default function or class is named by its span, as
+            // the frontend names its FunctionFact.
             ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
-                if let Some(name) = function.id.as_ref().map(|id| id.name.to_string()) {
-                    collect_function(name, function.span, function, functions);
-                }
+                let name = function.id.as_ref().map_or_else(
+                    || anonymous_callable_name(function.span.start, function.span.end),
+                    |id| id.name.to_string(),
+                );
+                collect_function(name, function.span, function, functions);
             }
             ExportDefaultDeclarationKind::ClassDeclaration(class) => {
-                if let Some(name) = class.id.as_ref().map(|id| id.name.to_string()) {
-                    collect_class_functions(&name, class, functions);
-                }
+                collect_class_functions(&class_callable_name(class), class, functions);
             }
             _ => {}
         },
@@ -903,9 +916,7 @@ fn collect_declaration_functions<'ast>(
             if let Some(name) = function.id.as_ref().map(|id| id.name.to_string()) {
                 collect_function(name, function.span, function, functions);
             }
-            if let Some(body) = function.body.as_deref() {
-                collect_anonymous_functions_from_body(body, functions);
-            }
+            collect_anonymous_functions_from_function(function, functions);
         }
         Declaration::VariableDeclaration(variable) => {
             for declarator in &variable.declarations {
@@ -937,6 +948,7 @@ fn collect_variable_function<'ast>(
                 name: name.name.to_string(),
                 span: function.span,
                 parameters: parameter_names(&function.params),
+                formals: Some(&function.params),
                 body: arrow_candidate_body(function),
             });
         }
@@ -946,6 +958,7 @@ fn collect_variable_function<'ast>(
                     name: name.name.to_string(),
                     span: function.span,
                     parameters: parameter_names(&function.params),
+                    formals: Some(&function.params),
                     body: CandidateBody::Statements(&body.statements),
                 });
             }
@@ -965,6 +978,7 @@ fn collect_function<'ast>(
             name,
             span,
             parameters: parameter_names(&function.params),
+            formals: Some(&function.params),
             body: CandidateBody::Statements(&body.statements),
         });
     }
@@ -988,15 +1002,14 @@ fn collect_class_functions<'ast>(
             {
                 collect_function(class_name.to_string(), class.span, &method.value, functions);
             }
+            // A computed key has no static name; the method is named by its
+            // span, as the frontend names its FunctionFact.
             ClassElement::MethodDefinition(method) => {
-                if let Some(method_name) = method_name(method) {
-                    collect_function(
-                        format!("{class_name}.{method_name}"),
-                        method.span,
-                        &method.value,
-                        functions,
-                    );
-                }
+                let name = method_name(method).map_or_else(
+                    || anonymous_callable_name(method.span.start, method.span.end),
+                    |method_name| format!("{class_name}.{method_name}"),
+                );
+                collect_function(name, method.span, &method.value, functions);
             }
             // A class static block (`static { … }`) executes at class-definition
             // time and is its own function in Jelly's model. Lower its statement
@@ -1008,6 +1021,7 @@ fn collect_class_functions<'ast>(
                     name: anonymous_callable_name(block.span.start, block.span.end),
                     span: block.span,
                     parameters: Vec::new(),
+                    formals: None,
                     body: CandidateBody::Statements(&block.body),
                 });
             }
@@ -1023,6 +1037,7 @@ fn collect_class_functions<'ast>(
                         name: anonymous_callable_name(span.start, span.end),
                         span,
                         parameters: Vec::new(),
+                        formals: None,
                         body: CandidateBody::Expression(value),
                     });
                 }
@@ -1049,15 +1064,33 @@ fn collect_anonymous_functions_from_statement<'ast>(
 ) {
     match statement {
         Statement::BlockStatement(block) => {
-            for statement in &block.body {
-                collect_anonymous_functions_from_statement(statement, functions);
-            }
+            collect_anonymous_functions_from_statements(&block.body, functions);
         }
         Statement::ExpressionStatement(statement) => {
             collect_anonymous_functions_from_expression(&statement.expression, true, functions);
         }
+        Statement::TryStatement(statement) => {
+            collect_anonymous_functions_from_statements(&statement.block.body, functions);
+            if let Some(handler) = &statement.handler {
+                if let Some(parameter) = &handler.param {
+                    collect_anonymous_functions_from_binding_pattern(&parameter.pattern, functions);
+                }
+                collect_anonymous_functions_from_statements(&handler.body.body, functions);
+            }
+            if let Some(finalizer) = &statement.finalizer {
+                collect_anonymous_functions_from_statements(&finalizer.body, functions);
+            }
+        }
+        Statement::LabeledStatement(statement) => {
+            collect_anonymous_functions_from_statement(&statement.body, functions);
+        }
+        Statement::WithStatement(statement) => {
+            collect_anonymous_functions_from_expression(&statement.object, true, functions);
+            collect_anonymous_functions_from_statement(&statement.body, functions);
+        }
         Statement::VariableDeclaration(variable) => {
             for declarator in &variable.declarations {
+                collect_anonymous_functions_from_binding_pattern(&declarator.id, functions);
                 if let Some(init) = &declarator.init {
                     // `include_self = true` mirrors the frontend: a nested
                     // `const x = function(){}` init function gets its own MIR body
@@ -1076,9 +1109,7 @@ fn collect_anonymous_functions_from_statement<'ast>(
             if let Some(name) = function.id.as_ref().map(|id| id.name.to_string()) {
                 collect_function(name, function.span, function, functions);
             }
-            if let Some(body) = function.body.as_deref() {
-                collect_anonymous_functions_from_body(body, functions);
-            }
+            collect_anonymous_functions_from_function(function, functions);
         }
         Statement::ReturnStatement(statement) => {
             if let Some(argument) = &statement.argument {
@@ -1156,15 +1187,14 @@ fn collect_anonymous_functions_from_statement<'ast>(
         Statement::ExportNamedDeclaration(export) => match &export.declaration {
             Some(Declaration::VariableDeclaration(variable)) => {
                 for declarator in &variable.declarations {
+                    collect_anonymous_functions_from_binding_pattern(&declarator.id, functions);
                     if let Some(init) = &declarator.init {
                         collect_anonymous_functions_from_expression(init, true, functions);
                     }
                 }
             }
             Some(Declaration::FunctionDeclaration(function)) => {
-                if let Some(body) = function.body.as_deref() {
-                    collect_anonymous_functions_from_body(body, functions);
-                }
+                collect_anonymous_functions_from_function(function, functions);
             }
             Some(Declaration::ClassDeclaration(class)) => {
                 collect_anonymous_functions_from_class(class, functions);
@@ -1173,9 +1203,7 @@ fn collect_anonymous_functions_from_statement<'ast>(
         },
         Statement::ExportDefaultDeclaration(export) => match &export.declaration {
             ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
-                if let Some(body) = function.body.as_deref() {
-                    collect_anonymous_functions_from_body(body, functions);
-                }
+                collect_anonymous_functions_from_function(function, functions);
             }
             ExportDefaultDeclarationKind::ClassDeclaration(class) => {
                 collect_anonymous_functions_from_class(class, functions);
@@ -1201,14 +1229,20 @@ fn collect_anonymous_functions_from_class<'ast>(
     // shared with the frontend so the names always agree.
     let class_name = class_callable_name(class);
     collect_class_functions(&class_name, class, functions);
+    if let Some(super_class) = &class.super_class {
+        collect_anonymous_functions_from_expression(super_class, true, functions);
+    }
     for element in &class.body.body {
         match element {
             ClassElement::MethodDefinition(method) => {
-                if let Some(body) = method.value.body.as_deref() {
-                    collect_anonymous_functions_from_body(body, functions);
-                }
+                collect_anonymous_functions_from_function(&method.value, functions);
             }
             ClassElement::PropertyDefinition(property) => {
+                if let Some(value) = &property.value {
+                    collect_anonymous_functions_from_expression(value, true, functions);
+                }
+            }
+            ClassElement::AccessorProperty(property) => {
                 if let Some(value) = &property.value {
                     collect_anonymous_functions_from_expression(value, true, functions);
                 }
@@ -1227,8 +1261,80 @@ fn collect_anonymous_functions_from_body<'ast>(
     body: &'ast FunctionBody<'ast>,
     functions: &mut Vec<TsFunctionCandidate<'ast>>,
 ) {
-    for statement in &body.statements {
+    collect_anonymous_functions_from_statements(&body.statements, functions);
+}
+
+fn collect_anonymous_functions_from_statements<'ast>(
+    statements: &'ast [Statement<'ast>],
+    functions: &mut Vec<TsFunctionCandidate<'ast>>,
+) {
+    for statement in statements {
         collect_anonymous_functions_from_statement(statement, functions);
+    }
+}
+
+/// Parameter defaults and then the body, mirroring the frontend walk so every
+/// callable that has a FunctionFact also has a candidate body.
+fn collect_anonymous_functions_from_function<'ast>(
+    function: &'ast Function<'ast>,
+    functions: &mut Vec<TsFunctionCandidate<'ast>>,
+) {
+    collect_anonymous_functions_from_parameters(&function.params, functions);
+    if let Some(body) = function.body.as_deref() {
+        collect_anonymous_functions_from_body(body, functions);
+    }
+}
+
+fn collect_anonymous_functions_from_arrow<'ast>(
+    function: &'ast oxc_ast::ast::ArrowFunctionExpression<'ast>,
+    functions: &mut Vec<TsFunctionCandidate<'ast>>,
+) {
+    collect_anonymous_functions_from_parameters(&function.params, functions);
+    collect_anonymous_functions_from_body(&function.body, functions);
+}
+
+fn collect_anonymous_functions_from_parameters<'ast>(
+    parameters: &'ast FormalParameters<'ast>,
+    functions: &mut Vec<TsFunctionCandidate<'ast>>,
+) {
+    for parameter in &parameters.items {
+        if let Some(initializer) = &parameter.initializer {
+            collect_anonymous_functions_from_expression(initializer, true, functions);
+        }
+        collect_anonymous_functions_from_binding_pattern(&parameter.pattern, functions);
+    }
+    if let Some(rest) = &parameters.rest {
+        collect_anonymous_functions_from_binding_pattern(&rest.rest.argument, functions);
+    }
+}
+
+/// Destructuring defaults (`{a = () => {}}`), as the frontend walks them.
+fn collect_anonymous_functions_from_binding_pattern<'ast>(
+    pattern: &'ast BindingPattern<'ast>,
+    functions: &mut Vec<TsFunctionCandidate<'ast>>,
+) {
+    match pattern {
+        BindingPattern::BindingIdentifier(_) => {}
+        BindingPattern::ObjectPattern(object) => {
+            for property in &object.properties {
+                collect_anonymous_functions_from_binding_pattern(&property.value, functions);
+            }
+            if let Some(rest) = &object.rest {
+                collect_anonymous_functions_from_binding_pattern(&rest.argument, functions);
+            }
+        }
+        BindingPattern::ArrayPattern(array) => {
+            for element in array.elements.iter().flatten() {
+                collect_anonymous_functions_from_binding_pattern(element, functions);
+            }
+            if let Some(rest) = &array.rest {
+                collect_anonymous_functions_from_binding_pattern(&rest.argument, functions);
+            }
+        }
+        BindingPattern::AssignmentPattern(assignment) => {
+            collect_anonymous_functions_from_expression(&assignment.right, true, functions);
+            collect_anonymous_functions_from_binding_pattern(&assignment.left, functions);
+        }
     }
 }
 
@@ -1244,10 +1350,11 @@ fn collect_anonymous_functions_from_expression<'ast>(
                     name: anonymous_callable_name(function.span.start, function.span.end),
                     span: function.span,
                     parameters: parameter_names(&function.params),
+                    formals: Some(&function.params),
                     body: arrow_candidate_body(function),
                 });
             }
-            collect_anonymous_functions_from_body(&function.body, functions);
+            collect_anonymous_functions_from_arrow(function, functions);
         }
         Expression::FunctionExpression(function) => {
             if include_self && let Some(body) = function.body.as_deref() {
@@ -1255,12 +1362,11 @@ fn collect_anonymous_functions_from_expression<'ast>(
                     name: anonymous_callable_name(function.span.start, function.span.end),
                     span: function.span,
                     parameters: parameter_names(&function.params),
+                    formals: Some(&function.params),
                     body: CandidateBody::Statements(&body.statements),
                 });
             }
-            if let Some(body) = function.body.as_deref() {
-                collect_anonymous_functions_from_body(body, functions);
-            }
+            collect_anonymous_functions_from_function(function, functions);
         }
         Expression::CallExpression(call) => {
             collect_anonymous_functions_from_expression(&call.callee, true, functions);
@@ -1325,6 +1431,39 @@ fn collect_anonymous_functions_from_expression<'ast>(
             collect_anonymous_functions_from_expression(&expression.left, true, functions);
             collect_anonymous_functions_from_expression(&expression.right, true, functions);
         }
+        Expression::UnaryExpression(expression) => {
+            collect_anonymous_functions_from_expression(&expression.argument, true, functions);
+        }
+        Expression::BinaryExpression(expression) => {
+            collect_anonymous_functions_from_expression(&expression.left, true, functions);
+            collect_anonymous_functions_from_expression(&expression.right, true, functions);
+        }
+        Expression::TemplateLiteral(template) => {
+            for expression in &template.expressions {
+                collect_anonymous_functions_from_expression(expression, true, functions);
+            }
+        }
+        Expression::ImportExpression(expression) => {
+            collect_anonymous_functions_from_expression(&expression.source, true, functions);
+            if let Some(options) = &expression.options {
+                collect_anonymous_functions_from_expression(options, true, functions);
+            }
+        }
+        Expression::TSAsExpression(expression) => {
+            collect_anonymous_functions_from_expression(&expression.expression, true, functions);
+        }
+        Expression::TSSatisfiesExpression(expression) => {
+            collect_anonymous_functions_from_expression(&expression.expression, true, functions);
+        }
+        Expression::TSNonNullExpression(expression) => {
+            collect_anonymous_functions_from_expression(&expression.expression, true, functions);
+        }
+        Expression::TSTypeAssertion(expression) => {
+            collect_anonymous_functions_from_expression(&expression.expression, true, functions);
+        }
+        Expression::TSInstantiationExpression(expression) => {
+            collect_anonymous_functions_from_expression(&expression.expression, true, functions);
+        }
         Expression::ObjectExpression(object) => {
             for property in &object.properties {
                 match property {
@@ -1345,9 +1484,10 @@ fn collect_anonymous_functions_from_expression<'ast>(
                             name: anonymous_callable_name(span.start, span.end),
                             span,
                             parameters: parameter_names(&function.params),
+                            formals: Some(&function.params),
                             body: CandidateBody::Statements(&body.statements),
                         });
-                        collect_anonymous_functions_from_body(body, functions);
+                        collect_anonymous_functions_from_function(function, functions);
                     }
                     ObjectPropertyKind::ObjectProperty(property) => {
                         collect_anonymous_functions_from_expression(
@@ -1432,9 +1572,10 @@ fn collect_anonymous_functions_from_argument<'ast>(
                 name: anonymous_callable_name(function.span.start, function.span.end),
                 span: function.span,
                 parameters: parameter_names(&function.params),
+                formals: Some(&function.params),
                 body: arrow_candidate_body(function),
             });
-            collect_anonymous_functions_from_body(&function.body, functions);
+            collect_anonymous_functions_from_arrow(function, functions);
         }
         Argument::FunctionExpression(function) => {
             if let Some(body) = function.body.as_deref() {
@@ -1442,10 +1583,11 @@ fn collect_anonymous_functions_from_argument<'ast>(
                     name: anonymous_callable_name(function.span.start, function.span.end),
                     span: function.span,
                     parameters: parameter_names(&function.params),
+                    formals: Some(&function.params),
                     body: CandidateBody::Statements(&body.statements),
                 });
-                collect_anonymous_functions_from_body(body, functions);
             }
+            collect_anonymous_functions_from_function(function, functions);
         }
         _ => collect_anonymous_functions_from_expression(argument.to_expression(), true, functions),
     }
@@ -2070,6 +2212,13 @@ impl<'source> FunctionLowering<'source> {
             if let Some(init) = &declarator.init {
                 self.lower_expression(interner, init, places, operations, unsupported, false);
             }
+            self.lower_binding_pattern_expressions(
+                interner,
+                &declarator.id,
+                places,
+                operations,
+                unsupported,
+            );
             self.push_unsupported(
                 interner,
                 operations,
@@ -2110,6 +2259,131 @@ impl<'source> FunctionLowering<'source> {
                 OperationKindDraft::StorageLive { place_key: key },
                 MirStatus::Partial,
             );
+        }
+    }
+
+    /// The expressions a parameter list runs on entry: defaults and computed
+    /// destructuring keys. Only their operations are lowered, so their calls
+    /// have sites; the values they give a parameter are not modelled.
+    fn lower_parameter_expressions(
+        &mut self,
+        interner: &crate::internal_core::StableKeyInterner,
+        parameters: &FormalParameters<'_>,
+        places: &mut PlaceTableBuilder,
+        operations: &mut Vec<OperationDraft>,
+        unsupported: &mut Vec<UnsupportedDraft>,
+    ) {
+        for parameter in &parameters.items {
+            if let Some(initializer) = &parameter.initializer {
+                self.lower_expression(
+                    interner,
+                    initializer,
+                    places,
+                    operations,
+                    unsupported,
+                    false,
+                );
+            }
+            self.lower_binding_pattern_expressions(
+                interner,
+                &parameter.pattern,
+                places,
+                operations,
+                unsupported,
+            );
+        }
+        if let Some(rest) = &parameters.rest {
+            self.lower_binding_pattern_expressions(
+                interner,
+                &rest.rest.argument,
+                places,
+                operations,
+                unsupported,
+            );
+        }
+    }
+
+    /// Defaults (`{a = f()}`) and computed keys (`{[k()]: a}`) of a binding
+    /// pattern, lowered for their operations only.
+    fn lower_binding_pattern_expressions(
+        &mut self,
+        interner: &crate::internal_core::StableKeyInterner,
+        pattern: &BindingPattern<'_>,
+        places: &mut PlaceTableBuilder,
+        operations: &mut Vec<OperationDraft>,
+        unsupported: &mut Vec<UnsupportedDraft>,
+    ) {
+        match pattern {
+            BindingPattern::BindingIdentifier(_) => {}
+            BindingPattern::ObjectPattern(object) => {
+                for property in &object.properties {
+                    if property.computed
+                        && let Some(key) = property.key.as_expression()
+                    {
+                        self.lower_expression(
+                            interner,
+                            key,
+                            places,
+                            operations,
+                            unsupported,
+                            false,
+                        );
+                    }
+                    self.lower_binding_pattern_expressions(
+                        interner,
+                        &property.value,
+                        places,
+                        operations,
+                        unsupported,
+                    );
+                }
+                if let Some(rest) = &object.rest {
+                    self.lower_binding_pattern_expressions(
+                        interner,
+                        &rest.argument,
+                        places,
+                        operations,
+                        unsupported,
+                    );
+                }
+            }
+            BindingPattern::ArrayPattern(array) => {
+                for element in array.elements.iter().flatten() {
+                    self.lower_binding_pattern_expressions(
+                        interner,
+                        element,
+                        places,
+                        operations,
+                        unsupported,
+                    );
+                }
+                if let Some(rest) = &array.rest {
+                    self.lower_binding_pattern_expressions(
+                        interner,
+                        &rest.argument,
+                        places,
+                        operations,
+                        unsupported,
+                    );
+                }
+            }
+            BindingPattern::AssignmentPattern(assignment) => {
+                self.lower_expression(
+                    interner,
+                    &assignment.right,
+                    places,
+                    operations,
+                    unsupported,
+                    false,
+                );
+                self.lower_binding_pattern_expressions(
+                    interner,
+                    &assignment.left,
+                    places,
+                    operations,
+                    unsupported,
+                );
+            }
         }
     }
 
@@ -3693,7 +3967,9 @@ impl<'source> FunctionLowering<'source> {
                 (Vec::new(), ConservativeAction::HavocAffectedPlaces),
             );
         }
-        if callee_text(&call.callee).as_deref() == Some("eval") {
+        if callee_text(&call.callee).as_deref() == Some("eval")
+            || crate::ts::sealed_bindings::is_direct_eval(call)
+        {
             self.push_unsupported(
                 interner,
                 operations,
@@ -4421,7 +4697,7 @@ impl UnsupportedDraft {
             file: input.file,
             span: input.span,
             construct: input.construct,
-            source_evidence: input.source_evidence.into().trim().to_string(),
+            source_evidence: source_evidence_excerpt(&input.source_evidence.into()),
             affected_place_keys: input.affected_place_keys,
             affected_domains: input.affected_domains,
             conservative_action: input.conservative_action,
@@ -4617,6 +4893,10 @@ fn callee_text(expression: &Expression<'_>) -> Option<String> {
         Expression::ParenthesizedExpression(parenthesized) => {
             callee_text(&parenthesized.expression)
         }
+        // `(0, m.f)(x)` calls the value of its last operand. Only the callee is
+        // named this way: the call runs with `this` undefined, and receiver
+        // bindings are read from the syntax, not from this text.
+        Expression::SequenceExpression(sequence) => callee_text(sequence.expressions.last()?),
         _ => None,
     }
 }
@@ -5598,6 +5878,28 @@ export async function flow(obj, key, promise, value) {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn ts_unsupported_evidence_is_a_bounded_excerpt_of_a_long_construct() {
+        let statements = (0..200)
+            .map(|index| format!("  total = total + {index};\n"))
+            .collect::<String>();
+        let source = format!("var total = 0;\nwith (scope) {{\n{statements}}}\n");
+        let (output, interner) = lower("src/with.js", &source);
+        let row = output
+            .unsupported
+            .iter()
+            .find(|row| row.construct == "with")
+            .expect("with statement is unsupported");
+
+        assert!(row.is_complete());
+        assert!(row.source_evidence.starts_with("with (scope)"));
+        assert!(row.source_evidence.ends_with('…'));
+        assert!(row.source_evidence.len() < 200, "{}", row.source_evidence);
+        let construct_text = &source[row.span.start_byte as usize..row.span.end_byte as usize];
+        assert!(construct_text.ends_with("total = total + 199;\n}"));
+        assert!(interner.resolve(row.stable_key).len() < 1_000);
     }
 
     #[test]

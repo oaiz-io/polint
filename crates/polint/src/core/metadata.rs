@@ -593,6 +593,7 @@ pub(super) fn unresolved_reason_label(reason: UnresolvedReason) -> &'static str 
         UnresolvedReason::UnsupportedImport => "unsupported_import",
         UnresolvedReason::ResolverError => "resolver_error",
         UnresolvedReason::OutsideWorkspace => "outside_workspace",
+        UnresolvedReason::ModeDependent => "mode_dependent",
         _ => "unknown",
     }
 }

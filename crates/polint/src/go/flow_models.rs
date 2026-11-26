@@ -10,9 +10,6 @@ use crate::analysis_neutral::taint::models::{
     Models, PropagatorModel, SinkModel, SourceModel, Target,
 };
 
-/// The directory, under the repository root, that holds model files.
-const MODELS_DIRECTORY: &str = ".polint/models";
-
 const BUILT_IN: &str = include_str!("flow_models.toml");
 
 /// The keys a table of each kind may have.
@@ -37,23 +34,8 @@ pub(crate) fn load_flow_models(root: &Path) -> GoFlowModels {
     let mut models = Models::parse(BUILT_IN).expect("the built-in Go flow models parse");
     let mut problems = Vec::new();
     let mut digest_parts = vec![BUILT_IN.to_string()];
-    let directory = root.join(MODELS_DIRECTORY);
-    let mut paths = std::fs::read_dir(&directory)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "toml"))
-        .collect::<Vec<_>>();
-    paths.sort();
-    for path in paths {
-        let name = format!(
-            "{MODELS_DIRECTORY}/{}",
-            path.file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default()
-        );
-        let text = match std::fs::read_to_string(&path) {
+    for super::model_files::ModelFile { name, text } in super::model_files::model_files(root) {
+        let text = match text {
             Ok(text) => text,
             Err(error) => {
                 problems.push(format!("{name}: could not be read: {error}"));
@@ -306,6 +288,57 @@ function = "a.Compare"
                 .opaque
                 .iter()
                 .any(|target| target.function.as_deref() == Some("a.Compare"))
+        );
+    }
+
+    #[test]
+    fn a_model_file_over_one_mebibyte_is_reported_and_not_read() {
+        let root = tempfile::tempdir().unwrap();
+        write(
+            root.path(),
+            "big.toml",
+            &format!("# {}\n", "x".repeat(1_048_576)),
+        );
+        let problems = load_flow_models(root.path()).problems;
+        assert_eq!(
+            problems,
+            vec![
+                ".polint/models/big.toml: could not be read: larger than 1048576 bytes".to_string()
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_model_file_that_links_outside_the_repository_is_reported_and_not_read() {
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(
+            outside.path().join("models.toml"),
+            "[[go_flow_sink]]\nkind = \"sql\"\nfunction = \"a.Raw\"\n",
+        )
+        .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join(".polint/models");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("models.toml"),
+            directory.join("linked.toml"),
+        )
+        .unwrap();
+        let models = load_flow_models(root.path());
+        assert_eq!(
+            models.problems,
+            vec![
+                ".polint/models/linked.toml: could not be read: path escapes repository root"
+                    .to_string()
+            ]
+        );
+        assert!(
+            models
+                .models
+                .sinks
+                .iter()
+                .all(|sink| sink.target.function.as_deref() != Some("a.Raw"))
         );
     }
 }

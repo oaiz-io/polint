@@ -53,6 +53,49 @@ class Box {
     }
 
     #[test]
+    fn marks_the_functions_written_without_a_body() {
+        let file = fixture_file(
+            r#"
+function pick(x: string): string;
+function pick(x: any) { return x; }
+declare function ambient(x: string): void;
+abstract class Shape {
+  abstract area(): number;
+  size(): number;
+  size() { return 1; }
+}
+const arrow = () => {};
+"#,
+        );
+
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let output = extract_ts_inventory(&interner, file);
+        let rows = output
+            .functions
+            .iter()
+            .map(|function| {
+                (
+                    function.display_name.clone().unwrap_or_default(),
+                    function.has_body,
+                )
+            })
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(
+            rows,
+            BTreeSet::from([
+                ("pick".to_string(), false),
+                ("pick".to_string(), true),
+                ("ambient".to_string(), false),
+                ("area".to_string(), false),
+                ("size".to_string(), false),
+                ("size".to_string(), true),
+                ("arrow".to_string(), true),
+            ])
+        );
+    }
+
+    #[test]
     fn normalized_function_rows_sort_by_stable_key_before_dense_ids() {
         let file = fixture_file(
             r#"

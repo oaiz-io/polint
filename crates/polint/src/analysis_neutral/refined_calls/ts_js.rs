@@ -13,7 +13,7 @@ use crate::analysis_neutral::calls::facts::{
     UnresolvedCallFact, UnresolvedCallReason,
 };
 use crate::analysis_neutral::ids::{CallSiteId, PlaceId, RefinedCallEdgeId, SemanticNodeId};
-use crate::analysis_neutral::points_to::facts::PointsToStatus;
+use crate::analysis_neutral::points_to::facts::{PointsToPrecision, PointsToStatus};
 use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
 use crate::analysis_neutral::semantic_graph::facts::NodeKind;
 use crate::internal_core::StableKeyId;
@@ -67,15 +67,19 @@ impl SiteIndex {
     }
 }
 
-/// Call sites the points-to solver resolved: a present solver edge derived
-/// from a call constraint lists, among its contributing facts, a call
-/// constraint on the site's callsite node. Keys are compared as text.
+/// Call sites the points-to solver resolved: a present, non-heuristic solver
+/// edge derived from a call constraint lists, among its contributing facts, a
+/// call constraint on the site's callsite node. Keys are compared as text.
+///
+/// A heuristic edge comes from a set that may hold values the solve could not
+/// see, so it does not resolve its site: the site keeps its unresolved marker.
 fn solver_resolved_sites(db: &impl AnalysisHost) -> HashSet<CallSiteId> {
     let contributing: HashSet<Arc<str>> = db
         .solver_derived_edges()
         .iter()
         .filter(|edge| {
             edge.status == PointsToStatus::Present
+                && edge.precision < PointsToPrecision::Heuristic
                 && edge.provenance.constraint_kind == "call_constraint"
         })
         .flat_map(|edge| edge.provenance.contributing_facts.iter())
@@ -88,7 +92,7 @@ fn solver_resolved_sites(db: &impl AnalysisHost) -> HashSet<CallSiteId> {
         .semantic_constraints()
         .iter()
         .filter_map(|constraint| match constraint.kind {
-            ConstraintKind::CallConstraint { callsite }
+            ConstraintKind::CallConstraint { callsite, .. }
                 if contributing.contains(db.resolve_stable_key(constraint.stable_key).as_ref()) =>
             {
                 Some(callsite)
@@ -159,6 +163,7 @@ fn unresolved_edge(
                 ("status", format!("{status:?}")),
             ],
         ),
+        assumptions: Vec::new(),
     })
 }
 
@@ -186,9 +191,18 @@ mod tests {
         CallPrecision, CallSiteFact, CallSyntaxKind, UnresolvedCallFact,
     };
     use crate::analysis_neutral::calls::store::CallOutput;
-    use crate::analysis_neutral::ids::{CallSiteId, MirBodyId, MirOpId, PlaceId};
+    use crate::analysis_neutral::ids::{
+        CallSiteId, DerivedEdgeId, MirBodyId, MirOpId, PlaceId, SemanticConstraintId,
+    };
     use crate::analysis_neutral::mir_body::MirOutput;
     use crate::analysis_neutral::places::{PlaceFact, PlaceRoot, PlaceStatus};
+    use crate::analysis_neutral::semantic_graph::constraints::ConstraintFact;
+    use crate::analysis_neutral::semantic_graph::facts::{SemanticNodeFact, SemanticPrecision};
+    use crate::analysis_neutral::semantic_graph::store::SemanticGraphOutput;
+    use crate::analysis_neutral::solver::budget::BudgetStatus;
+    use crate::analysis_neutral::solver::facts::DerivedEdgeFact;
+    use crate::analysis_neutral::solver::provenance::{ContributingFact, DerivedEdgeProvenance};
+    use crate::analysis_neutral::solver::store::SolverOutput;
     use crate::internal_core::{FileId, FunctionId, Language, Span};
 
     std::thread_local! {
@@ -349,6 +363,90 @@ mod tests {
         assert_eq!(
             output.edges[0].synthetic_target.as_deref(),
             Some("ts-js:callable-place:place:callable:stable")
+        );
+    }
+
+    /// Adds a callsite node for the unresolved site, a call constraint on it and
+    /// one present solver edge derived from that constraint at `precision`.
+    fn with_solver_edge(mut db: LocalAnalysisDb, precision: PointsToPrecision) -> LocalAnalysisDb {
+        let interner = db.stable_key_interner();
+        let node = |id, kind, key: &str| SemanticNodeFact {
+            id: SemanticNodeId(id),
+            kind,
+            precision: SemanticPrecision::SetupAware,
+            stable_key: interner.intern(key),
+        };
+        db.replace_semantic_graph_facts(SemanticGraphOutput {
+            nodes: vec![
+                node(
+                    0,
+                    NodeKind::Function(FunctionId::from_raw(0)),
+                    "node:function:caller",
+                ),
+                node(
+                    1,
+                    NodeKind::Callsite(CallSiteId(0)),
+                    "node:callsite:callable",
+                ),
+            ],
+            edges: Vec::new(),
+            constraints: vec![ConstraintFact {
+                id: SemanticConstraintId(0),
+                kind: ConstraintKind::call_at(SemanticNodeId(1)),
+                status: PointsToStatus::Present,
+                precision: PointsToPrecision::FlowInsensitive,
+                stable_key: interner.intern("constraint:call:callable"),
+            }],
+        })
+        .expect("valid semantic graph");
+        let provenance = DerivedEdgeProvenance::new(
+            &interner,
+            vec![ContributingFact {
+                stable_key: interner.intern("constraint:call:callable"),
+            }],
+            &ConstraintKind::call_at(SemanticNodeId(1)),
+            1,
+        );
+        db.replace_solver_facts(SolverOutput {
+            derived_edges: vec![DerivedEdgeFact {
+                id: DerivedEdgeId(0),
+                source: SemanticNodeId(1),
+                target: SemanticNodeId(0),
+                status: PointsToStatus::Present,
+                precision,
+                stable_key: interner.intern("solver-edge:callable"),
+                provenance,
+                claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
+            }],
+            budget_status: BudgetStatus::WithinBudget,
+            ..SolverOutput::default()
+        })
+        .expect("valid solver facts");
+        db
+    }
+
+    #[test]
+    fn a_heuristic_solver_edge_leaves_its_site_unresolved() {
+        let resolved = with_solver_edge(
+            refinement_db(Language::TypeScript),
+            PointsToPrecision::FlowInsensitive,
+        );
+        assert!(
+            derive_ts_js_refinements(&resolved).edges.is_empty(),
+            "a flow-insensitive solver edge resolves its site"
+        );
+
+        let heuristic = with_solver_edge(
+            refinement_db(Language::TypeScript),
+            PointsToPrecision::Heuristic,
+        );
+        let output = derive_ts_js_refinements(&heuristic);
+        assert_eq!(output.edges.len(), 1, "{:?}", output.edges);
+        assert_eq!(output.edges[0].site, CallSiteId(0));
+        assert_eq!(output.edges[0].status, CallTargetStatus::Unresolved);
+        assert_eq!(
+            output.edges[0].evidence,
+            vec!["ts_js_points_to_unresolved".to_string()]
         );
     }
 }

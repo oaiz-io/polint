@@ -1,0 +1,10 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "dependencies": {
+    "liba": "1.0.0",
+    "libb": "1.0.0"
+  }
+}

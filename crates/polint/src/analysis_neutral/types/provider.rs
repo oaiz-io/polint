@@ -75,6 +75,7 @@ pub fn derive_type_value_alias_with_cache_stats(
         module_topology_output_digest,
         upstream_syntax_output_digests,
         true,
+        false,
     )
 }
 
@@ -97,6 +98,7 @@ pub fn derive_type_value_alias_with_go_points_to(
     module_topology_output_digest: Digest,
     upstream_syntax_output_digests: Vec<Digest>,
     go_points_to: bool,
+    copies_only: bool,
 ) -> TypeValueAliasProviderOutput {
     let mut started = std::time::Instant::now();
     let mut checkpoint = |step: &'static str| {
@@ -107,13 +109,13 @@ pub fn derive_type_value_alias_with_go_points_to(
     let interner = &interner_handle;
     debug_assert_eq!(manifest.id, TYPE_VALUE_ALIAS_PROVIDER_ID);
     let mut diagnostics = Vec::new();
-    let mut output = if go_points_to {
+    let mut output = if go_points_to && !copies_only {
         super::go::derive_go_type_value_alias(db)
     } else {
         TypeValueAliasOutput::default()
     };
     checkpoint("go_facts");
-    let ts_js_output = super::ts_js::derive_ts_js_type_value_alias(db);
+    let ts_js_output = super::ts_js::derive_ts_js_type_value_alias(db, copies_only);
     checkpoint("ts_js_facts");
     output.types.types.extend(ts_js_output.types.types);
     output.types.narrowed.extend(ts_js_output.types.narrowed);
@@ -127,45 +129,52 @@ pub fn derive_type_value_alias_with_go_points_to(
         .access_paths
         .extend(ts_js_output.access_paths.access_paths);
     output = output.normalized(interner);
-    let base_merge = super::validate::merge_extension_type_value_alias_base_facts(
-        interner,
-        output,
-        db.extension_facts(),
-    );
-    output = base_merge.output.normalized(interner);
-    diagnostics.extend(base_merge.diagnostics);
-    let relation_merge = super::validate::merge_extension_type_value_alias_relation_facts(
-        interner,
-        output,
-        db.extension_facts(),
-    );
-    output = relation_merge.output;
-    diagnostics.extend(relation_merge.diagnostics);
-    checkpoint("merge_normalize");
-    let mut points_to_constraints =
-        crate::analysis_neutral::points_to::constraints::derive_points_to_constraints(
-            interner, &output,
+    // Each merge returns its output normalized; without extension facts it
+    // would only normalize the normalized output again.
+    if !db.extension_facts().is_empty() {
+        let base_merge = super::validate::merge_extension_type_value_alias_base_facts(
+            interner,
+            output,
+            db.extension_facts(),
         );
-    points_to_constraints.extend(std::mem::take(&mut output.points_to.constraints));
-    checkpoint("points_to_constraints");
-    let points_to_output = crate::analysis_neutral::points_to::solver::output_with_solved_sets(
-        interner,
-        points_to_constraints,
-        crate::analysis_neutral::points_to::solver::PointsToBudget::default(),
-    );
-    checkpoint("points_to_solve");
-    let mut alias_output = crate::analysis_neutral::aliases::provider_stack::derive_alias_answers(
-        interner,
-        &output.access_paths.access_paths,
-        &points_to_output.sets,
-    );
-    checkpoint("alias_answers");
-    alias_output
-        .answers
-        .extend(std::mem::take(&mut output.aliases.answers));
-    output.points_to = points_to_output;
-    output.aliases = alias_output;
-    output = output.normalized(interner);
+        output = base_merge.output;
+        diagnostics.extend(base_merge.diagnostics);
+        let relation_merge = super::validate::merge_extension_type_value_alias_relation_facts(
+            interner,
+            output,
+            db.extension_facts(),
+        );
+        output = relation_merge.output;
+        diagnostics.extend(relation_merge.diagnostics);
+    }
+    checkpoint("merge_normalize");
+    if !copies_only {
+        let mut points_to_constraints =
+            crate::analysis_neutral::points_to::constraints::derive_points_to_constraints(
+                interner, &output,
+            );
+        points_to_constraints.extend(std::mem::take(&mut output.points_to.constraints));
+        checkpoint("points_to_constraints");
+        let points_to_output = crate::analysis_neutral::points_to::solver::output_with_solved_sets(
+            interner,
+            points_to_constraints,
+            crate::analysis_neutral::points_to::solver::PointsToBudget::default(),
+        );
+        checkpoint("points_to_solve");
+        let mut alias_output =
+            crate::analysis_neutral::aliases::provider_stack::derive_alias_answers(
+                interner,
+                &output.access_paths.access_paths,
+                &points_to_output.sets,
+            );
+        checkpoint("alias_answers");
+        alias_output
+            .answers
+            .extend(std::mem::take(&mut output.aliases.answers));
+        output.points_to = points_to_output;
+        output.aliases = alias_output;
+        output = output.normalized(interner);
+    }
     checkpoint("normalize");
     let output_digest = type_value_alias_output_digest(
         db,

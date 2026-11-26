@@ -81,6 +81,9 @@ pub enum PointsToStatus {
     Unsupported,
     SetupMissing,
     BudgetExceeded,
+    /// The set may lack values that cross more field loads and stores than
+    /// the solve's indirection bound lets through.
+    IndirectionBound,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

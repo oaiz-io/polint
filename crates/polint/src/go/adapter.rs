@@ -643,6 +643,18 @@ fn parse_go_file(db: &mut dyn FactDatabase, file_id: FileId) -> Result<Vec<Diagn
     let root = tree.root_node();
     let mut diagnostics = Vec::new();
 
+    if super::grammar::syntax_too_deep(root) {
+        diagnostics.push(Diagnostic::error(
+            "parser/go",
+            db.path_for(file_id),
+            TextRange::point(1, 1),
+            format!(
+                "Go source nests deeper than {} syntax levels; the file is not analysed.",
+                super::grammar::MAX_SYNTAX_DEPTH
+            ),
+        ));
+        return Ok(diagnostics);
+    }
     if root.has_error() {
         diagnostics.push(parser_error_diagnostic(db, file_id, root));
     }

@@ -18,6 +18,8 @@ pub(crate) mod host;
 pub(crate) mod incremental;
 mod metadata;
 pub(crate) mod metrics_projection;
+#[cfg(all(test, feature = "lang-typescript"))]
+mod name_match_tests;
 mod outcome;
 mod provider;
 pub(crate) mod resource;
@@ -1149,8 +1151,7 @@ impl AnalysisKernel {
             "events" => &["polint.go.syntax", "polint.ts.syntax"],
             "resolved_imports" | "module_graph" => &["polint.module_graph"],
             "symbols" | "references" => &["polint.symbol_graph"],
-            "calls" | "control_flow" | "cfg" => &["polint.refined_calls"],
-            "call_graph" => &["polint.calls"],
+            "calls" | "control_flow" | "cfg" | "call_graph" => &["polint.refined_calls"],
             "go_types" | "routes" => &["polint.go.semantic"],
             "dataflow" => &["polint.evidence"],
             "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
@@ -3227,6 +3228,155 @@ function cleanup(value: string) {{ return value.trim(); }}
                 .cache_stats
                 .recomputes,
             0
+        );
+    }
+
+    /// A value that flows down a chain of copies is solved once per node. The
+    /// solver stores the calls it resolves, not every pair of nodes the chain
+    /// connects, so a deep chain of conditionals costs its length and not its
+    /// square.
+    #[cfg(feature = "lang-typescript")]
+    #[test]
+    fn a_two_hundred_deep_conditional_chain_stores_solver_edges_linear_in_its_depth() {
+        let depth = 200;
+        let mut chain = String::from("f()");
+        for level in 0..depth {
+            chain = format!("v === {level} ? f() : {chain}");
+        }
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("main.mjs"),
+            format!("function f() {{}}\nexport function g(v) {{ const t = {chain}; return t; }}\n"),
+        )
+        .expect("write source");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let output = AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel should run");
+
+        let calls = output.db.call_sites().len();
+        assert!(calls > depth, "every call in the chain is a call site");
+        let stored = output.db.solver_derived_edges().len();
+        assert!(
+            stored <= 2 * calls,
+            "{stored} solver edges for {calls} call sites"
+        );
+        let resolved_to_f = output
+            .db
+            .refined_call_edges()
+            .iter()
+            .filter(|edge| edge.target_function.is_some())
+            .count();
+        assert!(resolved_to_f > depth, "every call to f keeps its target");
+    }
+
+    #[cfg(feature = "lang-typescript")]
+    #[test]
+    fn ts_function_returns_flow_through_their_return_place_to_the_consuming_call() {
+        use crate::analysis_neutral::calls::facts::ClaimTier;
+        use crate::analysis_neutral::points_to::facts::PointsToPrecision;
+        use crate::analysis_neutral::semantic_graph::constraints::ConstraintKind;
+        use crate::analysis_neutral::semantic_graph::facts::NodeKind;
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            temp.path().join("app.ts"),
+            "export function make() { const made = function () {}; return made; }\n\
+             export function run() { const got = make(); got(); }\n",
+        )
+        .expect("write ts");
+        let loaded = load_config(temp.path()).expect("default config loads");
+        let cache = Cache::new("", false);
+        let plan = AnalysisPlan::from_capability_names_for_test(&["calls"]);
+        let output = AnalysisKernel::run(KernelInput {
+            loaded: &loaded,
+            cache: &cache,
+            config_digest: "config",
+            rule_digest: "rules",
+            plan: &plan,
+            parallel: false,
+        })
+        .expect("kernel should run");
+
+        let functions = output.db.functions();
+        let function_named = |name: &str| {
+            functions
+                .iter()
+                .find(|function| function.name == name)
+                .unwrap_or_else(|| panic!("{name} is a function"))
+        };
+        let make = function_named("make");
+        let run = function_named("run").id;
+        let made = functions
+            .iter()
+            .find(|function| {
+                function.id != make.id
+                    && function.span.start_byte > make.span.start_byte
+                    && function.span.end_byte < make.span.end_byte
+            })
+            .expect("the function expression in make is a function")
+            .id;
+        let make = make.id;
+        let nodes = output.db.semantic_nodes();
+        let ret = nodes
+            .iter()
+            .find(|node| node.kind == NodeKind::FunctionReturn(make))
+            .expect("make has a return place")
+            .id;
+        assert!(
+            nodes
+                .iter()
+                .any(|node| node.kind == NodeKind::FunctionThis(make)),
+            "make has a this place"
+        );
+        // The value flow of the file describes every value make returns, so it
+        // replaces the summary of make's returns.
+        let returns = output
+            .db
+            .semantic_constraints()
+            .iter()
+            .filter(|constraint| {
+                matches!(constraint.kind, ConstraintKind::CopyEdge { dst, .. } if dst == ret)
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !returns.is_empty(),
+            "make's returns copy into its return place"
+        );
+        assert!(
+            returns
+                .iter()
+                .all(|constraint| constraint.precision != PointsToPrecision::SummaryProjected),
+            "the value flow replaces the summary of make's returns: {returns:?}"
+        );
+        // The returned function is the only value `got` holds, and the value
+        // flow describes it completely: the call reaches it, and only it.
+        let from_run = output
+            .db
+            .refined_call_edges()
+            .iter()
+            .filter(|edge| edge.caller == run && edge.target_function != Some(make))
+            .collect::<Vec<_>>();
+        assert!(
+            from_run
+                .iter()
+                .any(|edge| edge.target_function == Some(made)
+                    && edge.precision.tier() == ClaimTier::Exact),
+            "the returned function is the exact target of the consuming call: {from_run:?}"
+        );
+        assert!(
+            from_run
+                .iter()
+                .all(|edge| edge.target_function == Some(made)),
+            "the consuming call reaches nothing but the returned function: {from_run:?}"
         );
     }
 

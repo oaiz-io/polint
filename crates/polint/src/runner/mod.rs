@@ -151,7 +151,7 @@ pub fn run_cli(rules: Vec<Rule>) -> ExitCode {
         .with_writer(std::io::stderr)
         .try_init()
         .ok();
-    match run(rules) {
+    match crate::jobs::on_worker_stack(move || run(rules)).and_then(|code| code) {
         Ok(code) => ExitCode::from(code),
         Err(error) => {
             eprintln!("polint-local-rules: {error:?}");

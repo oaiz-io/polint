@@ -1,0 +1,48 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "main.js",
+    "vendor/pad.js"
+  ],
+  "instrumented_functions": 3,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "main.js@65..139",
+      "name": "label"
+    },
+    {
+      "function": "vendor/pad.js@132..224",
+      "name": "repeat"
+    },
+    {
+      "function": "vendor/pad.js@23..130",
+      "name": "pad"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "main.js@110..122",
+      "syntax": "identifier",
+      "callee": "vendor/pad.js@23..130",
+      "callee_name": "pad"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@141..151",
+      "syntax": "identifier",
+      "callee": "main.js@65..139",
+      "callee_name": "label"
+    },
+    {
+      "kind": "call",
+      "site": "vendor/pad.js@71..103",
+      "syntax": "identifier",
+      "callee": "vendor/pad.js@132..224",
+      "callee_name": "repeat"
+    }
+  ]
+}

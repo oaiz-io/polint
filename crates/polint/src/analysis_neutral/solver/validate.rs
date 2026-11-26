@@ -19,9 +19,9 @@
 //! value-flow (`CopyEdge`) graph that passes through a `CallConstraint` (summary)
 //! node — is DETECTED and reported as a bounded diagnostic rather than allowed to
 //! diverge. This is the concrete mechanism behind D-11's "closed input set / single
-//! fixpoint per run / bounded outer iterations": the solver's transitive closure is
+//! fixpoint per run / bounded outer iterations": the solver's value flow is
 //! deterministic and terminating because the cycle is detected and the back-edge is
-//! not re-expanded (the engine's self-loop guard + this check together bound it).
+//! not re-expanded.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -42,13 +42,13 @@ pub fn validate_derived_edges(
     node_ids: &BTreeSet<SemanticNodeId>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let resolved_keys: Vec<String> = derived_edges
+    let resolved_keys: Vec<std::sync::Arc<str>> = derived_edges
         .iter()
-        .map(|row| interner.resolve(row.stable_key).to_string())
+        .map(|row| interner.resolve(row.stable_key))
         .collect();
 
     // Duplicate stable keys (compare by resolved text).
-    check_duplicate_stable_keys(diagnostics, resolved_keys.iter().map(String::as_str));
+    check_duplicate_stable_keys(diagnostics, resolved_keys.iter().map(AsRef::as_ref));
 
     // Dense IDs contiguous (0..n) and stable-key-sorted by resolved text.
     check_dense_ids_sorted(
@@ -56,11 +56,10 @@ pub fn validate_derived_edges(
         derived_edges
             .iter()
             .zip(resolved_keys.iter())
-            .map(|(row, key)| (row.id.0, key.as_str())),
+            .map(|(row, key)| (row.id.0, key.as_ref())),
     );
 
-    for edge in derived_edges {
-        let edge_key = interner.resolve(edge.stable_key);
+    for (edge, edge_key) in derived_edges.iter().zip(&resolved_keys) {
         // Dangling endpoint references.
         if !node_ids.is_empty() {
             if !node_ids.contains(&edge.source) {
@@ -132,7 +131,7 @@ pub fn detect_solver_summary_cycle(
             ConstraintKind::CopyEdge { dst, src } => {
                 adjacency.entry(*src).or_default().insert(*dst);
             }
-            ConstraintKind::CallConstraint { callsite } => {
+            ConstraintKind::CallConstraint { callsite, .. } => {
                 summary_nodes.insert(*callsite);
             }
             _ => {}
@@ -379,6 +378,7 @@ mod tests {
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: crate::internal_core::stable_key_for_test(stable_key),
             provenance: provenance(),
+            claim: crate::analysis_neutral::points_to::tiers::EdgeClaim::Unassigned,
         }
     }
 
@@ -398,9 +398,7 @@ mod tests {
     fn call_constraint(callsite: u64, stable_key: &str) -> ConstraintFact {
         ConstraintFact {
             id: SemanticConstraintId(0),
-            kind: ConstraintKind::CallConstraint {
-                callsite: SemanticNodeId(callsite),
-            },
+            kind: ConstraintKind::call_at(SemanticNodeId(callsite)),
             status: PointsToStatus::Present,
             precision: PointsToPrecision::FlowInsensitive,
             stable_key: crate::internal_core::stable_key_for_test(stable_key),

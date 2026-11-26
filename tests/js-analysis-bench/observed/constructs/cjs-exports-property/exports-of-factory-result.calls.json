@@ -1,0 +1,37 @@
+{
+  "schema": "polint-js-bench-observed-calls-2",
+  "node": "v24.22.3",
+  "instrumented_files": [
+    "api.js",
+    "main.js"
+  ],
+  "instrumented_functions": 2,
+  "transformed_not_instrumented": [],
+  "failures": [],
+  "entered_functions": [
+    {
+      "function": "api.js@18..138",
+      "name": "makeParser"
+    },
+    {
+      "function": "api.js@69..135",
+      "name": "parser"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "call",
+      "site": "api.js@155..167",
+      "syntax": "identifier",
+      "callee": "api.js@18..138",
+      "callee_name": "makeParser"
+    },
+    {
+      "kind": "call",
+      "site": "main.js@55..69",
+      "syntax": "member",
+      "callee": "api.js@69..135",
+      "callee_name": "parser"
+    }
+  ]
+}

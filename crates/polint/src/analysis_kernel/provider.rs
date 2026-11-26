@@ -790,6 +790,15 @@ impl Provider for TypeValueAliasProvider {
     fn run(&self, ctx: &mut ProviderCtx<'_>) -> ProviderRunResult {
         let ctx = CtxHandle::from_ctx(ctx);
         let go_points_to = go_points_to_requested(&ctx.plan, ctx.db);
+        let copies_only = ctx.plan.requests_capability("call_graph")
+            && !control_or_data_flow_requested(&ctx.plan, ctx.db)
+            && !ctx.plan.requests_per_point_domain_facts()
+            && ctx.db.extension_facts().is_empty()
+            && ctx
+                .db
+                .files()
+                .iter()
+                .all(|file| file.language.is_ts_family());
         let derivation =
             crate::analysis::types::provider::derive_type_value_alias_with_go_points_to(
                 ctx.db,
@@ -809,6 +818,7 @@ impl Provider for TypeValueAliasProvider {
                     ctx.dependency_digest("polint.ts.syntax"),
                 ],
                 go_points_to,
+                copies_only,
             );
         ProviderRunResult {
             counts: Default::default(),
@@ -1277,7 +1287,7 @@ const DEEP_PROVIDER_SEEDS: &[&str] = &[
     "polint.solver",
 ];
 
-const DEEP_TRIGGER_CAPABILITIES: &[&str] = &["calls", "control_flow", "dataflow"];
+const DEEP_TRIGGER_CAPABILITIES: &[&str] = &["calls", "control_flow", "dataflow", "call_graph"];
 
 /// Provider set enabled by the historical boolean pipeline gates for `requested`.
 pub(crate) fn providers_enabled_by_boolean_gates(
@@ -1317,15 +1327,6 @@ pub(crate) fn providers_enabled_by_boolean_gates(
     if requested.contains("dataflow") {
         enabled.extend(["polint.data_flow", "polint.evidence"]);
     }
-    if requested.contains("call_graph") {
-        enabled.extend([
-            "polint.module_topology",
-            "polint.semantic_mir",
-            "polint.cfg",
-            "polint.calls",
-            "polint.go.semantic",
-        ]);
-    }
     if requested.contains("go_types") || requested.contains("routes") {
         enabled.insert("polint.go.semantic");
     }
@@ -1336,7 +1337,7 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
     match capability {
         "resolved_imports" | "module_graph" => &["polint.module_graph"],
         "symbols" | "references" => &["polint.symbol_graph"],
-        "calls" | "control_flow" => DEEP_PROVIDER_SEEDS,
+        "calls" | "control_flow" | "call_graph" => DEEP_PROVIDER_SEEDS,
         "dataflow" => {
             const DATAFLOW_SEEDS: &[&str] = &[
                 "polint.calls",
@@ -1350,7 +1351,6 @@ fn seed_providers_for_capability(capability: &str) -> &'static [&'static str] {
             DATAFLOW_SEEDS
         }
         "file_metrics" | "function_metrics" | "complexity_metrics" => &["polint.metrics"],
-        "call_graph" => &["polint.calls"],
         "go_types" | "routes" => &["polint.go.semantic"],
         _ => &[],
     }
@@ -1493,8 +1493,8 @@ const MODULE_GRAPH_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
 }];
 
 const SYMBOL_GRAPH_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
-    name: "symbol-graph-facts-3",
-    version: 3,
+    name: "symbol-graph-facts-4",
+    version: 4,
 }];
 
 const MODULE_TOPOLOGY_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
@@ -1559,7 +1559,7 @@ const TYPE_VALUE_ALIAS_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
 
 const SEMANTIC_GRAPH_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
     name: crate::analysis::semantic_graph::cache_key::SEMANTIC_GRAPH_SCHEMA_LABEL,
-    version: 1,
+    version: 2,
 }];
 
 const SOLVER_SCHEMA: &[SchemaVersion] = &[SchemaVersion {
@@ -2475,8 +2475,8 @@ mod tests {
         assert_eq!(
             manifest.schema_versions,
             &[SchemaVersion {
-                name: "symbol-graph-facts-3",
-                version: 3,
+                name: "symbol-graph-facts-4",
+                version: 4,
             }]
         );
     }

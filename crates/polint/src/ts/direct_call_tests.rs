@@ -1,26 +1,49 @@
 //! Direct call resolution over real TS/JS sources, end to end through the
 //! analysis kernel: each case names one call site and the exact set of
-//! functions the direct resolver may give it a precise edge to.
+//! functions the direct resolver may give it a precise edge to. A few cases
+//! check the refined edges of the same site, which every resolver feeds.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::analysis_neutral::calls::facts::{CallPrecision, CallProvenance, CallTargetStatus};
+use crate::analysis_neutral::calls::facts::{
+    CallPrecision, CallProvenance, CallTargetStatus, ClaimTier,
+};
+use crate::analysis_neutral::ids::CallSiteId;
+
+/// Which edges of a call site a case reads.
+#[derive(Clone, Copy)]
+enum Edges {
+    /// Precise native direct targets.
+    Direct,
+    /// Refined edges that claim a target in any tier.
+    Refined,
+}
 
 /// The texts of the functions that `call` (a snippet unique in `main`) has
 /// precise direct edges to.
 fn direct_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSet<String> {
-    let repo = tempfile::tempdir().unwrap();
-    for (name, body) in files {
-        std::fs::write(repo.path().join(name), body).unwrap();
-    }
+    targets_at(files, main, call, Edges::Direct)
+}
+
+/// The texts of the functions a refined edge at `call` claims, in any tier.
+fn refined_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSet<String> {
+    targets_at(files, main, call, Edges::Refined)
+}
+
+/// Whether the refined answer at `call` marks the site open: some refined edge
+/// there is not resolved, so the targets it claims may not be all of them.
+fn refined_site_is_open(files: &[(&str, &str)], main: &str, call: &str) -> bool {
+    let (output, site) = analyse_site(files, main, call);
+    output
+        .db
+        .refined_call_edges()
+        .iter()
+        .any(|edge| edge.site == site && edge.status != CallTargetStatus::Resolved)
+}
+
+fn targets_at(files: &[(&str, &str)], main: &str, call: &str, edges: Edges) -> BTreeSet<String> {
+    let (output, site) = analyse_site(files, main, call);
     let sources = files.iter().copied().collect::<BTreeMap<_, _>>();
-    let source = sources[main];
-    assert_eq!(
-        source.matches(call).count(),
-        1,
-        "call snippet {call:?} must be unique in {source}"
-    );
-    let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
     let paths = output
         .db
         .files()
@@ -33,6 +56,63 @@ fn direct_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSet
         .iter()
         .map(|function| (function.id, function))
         .collect::<BTreeMap<_, _>>();
+    let targets = match edges {
+        Edges::Direct => output
+            .db
+            .call_targets()
+            .iter()
+            .filter(|target| {
+                target.site == site
+                    && target.status == CallTargetStatus::Resolved
+                    && target.provenance == CallProvenance::NativeDirect
+                    && target.precision != CallPrecision::Heuristic
+            })
+            .filter_map(|target| target.target_function)
+            .collect::<Vec<_>>(),
+        Edges::Refined => output
+            .db
+            .refined_call_edges()
+            .iter()
+            .filter(|edge| {
+                edge.site == site
+                    && edge.status == CallTargetStatus::Resolved
+                    && edge.precision.tier() != ClaimTier::NoClaim
+            })
+            .filter_map(|edge| edge.target_function)
+            .collect(),
+    };
+    targets
+        .into_iter()
+        .filter_map(|target| {
+            let function = functions.get(&target)?;
+            let body = sources[paths.get(&function.file)?.as_str()];
+            Some(
+                body[function.span.start_byte as usize..function.span.end_byte as usize]
+                    .to_string(),
+            )
+        })
+        .collect()
+}
+
+/// The kernel's output over `files`, and the call site of `call`: the longest
+/// site that starts where the snippet does and ends inside it.
+fn analyse_site(
+    files: &[(&str, &str)],
+    main: &str,
+    call: &str,
+) -> (crate::analysis_kernel::KernelOutput, CallSiteId) {
+    let repo = tempfile::tempdir().unwrap();
+    for (name, body) in files {
+        std::fs::write(repo.path().join(name), body).unwrap();
+    }
+    let sources = files.iter().copied().collect::<BTreeMap<_, _>>();
+    let source = sources[main];
+    assert_eq!(
+        source.matches(call).count(),
+        1,
+        "call snippet {call:?} must be unique in {source}"
+    );
+    let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
     let main_file = output
         .db
         .files()
@@ -50,26 +130,9 @@ fn direct_targets_at(files: &[(&str, &str)], main: &str, call: &str) -> BTreeSet
                 && site.span.end_byte <= start + call.len() as u32
         })
         .max_by_key(|site| site.span.end_byte)
+        .map(|site| site.id)
         .unwrap_or_else(|| panic!("no call site for {call:?} in {source}"));
-    output
-        .db
-        .call_targets()
-        .iter()
-        .filter(|target| {
-            target.site == site.id
-                && target.status == CallTargetStatus::Resolved
-                && target.provenance == CallProvenance::NativeDirect
-                && target.precision != CallPrecision::Heuristic
-        })
-        .filter_map(|target| {
-            let function = functions.get(&target.target_function?)?;
-            let body = sources[paths.get(&function.file)?.as_str()];
-            Some(
-                body[function.span.start_byte as usize..function.span.end_byte as usize]
-                    .to_string(),
-            )
-        })
-        .collect()
+    (output, site)
 }
 
 fn set(texts: &[&str]) -> BTreeSet<String> {
@@ -168,6 +231,97 @@ fn overload_with_an_object_literal_return_type_targets_the_implementation() {
     assert_eq!(
         direct_targets_at(&[("main.ts", main)], "main.ts", "pick(\"a\")"),
         set(&["function pick(x: any) { return { value: x }; }"])
+    );
+}
+
+/// An overload signature has no body, so no call reaches it: every refined
+/// edge, through an import, a namespace member or a local binding, names the
+/// implementation alone.
+#[test]
+fn refined_edges_reach_the_implementation_of_an_overload() {
+    let util = "export function issue(a: string, b: number): string;\n\
+                export function issue(a: string): string;\n\
+                export function issue(...args: any[]): string { return String(args[0]); }\n";
+    let main = "import * as util from \"./util\";\n\
+                import { issue } from \"./util\";\n\
+                function pick(x: string): string;\n\
+                function pick(x: any) { return x; }\n\
+                export function run() {\n\
+                \x20 util.issue(\"a\");\n\
+                \x20 issue(\"b\");\n\
+                \x20 pick(\"c\");\n\
+                }\n";
+    let files = [("util.ts", util), ("main.ts", main)];
+    let implementation = "function issue(...args: any[]): string { return String(args[0]); }";
+
+    assert_eq!(
+        refined_targets_at(&files, "main.ts", "util.issue(\"a\")"),
+        set(&[implementation])
+    );
+    assert_eq!(
+        refined_targets_at(&files, "main.ts", "issue(\"b\")"),
+        set(&[implementation])
+    );
+    assert_eq!(
+        refined_targets_at(&files, "main.ts", "pick(\"c\")"),
+        set(&["function pick(x: any) { return x; }"])
+    );
+}
+
+/// A callee set that also takes a value the solve cannot see (a parameter of
+/// an exported function, which any caller may bind) is heuristic: its edge to
+/// the known function stays, and the site stays open, so no other layer's
+/// target makes it look complete.
+#[test]
+fn a_heuristic_callee_set_leaves_the_site_open() {
+    let main = "function known() { return 1; }\n\
+                export function run(other) {\n\
+                \x20 const o = { f: known };\n\
+                \x20 o.f = other;\n\
+                \x20 o.f();\n\
+                }\n";
+    let files = [("main.js", main)];
+
+    assert_eq!(
+        refined_targets_at(&files, "main.js", "o.f()"),
+        set(&["function known() { return 1; }"])
+    );
+    assert!(refined_site_is_open(&files, "main.js", "o.f()"));
+}
+
+/// A name written after its declaration, or redeclared, may hold another value,
+/// and so may a name aliased after the function it read was written: none of
+/// them is an alias of its initializer, and the call through it stays open.
+#[test]
+fn a_written_alias_is_no_alias_of_its_initializer() {
+    let reassigned = "function known() { return 1; }\n\
+                      export function run(other) {\n\
+                      \x20 let pick = known;\n\
+                      \x20 if (other) pick = other;\n\
+                      \x20 pick();\n\
+                      }\n";
+    let redeclared = "function known() { return 1; }\n\
+                      export function run(other) {\n\
+                      \x20 var pick = known;\n\
+                      \x20 var pick = other;\n\
+                      \x20 pick();\n\
+                      }\n";
+    let target_written = "function known() { return 1; }\n\
+                          export function run(other) {\n\
+                          \x20 known = other;\n\
+                          \x20 let pick = known;\n\
+                          \x20 pick();\n\
+                          }\n";
+
+    for main in [reassigned, redeclared, target_written] {
+        let files = [("main.js", main)];
+        assert!(refined_site_is_open(&files, "main.js", "pick()"), "{main}");
+    }
+    // The row call contributes the known operand at the real site on the
+    // heuristic tier; the unresolved row still forbids a complete answer.
+    assert_eq!(
+        refined_targets_at(&[("main.js", redeclared)], "main.js", "pick()"),
+        set(&["function known() { return 1; }"])
     );
 }
 
@@ -329,4 +483,79 @@ fn named_function_expression_keeps_its_target_under_a_same_named_binding() {
         direct_targets_at(&[("main.cjs", main)], "main.cjs", "fact(n - 1)"),
         set(&["function fact(n) { return n ? fact(n - 1) : fact; }"])
     );
+}
+
+/// A target derived at a call through a value another call returned belongs
+/// to the call that consumes the value, not to the call that carried it: the
+/// returning call keeps only its own target.
+#[test]
+fn a_returned_callee_is_attributed_to_the_call_that_consumes_it() {
+    let main = "function double(x) { return x * 2; }\n\
+                function negate(x) { return -x; }\n\
+                function pick(mode) {\n\
+                \x20 if (mode) { return double; }\n\
+                \x20 return negate;\n\
+                }\n\
+                const fn = pick(process.argv.length > 2);\n\
+                fn(1);\n";
+    let files = [("main.js", main)];
+
+    assert_eq!(
+        refined_targets_at(&files, "main.js", "pick(process.argv.length > 2)"),
+        set(&["function pick(mode) {\n  if (mode) { return double; }\n  return negate;\n}"])
+    );
+    assert_eq!(
+        refined_targets_at(&files, "main.js", "fn(1)"),
+        set(&[
+            "function double(x) { return x * 2; }",
+            "function negate(x) { return -x; }",
+        ])
+    );
+}
+
+#[test]
+fn function_properties_and_prototypes_flow_across_module_requests() {
+    let main =
+        "const {C} = require('./factory'); const inst = new C({}); inst.check(); C.init(inst, {});";
+    for prototype_store in [
+        "Made.prototype.check = proto.check;",
+        "Made.prototype = proto;",
+    ] {
+        let library = "function make(initializer, proto) { function Made(def) { initializer(this, def); } PROTOTYPE_STORE Object.defineProperty(Made, 'init', {value: initializer}); return Made; } function initialize(inst, def) {} exports.C = make(initialize, {check() {}});"
+            .replace("PROTOTYPE_STORE", prototype_store);
+        let files = [("factory.js", library.as_str()), ("main.js", main)];
+        assert_eq!(
+            refined_targets_at(&files, "main.js", "new C({})"),
+            set(&["function Made(def) { initializer(this, def); }"])
+        );
+        assert_eq!(
+            refined_targets_at(&files, "main.js", "inst.check()"),
+            set(&["check() {}"])
+        );
+        assert_eq!(
+            refined_targets_at(&files, "main.js", "C.init(inst, {})"),
+            set(&["function initialize(inst, def) {}"])
+        );
+    }
+}
+
+#[test]
+fn inherited_field_projection_keeps_an_own_override() {
+    let main = "const parent = {run() {}}; const child = Object.create(parent); child.run = function own() {}; child.run();";
+    assert_eq!(
+        refined_targets_at(&[("main.js", main)], "main.js", "child.run()"),
+        set(&["function own() {}"])
+    );
+}
+
+#[test]
+fn implicit_derived_constructor_arguments_do_not_close_a_default_callback() {
+    let main = "function fallback() {} function supplied() {} class Base { constructor(callback = fallback) { callback(); } } class Derived extends Base {} new Derived(supplied);";
+    // Forwarding the implicit argument list remains open until element flow
+    // describes it, so the default cannot become a complete answer.
+    assert!(refined_site_is_open(
+        &[("main.js", main)],
+        "main.js",
+        "callback()"
+    ));
 }
