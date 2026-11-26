@@ -11,6 +11,7 @@ use oxc_span::SourceType;
 use std::path::Path;
 
 use crate::analysis_api::SourceFile;
+use crate::ts::nesting::{MAX_NESTING_DEPTH, nesting_past_limit};
 
 /// Construct name for unsupported-semantic rows recorded on recoverable Oxc errors.
 pub const PARSER_RECOVERY_CONSTRUCT: &str = "parser recovery";
@@ -53,11 +54,17 @@ pub fn source_type(path: &Path) -> SourceType {
 }
 
 /// The only sanctioned way to parse TS/JS in this crate.
+///
+/// A source that nests deeper than [`MAX_NESTING_DEPTH`] is not parsed: the
+/// result is catastrophic, with one error that names the limit.
 pub fn parse_ts_source<'a>(
     allocator: &'a Allocator,
     path: &Path,
     source: &'a str,
 ) -> ParsedTsSource<'a> {
+    if let Some(offset) = nesting_past_limit(source, MAX_NESTING_DEPTH) {
+        return nested_too_deep(allocator, path, source, offset);
+    }
     let raw = Parser::new(allocator, source, source_type(path)).parse();
     let errors = raw
         .errors
@@ -84,6 +91,30 @@ pub fn parse_ts_source<'a>(
         raw,
         errors,
         fully_parsed,
+    }
+}
+
+/// The result for a source that nests past [`MAX_NESTING_DEPTH`] at `offset`:
+/// an empty program over `source`, marked as an aborted parse.
+fn nested_too_deep<'a>(
+    allocator: &'a Allocator,
+    path: &Path,
+    source: &'a str,
+    offset: usize,
+) -> ParsedTsSource<'a> {
+    let mut raw = Parser::new(allocator, "", source_type(path)).parse();
+    raw.program.source_text = source;
+    raw.panicked = true;
+    ParsedTsSource {
+        raw,
+        errors: vec![ParseError {
+            message: format!(
+                "Source nests deeper than {MAX_NESTING_DEPTH} levels; the file is not analysed."
+            ),
+            start_byte: Some(offset),
+            end_byte: Some(offset),
+        }],
+        fully_parsed: false,
     }
 }
 
@@ -337,6 +368,55 @@ mod tests {
         for (construct, path, source) in nested_sources(500) {
             let (fully_parsed, _, messages) = parse_on_a_worker_stack(path, source);
             assert!(fully_parsed, "{construct}: {messages:?}");
+        }
+    }
+
+    /// The most levels of one construct that stay within the nesting limit.
+    fn deepest_accepted_levels(construct: &str) -> usize {
+        let within = |levels: usize| {
+            let (_, _, source) = nested_sources(levels)
+                .into_iter()
+                .find(|(name, _, _)| *name == construct)
+                .expect("known construct");
+            nesting_past_limit(&source, MAX_NESTING_DEPTH).is_none()
+        };
+        let (mut low, mut high) = (1, MAX_NESTING_DEPTH as usize + 1);
+        while low + 1 < high {
+            let middle = (low + high) / 2;
+            if within(middle) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        low
+    }
+
+    /// Every construct nested as deep as the limit admits parses, and its
+    /// semantic walk finishes, on the stack an analysis worker gets.
+    #[test]
+    fn a_file_at_the_nesting_limit_parses_and_walks_on_a_worker_stack() {
+        for (construct, _, _) in nested_sources(1) {
+            let levels = deepest_accepted_levels(construct);
+            let (_, path, source) = nested_sources(levels)
+                .into_iter()
+                .find(|(name, _, _)| *name == construct)
+                .expect("known construct");
+            let (fully_parsed, scopes) = std::thread::Builder::new()
+                .stack_size(crate::jobs::WORKER_STACK_BYTES)
+                .spawn(move || {
+                    let allocator = Allocator::default();
+                    let parsed = parse_ts_source(&allocator, Path::new(path), &source);
+                    let semantic = oxc_semantic::SemanticBuilder::new()
+                        .build(parsed.program())
+                        .semantic;
+                    (parsed.fully_parsed, semantic.scoping().scopes_len())
+                })
+                .expect("spawn parse thread")
+                .join()
+                .expect("parse and walk finish without overflowing the stack");
+            assert!(fully_parsed, "{construct} at {levels} levels");
+            assert!(scopes > 0, "{construct} at {levels} levels");
         }
     }
 

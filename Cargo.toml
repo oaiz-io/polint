@@ -27,9 +27,7 @@ members = [
 # The public-surface leak probe is compiled separately from the workspace.
 # Keep the leak-gate probe OUT of normal workspace builds, lints, and tests; it
 # is compiled in isolation only by crates/polint/tests/public_surface_leak.rs.
-# The forked Oxc parser keeps upstream's sources, lints and formatting, so it
-# builds as a dependency, not as a member under the workspace's lints.
-exclude = ["crates/polint-oxc-parser", "tests/fixtures/public-surface-leak-probe"]
+exclude = ["tests/fixtures/public-surface-leak-probe"]
 resolver = "3"
 
 [workspace.package]
@@ -59,8 +57,7 @@ libc = "0.2"
 # `tree-sitter-go-0.25.0` in parser_identity.rs.
 oxc_allocator = "=0.129.0"
 oxc_ast = "=0.129.0"
-# Oxc's parser with a nesting limit; see crates/polint-oxc-parser/VENDOR.md.
-oxc_parser = { package = "polint-oxc-parser", version = "=0.129.0-polint.1", path = "crates/polint-oxc-parser" }
+oxc_parser = "=0.129.0"
 oxc_resolver = "=11.19.1"
 oxc_semantic = "=0.129.0"
 oxc_span = "=0.129.0"
