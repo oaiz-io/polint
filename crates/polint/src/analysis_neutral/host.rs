@@ -284,6 +284,11 @@ pub trait AnalysisHost: FactDatabase {
         self.semantic_mir_store().places()
     }
 
+    /// The place with `id`, through the store's index rather than a scan.
+    fn mir_place(&self, id: crate::analysis_neutral::ids::PlaceId) -> Option<&PlaceFact> {
+        self.semantic_mir_store().place(id)
+    }
+
     fn mir_place_types(&self) -> &[PlaceTypeFact] {
         self.semantic_mir_store().place_types()
     }
