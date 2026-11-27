@@ -28,8 +28,6 @@ pub(super) enum TsCallableFlowKind {
 
 #[cfg(all(test, feature = "lang-go", feature = "lang-typescript"))]
 mod tests {
-    use std::collections::BTreeMap;
-
     /// Callee bodies walked collecting the callable flows of a file whose one
     /// function calls itself at `self_calls` sites, counted on a one-thread
     /// pool so the walks of every pass are seen. A walk limit fails an
@@ -47,15 +45,62 @@ mod tests {
             .build()
             .unwrap();
         pool.install(|| {
-            let file = &output.db.files()[0];
-            let arena = oxc_allocator::Allocator::default();
-            let parsed = crate::ts::parse::parse_ts_file(&arena, file);
-            let programs = BTreeMap::from([(file.id, parsed.program())]);
             super::extract::limit_body_walks(super::extract::body_walks() + 100_000);
             let before = super::extract::body_walks();
-            super::collect_callable_flows(&output.db, &programs);
+            super::collect_callable_flows(&output.db);
             super::extract::body_walks() - before
         })
+    }
+
+    /// The callable flows of a program whose files feed each other through
+    /// re-exports, required factories and returned objects. The export
+    /// summaries take more than one round to settle, so every pass runs.
+    fn cross_file_flows(threads: usize) -> Vec<super::TsCallableFlow> {
+        let repo = tempfile::tempdir().unwrap();
+        let files = [
+            (
+                "index.js",
+                "const lib = require('./lib');\nconst make = require('./factory');\n\
+                 const app = make();\napp.start(lib.helper);\nlib.run(function cb() {});\n",
+            ),
+            ("lib.js", "module.exports = require('./impl');\n"),
+            (
+                "impl.js",
+                "function helper() {}\nfunction run(fn) { fn(); helper(); }\n\
+                 module.exports = { helper, run };\n",
+            ),
+            (
+                "factory.js",
+                "const { run } = require('./impl');\n\
+                 module.exports = function make() {\n\
+                 const app = { start(fn) { fn(); run(fn); } };\n  return app;\n};\n",
+            ),
+            (
+                "esm.mjs",
+                "export { helper as h } from './impl.js';\nimport * as all from './impl.js';\n\
+                 all.run(() => {});\n",
+            ),
+        ];
+        for (path, source) in files {
+            std::fs::write(repo.path().join(path), source).unwrap();
+        }
+        let output = crate::eval::observed::run_kernel_for_repo_for_test(repo.path()).unwrap();
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        pool.install(|| super::collect_callable_flows(&output.db))
+    }
+
+    /// The files are walked on as many threads as the pool has, and the
+    /// flows do not depend on how many that is.
+    #[test]
+    fn callable_flows_do_not_depend_on_the_thread_count() {
+        let serial = cross_file_flows(1);
+        assert!(!serial.is_empty(), "the fixture produces callable flows");
+        for threads in [2, 4, 8] {
+            assert_eq!(cross_file_flows(threads), serial, "{threads} threads");
+        }
     }
 
     /// A function that calls itself at `k` sites is not walked once per path

@@ -273,69 +273,113 @@ impl Drop for WalkFrame {
     }
 }
 
-pub(in crate::ts) fn collect_callable_flows<'ast>(
+/// Parses every TypeScript/JavaScript file of `db` that `select` keeps and runs
+/// `walk` on each one that parses completely, on the thread that parsed it,
+/// since an Oxc tree cannot cross threads. Results come back in file order.
+/// Each walk reads its own file's tree and the shared tables it is handed,
+/// never another file's tree, so walking the files in parallel gives what
+/// walking them in turn does.
+fn walk_parsed_files<'db, H, T, F>(
+    db: &'db H,
+    select: impl Fn(&SourceFile) -> bool + Sync,
+    walk: F,
+) -> Vec<T>
+where
+    H: AnalysisHost + Sync,
+    T: Send,
+    F: for<'ast> Fn(&'db SourceFile, &'db FunctionFact, &'ast Program<'ast>) -> Option<T> + Sync,
+{
+    let files = db
+        .files()
+        .iter()
+        .filter(|file| file.language.is_ts_family() && select(file))
+        .collect::<Vec<_>>();
+    files
+        .par_iter()
+        .filter_map(|&file| {
+            let module = module_function(db, file)?;
+            let allocator = Allocator::default();
+            let parsed = parse_ts_file(&allocator, file);
+            if !parsed.fully_parsed {
+                return None;
+            }
+            walk(file, module, parsed.program())
+        })
+        .collect()
+}
+
+fn new_collector<'db, 'ast, 'env>(
+    file: &'db SourceFile,
+    module: &'db FunctionFact,
+    sites: &'db [&'db CallSiteFact],
+    functions_by_start: &'db BTreeMap<(FileId, u32), Vec<&'db FunctionFact>>,
+    resolution_map: &'env BTreeMap<(FileId, String), FileId>,
+    module_summaries: &'env BTreeMap<FileId, ModuleExportSummary>,
+    function_returns: &'env BTreeMap<FunctionId, ModuleExportSummary>,
+) -> TsCallableFlowCollector<'db, 'ast, 'env> {
+    TsCallableFlowCollector {
+        file,
+        module,
+        sites,
+        functions_by_start,
+        resolution_map,
+        module_summaries,
+        function_returns,
+        function_declarations: BTreeMap::new(),
+        function_flows_by_id: BTreeMap::new(),
+        classes: BTreeMap::new(),
+        class_expressions: Vec::new(),
+        exports: ModuleExportSummary::default(),
+        export_aliases: std::collections::BTreeSet::new(),
+        this_method_walk: false,
+        current_super: None,
+        invocation_depth: 0,
+        walk_guard: Rc::default(),
+        table_generation: 0,
+        invocations: HashMap::new(),
+        invocation_walks: 0,
+        tree_walks: 0,
+        invoking: Vec::new(),
+        iterator_next_ordinals: BTreeMap::new(),
+        iterator_next_starts: BTreeMap::new(),
+        rows: Vec::new(),
+    }
+}
+
+pub(in crate::ts) fn collect_callable_flows(
     db: &(impl AnalysisHost + Sync),
-    programs: &BTreeMap<FileId, &'ast Program<'ast>>,
 ) -> Vec<TsCallableFlow> {
-    let mut rows = Vec::new();
     let sites = db.call_sites();
     let sites_by_file = sites_by_file(sites);
     let functions_by_file_start = functions_by_file_start(db);
     let resolution_map = module_resolution_map(db);
     let module_summaries =
-        compute_module_export_summaries(db, programs, &functions_by_file_start, &resolution_map);
+        compute_module_export_summaries(db, &functions_by_file_start, &resolution_map);
     let function_returns = compute_function_return_summaries(
         db,
-        &programs.keys().copied().collect(),
         &functions_by_file_start,
         &resolution_map,
         &module_summaries,
     );
 
-    for file in db
-        .files()
-        .iter()
-        .filter(|file| file.language.is_ts_family())
-    {
-        let Some(file_sites) = sites_by_file.get(&file.id) else {
-            continue;
-        };
-        let Some(module) = module_function(db, file) else {
-            continue;
-        };
-        let Some(&program) = programs.get(&file.id) else {
-            continue;
-        };
-        let mut collector = TsCallableFlowCollector {
+    let has_sites = |file: &SourceFile| sites_by_file.contains_key(&file.id);
+    let mut rows = walk_parsed_files(db, has_sites, |file, module, program| {
+        let file_sites = sites_by_file.get(&file.id)?;
+        let mut collector = new_collector(
             file,
             module,
-            sites: file_sites,
-            functions_by_start: &functions_by_file_start,
-            resolution_map: &resolution_map,
-            module_summaries: &module_summaries,
-            function_returns: &function_returns,
-            function_declarations: BTreeMap::new(),
-            function_flows_by_id: BTreeMap::new(),
-            classes: BTreeMap::new(),
-            class_expressions: Vec::new(),
-            exports: ModuleExportSummary::default(),
-            export_aliases: std::collections::BTreeSet::new(),
-            this_method_walk: false,
-            current_super: None,
-            invocation_depth: 0,
-            walk_guard: Rc::default(),
-            table_generation: 0,
-            invocations: HashMap::new(),
-            invocation_walks: 0,
-            tree_walks: 0,
-            invoking: Vec::new(),
-            iterator_next_ordinals: BTreeMap::new(),
-            iterator_next_starts: BTreeMap::new(),
-            rows: Vec::new(),
-        };
+            file_sites,
+            &functions_by_file_start,
+            &resolution_map,
+            &module_summaries,
+            &function_returns,
+        );
         collector.collect_program(program);
-        rows.extend(collector.rows);
-    }
+        Some(collector.rows)
+    })
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
 
     rows.sort();
     rows.dedup();
@@ -517,9 +561,8 @@ fn module_resolution_map(db: &impl AnalysisHost) -> BTreeMap<(FileId, String), F
 /// upstream summaries (so only locally-defined exports resolve); each later
 /// round lets `require`/`import` results observe the previous round's
 /// summaries, converging re-export chains.
-fn compute_module_export_summaries<'ast>(
-    db: &impl AnalysisHost,
-    programs: &BTreeMap<FileId, &'ast Program<'ast>>,
+fn compute_module_export_summaries(
+    db: &(impl AnalysisHost + Sync),
     functions_by_file_start: &BTreeMap<(FileId, u32), Vec<&FunctionFact>>,
     resolution_map: &BTreeMap<(FileId, String), FileId>,
 ) -> BTreeMap<FileId, ModuleExportSummary> {
@@ -532,50 +575,26 @@ fn compute_module_export_summaries<'ast>(
     // Function-return seeding is not active while building export summaries.
     let empty_returns: BTreeMap<FunctionId, ModuleExportSummary> = BTreeMap::new();
     for _round in 0..MAX_MODULE_SUMMARY_ROUNDS {
-        let mut next: BTreeMap<FileId, ModuleExportSummary> = BTreeMap::new();
-        for file in db
-            .files()
-            .iter()
-            .filter(|file| file.language.is_ts_family())
-        {
-            let Some(module) = module_function(db, file) else {
-                continue;
-            };
-            let Some(&program) = programs.get(&file.id) else {
-                continue;
-            };
-            let mut collector = TsCallableFlowCollector {
-                file,
-                module,
-                sites: &[],
-                functions_by_start: functions_by_file_start,
-                resolution_map,
-                module_summaries: &summaries,
-                function_returns: &empty_returns,
-                function_declarations: BTreeMap::new(),
-                function_flows_by_id: BTreeMap::new(),
-                classes: BTreeMap::new(),
-                class_expressions: Vec::new(),
-                exports: ModuleExportSummary::default(),
-                export_aliases: std::collections::BTreeSet::new(),
-                this_method_walk: false,
-                current_super: None,
-                invocation_depth: 0,
-                walk_guard: Rc::default(),
-                table_generation: 0,
-                invocations: HashMap::new(),
-                invocation_walks: 0,
-                tree_walks: 0,
-                invoking: Vec::new(),
-                iterator_next_ordinals: BTreeMap::new(),
-                iterator_next_starts: BTreeMap::new(),
-                rows: Vec::new(),
-            };
-            collector.collect_program(program);
-            if !collector.exports.is_empty() {
-                next.insert(file.id, collector.exports);
-            }
-        }
+        // Every file of a round reads the previous round's summaries only.
+        let next: BTreeMap<FileId, ModuleExportSummary> = walk_parsed_files(
+            db,
+            |_| true,
+            |file, module, program| {
+                let mut collector = new_collector(
+                    file,
+                    module,
+                    &[],
+                    functions_by_file_start,
+                    resolution_map,
+                    &summaries,
+                    &empty_returns,
+                );
+                collector.collect_program(program);
+                (!collector.exports.is_empty()).then_some((file.id, collector.exports))
+            },
+        )
+        .into_iter()
+        .collect();
         if next == summaries {
             break;
         }
@@ -594,65 +613,32 @@ fn compute_module_export_summaries<'ast>(
 /// `require` boundary.
 /// Each file's return summaries depend only on the module summaries, never on
 /// another file's return summaries, so the files are summarised in parallel.
-/// An Oxc `Program` cannot cross threads, so each worker parses its own file
-/// again; `parsed_files` names the files that parsed in full. The per-file
-/// results are merged in file order, as the serial pass inserted them.
+/// The per-file results are merged in file order.
 fn compute_function_return_summaries(
     db: &(impl AnalysisHost + Sync),
-    parsed_files: &BTreeSet<FileId>,
     functions_by_file_start: &BTreeMap<(FileId, u32), Vec<&FunctionFact>>,
     resolution_map: &BTreeMap<(FileId, String), FileId>,
     module_summaries: &BTreeMap<FileId, ModuleExportSummary>,
 ) -> BTreeMap<FunctionId, ModuleExportSummary> {
-    let files = db
-        .files()
-        .iter()
-        .filter(|file| file.language.is_ts_family() && parsed_files.contains(&file.id))
-        .collect::<Vec<_>>();
-    let per_file = files
-        .par_iter()
-        .map(|file| {
+    let empty_returns = BTreeMap::new();
+    let per_file = walk_parsed_files(
+        db,
+        |_| true,
+        |file, module, program| {
             let mut returns = BTreeMap::new();
-            let Some(module) = module_function(db, file) else {
-                return returns;
-            };
-            let allocator = Allocator::default();
-            let parsed = parse_ts_file(&allocator, file);
-            if !parsed.fully_parsed {
-                return returns;
-            }
-            let empty_returns = BTreeMap::new();
-            let mut collector = TsCallableFlowCollector {
+            let mut collector = new_collector(
                 file,
                 module,
-                sites: &[],
-                functions_by_start: functions_by_file_start,
+                &[],
+                functions_by_file_start,
                 resolution_map,
                 module_summaries,
-                function_returns: &empty_returns,
-                function_declarations: BTreeMap::new(),
-                function_flows_by_id: BTreeMap::new(),
-                classes: BTreeMap::new(),
-                class_expressions: Vec::new(),
-                exports: ModuleExportSummary::default(),
-                export_aliases: std::collections::BTreeSet::new(),
-                this_method_walk: false,
-                current_super: None,
-                invocation_depth: 0,
-                walk_guard: Rc::default(),
-                table_generation: 0,
-                invocations: HashMap::new(),
-                invocation_walks: 0,
-                tree_walks: 0,
-                invoking: Vec::new(),
-                iterator_next_ordinals: BTreeMap::new(),
-                iterator_next_starts: BTreeMap::new(),
-                rows: Vec::new(),
-            };
-            collector.collect_return_summaries(parsed.program(), &mut returns);
-            returns
-        })
-        .collect::<Vec<_>>();
+                &empty_returns,
+            );
+            collector.collect_return_summaries(program, &mut returns);
+            Some(returns)
+        },
+    );
     let mut returns = BTreeMap::new();
     for file_returns in per_file {
         returns.extend(file_returns);
@@ -2298,8 +2284,8 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
             if let Some(name) = binding_identifier_name(&declarator.id)
                 && let Some(Expression::ObjectExpression(object)) = &declarator.init
             {
-                env.objects
-                    .insert(name, self.object_literal_targets(object, Some(env)));
+                let targets = self.object_literal_targets(object, Some(env));
+                env.objects.insert(name, targets);
             }
             if let Some(init) = &declarator.init {
                 self.collect_expression(init, owner, env);
@@ -7747,60 +7733,116 @@ impl<'db, 'ast, 'env> TsCallableFlowCollector<'db, 'ast, 'env> {
     }
 }
 
+/// A table of a [`FlowEnv`] or an [`ObjectTargets`] that copies share until
+/// one of them writes it. A callee walk starts from a copy of its caller's
+/// environment, and reading an object's member starts from a copy of the
+/// object; both usually write few tables or none, so a copy is a reference
+/// count per table and a table is copied only on its first write. Equality,
+/// hashing and debug output are those of the table itself.
+#[derive(Clone, Default, PartialEq, Eq, Hash)]
+struct Shared<T>(std::sync::Arc<T>);
+
+impl<T> std::ops::Deref for Shared<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: Clone> std::ops::DerefMut for Shared<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        std::sync::Arc::make_mut(&mut self.0)
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Shared<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl<T: Clone + IntoIterator> IntoIterator for Shared<T> {
+    type Item = T::Item;
+    type IntoIter = T::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        std::sync::Arc::unwrap_or_clone(self.0).into_iter()
+    }
+}
+
+impl<T: FromIterator<A>, A> FromIterator<A> for Shared<T> {
+    fn from_iter<I: IntoIterator<Item = A>>(iter: I) -> Self {
+        Shared(std::sync::Arc::new(T::from_iter(iter)))
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Shared<T>
+where
+    &'a T: IntoIterator,
+{
+    type Item = <&'a T as IntoIterator>::Item;
+    type IntoIter = <&'a T as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&*self.0).into_iter()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct FlowEnv {
-    bindings: BTreeMap<String, CollectionTargets>,
-    bound_functions: BTreeMap<String, Vec<BoundFunctionTarget>>,
-    objects: BTreeMap<String, ObjectTargets>,
+    bindings: Shared<BTreeMap<String, CollectionTargets>>,
+    bound_functions: Shared<BTreeMap<String, Vec<BoundFunctionTarget>>>,
+    objects: Shared<BTreeMap<String, ObjectTargets>>,
     /// Variable name -> class key in `classes`, for classes flowed through a
     /// variable (e.g. `var a = makeClass()` then `new a()` / `a.staticM()`).
-    class_bindings: BTreeMap<String, String>,
-    string_bindings: BTreeMap<String, String>,
-    bool_bindings: BTreeMap<String, bool>,
-    string_arrays: BTreeMap<String, Vec<String>>,
-    promises: BTreeMap<String, PromiseTargets>,
-    async_functions: BTreeMap<String, PromiseTargets>,
-    async_generators: BTreeMap<String, CollectionTargets>,
-    async_iterators: BTreeMap<String, CollectionTargets>,
+    class_bindings: Shared<BTreeMap<String, String>>,
+    string_bindings: Shared<BTreeMap<String, String>>,
+    bool_bindings: Shared<BTreeMap<String, bool>>,
+    string_arrays: Shared<BTreeMap<String, Vec<String>>>,
+    promises: Shared<BTreeMap<String, PromiseTargets>>,
+    async_functions: Shared<BTreeMap<String, PromiseTargets>>,
+    async_generators: Shared<BTreeMap<String, CollectionTargets>>,
+    async_iterators: Shared<BTreeMap<String, CollectionTargets>>,
     /// Ordered yield/return sequence of a generator **function** bound to a name
     /// (`function* g(){…}` / `const g = async function*(){…}`), used to resolve
     /// the k-th `.next()` on an instance of it to the k-th yielded value.
-    generator_sequences: BTreeMap<String, GeneratorSequence>,
+    generator_sequences: Shared<BTreeMap<String, GeneratorSequence>>,
     /// Ordered yield/return sequence of an **iterator instance** bound to a name
     /// (`const it = g()`), so `it.next()` is sequenced positionally and `for-of`
     /// over `it` iterates the yields without the `return` value.
-    iterator_sequences: BTreeMap<String, GeneratorSequence>,
+    iterator_sequences: Shared<BTreeMap<String, GeneratorSequence>>,
     this_object: ObjectTargets,
     this_callables: CollectionTargets,
     /// Loop variables bound by a `for (const k in obj)` head. A computed access
     /// `obj[k]` keyed on such a variable ranges over every own property, so it
     /// resolves to the union of the object's property values.
-    forin_keys: std::collections::BTreeSet<String>,
+    forin_keys: Shared<std::collections::BTreeSet<String>>,
     /// Variable names bound to a `merge-descriptors`-style property-copy helper
     /// (`var mixin = require('merge-descriptors')`). A call `mixin(dst, src, …)`
     /// copies every own property of each source onto `dst` in place (like the
     /// named-target `Object.assign`), which is how Express assembles `app`.
-    merge_helpers: std::collections::BTreeSet<String>,
+    merge_helpers: Shared<std::collections::BTreeSet<String>>,
     /// Explicit prototype object of a named object, recorded when
     /// `Object.setPrototypeOf(o, p)` / `o.__proto__ = p` is seen. Used to bind
     /// `super` while walking `o`'s own methods (object-literal `super.m()`).
     /// Kept separate from the prototype's members being merged into `o` (which
     /// drives direct `o.m()` dispatch) so `super` resolves to the proto only.
-    object_prototypes: BTreeMap<String, ObjectTargets>,
+    object_prototypes: Shared<BTreeMap<String, ObjectTargets>>,
     /// Parameter names that are KNOWN to be `undefined` in this invocation because
     /// the resolved call passed fewer positional arguments than the function
     /// declares (a syntactic arg-count shortfall — never inferred from value
     /// analysis). Lets `decide_branch` fold a guard like `if (depth == null)` to its
     /// live arm, so the dead arm's calls are never walked (demand-driven pruning of
     /// `array-flatten`'s `flattenWithDepth` recursion under express's no-`depth` call).
-    absent: std::collections::BTreeSet<String>,
+    absent: Shared<std::collections::BTreeSet<String>>,
     /// Local names bound directly to a resolvable `require(...)` result
     /// (`const mod = require('./lib')`). Only the *identity* of the module is
     /// kept; its shape already flows through `objects`/`bindings`. The interop
     /// helpers branch on the wrapped module's `__esModule` marker, which lives on
     /// that module's summary, so a helper handed a variable rather than the
     /// `require(...)` call itself needs this to find it.
-    module_bindings: BTreeMap<String, FileId>,
+    module_bindings: Shared<BTreeMap<String, FileId>>,
 }
 
 impl FlowEnv {
@@ -8115,11 +8157,11 @@ impl CollectionTargets {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct ObjectTargets {
-    properties: BTreeMap<String, Vec<FunctionId>>,
-    getter_properties: BTreeMap<String, Vec<FunctionId>>,
-    setter_properties: BTreeMap<String, Vec<FunctionId>>,
-    object_properties: BTreeMap<String, Box<ObjectTargets>>,
-    collection_properties: BTreeMap<String, CollectionTargets>,
+    properties: Shared<BTreeMap<String, Vec<FunctionId>>>,
+    getter_properties: Shared<BTreeMap<String, Vec<FunctionId>>>,
+    setter_properties: Shared<BTreeMap<String, Vec<FunctionId>>>,
+    object_properties: Shared<BTreeMap<String, Box<ObjectTargets>>>,
+    collection_properties: Shared<BTreeMap<String, CollectionTargets>>,
     /// Callable values reachable through a **dynamic** (computed, non-constant)
     /// property write keyed on a loop/iteration variable, e.g.
     /// `methods.forEach(m => { app[m] = fn })`. A read of a property with no
@@ -9687,5 +9729,58 @@ fn callee_text(expression: &Expression<'_>) -> Option<String> {
         }
         Expression::ParenthesizedExpression(expression) => callee_text(&expression.expression),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod shared_tests {
+    use std::collections::BTreeMap;
+    use std::hash::BuildHasher as _;
+
+    use super::Shared;
+
+    fn table(pairs: &[(&str, u32)]) -> BTreeMap<String, u32> {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), *value))
+            .collect()
+    }
+
+    /// A write to one copy is not seen by another, and a copy that is never
+    /// written still shares the table.
+    #[test]
+    fn a_write_to_one_copy_leaves_the_others_unchanged() {
+        let mut original: Shared<BTreeMap<String, u32>> = table(&[("a", 1)]).into_iter().collect();
+        let untouched = original.clone();
+        let mut written = original.clone();
+        written.insert("b".to_string(), 2);
+        original.remove("a");
+
+        assert_eq!(*untouched, table(&[("a", 1)]));
+        assert_eq!(*written, table(&[("a", 1), ("b", 2)]));
+        assert!(original.is_empty());
+        let shared = untouched.clone();
+        assert!(std::sync::Arc::ptr_eq(&shared.0, &untouched.0));
+    }
+
+    /// Equality, hashing and debug output are the table's, whether two values
+    /// share one table or hold equal copies.
+    #[test]
+    fn equality_hashing_and_debug_output_are_the_tables() {
+        let hasher = std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default();
+        let plain = table(&[("a", 1), ("b", 2)]);
+        let shared: Shared<BTreeMap<String, u32>> = plain.clone().into_iter().collect();
+        let mut copied = shared.clone();
+        copied.insert("c".to_string(), 3);
+        copied.remove("c");
+
+        assert!(!std::sync::Arc::ptr_eq(&shared.0, &copied.0));
+        assert_eq!(shared, copied);
+        assert_eq!(hasher.hash_one(&shared), hasher.hash_one(&plain));
+        assert_eq!(hasher.hash_one(&copied), hasher.hash_one(&plain));
+        assert_eq!(format!("{shared:?}"), format!("{plain:?}"));
+        let borrowed = (&shared).into_iter().collect::<Vec<_>>();
+        assert_eq!(borrowed, plain.iter().collect::<Vec<_>>());
+        assert_eq!(shared.into_iter().collect::<BTreeMap<_, _>>(), plain);
     }
 }

@@ -318,7 +318,8 @@ fn collect_ts_file_analyses(
         .filter(|file| file.language.is_ts_family())
         .collect::<Vec<_>>();
     // An Oxc tree cannot cross threads, so each file is analyzed on the thread
-    // that parses it, and the trees the callable flows read are parsed again.
+    // that parses it, and the callable-flow passes parse each file again on
+    // the worker that walks it.
     let analyses = files
         .par_iter()
         .map(|file| {
@@ -327,22 +328,7 @@ fn collect_ts_file_analyses(
             crate::ts::semantic_graph::analyze_parsed_ts_file(&interner, file, &parsed)
         })
         .collect();
-    let arenas = files
-        .iter()
-        .map(|_| Allocator::default())
-        .collect::<Vec<_>>();
-    let parsed = files
-        .iter()
-        .zip(&arenas)
-        .map(|(file, arena)| parse_ts_file(arena, file))
-        .collect::<Vec<_>>();
-    let programs = files
-        .iter()
-        .zip(&parsed)
-        .filter(|(_, parsed)| parsed.fully_parsed)
-        .map(|(file, parsed)| (file.id, parsed.program()))
-        .collect();
-    let callable_flows = crate::ts::callable_flow::collect_callable_flows(db, &programs);
+    let callable_flows = crate::ts::callable_flow::collect_callable_flows(db);
     (analyses, callable_flows)
 }
 

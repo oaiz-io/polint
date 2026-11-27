@@ -2,7 +2,7 @@
 # Regenerate: POLINT_UPDATE_DENSE_ID_BASELINE=1 cargo test -p polint --test internal_architecture dense_id_sweep --locked
 # Entry: <sha256 of (repo-relative path, enclosing fn/impl item, whitespace-collapsed line)>  <command>  <scope>  <count>
 # dot0: 159 hits, 41 test-only, 118 non-test
-# debug: 689 hits, 344 test-only, 345 non-test
+# debug: 692 hits, 347 test-only, 345 non-test
 # raw: 0 hits, 0 test-only, 0 non-test
 # other-debug: 134 hits, 134 test-only, 0 non-test
 0038500d6decf3dbeb069116d00d773912c3b88e191bbf9f87efeb9a70451dd1  debug  non-test  1
@@ -345,6 +345,7 @@
 5e0475178382a5b7e2796317ff08d7e270762467561e12542d56b62ba7a403cd  dot0  non-test  1
 5e8016190270c7e02273cd38095e17f84a3b939044ae28ac59d1ab8b7b151cc1  debug  test  1
 5e9e55c83f5b21411108392141389d80d24ff06f62db636f20a3c9a8b4355414  other-debug  test  1
+5ed0fabdf8efb991595d7aad2cbcf42bceb235666c78e089f8e6b92b22fb76fd  debug  test  1
 5f8814055cc809b218c2e17935c7a52034848e0fd2df8c3f519c431d0b3c80ab  debug  non-test  1
 60247ee5a702be32e63788f2e5c2a3f6a1fe33740d8450be4b52e60fb1e82881  debug  test  1
 602cdef42ba622ee05c9456ba132f494031378ad2a0a0b9004010897537dabbe  debug  non-test  1
@@ -833,6 +834,7 @@ e7a63a0042d879fce1ac6e5c171c2c564cb38bae41f9b702e0f62a35d20f5882  debug  non-tes
 e7bf9bb02ce1bc5f7a2e057becdb6002d3291e98af9ccdbd1dbbf74493e78f9d  debug  test  1
 e7f0c8c3871472d0ff402a18ab1d31ab3b83ab00a98956ea23ddd740d74ec5be  debug  test  1
 e80caf518606e92918a8886bbcbc2171ace9631eae1c7912ba44ff260c78b402  dot0  non-test  2
+e81c54ed018e97e37e7e9297b32c197a5949de46efc63f407797ed072449e960  debug  test  1
 e8230fcd78cefbfaf7316dabd9f0e407590e01e7538c190be4eb848d2801bab3  other-debug  test  1
 e824fb82fa0cdadb8eabe462348557dd119b9b069fca423d427b1ce147dac674  debug  test  2
 e85d991eae95d259fdb6b080bc973604abc4b86a909a564fd623d1404e5a583f  debug  test  1
@@ -918,4 +920,5 @@ fdc78f55fb6cb853b83782701ece5858c9e81a6c0abc378565bb28c1a139375e  dot0  non-test
 fe8a225e0db6fa214c8cd6787a0191c4d25a0edacdd3ee503abcd437e9be9cd9  debug  test  1
 feda2746705c1e6c89128c940e61780465da13d2f6af8c0f3f733f77c13e69c4  other-debug  test  1
 ff2f2a508bca971714bac24b37ffa466ecb8989e5d0bbb5335b839cf913afdda  debug  non-test  1
+ff67389be7c4e813b657c805f771ac964360028f8972f7a518d4b1f19e4ce7c3  debug  test  1
 ffb933695894dee89707a02bbaaaafd6f9412afa2e4e2bdb4c5999dbfef6370e  debug  test  1

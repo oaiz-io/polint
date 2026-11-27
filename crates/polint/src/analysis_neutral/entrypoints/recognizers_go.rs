@@ -733,7 +733,7 @@ fn resolve_handler_function(
     }
 
     for argument in site.arguments.iter().rev() {
-        let Some(place) = db.mir_places().iter().find(|place| place.id == *argument) else {
+        let Some(place) = db.mir_place(*argument) else {
             continue;
         };
         if let PlaceRoot::Temporary { ordinal, .. } = place.root
@@ -756,7 +756,7 @@ fn resolve_handler_function(
 /// chi r.Get("/path", handler) calls.
 fn extract_first_arg_literal(db: &impl AnalysisHost, site: &CallSiteFact) -> Option<String> {
     if let Some(first_arg) = site.arguments.first()
-        && let Some(place) = db.mir_places().iter().find(|p| p.id == *first_arg)
+        && let Some(place) = db.mir_place(*first_arg)
         && let PlaceRoot::Unknown { evidence } = &place.root
         && let Some(value) = unquote_literal(evidence)
     {
@@ -772,7 +772,7 @@ fn handler_argument_names(db: &impl AnalysisHost, site: &CallSiteFact) -> Vec<St
     let mut names = Vec::new();
 
     for argument in site.arguments.iter().rev() {
-        let Some(place) = db.mir_places().iter().find(|place| place.id == *argument) else {
+        let Some(place) = db.mir_place(*argument) else {
             continue;
         };
         if let Some(name) = handler_name_from_place_root(&place.root) {

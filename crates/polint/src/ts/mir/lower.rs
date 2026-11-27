@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -500,11 +501,26 @@ struct BranchRegion {
     else_end: Option<MirOpId>,
 }
 
+/// The operation `branch` names. Every operation is pushed with its position
+/// in the list as its id, so the list is indexed by the id; a list that does
+/// not hold to that is scanned, as before.
+fn branch_operation_mut(operations: &mut [OperationDraft], branch: MirOpId) -> &mut OperationDraft {
+    let position = usize::try_from(branch.0).ok().filter(|&position| {
+        operations
+            .get(position)
+            .is_some_and(|operation| operation.id == branch)
+    });
+    match position {
+        Some(position) => &mut operations[position],
+        None => operations
+            .iter_mut()
+            .find(|operation| operation.id == branch)
+            .expect("branch operation should exist"),
+    }
+}
+
 fn set_branch_region(operations: &mut [OperationDraft], branch: MirOpId, region: BranchRegion) {
-    let operation = operations
-        .iter_mut()
-        .find(|operation| operation.id == branch)
-        .expect("branch operation should exist");
+    let operation = branch_operation_mut(operations, branch);
     let OperationKindDraft::Branch { region: stored, .. } = &mut operation.kind else {
         panic!("branch operation id should identify a branch");
     };
@@ -517,10 +533,7 @@ fn set_branch_predicate(
     predicate_place_key: Option<String>,
     nil_test: Option<BranchNilTest>,
 ) {
-    let operation = operations
-        .iter_mut()
-        .find(|operation| operation.id == branch)
-        .expect("branch operation should exist");
+    let operation = branch_operation_mut(operations, branch);
     let OperationKindDraft::Branch {
         predicate_place_key: stored_place,
         nil_test: stored_nil_test,
@@ -620,12 +633,20 @@ impl TsMirLowering {
             let body = self.push_body(interner, index, file, function_fact, span);
             prepared.push((function, function_fact.id, body));
         }
-        let closure_bodies = prepared
-            .iter()
-            .map(|(function, _, body)| ((function.span.start, function.span.end), body.id))
-            .collect::<BTreeMap<_, _>>();
-        let closure_capture_names =
-            closure_capture_names(db, file.id, file.source.as_ref(), &prepared);
+        // Every function of the file reads the same closure tables, so they
+        // are shared rather than copied into each one.
+        let closure_bodies = Rc::new(
+            prepared
+                .iter()
+                .map(|(function, _, body)| ((function.span.start, function.span.end), body.id))
+                .collect::<BTreeMap<_, _>>(),
+        );
+        let closure_capture_names = Rc::new(closure_capture_names(
+            db,
+            file.id,
+            file.source.as_ref(),
+            &prepared,
+        ));
 
         if let Some(module_function) = matching_module_function(index, file.id, file.language) {
             let span = file.span_from_byte_range(0, file.source.len());
@@ -1731,8 +1752,9 @@ struct FunctionLowering<'source> {
     function: FunctionId,
     body: MirBodyId,
     stable_context: PlaceStableContext,
-    closure_bodies: BTreeMap<(u32, u32), MirBodyId>,
-    closure_capture_names: BTreeMap<(u32, u32), Vec<String>>,
+    /// The closures of the whole file, shared by every function lowered in it.
+    closure_bodies: Rc<BTreeMap<(u32, u32), MirBodyId>>,
+    closure_capture_names: Rc<BTreeMap<(u32, u32), Vec<String>>>,
     parameters: BTreeMap<String, PlaceRoot>,
     locals: BTreeMap<String, PlaceRoot>,
 }
@@ -1744,8 +1766,8 @@ impl<'source> FunctionLowering<'source> {
         source: &'source str,
         function: FunctionId,
         body: &MirBody,
-        closure_bodies: BTreeMap<(u32, u32), MirBodyId>,
-        closure_capture_names: BTreeMap<(u32, u32), Vec<String>>,
+        closure_bodies: Rc<BTreeMap<(u32, u32), MirBodyId>>,
+        closure_capture_names: Rc<BTreeMap<(u32, u32), Vec<String>>>,
     ) -> Self {
         Self {
             language: file.language,
@@ -5332,6 +5354,74 @@ mod operations {
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         let output = lower_ts_mir(&db);
         (output, db.stable_key_interner())
+    }
+
+    fn branch_draft(interner: &crate::internal_core::StableKeyInterner, id: u64) -> OperationDraft {
+        OperationDraft::new(
+            interner,
+            MirOpId(id),
+            MirBodyId(0),
+            "body",
+            id as u32,
+            Span::point(crate::internal_core::FileId::from_raw(0), 1, 1),
+            (
+                OperationKindDraft::Branch {
+                    predicate: MirPredicateId(id),
+                    predicate_place_key: None,
+                    nil_test: None,
+                    shape: ControlShape::Conditional,
+                    region: BranchRegion::default(),
+                },
+                MirStatus::Partial,
+            ),
+        )
+    }
+
+    fn predicate_key(operation: &OperationDraft) -> Option<&str> {
+        match &operation.kind {
+            OperationKindDraft::Branch {
+                predicate_place_key,
+                ..
+            } => predicate_place_key.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// A branch is found by its id whether the list holds it at the position
+    /// its id names, as lowering pushes it, or somewhere else.
+    #[test]
+    fn a_branch_is_found_by_position_and_otherwise_by_scan() {
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let mut pushed = (0..4)
+            .map(|id| branch_draft(&interner, id))
+            .collect::<Vec<_>>();
+        set_branch_predicate(&mut pushed, MirOpId(2), Some("place".to_string()), None);
+        let keys = pushed.iter().map(predicate_key).collect::<Vec<_>>();
+        assert_eq!(keys, [None, None, Some("place"), None]);
+
+        // Position 1 holds the operation with id 0, so id 1 is found by the scan.
+        let mut shuffled = [2, 0, 1]
+            .into_iter()
+            .map(|id| branch_draft(&interner, id))
+            .collect::<Vec<_>>();
+        set_branch_predicate(&mut shuffled, MirOpId(1), Some("place".to_string()), None);
+        let keys = shuffled.iter().map(predicate_key).collect::<Vec<_>>();
+        assert_eq!(keys, [None, None, Some("place")]);
+        let region = BranchRegion {
+            then_end: Some(MirOpId(7)),
+            else_end: None,
+        };
+        set_branch_region(&mut shuffled, MirOpId(0), region);
+        assert!(matches!(
+            shuffled[1].kind,
+            OperationKindDraft::Branch {
+                region: BranchRegion {
+                    then_end: Some(MirOpId(7)),
+                    else_end: None
+                },
+                ..
+            }
+        ));
     }
 
     #[test]

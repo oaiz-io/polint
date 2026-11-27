@@ -767,4 +767,37 @@ mod tests {
             }
         ));
     }
+
+    /// The indexed lookup answers what a scan of `places()` answers, after the
+    /// store has re-sorted and renumbered the places.
+    #[test]
+    fn place_lookup_by_id_agrees_with_a_scan_after_sorting() {
+        let interner = crate::internal_core::StableKeyInterner::default();
+        let places = ["place:m", "place:z", "place:a", "place:q"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, key)| {
+                let mut row = place(&interner);
+                row.id = PlaceId(index as u64 + 10);
+                row.stable_key = interner.intern(key.to_string());
+                row
+            })
+            .collect();
+        let output = MirOutput {
+            bodies: vec![body(&interner)],
+            places,
+            ..MirOutput::default()
+        };
+
+        let store = SemanticStore::from_output(output, &interner).expect("store normalizes");
+        for id in (0..20).map(PlaceId) {
+            let scanned = store.places().iter().find(|place| place.id == id);
+            assert_eq!(
+                store.place(id).map(|place| place.stable_key),
+                scanned.map(|place| place.stable_key),
+                "{id:?}"
+            );
+        }
+        assert_eq!(store.places().len(), 4);
+    }
 }
